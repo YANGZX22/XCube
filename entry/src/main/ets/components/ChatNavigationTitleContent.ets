@@ -2,15 +2,9 @@ import { Markdown, MarkdownController } from '@luvi/lv-markdown-in'
 import { ProviderIconSmall } from './ProviderIcon'
 import { getAppUiState, observeAppUiState } from '../state/AppUiState'
 import { buildIconResourcePath, getModelIconPath, isNetworkIconPath, isSandboxIconPath } from '../utils/ProviderIconUtils'
-import {
-  createButtonTouchHandler,
-  getButtonAnimation,
-  getButtonScale
-} from '../utils/ButtonAnimationUtils'
 
 export const CHAT_NAVIGATION_TITLE_STACK_BUILDER_HEIGHT = 56
-const CHAT_NAVIGATION_ACTION_BUTTON_SIZE = 30
-const CHAT_NAVIGATION_CONTENT_VERTICAL_OFFSET = -5
+const CHAT_NAVIGATION_CONTENT_VERTICAL_OFFSET = -1
 
 @ComponentV2
 export struct ChatNavigationTitleContent {
@@ -26,25 +20,19 @@ export struct ChatNavigationTitleContent {
   @Param currentProviderCustomImagePath: string = ''
   @Param currentProviderBrandColor: ResourceColor = ''
   @Param isTitleGenerating: boolean = false
-  @Param isSending: boolean = false
   @Param titleGenerateFailed: boolean = false
-  @Param leftActionLaneWidth: number = 44
-  @Param rightActionLaneWidth: number = 44
-  @Param showNewChatAction: boolean = false
+  @Param editTitleRequestTick: number = 0
+  @Param titleStartInset: number = 64
+  @Param titleEndInset: number = 126
 
-  @Event onBack: () => void = () => {}
   @Event onModelSelect: () => void = () => {}
-  @Event onNewChat: () => void = () => {}
-  @Event onDeleteChat: () => void = () => {}
   @Event onRegenerateTitle: () => void = () => {}
   @Event onWillEditTitle: () => void = () => {}
   @Event onTitleChanged: (newTitle: string) => void = (_newTitle: string): void => {}
 
-  @Local private backBtnPressed: boolean = false
-  @Local private newChatBtnPressed: boolean = false
-  @Local private moreBtnPressed: boolean = false
   @Local private isEditingTitle: boolean = false
   @Local private editingTitleInput: string = ''
+  private handledEditTitleRequestTick: number = 0
   private readonly titleInputFocusId: string = 'chat_navigation_title_input'
   private titleMarkdownController: MarkdownController = new MarkdownController()
   private themeObserverDisposer: (() => void) | null = null
@@ -92,16 +80,16 @@ export struct ChatNavigationTitleContent {
     return this.isDarkMode ? '#C7CDD5' : '#5A6573'
   }
 
-  private getNavigationActionButtonBackgroundColor(): string {
-    return this.isDarkMode ? '#30FFFFFF' : '#D9FFFFFF'
-  }
-
-  private getMoreMenuBackgroundColor(): string {
-    return this.isDarkMode ? '#A8212328' : '#BFFFFFFF'
-  }
-
   private hasCurrentModelIdentity(): boolean {
     return this.currentModelId !== '' || this.currentModelName !== ''
+  }
+
+  @Monitor('editTitleRequestTick')
+  onEditTitleRequestTickMonitor(): void {
+    if (this.editTitleRequestTick > 0 && this.editTitleRequestTick !== this.handledEditTitleRequestTick) {
+      this.handledEditTitleRequestTick = this.editTitleRequestTick
+      this.startEditingTitle()
+    }
   }
 
   private getCurrentModelIconPath(): string {
@@ -231,113 +219,8 @@ export struct ChatNavigationTitleContent {
     }
   }
 
-  @Builder
-  private BackButtonBuilder() {
-    Button({ type: ButtonType.Circle }) {
-      SymbolGlyph($r('sys.symbol.chevron_left'))
-        .fontSize(17)
-        .fontColor([$r('app.color.text_primary')])
-    }
-    .width(CHAT_NAVIGATION_ACTION_BUTTON_SIZE)
-    .height(CHAT_NAVIGATION_ACTION_BUTTON_SIZE)
-    .backgroundBlurStyle(BlurStyle.COMPONENT_REGULAR)
-    .backgroundColor(this.getNavigationActionButtonBackgroundColor())
-    .scale(getButtonScale(this.backBtnPressed))
-    .animation(getButtonAnimation())
-    .onTouch(createButtonTouchHandler((pressed: boolean): void => {
-      this.backBtnPressed = pressed
-    }))
-    .onClick(() => {
-      this.onBack()
-    })
-  }
-
-  @Builder
-  private NewChatButtonBuilder() {
-    Button({ type: ButtonType.Circle }) {
-      SymbolGlyph($r('sys.symbol.plus'))
-        .fontSize(17)
-        .fontColor([$r('app.color.text_primary')])
-    }
-    .width(CHAT_NAVIGATION_ACTION_BUTTON_SIZE)
-    .height(CHAT_NAVIGATION_ACTION_BUTTON_SIZE)
-    .backgroundBlurStyle(BlurStyle.COMPONENT_REGULAR)
-    .backgroundColor(this.getNavigationActionButtonBackgroundColor())
-    .scale(getButtonScale(this.newChatBtnPressed))
-    .animation(getButtonAnimation())
-    .onTouch(createButtonTouchHandler((pressed: boolean): void => {
-      this.newChatBtnPressed = pressed
-    }))
-    .onClick(() => {
-      this.onNewChat()
-    })
-  }
-
-  @Builder
-  private MoreButtonBuilder() {
-    Button({ type: ButtonType.Circle }) {
-      SymbolGlyph($r('sys.symbol.dot_grid_2x2'))
-        .fontSize(16)
-        .fontColor([$r('app.color.text_primary')])
-    }
-    .width(CHAT_NAVIGATION_ACTION_BUTTON_SIZE)
-    .height(CHAT_NAVIGATION_ACTION_BUTTON_SIZE)
-    .backgroundBlurStyle(BlurStyle.COMPONENT_REGULAR)
-    .backgroundColor(this.getNavigationActionButtonBackgroundColor())
-    .scale(getButtonScale(this.moreBtnPressed))
-    .animation(getButtonAnimation())
-    .onTouch(createButtonTouchHandler((pressed: boolean): void => {
-      this.moreBtnPressed = pressed
-    }))
-    .bindMenu(this.MoreMenuBuilder(), {
-      placement: Placement.BottomRight,
-      offset: { x: 0, y: 10 },
-      backgroundColor: this.getMoreMenuBackgroundColor(),
-      backgroundBlurStyle: BlurStyle.Regular
-    })
-  }
-
-  @Builder
-  private MoreMenuBuilder() {
-    Menu() {
-      MenuItem({
-        startIcon: $r('sys.symbol.square_and_pencil'),
-        content: $r('app.string.edit_chat_title')
-      })
-        .onClick(() => {
-          this.startEditingTitle()
-        })
-
-      MenuItem({
-        startIcon: $r('sys.symbol.arrow_clockwise'),
-        content: $r('app.string.regenerate_title')
-      })
-        .enabled(!this.isTitleGenerating && !this.isSending)
-        .onClick(() => {
-          this.onRegenerateTitle()
-        })
-
-      MenuItem({
-        startIcon: $r('sys.symbol.trash'),
-        content: $r('app.string.delete_chat')
-      })
-        .contentFontColor($r('app.color.status_error'))
-        .onClick(() => {
-          this.onDeleteChat()
-        })
-    }
-  }
-
   build() {
     Row() {
-      Row() {
-        this.BackButtonBuilder()
-      }
-      .width(this.leftActionLaneWidth)
-      .height(CHAT_NAVIGATION_TITLE_STACK_BUILDER_HEIGHT)
-      .justifyContent(FlexAlign.Start)
-      .alignItems(VerticalAlign.Center)
-
       Column() {
         if (this.isEditingTitle) {
           TextInput({ text: this.editingTitleInput, placeholder: $r('app.string.chat_title_input_placeholder') })
@@ -453,21 +336,10 @@ export struct ChatNavigationTitleContent {
       })
       .justifyContent(FlexAlign.Center)
       .backgroundColor(Color.Transparent)
-
-      Row({ space: 6 }) {
-        if (this.showNewChatAction) {
-          this.NewChatButtonBuilder()
-        }
-        this.MoreButtonBuilder()
-      }
-      .width(this.rightActionLaneWidth)
-      .height(CHAT_NAVIGATION_TITLE_STACK_BUILDER_HEIGHT)
-      .justifyContent(FlexAlign.End)
-      .alignItems(VerticalAlign.Center)
     }
     .width('100%')
     .height(CHAT_NAVIGATION_TITLE_STACK_BUILDER_HEIGHT)
-    .padding({ left: 12, right: 12 })
+    .padding({ left: this.titleStartInset, right: this.titleEndInset })
     .translate({ y: CHAT_NAVIGATION_CONTENT_VERTICAL_OFFSET })
     .backgroundColor(Color.Transparent)
     .renderGroup(false)

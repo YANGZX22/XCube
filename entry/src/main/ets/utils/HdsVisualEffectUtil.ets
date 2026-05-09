@@ -1,8 +1,8 @@
 import uiEffect from '@ohos.graphics.uiEffect'
 import { LengthMetrics } from '@kit.ArkUI'
 import {
-  BlurStrategy,
   HdsNavigationTitleBarOptions,
+  HdsNavigationMenuItemOptions,
   ScrollEffectType,
   hdsEffect,
   hdsMaterial
@@ -12,6 +12,8 @@ import { withColorAlpha } from './ColorAlphaUtils'
 
 const STATUS_BAR_CONTENT_LIGHT: string = '#1F2329'
 const STATUS_BAR_CONTENT_DARK: string = '#F5F7FA'
+const TITLE_BAR_BLUR_EFFECTIVE_START_OFFSET: number = 1e5
+const TITLE_BAR_BLUR_EFFECTIVE_END_OFFSET: number = 2e5
 
 export function buildPointLightBorderEffect(sourceBright: boolean = false): uiEffect.VisualEffect {
   return new hdsEffect.HdsEffectBuilder()
@@ -30,7 +32,8 @@ export class HdsTopNavigationBlurOptions {
   windowWidthVp: number = 0
   windowHeightVp: number = 0
   maskExtraHeightVp: number = 20
-  blurEffectiveEndOffsetVp: number = 28
+  blurEffectiveEndOffsetVp: number = TITLE_BAR_BLUR_EFFECTIVE_END_OFFSET
+  menuItems: Array<HdsNavigationMenuItemOptions> = []
   stackBuilder: () => void = (): void => {}
 }
 
@@ -40,7 +43,7 @@ export function getHdsTopNavigationMaskExtraHeight(windowWidthVp: number, window
 }
 
 export function getHdsTopNavigationBlurEffectiveEndOffset(windowWidthVp: number, windowHeightVp: number): number {
-  return windowWidthVp > windowHeightVp ? 20 : 28
+  return TITLE_BAR_BLUR_EFFECTIVE_END_OFFSET
 }
 
 export function getHdsTopNavigationContentTopPadding(topAvoidHeightVp: number, windowWidthVp: number,
@@ -49,10 +52,7 @@ export function getHdsTopNavigationContentTopPadding(topAvoidHeightVp: number, w
 }
 
 export function getHdsTopNavigationScrollEffectType(materialType: number): ScrollEffectType {
-  if (materialType === 0) {
-    return ScrollEffectType.GRADIENT_BLUR
-  }
-  return ScrollEffectType.IMMERSIVE_GRADIENT_BLUR
+  return ScrollEffectType.GRADIENT_BLUR
 }
 
 export function getHdsStatusBarContentColor(): string {
@@ -100,34 +100,55 @@ export function buildHdsTopNavigationTitleBarOptions(
       title: {
         mainTitle: ' '
       },
+      menu: {
+        value: options.menuItems
+      },
       stackBuilder: options.stackBuilder
     },
     style: {
       scrollEffectOpts: {
-        enableScrollEffect: true,
+        enableScrollEffect: false,
         scrollEffectType: getHdsTopNavigationScrollEffectType(options.materialType),
-        blurEffectiveStartOffset: LengthMetrics.vp(0),
+        blurEffectiveStartOffset: LengthMetrics.vp(TITLE_BAR_BLUR_EFFECTIVE_START_OFFSET),
         blurEffectiveEndOffset: LengthMetrics.vp(options.blurEffectiveEndOffsetVp)
       },
-      originalStyle: {
-        backgroundStyle: {
-          backgroundColor: getHdsTopNavigationOriginBackgroundColor(),
-          maskExtraHeight: options.maskExtraHeightVp,
-          blurRadius: getHdsTopNavigationInitialBlurRadius(options.materialType)
-        }
+      systemMaterialEffect: {
+        materialType: hdsMaterial.MaterialType.ADAPTIVE,
+        materialLevel: hdsMaterial.MaterialLevel.ADAPTIVE
       },
       scrollEffectStyle: {
         backgroundStyle: {
-          backgroundColor: getHdsTopNavigationScrolledBackgroundColor(),
-          maskExtraHeight: options.maskExtraHeightVp,
-          blurRadius: getHdsTopNavigationBlurRadius(options.materialType, options.materialLevel, options.windowWidthVp,
-            options.windowHeightVp)
+          backgroundColor: $r('sys.color.ohos_id_color_background_transparent'),
+          maskExtraHeight: options.maskExtraHeightVp
+        },
+        contentStyle: {
+          titleStyle: {
+            mainTitleColor: $r('sys.color.font_primary')
+          },
+          menuStyle: {
+            backgroundColor: $r('sys.color.comp_background_primary'),
+            iconColor: $r('sys.color.icon_primary')
+          },
+          backIconStyle: {
+            backgroundColor: $r('sys.color.comp_background_primary'),
+            iconColor: $r('sys.color.icon_primary')
+          }
         }
       },
-      blurStrategy: BlurStrategy.ENABLE,
-      systemMaterialEffect: {
-        materialType: options.materialType as hdsMaterial.MaterialType,
-        materialLevel: options.materialLevel as hdsMaterial.MaterialLevel
+      originalStyle: {
+        backgroundStyle: {
+          backgroundColor: $r('sys.color.ohos_id_color_background_transparent'),
+          maskExtraHeight: options.maskExtraHeightVp
+        },
+        contentStyle: {
+          titleStyle: {
+            mainTitleColor: Color.Black
+          },
+          menuStyle: {
+            backgroundColor: $r('sys.color.comp_background_tertiary'),
+            iconColor: $r('sys.color.icon_primary')
+          }
+        }
       }
     },
     avoidLayoutSafeArea: true,

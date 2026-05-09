@@ -22,8 +22,8 @@ export function buildCompactTabsFloatingStyle(opts: CompactTabsFloatingStyleOpti
     barSideMargin: opts.barSideMargin,
     barBottomMargin: opts.barBottomMargin,
     systemMaterialEffect: {
-      materialType: opts.materialType as hdsMaterial.MaterialType,
-      materialLevel: opts.materialLevel as hdsMaterial.MaterialLevel
+      materialType: hdsMaterial.MaterialType.ADAPTIVE,
+      materialLevel: hdsMaterial.MaterialLevel.ADAPTIVE
     },
     lightColor: opts.lightColorMode === 'theme' ? opts.themePrimary : undefined
   }

@@ -1551,7 +1551,6 @@ struct Index {
         .barHeight(this.getCompactTabsHostBarHeight())
         .barOverlap(true)
         .barBackgroundColor(Color.Transparent)
-        .barBackgroundBlurStyle(BlurStyle.COMPONENT_THIN)
         .barFloatingStyle(this.buildBottomTabsFloatingStyle())
         .scrollable(false)
         .cachedMaxCount(3, TabsCacheMode.CACHE_LATEST_SWITCHED)

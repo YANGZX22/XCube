@@ -1,8 +1,9 @@
-import { KeyboardAvoidMode } from '@kit.ArkUI'
+import { KeyboardAvoidMode, SymbolGlyphModifier } from '@kit.ArkUI'
 import { common } from '@kit.AbilityKit'
 import {
   HdsNavDestination,
   HdsNavDestinationTitleMode,
+  HdsNavigationMenuItemOptions,
   HdsNavigationTitleBarOptions
 } from '@kit.UIDesignKit'
 import {
@@ -72,7 +73,11 @@ import { ChatSelectionFlow, ChatSelectionFlowDependencies } from './chat/ChatSel
 import { ChatPageLoadFlow, ChatPageLoadFlowDependencies, ChatPageLoadResult } from './chat/ChatPageLoadFlow'
 import { ChatTaskAlertFlow, ChatTaskAlertFlowDependencies } from './chat/ChatTaskAlertFlow'
 import { ChatScrollUiFlow, ChatScrollUiFlowDependencies } from './chat/ChatScrollUiFlow'
-import { buildHdsTopNavigationTitleBarOptions, HdsTopNavigationBlurOptions } from '../utils/HdsVisualEffectUtil'
+import {
+  buildHdsTopNavigationTitleBarOptions,
+  getHdsTopNavigationBlurEffectiveEndOffset,
+  HdsTopNavigationBlurOptions
+} from '../utils/HdsVisualEffectUtil'
 import {
   collectTailMessageIds,
   findMessageIndexById,
@@ -108,9 +113,9 @@ class EditedMessageToolContext {
 }
 
 const HDS_NAV_DESTINATION_MINI_TITLE_BAR_HEIGHT: number = 56
-const HDS_NAV_TITLE_LEFT_ACTION_LANE_WIDTH: number = 44
-const HDS_NAV_TITLE_RIGHT_ACTION_LANE_WIDTH_SINGLE: number = 44
-const HDS_NAV_TITLE_RIGHT_ACTION_LANE_WIDTH_DOUBLE: number = 80
+const HDS_NAV_TITLE_SYSTEM_BACK_INSET: number = 64
+const HDS_NAV_TITLE_SYSTEM_MENU_ITEM_WIDTH: number = 34
+const HDS_NAV_TITLE_SYSTEM_MENU_END_MARGIN: number = 10
 
 @ComponentV2
 export struct ChatPage {
@@ -170,6 +175,7 @@ export struct ChatPage {
   @Local sessionTitle: string = ''
   @Local isTitleGenerating: boolean = false
   @Local titleGenerateFailed: boolean = false
+  @Local titleEditRequestTick: number = 0
   // 图片预览状态
   @Local showImagePreview: boolean = false
   @Local previewImages: Array<string> = []
@@ -1946,12 +1952,6 @@ export struct ChatPage {
     return HDS_NAV_DESTINATION_MINI_TITLE_BAR_HEIGHT + this.getPageTopAvoidHeight()
   }
 
-  private getTitleRightActionLaneWidth(): number {
-    return this.shouldShowTitleBarNewChatAction() ?
-      HDS_NAV_TITLE_RIGHT_ACTION_LANE_WIDTH_DOUBLE :
-      HDS_NAV_TITLE_RIGHT_ACTION_LANE_WIDTH_SINGLE
-  }
-
   private getStatusBarContentColor(): string {
     if (this.showImagePreview) {
       return '#F5F7FA'
@@ -1974,6 +1974,67 @@ export struct ChatPage {
     return !this.isNewChatTransition && this.sessionId.trim() !== ''
   }
 
+  private buildTitleBarMenuIcon(symbol: Resource, color: ResourceColor): SymbolGlyphModifier {
+    const icon = new SymbolGlyphModifier(symbol)
+    icon.fontSize(20)
+    icon.fontColor([color])
+    return icon
+  }
+
+  private getTitleBarMenuItems(): Array<HdsNavigationMenuItemOptions> {
+    const menus: Array<HdsNavigationMenuItemOptions> = []
+    if (this.shouldShowTitleBarNewChatAction()) {
+      menus.push({
+        content: {
+          label: $r('app.string.new_chat'),
+          icon: this.buildTitleBarMenuIcon($r('sys.symbol.plus'), $r('app.color.text_primary')),
+          action: () => {
+            void this.handleNewChat()
+          }
+        }
+      })
+    }
+
+    menus.push({
+      content: {
+        label: $r('app.string.edit_chat_title'),
+        icon: this.buildTitleBarMenuIcon($r('sys.symbol.square_and_pencil'), $r('app.color.text_primary')),
+        action: () => {
+          this.titleEditRequestTick += 1
+        }
+      }
+    })
+    menus.push({
+      content: {
+        label: $r('app.string.regenerate_title'),
+        icon: this.buildTitleBarMenuIcon($r('sys.symbol.arrow_clockwise'), $r('app.color.text_primary')),
+        isEnabled: !this.isTitleGenerating && !this.isSending,
+        action: () => {
+          void this.handleRegenerateTitle()
+        }
+      }
+    })
+    menus.push({
+      content: {
+        label: $r('app.string.delete_chat'),
+        icon: this.buildTitleBarMenuIcon($r('sys.symbol.trash'), $r('app.color.status_error')),
+        action: () => {
+          this.handleDeleteChat()
+        }
+      }
+    })
+    return menus
+  }
+
+  private getTitleBarMenuItemCount(): number {
+    return this.shouldShowTitleBarNewChatAction() ? 4 : 3
+  }
+
+  private getTitleBarMenuEndInset(): number {
+    return this.getTitleBarMenuItemCount() * HDS_NAV_TITLE_SYSTEM_MENU_ITEM_WIDTH +
+      HDS_NAV_TITLE_SYSTEM_MENU_END_MARGIN
+  }
+
   private getTitleBarOptions(): HdsNavigationTitleBarOptions {
     const options = new HdsTopNavigationBlurOptions()
     options.startPaddingVp = 16
@@ -1983,7 +2044,9 @@ export struct ChatPage {
     options.windowWidthVp = this.windowWidthVp
     options.windowHeightVp = this.windowHeightVp
     options.maskExtraHeightVp = 24
-    options.blurEffectiveEndOffsetVp = this.windowWidthVp > this.windowHeightVp ? 20 : 28
+    options.blurEffectiveEndOffsetVp = getHdsTopNavigationBlurEffectiveEndOffset(this.windowWidthVp,
+      this.windowHeightVp)
+    options.menuItems = this.getTitleBarMenuItems()
     options.stackBuilder = (): void => this.ChatTitleStackBuilder()
     return buildHdsTopNavigationTitleBarOptions(options)
   }
@@ -2003,24 +2066,14 @@ export struct ChatPage {
       currentProviderCustomImagePath: this.currentProvider?.customImagePath ?? '',
       currentProviderBrandColor: this.currentProvider?.brandColor ?? '',
       isTitleGenerating: this.isTitleGenerating,
-      isSending: this.isSending,
       titleGenerateFailed: this.titleGenerateFailed,
-      showNewChatAction: this.shouldShowTitleBarNewChatAction(),
-      leftActionLaneWidth: HDS_NAV_TITLE_LEFT_ACTION_LANE_WIDTH,
-      rightActionLaneWidth: this.getTitleRightActionLaneWidth(),
-      onBack: (): void => {
-        this.handleBack()
-      },
+      editTitleRequestTick: this.titleEditRequestTick,
+      titleStartInset: HDS_NAV_TITLE_SYSTEM_BACK_INSET,
+      titleEndInset: this.getTitleBarMenuEndInset(),
       onModelSelect: (): void => {
         this.safeStopInputSession()
         this.isModelSelectorVisible = true
         this.modelSheetActivePanel = 'selector'
-      },
-      onNewChat: (): void => {
-        void this.handleNewChat()
-      },
-      onDeleteChat: (): void => {
-        this.handleDeleteChat()
       },
       onRegenerateTitle: (): void => {
         void this.handleRegenerateTitle()
@@ -2436,7 +2489,7 @@ export struct ChatPage {
       { statusBarContentColor: this.getStatusBarContentColor() },
       { statusBarContentColor: this.getStatusBarContentColor() }
     )
-    .hideBackButton(true)
+    .hideBackButton(false)
     .ignoreLayoutSafeArea([LayoutSafeAreaType.SYSTEM], [LayoutSafeAreaEdge.TOP])
     .backgroundColor(this.themeBackground)
     .onReady((context: NavDestinationContext) => {
