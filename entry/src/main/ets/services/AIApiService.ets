@@ -155,7 +155,7 @@ interface MessageContent {
 // 测试请求接口
 interface TestRequestBody {
   model: string
-  messages: RequestMessage[]
+  messages: MessageContent[]
   max_tokens: number
 }
 
@@ -350,6 +350,12 @@ export interface ApiError {
   message: string
   type: string
   code: string
+  metadata?: ApiErrorMetadata
+}
+
+interface ApiErrorMetadata {
+  raw?: string
+  provider_name?: string
 }
 
 // 模型列表响应
@@ -913,8 +919,8 @@ export class AIApiService {
 
   // 测试连接
   async testConnection(config: AIApiConfig, modelId: string = ''): Promise<AIApiResult> {
-    const testMessages: RequestMessage[] = [
-      new RequestMessage('user', 'Hi')
+    const testMessages: MessageContent[] = [
+      { role: 'user', content: 'Hi' }
     ]
 
     const testModel = modelId !== '' ? modelId : this.getCompatibilityProfile(config).defaultTestModel
@@ -934,14 +940,14 @@ export class AIApiService {
     if (config.apiStyle === ApiStyle.GOOGLE) {
       const googleBody: GoogleRequestBody = {
         contents: [{ role: 'user', parts: [{ text: 'Hi' }] }],
-        generationConfig: { temperature: 0.7, maxOutputTokens: 10 }
+        generationConfig: { temperature: 0.7, maxOutputTokens: 100 }
       }
       requestBodyStr = JSON.stringify(googleBody)
     } else if (config.apiStyle === ApiStyle.ANTHROPIC) {
       const anthropicBody: AnthropicRequestBody = {
         model: testModel,
         messages: [{ role: 'user', content: 'Hi' }],
-        max_tokens: 10,
+        max_tokens: 100,
         temperature: 0.7
       }
       requestBodyStr = JSON.stringify(anthropicBody)
@@ -949,14 +955,14 @@ export class AIApiService {
       const responsesBody: OpenAIResponsesRequestBody = {
         model: testModel,
         input: 'Hi',
-        max_output_tokens: 10
+        max_output_tokens: 100
       }
       requestBodyStr = JSON.stringify(responsesBody)
     } else {
       const openaiBody: TestRequestBody = {
         model: testModel,
         messages: testMessages,
-        max_tokens: 10
+        max_tokens: 100
       }
       requestBodyStr = JSON.stringify(openaiBody)
     }
@@ -1240,6 +1246,11 @@ export class AIApiService {
     try {
       const parsed = JSON.parse(responseData) as ApiErrorResponse
       if (parsed.error !== undefined && parsed.error !== null && parsed.error.message !== '') {
+        const meta = parsed.error.metadata
+        if (meta !== undefined && meta !== null &&
+          meta.raw !== undefined && meta.raw !== null && meta.raw !== '') {
+          return `${parsed.error.message}: ${meta.raw}`
+        }
         return parsed.error.message
       }
     } catch (_error) {}
