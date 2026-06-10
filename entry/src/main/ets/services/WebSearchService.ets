@@ -4,6 +4,7 @@ import {
   HttpRequestController,
   HttpRequestRuntimeOptions
 } from './HttpService'
+import { util } from '@kit.ArkTS'
 import { SearchReference, SearchServiceConfig, SearchEngine } from '../models/ChatModels'
 import { getPreferencesService, PreferenceKeys } from './PreferencesService'
 import { cleanSearchQuery as cleanSearchQueryShared } from '../utils/SearchQueryUtils'
@@ -16,6 +17,9 @@ export class SearchResult {
   references: SearchReference[]
   contentForAI: string
   errorMessage: string
+  startIndex: number
+  // 翻页/去重后已无更多新结果时为 true（success 仍为 true，但 references 为空），用于提示模型换词或停止
+  exhausted: boolean
 
   constructor(
     success: boolean,
@@ -23,7 +27,9 @@ export class SearchResult {
     searchEngine: string,
     references: SearchReference[],
     contentForAI: string,
-    errorMessage: string
+    errorMessage: string,
+    startIndex: number = 1,
+    exhausted: boolean = false
   ) {
     this.success = success
     this.query = query
@@ -31,6 +37,8 @@ export class SearchResult {
     this.references = references
     this.contentForAI = contentForAI
     this.errorMessage = errorMessage
+    this.startIndex = startIndex
+    this.exhausted = exhausted
   }
 }
 
@@ -83,6 +91,8 @@ export class SearchRuntimeConfigSnapshot {
   tavilyBaseUrl: string = 'https://api.tavily.com'
   exaApiKey: string = ''
   exaBaseUrl: string = 'https://api.exa.ai'
+  bochaApiKey: string = ''
+  bochaBaseUrl: string = 'https://api.bochaai.com'
 }
 
 // 搜索执行选项（可选）
@@ -90,6 +100,7 @@ export interface WebSearchExecutionOptions {
   requestId?: string
   runtimeConfig?: SearchRuntimeConfigSnapshot
   cancelCheck?: () => boolean
+  page?: number
 }
 
 // HTML 解析结果类
@@ -118,6 +129,17 @@ class BingSearchResponse {
   }
 }
 
+// Bing 结果相关性判定结果
+class BingRelevanceVerdict {
+  relevant: boolean
+  filtered: SearchResultItem[]
+
+  constructor(relevant: boolean, filtered: SearchResultItem[]) {
+    this.relevant = relevant
+    this.filtered = filtered
+  }
+}
+
 class ExaSearchTextConfig {
   maxCharacters: number = 2500
 }
@@ -135,6 +157,18 @@ class ExaSearchRequest {
   constructor(query: string, numResults: number) {
     this.query = query
     this.numResults = numResults
+  }
+}
+
+class BochaSearchRequest {
+  query: string = ''
+  summary: boolean = true
+  count: number = 10
+  freshness: string = 'noLimit'
+
+  constructor(query: string, count: number) {
+    this.query = query
+    this.count = count
   }
 }
 
@@ -171,8 +205,20 @@ export class WebSearchService {
   private tavilyApiKey: string = ''
   private exaApiKey: string = ''
   private exaBaseUrl: string = 'https://api.exa.ai'
+  private bochaApiKey: string = ''
+  private bochaBaseUrl: string = 'https://api.bochaai.com'
 
   private requestControllerMap: Map<string, RequestControllerEntry> = new Map()
+  // 记录本次用户请求已返回过的 URL，用于跨查询、跨页去重（新用户消息时清空）
+  private returnedUrlsInCurrentRequest: Set<string> = new Set()
+  private returnedDomainsInCurrentRequest: Set<string> = new Set()
+
+  // 中文字典/百科类域名：Bing 拆词噪声（多字词被拆成首字）通常落在这些站点
+  private readonly cjkDictionaryDomains: string[] = [
+    'baike.baidu.com', 'hanyuguoxue.com', 'hancibao.com', 'zdic.net',
+    'zd.hwxnet.com', 'hwxnet.com', 'qianp.com', 'guoxuedashi.net',
+    'zidian', 'cidian'
+  ]
 
   private constructor() {
     this.httpService = getHttpService()
@@ -206,6 +252,9 @@ export class WebSearchService {
     if (raw === SearchEngine.EXA) {
       return SearchEngine.EXA
     }
+    if (raw === SearchEngine.BOCHA) {
+      return SearchEngine.BOCHA
+    }
     if (raw === SearchEngine.CUSTOM) {
       return SearchEngine.CUSTOM
     }
@@ -232,6 +281,21 @@ export class WebSearchService {
     return raw
   }
 
+  private normalizeSearchPage(raw: number | undefined): number {
+    if (raw === undefined || raw <= 1) {
+      return 1
+    }
+    if (raw > 10) {
+      return 10
+    }
+    return Math.floor(raw)
+  }
+
+  private getSearchStartIndex(resultCount: number, page: number): number {
+    const normalizedPage = this.normalizeSearchPage(page)
+    return (normalizedPage - 1) * this.normalizeResultCount(resultCount) + 1
+  }
+
   private applyRuntimeConfig(snapshot: SearchRuntimeConfigSnapshot): void {
     this.config.enabled = snapshot.enabled
     this.config.searchEngine = snapshot.searchEngine
@@ -242,6 +306,8 @@ export class WebSearchService {
     this.tavilyApiKey = snapshot.tavilyApiKey
     this.exaApiKey = snapshot.exaApiKey
     this.exaBaseUrl = snapshot.exaBaseUrl
+    this.bochaApiKey = snapshot.bochaApiKey
+    this.bochaBaseUrl = snapshot.bochaBaseUrl
   }
 
   // 加载搜索服务配置（旧接口，保留）
@@ -266,6 +332,8 @@ export class WebSearchService {
       await prefsService.getString(PreferenceKeys.SEARCH_TAVILY_BASE_URL, 'https://api.tavily.com')
     const exaApiKey = await prefsService.getString(PreferenceKeys.SEARCH_EXA_API_KEY, '')
     const exaBaseUrl = await prefsService.getString(PreferenceKeys.SEARCH_EXA_BASE_URL, 'https://api.exa.ai')
+    const bochaApiKey = await prefsService.getString(PreferenceKeys.SEARCH_BOCHA_API_KEY, '')
+    const bochaBaseUrl = await prefsService.getString(PreferenceKeys.SEARCH_BOCHA_BASE_URL, 'https://api.bochaai.com')
 
     snapshot.enabled = enabled
     snapshot.searchEngine = this.parseSearchEngine(engine)
@@ -277,6 +345,8 @@ export class WebSearchService {
     snapshot.tavilyBaseUrl = this.normalizeBaseUrl(tavilyBaseUrl, 'https://api.tavily.com')
     snapshot.exaApiKey = exaApiKey.trim()
     snapshot.exaBaseUrl = this.normalizeBaseUrl(exaBaseUrl, 'https://api.exa.ai')
+    snapshot.bochaApiKey = bochaApiKey.trim()
+    snapshot.bochaBaseUrl = this.normalizeBaseUrl(bochaBaseUrl, 'https://api.bochaai.com')
 
     // 同步到旧字段，兼容依赖 this.config 的现有逻辑
     this.applyRuntimeConfig(snapshot)
@@ -292,6 +362,9 @@ export class WebSearchService {
     }
     if (runtime.searchEngine === SearchEngine.EXA && runtime.exaApiKey !== '') {
       return 'Exa'
+    }
+    if (runtime.searchEngine === SearchEngine.BOCHA && runtime.bochaApiKey !== '') {
+      return '博查(Bocha)'
     }
     return 'Bing(local)'
   }
@@ -352,6 +425,121 @@ export class WebSearchService {
     this.requestControllerMap.clear()
   }
 
+  // 重置搜索结果去重状态（每次新用户消息时调用，与 ToolExecutionService 的 page 计数生命周期对齐）
+  resetSearchResultDedup(): void {
+    this.returnedUrlsInCurrentRequest.clear()
+    this.returnedDomainsInCurrentRequest.clear()
+  }
+
+  private normalizeResultUrlForDedup(url: string): string {
+    let normalized = url.trim()
+    if (normalized === '') {
+      return ''
+    }
+
+    const hashIndex = normalized.indexOf('#')
+    if (hashIndex >= 0) {
+      normalized = normalized.substring(0, hashIndex)
+    }
+    while (normalized.endsWith('/')) {
+      normalized = normalized.substring(0, normalized.length - 1)
+    }
+    if (normalized.startsWith('https://')) {
+      normalized = normalized.substring(8)
+    } else if (normalized.startsWith('http://')) {
+      normalized = normalized.substring(7)
+    }
+    return normalized.toLowerCase()
+  }
+
+  private extractDomainForDedup(url: string): string {
+    let normalized = url.trim()
+    if (normalized === '') {
+      return ''
+    }
+    if (normalized.startsWith('https://')) {
+      normalized = normalized.substring(8)
+    } else if (normalized.startsWith('http://')) {
+      normalized = normalized.substring(7)
+    }
+    const slashIndex = normalized.indexOf('/')
+    if (slashIndex >= 0) {
+      normalized = normalized.substring(0, slashIndex)
+    }
+    const questionIndex = normalized.indexOf('?')
+    if (questionIndex >= 0) {
+      normalized = normalized.substring(0, questionIndex)
+    }
+    const colonIndex = normalized.indexOf(':')
+    if (colonIndex >= 0) {
+      normalized = normalized.substring(0, colonIndex)
+    }
+    if (normalized.startsWith('www.')) {
+      normalized = normalized.substring(4)
+    }
+    return normalized.toLowerCase()
+  }
+
+  private buildSeenDomainExclusion(maxCount: number = 4): string {
+    const parts: string[] = []
+    this.returnedDomainsInCurrentRequest.forEach((domain: string) => {
+      if (parts.length >= maxCount) {
+        return
+      }
+      if (domain !== '' && !domain.includes('bing.com')) {
+        parts.push(`-site:${domain}`)
+      }
+    })
+    return parts.join(' ')
+  }
+
+  // 本轮请求全局去重：过滤掉已通过任意查询返回过的 URL，并把新 URL 记入集合
+  private dedupeSearchResult(result: SearchResult): SearchResult {
+    if (!result.success || result.references.length === 0) {
+      return result
+    }
+
+    const freshReferences: SearchReference[] = []
+    for (let i = 0; i < result.references.length; i++) {
+      const ref = result.references[i]
+      const urlKey = this.normalizeResultUrlForDedup(ref.url)
+      if (urlKey !== '' && this.returnedUrlsInCurrentRequest.has(urlKey)) {
+        continue
+      }
+      if (urlKey !== '') {
+        this.returnedUrlsInCurrentRequest.add(urlKey)
+        const domain = this.extractDomainForDedup(ref.url)
+        if (domain !== '') {
+          this.returnedDomainsInCurrentRequest.add(domain)
+        }
+      }
+      freshReferences.push(ref)
+    }
+
+    // 全部都是旧结果 → 标记枯竭，返回空结果让上层提示模型换词/停止
+    if (freshReferences.length === 0) {
+      return new SearchResult(true, result.query, result.searchEngine, [], '', '', result.startIndex, true)
+    }
+
+    // 有部分新结果：用去重后的 references 重建供 AI 的内容，避免把旧结果再喂给模型
+    const dedupedItems: SearchResultItem[] = []
+    for (let i = 0; i < freshReferences.length; i++) {
+      const ref = freshReferences[i]
+      dedupedItems.push(new SearchResultItem(ref.title, ref.url, ref.snippet))
+    }
+    const contentForAI = this.limitPromptContent(this.buildContentForAI(dedupedItems), 6000)
+    return new SearchResult(
+      true,
+      result.query,
+      result.searchEngine,
+      freshReferences,
+      contentForAI,
+      '',
+      result.startIndex,
+      false
+    )
+  }
+
   private isCancelled(controller: HttpRequestController | null, cancelCheck?: () => boolean): boolean {
     if (controller !== null && controller.isCancelled()) {
       return true
@@ -388,11 +576,67 @@ export class WebSearchService {
     return new WebSearchResult(false, url, '', '', '请求已取消')
   }
 
+  private async searchWithRuntime(
+    query: string,
+    runtime: SearchRuntimeConfigSnapshot,
+    controller: HttpRequestController | null,
+    cancelCheck?: () => boolean,
+    page: number = 1
+  ): Promise<SearchResult> {
+    if (runtime.searchEngine === SearchEngine.EXA) {
+      const exaResult = await this.exaSearchEnhanced(query, runtime, controller, cancelCheck, page)
+      if (exaResult.success) {
+        return exaResult
+      }
+      if (this.isCancelled(controller, cancelCheck)) {
+        return this.buildCancelledSearchResult(query, 'Exa')
+      }
+      console.warn('WebSearchService', `[Exa] Failed, fallback to Bing: ${exaResult.errorMessage}`)
+      const bingFallback = await this.bingSearchEnhanced(query, runtime, controller, cancelCheck, page)
+      return bingFallback.success ? bingFallback : exaResult
+    }
+    if (runtime.searchEngine === SearchEngine.BRAVE) {
+      return await this.braveSearchEnhanced(query, runtime, controller, cancelCheck, page)
+    }
+    if (runtime.searchEngine === SearchEngine.TAVILY) {
+      return await this.tavilySearchEnhanced(query, runtime, controller, cancelCheck, page)
+    }
+    if (runtime.searchEngine === SearchEngine.BOCHA) {
+      // 博查失败不回退 Bing，直接返回错误，让用户明确是 Key/配额/网络问题
+      return await this.bochaSearchEnhanced(query, runtime, controller, cancelCheck, page)
+    }
+    return await this.bingSearchEnhanced(query, runtime, controller, cancelCheck, page)
+  }
+
+  private buildFreshResultRetryQueries(originalQuery: string, effectiveQuery: string, page: number): string[] {
+    const candidates: string[] = []
+    this.pushUniqueCandidate(candidates, effectiveQuery)
+    const seenDomainExclusion = this.buildSeenDomainExclusion()
+
+    for (let i = 1; i <= 6; i++) {
+      this.pushUniqueCandidate(candidates, this.buildDiversifiedSearchQuery(originalQuery, page + i))
+      this.pushUniqueCandidate(candidates, this.buildDiversifiedSearchQuery(effectiveQuery, page + i))
+      if (seenDomainExclusion !== '') {
+        this.pushUniqueCandidate(candidates, `${this.buildDiversifiedSearchQuery(originalQuery, page + i)} ${seenDomainExclusion}`)
+        this.pushUniqueCandidate(candidates, `${this.buildDiversifiedSearchQuery(effectiveQuery, page + i)} ${seenDomainExclusion}`)
+      }
+    }
+
+    const filtered: string[] = []
+    for (let i = 0; i < candidates.length; i++) {
+      if (candidates[i] !== effectiveQuery) {
+        filtered.push(candidates[i])
+      }
+    }
+    return filtered
+  }
+
   // 统一搜索接口
   async search(query: string, options?: WebSearchExecutionOptions): Promise<SearchResult> {
     const runtime = options?.runtimeConfig !== undefined ? options.runtimeConfig : await this.getRuntimeConfigSnapshot()
     const requestId = options?.requestId !== undefined ? options.requestId : ''
     const cancelCheck = options?.cancelCheck
+    const page = this.normalizeSearchPage(options?.page)
     const controller = this.acquireRequestController(requestId)
 
     try {
@@ -411,10 +655,18 @@ export class WebSearchService {
 
       // 天气类查询：强制使用更可解析/更权威站点，避免结果被“查/查重/天眼查”等噪声污染
       let finalQuery = cleanedQuery
-      if (this.isWeatherIntent(cleanedQuery)) {
+      const weatherIntentForRewrite = this.isWeatherIntent(cleanedQuery)
+      if (weatherIntentForRewrite) {
         finalQuery = this.buildWeatherSiteQuery(cleanedQuery)
         if (finalQuery !== cleanedQuery) {
           console.info('WebSearchService', `Weather query rewritten: "${cleanedQuery}" -> "${finalQuery}"`)
+        }
+      }
+      if (page > 1 && runtime.searchEngine === SearchEngine.BING && !weatherIntentForRewrite) {
+        const diversifiedQuery = this.buildRepeatedBingSearchQuery(finalQuery, page)
+        if (diversifiedQuery !== finalQuery) {
+          console.info('WebSearchService', `Repeated Bing query diversified(page=${page}): "${finalQuery}" -> "${diversifiedQuery}"`)
+          finalQuery = diversifiedQuery
         }
       }
 
@@ -422,31 +674,32 @@ export class WebSearchService {
         return this.buildCancelledSearchResult(finalQuery, this.resolvePreferredEngineName(runtime))
       }
 
-      if (runtime.searchEngine === SearchEngine.EXA) {
-        const exaResult = await this.exaSearchEnhanced(finalQuery, runtime, controller, cancelCheck)
-        if (exaResult.success) {
-          return exaResult
-        }
+      const result = await this.searchWithRuntime(finalQuery, runtime, controller, cancelCheck, page)
+      const dedupedResult = this.dedupeSearchResult(result)
+      if (!dedupedResult.success || weatherIntentForRewrite) {
+        return dedupedResult
+      }
+      if (!dedupedResult.exhausted && dedupedResult.references.length > 0) {
+        return dedupedResult
+      }
+
+      // 如果当前关键词无结果，或只返回了本轮已见过的 URL，主动换搜索角度补搜，避免把空结果交给模型。
+      const retryQueries = this.buildFreshResultRetryQueries(cleanedQuery, finalQuery, page)
+      const maxRetryCount = Math.min(retryQueries.length, 5)
+      for (let i = 0; i < maxRetryCount; i++) {
         if (this.isCancelled(controller, cancelCheck)) {
-          return this.buildCancelledSearchResult(finalQuery, 'Exa')
+          return this.buildCancelledSearchResult(finalQuery, this.resolvePreferredEngineName(runtime))
         }
-        console.warn('WebSearchService', `[Exa] Failed, fallback to Bing: ${exaResult.errorMessage}`)
-        const bingFallback = await this.bingSearchEnhanced(finalQuery, runtime, controller, cancelCheck)
-        if (bingFallback.success) {
-          return bingFallback
+        const retryQuery = retryQueries[i]
+        console.info('WebSearchService', `Search result duplicated, retrying with query: "${retryQuery}"`)
+        const retryResult = await this.searchWithRuntime(retryQuery, runtime, controller, cancelCheck, 1)
+        const retryDeduped = this.dedupeSearchResult(retryResult)
+        if (retryDeduped.success && !retryDeduped.exhausted && retryDeduped.references.length > 0) {
+          return retryDeduped
         }
-        return exaResult
       }
 
-      if (runtime.searchEngine === SearchEngine.BRAVE) {
-        return await this.braveSearchEnhanced(finalQuery, runtime, controller, cancelCheck)
-      }
-
-      if (runtime.searchEngine === SearchEngine.TAVILY) {
-        return await this.tavilySearchEnhanced(finalQuery, runtime, controller, cancelCheck)
-      }
-
-      return await this.bingSearchEnhanced(finalQuery, runtime, controller, cancelCheck)
+      return dedupedResult
     } finally {
       this.releaseRequestController(requestId)
     }
@@ -456,9 +709,10 @@ export class WebSearchService {
     query: string,
     runtime: SearchRuntimeConfigSnapshot,
     controller: HttpRequestController | null,
-    cancelCheck?: () => boolean
+    cancelCheck?: () => boolean,
+    page: number = 1
   ): Promise<SearchResult> {
-    const response = await this.bingSearchInternal(query, runtime.maxResults, runtime, controller, cancelCheck)
+    const response = await this.bingSearchInternal(query, runtime.maxResults, runtime, controller, cancelCheck, page)
 
     if (!response.success) {
       return new SearchResult(
@@ -482,10 +736,33 @@ export class WebSearchService {
     if (effectiveResponse.results.length === 0 && weatherIntent) {
       const fallbackQuery = this.buildWeatherFallbackQuery(query)
       if (fallbackQuery !== '' && fallbackQuery !== query) {
-        const fallbackResp = await this.bingSearchInternal(fallbackQuery, runtime.maxResults, runtime, controller, cancelCheck)
+        const fallbackResp = await this.bingSearchInternal(fallbackQuery, runtime.maxResults, runtime, controller, cancelCheck, page)
         if (fallbackResp.success && fallbackResp.results.length > 0) {
           effectiveResponse = fallbackResp
         }
+      }
+    }
+
+    // 相关性校验：Bing 会把生僻中文多字词拆成首字返回字典/百科噪声（如"忆张师"→"忆"），
+    // 识别这种拆词噪声并诚实返回，避免用无关结果误导模型。
+    if (!weatherIntent) {
+      const relevance = this.assessBingResultRelevance(query, effectiveResponse.results)
+      if (!relevance.relevant) {
+        const tip = `未找到「${query}」的相关网页结果，该词可能是生僻或冷门实体；请勿编造，可补充上下文（如人物所属领域/作品/机构）后重试，或在设置中改用博查(Bocha)/Tavily 等中文检索引擎。`
+        return new SearchResult(
+          true,
+          effectiveResponse.query,
+          'Bing(local)',
+          [],
+          tip,
+          '',
+          this.getSearchStartIndex(runtime.maxResults, page),
+          true
+        )
+      }
+      if (relevance.filtered.length !== effectiveResponse.results.length) {
+        console.info('WebSearchService', `Bing relevance filter kept ${relevance.filtered.length}/${effectiveResponse.results.length} result(s) for "${query}"`)
+        effectiveResponse = new BingSearchResponse(true, effectiveResponse.query, relevance.filtered, '')
       }
     }
 
@@ -500,7 +777,7 @@ export class WebSearchService {
       if (enriched === '') {
         const fallbackQuery = this.buildWeatherFallbackQuery(effectiveResponse.query)
         if (fallbackQuery !== '' && fallbackQuery !== effectiveResponse.query) {
-          const fallbackResp = await this.bingSearchInternal(fallbackQuery, runtime.maxResults, runtime, controller, cancelCheck)
+          const fallbackResp = await this.bingSearchInternal(fallbackQuery, runtime.maxResults, runtime, controller, cancelCheck, page)
           if (fallbackResp.success && fallbackResp.results.length > 0) {
             effectiveResponse = fallbackResp
             enriched = await this.enrichTopPagesForAI(effectiveResponse.results, 2, runtime, controller, cancelCheck)
@@ -538,7 +815,8 @@ export class WebSearchService {
       'Bing(local)',
       references,
       contentForAI,
-      ''
+      '',
+      this.getSearchStartIndex(runtime.maxResults, page)
     )
   }
 
@@ -546,7 +824,8 @@ export class WebSearchService {
     query: string,
     runtime: SearchRuntimeConfigSnapshot,
     controller: HttpRequestController | null,
-    cancelCheck?: () => boolean
+    cancelCheck?: () => boolean,
+    page: number = 1
   ): Promise<SearchResult> {
     if (runtime.exaApiKey === '') {
       return new SearchResult(
@@ -559,11 +838,16 @@ export class WebSearchService {
       )
     }
 
-    const response = await this.exaSearch(query, runtime.maxResults, runtime, controller, cancelCheck)
+    // Exa 无原生分页：翻页时改写查询词制造差异（天气类已在 search() 做过 site 改写，这里跳过避免污染）
+    const effectiveQuery = page > 1 && !this.isWeatherIntent(query)
+      ? this.buildDiversifiedSearchQuery(query, page)
+      : query
+
+    const response = await this.exaSearch(effectiveQuery, runtime.maxResults, runtime, controller, cancelCheck)
     if (!response.success) {
       return new SearchResult(
         false,
-        query,
+        effectiveQuery,
         'Exa',
         [],
         '',
@@ -572,7 +856,7 @@ export class WebSearchService {
     }
 
     if (this.isCancelled(controller, cancelCheck)) {
-      return this.buildCancelledSearchResult(query, 'Exa')
+      return this.buildCancelledSearchResult(effectiveQuery, 'Exa')
     }
 
     const references: SearchReference[] = []
@@ -589,11 +873,73 @@ export class WebSearchService {
     const contentForAI = this.limitPromptContent(this.buildContentForAI(response.results), 6000)
     return new SearchResult(
       true,
-      query,
+      effectiveQuery,
       'Exa',
       references,
       contentForAI,
-      ''
+      '',
+      this.getSearchStartIndex(runtime.maxResults, page)
+    )
+  }
+
+  private async bochaSearchEnhanced(
+    query: string,
+    runtime: SearchRuntimeConfigSnapshot,
+    controller: HttpRequestController | null,
+    cancelCheck?: () => boolean,
+    page: number = 1
+  ): Promise<SearchResult> {
+    if (runtime.bochaApiKey === '') {
+      return new SearchResult(
+        false,
+        query,
+        '博查(Bocha)',
+        [],
+        '',
+        '博查 API Key 未配置'
+      )
+    }
+
+    // 博查无原生分页：翻页时改写查询词制造差异（天气类已在 search() 做过 site 改写，这里跳过避免污染）
+    const effectiveQuery = page > 1 && !this.isWeatherIntent(query)
+      ? this.buildDiversifiedSearchQuery(query, page)
+      : query
+
+    const response = await this.bochaSearch(effectiveQuery, runtime.maxResults, runtime, controller, cancelCheck)
+    if (!response.success) {
+      return new SearchResult(
+        false,
+        effectiveQuery,
+        '博查(Bocha)',
+        [],
+        '',
+        response.errorMessage
+      )
+    }
+
+    if (this.isCancelled(controller, cancelCheck)) {
+      return this.buildCancelledSearchResult(effectiveQuery, '博查(Bocha)')
+    }
+
+    const references: SearchReference[] = []
+    for (let i = 0; i < response.results.length; i++) {
+      const item = response.results[i]
+      references.push(new SearchReference(
+        `ref_${Date.now()}_${i}`,
+        item.title,
+        item.url,
+        item.snippet
+      ))
+    }
+
+    return new SearchResult(
+      true,
+      effectiveQuery,
+      '博查(Bocha)',
+      references,
+      this.limitPromptContent(this.buildContentForAI(response.results), 6000),
+      '',
+      this.getSearchStartIndex(runtime.maxResults, page)
     )
   }
 
@@ -601,7 +947,8 @@ export class WebSearchService {
     query: string,
     runtime: SearchRuntimeConfigSnapshot,
     controller: HttpRequestController | null,
-    cancelCheck?: () => boolean
+    cancelCheck?: () => boolean,
+    page: number = 1
   ): Promise<SearchResult> {
     if (runtime.braveApiKey === '') {
       return new SearchResult(
@@ -614,7 +961,7 @@ export class WebSearchService {
       )
     }
 
-    const response = await this.braveSearch(query, runtime.maxResults, runtime, controller, cancelCheck)
+    const response = await this.braveSearch(query, runtime.maxResults, runtime, controller, cancelCheck, page)
     if (!response.success) {
       return new SearchResult(
         false,
@@ -647,7 +994,8 @@ export class WebSearchService {
       'Brave Search',
       references,
       this.limitPromptContent(this.buildContentForAI(response.results), 6000),
-      ''
+      '',
+      this.getSearchStartIndex(runtime.maxResults, page)
     )
   }
 
@@ -655,7 +1003,8 @@ export class WebSearchService {
     query: string,
     runtime: SearchRuntimeConfigSnapshot,
     controller: HttpRequestController | null,
-    cancelCheck?: () => boolean
+    cancelCheck?: () => boolean,
+    page: number = 1
   ): Promise<SearchResult> {
     if (runtime.tavilyApiKey === '') {
       return new SearchResult(
@@ -668,11 +1017,16 @@ export class WebSearchService {
       )
     }
 
-    const response = await this.tavilySearch(query, runtime.maxResults, runtime, controller, cancelCheck)
+    // Tavily 无原生分页：翻页时改写查询词制造差异（天气类已在 search() 做过 site 改写，这里跳过避免污染）
+    const effectiveQuery = page > 1 && !this.isWeatherIntent(query)
+      ? this.buildDiversifiedSearchQuery(query, page)
+      : query
+
+    const response = await this.tavilySearch(effectiveQuery, runtime.maxResults, runtime, controller, cancelCheck)
     if (!response.success) {
       return new SearchResult(
         false,
-        query,
+        effectiveQuery,
         'Tavily',
         [],
         '',
@@ -681,7 +1035,7 @@ export class WebSearchService {
     }
 
     if (this.isCancelled(controller, cancelCheck)) {
-      return this.buildCancelledSearchResult(query, 'Tavily')
+      return this.buildCancelledSearchResult(effectiveQuery, 'Tavily')
     }
 
     const references: SearchReference[] = []
@@ -697,11 +1051,12 @@ export class WebSearchService {
 
     return new SearchResult(
       true,
-      query,
+      effectiveQuery,
       'Tavily',
       references,
       this.limitPromptContent(this.buildContentForAI(response.results), 6000),
-      ''
+      '',
+      this.getSearchStartIndex(runtime.maxResults, page)
     )
   }
 
@@ -710,15 +1065,18 @@ export class WebSearchService {
     resultCount: number,
     runtime: SearchRuntimeConfigSnapshot,
     controller: HttpRequestController | null,
-    cancelCheck?: () => boolean
+    cancelCheck?: () => boolean,
+    page: number = 1
   ): Promise<BingSearchResponse> {
     try {
       if (this.isCancelled(controller, cancelCheck)) {
         return new BingSearchResponse(false, query, [], '请求已取消')
       }
 
+      // Brave 的 offset 是页号（0-based，最大 9），配合 count 翻页
+      const braveOffset = Math.min(this.normalizeSearchPage(page) - 1, 9)
       const searchUrl =
-        `https://api.search.brave.com/res/v1/web/search?q=${encodeURIComponent(query)}&count=${this.normalizeResultCount(resultCount)}`
+        `https://api.search.brave.com/res/v1/web/search?q=${encodeURIComponent(query)}&count=${this.normalizeResultCount(resultCount)}&offset=${braveOffset}`
       const response = await this.httpService.get(
         searchUrl,
         {
@@ -993,6 +1351,137 @@ export class WebSearchService {
     } catch (error) {
       return new BingSearchResponse(false, query, [], `Exa 搜索失败: ${JSON.stringify(error)}`)
     }
+  }
+
+  private async bochaSearch(
+    query: string,
+    resultCount: number,
+    runtime: SearchRuntimeConfigSnapshot,
+    controller: HttpRequestController | null,
+    cancelCheck?: () => boolean
+  ): Promise<BingSearchResponse> {
+    try {
+      if (this.isCancelled(controller, cancelCheck)) {
+        return new BingSearchResponse(false, query, [], '请求已取消')
+      }
+
+      const headers: Record<string, string> = {
+        'Content-Type': 'application/json',
+        'Accept': 'application/json',
+        'Authorization': `Bearer ${runtime.bochaApiKey}`
+      }
+
+      const request = new BochaSearchRequest(query, this.normalizeResultCount(resultCount))
+      const body = JSON.stringify(request)
+      const response = await this.httpService.postWithTimeout(
+        `${runtime.bochaBaseUrl}/v1/web-search`,
+        body,
+        headers,
+        runtime.timeout,
+        this.buildHttpOptions(runtime.timeout, controller)
+      )
+
+      if (!response.success) {
+        return new BingSearchResponse(false, query, [], response.errorMessage)
+      }
+
+      if (this.isCancelled(controller, cancelCheck)) {
+        return new BingSearchResponse(false, query, [], '请求已取消')
+      }
+
+      const errorMessage = this.extractBochaErrorMessage(response.data)
+      if (errorMessage !== '') {
+        return new BingSearchResponse(false, query, [], errorMessage)
+      }
+
+      const results = this.parseBochaSearchResults(response.data, this.normalizeResultCount(resultCount))
+      return new BingSearchResponse(true, query, results, '')
+    } catch (error) {
+      return new BingSearchResponse(false, query, [], `博查搜索失败: ${JSON.stringify(error)}`)
+    }
+  }
+
+  // 博查响应错误：顶层 code 非 200，或 msg/message 含错误信息
+  private extractBochaErrorMessage(json: string): string {
+    if (json === '') {
+      return ''
+    }
+    try {
+      const parsed = JSON.parse(json) as Record<string, Object>
+      const code = parsed['code']
+      if (typeof code === 'number' && code !== 200) {
+        const msg = this.readStringFromObject(parsed, 'msg')
+        const message = this.readStringFromObject(parsed, 'message')
+        const detail = msg !== '' ? msg : message
+        return detail !== '' ? `博查返回错误(code=${code}): ${detail}` : `博查返回错误(code=${code})`
+      }
+      const error = parsed['error']
+      if (error !== undefined && error !== null) {
+        if (typeof error === 'string') {
+          return error
+        }
+        if (typeof error === 'object') {
+          const errorObj = error as Record<string, Object>
+          const message = this.readStringFromObject(errorObj, 'message')
+          if (message !== '') {
+            return message
+          }
+          return JSON.stringify(errorObj)
+        }
+      }
+      return ''
+    } catch (_error) {
+      return ''
+    }
+  }
+
+  // 解析博查响应：data.webPages.value[]，title=name，snippet 优先 summary 否则 snippet
+  private parseBochaSearchResults(json: string, maxCount: number): SearchResultItem[] {
+    const results: SearchResultItem[] = []
+    if (json === '') {
+      return results
+    }
+
+    try {
+      const parsed = JSON.parse(json) as Record<string, Object>
+      const dataValue = parsed['data']
+      if (dataValue === undefined || dataValue === null || typeof dataValue !== 'object' || Array.isArray(dataValue)) {
+        return results
+      }
+      const dataObj = dataValue as Record<string, Object>
+      const webPages = dataObj['webPages']
+      if (webPages === undefined || webPages === null || typeof webPages !== 'object' || Array.isArray(webPages)) {
+        return results
+      }
+      const webPagesObj = webPages as Record<string, Object>
+      const valueArray = webPagesObj['value']
+      if (valueArray === undefined || valueArray === null || !Array.isArray(valueArray)) {
+        return results
+      }
+
+      const list = valueArray as Object[]
+      for (let i = 0; i < list.length && results.length < maxCount; i++) {
+        const item = list[i]
+        if (item === null || item === undefined || typeof item !== 'object' || Array.isArray(item)) {
+          continue
+        }
+        const itemObj = item as Record<string, Object>
+        const title = this.readStringFromObject(itemObj, 'name').trim()
+        const url = this.readStringFromObject(itemObj, 'url').trim()
+        const summary = this.readStringFromObject(itemObj, 'summary').trim()
+        // 博查 summary 是为 LLM 设计的长摘要，比传统 snippet 信息量大，放宽截断长度以保留其价值
+        const rawSnippet = summary !== '' ? summary : this.readStringFromObject(itemObj, 'snippet')
+        const snippet = this.normalizeBochaSnippet(rawSnippet)
+        if (title === '' || url === '') {
+          continue
+        }
+        results.push(new SearchResultItem(title, url, snippet))
+      }
+    } catch (error) {
+      console.error('WebSearchService', `Parse Bocha results failed: ${JSON.stringify(error)}`)
+    }
+
+    return results
   }
 
   private extractBraveErrorMessage(json: string): string {
@@ -1334,6 +1823,15 @@ export class WebSearchService {
     return trimmed.substring(0, 220) + '...'
   }
 
+  // 博查 summary 长摘要专用：放宽到 500 字，保留更多上下文给模型；buildContentForAI 仍有总长限制
+  private normalizeBochaSnippet(raw: string): string {
+    const trimmed = raw.replace(/\s+/g, ' ').trim()
+    if (trimmed.length <= 500) {
+      return trimmed
+    }
+    return trimmed.substring(0, 500) + '...'
+  }
+
   private readStringFromObject(obj: Record<string, Object>, key: string): string {
     const value = obj[key]
     if (value === undefined || value === null) {
@@ -1398,6 +1896,154 @@ export class WebSearchService {
     }
     return false
   }
+
+  // ========== Bing 结果相关性校验 ==========
+  // 提取查询中最长的连续中文核心串（去掉口语词、标点、运算符）
+  private extractCoreCjkQuery(query: string): string {
+    let cleaned = query.trim()
+    if (cleaned.includes('site:') || cleaned.includes('-site:') || cleaned.includes(' OR ')) {
+      return ''
+    }
+    cleaned = cleaned
+      .replace(/[“”"']/g, '')
+      .replace(/[？?。!！，,、：:；;]/g, ' ')
+      .trim()
+    const matches = cleaned.match(/[一-鿿]+/g)
+    if (matches === null || matches.length === 0) {
+      return ''
+    }
+    let longest = ''
+    for (let i = 0; i < matches.length; i++) {
+      if (matches[i].length > longest.length) {
+        longest = matches[i]
+      }
+    }
+    return longest
+  }
+
+  private isCjkDictionaryUrl(url: string): boolean {
+    const lower = url.toLowerCase()
+    for (let i = 0; i < this.cjkDictionaryDomains.length; i++) {
+      if (lower.includes(this.cjkDictionaryDomains[i])) {
+        return true
+      }
+    }
+    return false
+  }
+
+  // 结果是否与 core 相关：命中 core 全串，或命中 core 的 ≥2 字连续子串
+  private resultMatchesCore(item: SearchResultItem, core: string): boolean {
+    const haystack = `${item.title} ${item.snippet}`.replace(/\s+/g, '')
+    if (haystack.includes(core)) {
+      return true
+    }
+    for (let len = core.length - 1; len >= 2; len--) {
+      for (let start = 0; start + len <= core.length; start++) {
+        if (haystack.includes(core.substring(start, start + len))) {
+          return true
+        }
+      }
+    }
+    return false
+  }
+
+  // 评估 Bing 结果相关性：返回是否相关 + 过滤掉拆词噪声后的列表。
+  // 针对 Bing 把生僻多字词拆成首字、返回字典/百科噪声的固有行为。
+  private assessBingResultRelevance(query: string, results: SearchResultItem[]): BingRelevanceVerdict {
+    if (results.length === 0) {
+      return new BingRelevanceVerdict(false, [])
+    }
+    const core = this.extractCoreCjkQuery(query)
+    // 核心串 <2 字（单字或非中文主导查询）不校验，原样返回
+    if (core.length < 2) {
+      return new BingRelevanceVerdict(true, results)
+    }
+
+    const relevant: SearchResultItem[] = []
+    let dictionaryNoiseCount = 0
+    for (let i = 0; i < results.length; i++) {
+      const item = results[i]
+      if (this.resultMatchesCore(item, core)) {
+        relevant.push(item)
+      } else if (this.isCjkDictionaryUrl(item.url)) {
+        dictionaryNoiseCount += 1
+      }
+    }
+
+    // 无任何相关结果且存在字典噪声 → 判定为拆词噪声，不相关
+    if (relevant.length === 0 && dictionaryNoiseCount > 0) {
+      return new BingRelevanceVerdict(false, [])
+    }
+    // 无相关结果也无明显字典噪声：保守保留原结果，避免误杀（可能 core 提取不准）
+    if (relevant.length === 0) {
+      return new BingRelevanceVerdict(true, results)
+    }
+    return new BingRelevanceVerdict(true, relevant)
+  }
+
+  private pushUniqueCandidate(candidates: string[], value: string): void {
+    const normalized = value.replace(/\s+/g, ' ').trim()
+    if (normalized === '' || candidates.includes(normalized)) {
+      return
+    }
+    candidates.push(normalized)
+  }
+
+  private appendUniqueSearchResults(
+    target: SearchResultItem[],
+    incoming: SearchResultItem[],
+    maxCount: number
+  ): void {
+    const normalizedMaxCount = this.normalizeResultCount(maxCount)
+    for (let i = 0; i < incoming.length; i++) {
+      if (target.length >= normalizedMaxCount) {
+        return
+      }
+      const url = incoming[i].url.trim()
+      if (url === '') {
+        continue
+      }
+      let exists = false
+      for (let j = 0; j < target.length; j++) {
+        if (target[j].url.trim() === url) {
+          exists = true
+          break
+        }
+      }
+      if (!exists) {
+        target.push(incoming[i])
+      }
+    }
+  }
+
+  private buildRepeatedBingSearchQuery(query: string, page: number): string {
+    return this.buildDiversifiedSearchQuery(query, page)
+  }
+
+  // 引擎无关的查询词变体：对无原生分页能力的引擎（Bing/Tavily/Exa），
+  // 在重复搜索同一 query 时改写关键词以拿到不同结果。page<=1 不改写。
+  private buildDiversifiedSearchQuery(query: string, page: number): string {
+    if (page <= 1) {
+      return query
+    }
+
+    // 用同义/角度扩展词制造差异。注意：Bing RSS/HTML 无视引号与 -排除/OR 语法，
+    // 故这里只用普通追加词；对支持运算符的引擎（Tavily/Exa/博查）同样有效。
+    const genericSuffixes: string[] = [
+      '资料',
+      '介绍',
+      '原文',
+      '详情',
+      '报道',
+      '官方'
+    ]
+    const suffix = genericSuffixes[(page - 2) % genericSuffixes.length]
+    if (query.includes(suffix)) {
+      return query
+    }
+    return `${query} ${suffix}`.trim()
+  }
+
 
   private async enrichTopPagesForAI(
     results: SearchResultItem[],
@@ -1506,7 +2152,14 @@ export class WebSearchService {
     const controller = this.acquireRequestController(requestId)
 
     try {
-      return await this.bingSearchInternal(query, resultCount, runtime, controller, options?.cancelCheck)
+      return await this.bingSearchInternal(
+        query,
+        resultCount,
+        runtime,
+        controller,
+        options?.cancelCheck,
+        this.normalizeSearchPage(options?.page)
+      )
     } finally {
       this.releaseRequestController(requestId)
     }
@@ -1517,7 +2170,8 @@ export class WebSearchService {
     resultCount: number,
     runtime: SearchRuntimeConfigSnapshot,
     controller: HttpRequestController | null,
-    cancelCheck?: () => boolean
+    cancelCheck?: () => boolean,
+    page: number = 1
   ): Promise<BingSearchResponse> {
     try {
       if (this.isCancelled(controller, cancelCheck)) {
@@ -1525,33 +2179,135 @@ export class WebSearchService {
       }
 
       const encodedQuery = encodeURIComponent(query)
-      const primaryUrl = `https://www.bing.com/search?q=${encodedQuery}&setlang=zh-hans`
-      const primaryResponse = await this.bingSearchByUrl(primaryUrl, query, resultCount, runtime, controller, cancelCheck)
+      const normalizedCount = this.normalizeResultCount(resultCount)
+      const startIndex = this.getSearchStartIndex(normalizedCount, page)
+      const mergedResponse = new BingSearchResponse(true, query, [], '')
+      const errors: string[] = []
+
+      const primaryRssUrl = this.buildBingRssSearchUrl('www.bing.com', encodedQuery, normalizedCount, startIndex)
+      const primaryRssResponse =
+        await this.bingRssSearchByUrl(primaryRssUrl, query, normalizedCount, runtime, controller, cancelCheck)
+      this.mergeBingResponse(mergedResponse, primaryRssResponse, normalizedCount, errors)
 
       if (this.isCancelled(controller, cancelCheck)) {
         return new BingSearchResponse(false, query, [], '请求已取消')
       }
 
-      // 若主域解析失败或结果为空，至少重试一次备用入口
-      const needRetry = !primaryResponse.success || primaryResponse.results.length === 0
-      if (!needRetry) {
-        return primaryResponse
+      if (mergedResponse.results.length < normalizedCount) {
+        const fallbackRssUrl = this.buildBingRssSearchUrl('cn.bing.com', encodedQuery, normalizedCount, startIndex)
+        const fallbackRssResponse =
+          await this.bingRssSearchByUrl(fallbackRssUrl, query, normalizedCount, runtime, controller, cancelCheck)
+        this.mergeBingResponse(mergedResponse, fallbackRssResponse, normalizedCount, errors)
       }
 
-      const fallbackUrl = `https://cn.bing.com/search?q=${encodedQuery}`
-      const fallbackResponse = await this.bingSearchByUrl(fallbackUrl, query, resultCount, runtime, controller, cancelCheck)
-      if (fallbackResponse.success && fallbackResponse.results.length > 0) {
-        return fallbackResponse
+      if (this.isCancelled(controller, cancelCheck)) {
+        return new BingSearchResponse(false, query, [], '请求已取消')
       }
 
-      if (!primaryResponse.success && fallbackResponse.success) {
-        return fallbackResponse
+      if (mergedResponse.results.length < normalizedCount) {
+        const primaryUrl = this.buildBingHtmlSearchUrl('www.bing.com', encodedQuery, normalizedCount, startIndex)
+        const primaryResponse = await this.bingSearchByUrl(primaryUrl, query, normalizedCount, runtime, controller, cancelCheck)
+        this.mergeBingResponse(mergedResponse, primaryResponse, normalizedCount, errors)
       }
 
-      return primaryResponse.success ? primaryResponse : fallbackResponse
+      if (this.isCancelled(controller, cancelCheck)) {
+        return new BingSearchResponse(false, query, [], '请求已取消')
+      }
+
+      if (mergedResponse.results.length < normalizedCount) {
+        const fallbackUrl = this.buildBingHtmlSearchUrl('cn.bing.com', encodedQuery, normalizedCount, startIndex)
+        const fallbackResponse =
+          await this.bingSearchByUrl(fallbackUrl, query, normalizedCount, runtime, controller, cancelCheck)
+        this.mergeBingResponse(mergedResponse, fallbackResponse, normalizedCount, errors)
+      }
+
+      if (mergedResponse.results.length > 0) {
+        return mergedResponse
+      }
+
+      if (errors.length > 0) {
+        return new BingSearchResponse(false, query, [], this.joinUniqueMessages(errors))
+      }
+
+      return mergedResponse
     } catch (error) {
       return new BingSearchResponse(false, query, [], `Bing 搜索失败: ${JSON.stringify(error)}`)
     }
+  }
+
+  private mergeBingResponse(
+    target: BingSearchResponse,
+    incoming: BingSearchResponse,
+    maxCount: number,
+    errors: string[]
+  ): void {
+    if (!incoming.success) {
+      if (incoming.errorMessage !== '') {
+        errors.push(incoming.errorMessage)
+      }
+      return
+    }
+    if (incoming.results.length === 0) {
+      return
+    }
+    this.appendUniqueSearchResults(target.results, incoming.results, maxCount)
+  }
+
+  private joinUniqueMessages(messages: string[]): string {
+    const unique: string[] = []
+    for (let i = 0; i < messages.length; i++) {
+      const message = messages[i].trim()
+      if (message === '' || unique.includes(message)) {
+        continue
+      }
+      unique.push(message)
+    }
+    return unique.join('; ')
+  }
+
+  private buildBingRssSearchUrl(host: string, encodedQuery: string, resultCount: number, startIndex: number): string {
+    return `https://${host}/search?format=rss&q=${encodedQuery}&setlang=zh-Hans&cc=CN&mkt=zh-CN&count=${resultCount}&first=${startIndex}`
+  }
+
+  private buildBingHtmlSearchUrl(host: string, encodedQuery: string, resultCount: number, startIndex: number): string {
+    return `https://${host}/search?q=${encodedQuery}&setlang=zh-Hans&cc=CN&mkt=zh-CN&count=${resultCount}&first=${startIndex}`
+  }
+
+  private async bingRssSearchByUrl(
+    searchUrl: string,
+    query: string,
+    resultCount: number,
+    runtime: SearchRuntimeConfigSnapshot,
+    controller: HttpRequestController | null,
+    cancelCheck?: () => boolean
+  ): Promise<BingSearchResponse> {
+    if (this.isCancelled(controller, cancelCheck)) {
+      return new BingSearchResponse(false, query, [], '请求已取消')
+    }
+
+    const response = await this.httpService.get(
+      searchUrl,
+      {
+        'Accept': 'application/rss+xml, application/xml;q=0.9, text/xml;q=0.8, */*;q=0.5'
+      },
+      this.buildHttpOptions(runtime.timeout, controller)
+    )
+
+    if (!response.success) {
+      return new BingSearchResponse(false, query, [], response.errorMessage)
+    }
+
+    if (this.isCancelled(controller, cancelCheck)) {
+      return new BingSearchResponse(false, query, [], '请求已取消')
+    }
+
+    const challengeMessage = this.extractBingChallengeMessage(response.data)
+    if (challengeMessage !== '') {
+      return new BingSearchResponse(false, query, [], challengeMessage)
+    }
+
+    const results = this.parseBingRssSearchResults(response.data, this.normalizeResultCount(resultCount))
+    return new BingSearchResponse(true, query, results, '')
   }
 
   private async bingSearchByUrl(
@@ -1580,8 +2336,47 @@ export class WebSearchService {
       return new BingSearchResponse(false, query, [], '请求已取消')
     }
 
+    const challengeMessage = this.extractBingChallengeMessage(response.data)
+    if (challengeMessage !== '') {
+      return new BingSearchResponse(false, query, [], challengeMessage)
+    }
+
     const results = this.parseBingSearchResults(response.data, this.normalizeResultCount(resultCount))
     return new BingSearchResponse(true, query, results, '')
+  }
+
+  private parseBingRssSearchResults(xml: string, maxCount: number): SearchResultItem[] {
+    const results: SearchResultItem[] = []
+    const seenUrls: Map<string, boolean> = new Map()
+    const itemRegex = /<item\b[^>]*>([\s\S]*?)<\/item>/gi
+    let match = itemRegex.exec(xml)
+
+    while (match !== null && results.length < maxCount) {
+      const block = match[1]
+      const title = this.stripHtmlTags(this.extractXmlTagContent(block, 'title')).trim()
+      const url = this.resolveBingResultUrl(this.extractXmlTagContent(block, 'link')).trim()
+      const snippet = this.normalizeSnippet(this.stripHtmlTags(this.extractXmlTagContent(block, 'description')).trim())
+
+      if (title !== '' && url !== '' && !this.isBingInternalUrl(url) && !seenUrls.has(url)) {
+        seenUrls.set(url, true)
+        results.push(new SearchResultItem(title, url, snippet))
+      }
+
+      match = itemRegex.exec(xml)
+    }
+
+    return results
+  }
+
+  private extractXmlTagContent(xml: string, tagName: string): string {
+    const regex = new RegExp(`<${tagName}\\b[^>]*>([\\s\\S]*?)<\\/${tagName}>`, 'i')
+    const match = regex.exec(xml)
+    if (!match || match[1] === undefined) {
+      return ''
+    }
+    const cdataMatch = /^<!\[CDATA\[([\s\S]*?)\]\]>$/.exec(match[1].trim())
+    const raw = cdataMatch && cdataMatch[1] !== undefined ? cdataMatch[1] : match[1]
+    return this.decodeHtmlEntities(raw.trim())
   }
 
   // 解析 Bing 搜索结果页 HTML（多策略，增强鲁棒性）
@@ -1630,7 +2425,7 @@ export class WebSearchService {
     let match = headingRegex.exec(html)
 
     while (match !== null && output.length < maxCount) {
-      const url = match[1]
+      const url = this.resolveBingResultUrl(match[1])
       const title = this.stripHtmlTags(match[2]).trim()
 
       if (title !== '' && !this.isBingInternalUrl(url)) {
@@ -1658,7 +2453,7 @@ export class WebSearchService {
       return null
     }
 
-    const url = linkMatch[1]
+    const url = this.resolveBingResultUrl(linkMatch[1])
     const title = this.stripHtmlTags(linkMatch[2]).trim()
     if (title === '' || this.isBingInternalUrl(url)) {
       return null
@@ -1669,7 +2464,7 @@ export class WebSearchService {
       snippetMatch = /<p[^>]*>([\s\S]*?)<\/p>/i.exec(block)
     }
 
-    const snippet = snippetMatch ? this.stripHtmlTags(snippetMatch[1]).trim() : ''
+    const snippet = snippetMatch ? this.normalizeSnippet(this.stripHtmlTags(snippetMatch[1]).trim()) : ''
     return new SearchResultItem(title, url.trim(), snippet)
   }
 
@@ -1686,19 +2481,162 @@ export class WebSearchService {
 
   private isBingInternalUrl(url: string): boolean {
     const lower = url.toLowerCase()
-    return lower.includes('bing.com') || lower.startsWith('/search') || lower.startsWith('/?')
+    if (lower.startsWith('/search') || lower.startsWith('/?') || lower.startsWith('/ck/')
+      || lower.startsWith('/aclick')) {
+      return true
+    }
+    const host = this.extractHostFromUrl(lower)
+    return host === 'bing.com' || host === 'www.bing.com' || host === 'cn.bing.com'
+      || host === 'www4.bing.com'
   }
 
-  // 移除 HTML 标签
-  private stripHtmlTags(text: string): string {
+  private extractHostFromUrl(url: string): string {
+    let value = url.trim()
+    if (value.startsWith('https://')) {
+      value = value.substring(8)
+    } else if (value.startsWith('http://')) {
+      value = value.substring(7)
+    } else {
+      return ''
+    }
+    const slashIndex = value.indexOf('/')
+    if (slashIndex >= 0) {
+      value = value.substring(0, slashIndex)
+    }
+    const questionIndex = value.indexOf('?')
+    if (questionIndex >= 0) {
+      value = value.substring(0, questionIndex)
+    }
+    const colonIndex = value.indexOf(':')
+    if (colonIndex >= 0) {
+      value = value.substring(0, colonIndex)
+    }
+    return value
+  }
+
+  private resolveBingResultUrl(rawUrl: string): string {
+    const decodedUrl = this.decodeHtmlEntities(rawUrl).trim()
+    if (decodedUrl === '') {
+      return ''
+    }
+    if (!this.isBingInternalUrl(decodedUrl)) {
+      return decodedUrl
+    }
+
+    const extractedUrl = this.extractUrlQueryParam(decodedUrl, 'url')
+    if (extractedUrl !== '') {
+      return extractedUrl
+    }
+
+    const extractedRedirect = this.extractUrlQueryParam(decodedUrl, 'r')
+    if (extractedRedirect !== '') {
+      return extractedRedirect
+    }
+
+    const extractedBingUrl = this.extractUrlQueryParam(decodedUrl, 'u')
+    if (extractedBingUrl !== '') {
+      const decodedBingUrl = this.decodeBingEncodedUrl(extractedBingUrl)
+      if (decodedBingUrl !== '') {
+        return decodedBingUrl
+      }
+      if (!this.isBingInternalUrl(extractedBingUrl)) {
+        return extractedBingUrl
+      }
+    }
+
+    return decodedUrl
+  }
+
+  private decodeBingEncodedUrl(rawValue: string): string {
+    let value = rawValue.trim()
+    if (value === '') {
+      return ''
+    }
+    if (value.startsWith('a1') && value.length > 2) {
+      value = value.substring(2)
+    }
+    value = value.replace(/-/g, '+').replace(/_/g, '/')
+    while (value.length % 4 !== 0) {
+      value += '='
+    }
+    try {
+      const helper = new util.Base64Helper()
+      const decodedBytes = helper.decodeSync(value)
+      const decoder = util.TextDecoder.create('utf-8')
+      const decoded = decoder.decodeToString(decodedBytes).trim()
+      if (decoded.startsWith('http://') || decoded.startsWith('https://')) {
+        return decoded
+      }
+    } catch (_error) {}
+    return ''
+  }
+
+  private extractUrlQueryParam(url: string, key: string): string {
+    const queryStart = url.indexOf('?')
+    if (queryStart < 0 || queryStart >= url.length - 1) {
+      return ''
+    }
+
+    const fragmentStart = url.indexOf('#', queryStart + 1)
+    const query = fragmentStart >= 0 ? url.substring(queryStart + 1, fragmentStart) : url.substring(queryStart + 1)
+    const parts = query.split('&')
+    for (let i = 0; i < parts.length; i++) {
+      const separatorIndex = parts[i].indexOf('=')
+      if (separatorIndex <= 0) {
+        continue
+      }
+      const rawKey = parts[i].substring(0, separatorIndex)
+      if (rawKey !== key) {
+        continue
+      }
+      const rawValue = parts[i].substring(separatorIndex + 1).replace(/\+/g, ' ')
+      try {
+        return decodeURIComponent(rawValue)
+      } catch (_error) {
+        return rawValue
+      }
+    }
+    return ''
+  }
+
+  private extractBingChallengeMessage(html: string): string {
+    const lower = html.toLowerCase()
+    const hasChallenge = lower.includes('turnstile') || lower.includes('captcha') ||
+      html.includes('最后一步') || html.includes('请解决以下难题')
+    if (!hasChallenge) {
+      return ''
+    }
+    return 'Bing Local 被 Bing 验证页拦截，无法解析搜索结果。已优先尝试 RSS 入口；若仍失败，请稍后重试或切换 Brave/Tavily/Exa。'
+  }
+
+  private decodeHtmlEntities(text: string): string {
     return text
-      .replace(/<[^>]+>/g, '')
       .replace(/&nbsp;/g, ' ')
       .replace(/&amp;/g, '&')
       .replace(/&lt;/g, '<')
       .replace(/&gt;/g, '>')
       .replace(/&quot;/g, '"')
+      .replace(/&apos;/g, "'")
       .replace(/&#39;/g, "'")
+      .replace(/&#(\d+);/g, (_match: string, code: string): string => {
+        const value = Number(code)
+        if (Number.isNaN(value)) {
+          return ''
+        }
+        return String.fromCharCode(value)
+      })
+      .replace(/&#x([0-9a-fA-F]+);/g, (_match: string, code: string): string => {
+        const value = parseInt(code, 16)
+        if (Number.isNaN(value)) {
+          return ''
+        }
+        return String.fromCharCode(value)
+      })
+  }
+
+  // 移除 HTML 标签
+  private stripHtmlTags(text: string): string {
+    return this.decodeHtmlEntities(text.replace(/<[^>]+>/g, ''))
       .replace(/\s+/g, ' ')
       .trim()
   }

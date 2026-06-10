@@ -251,8 +251,9 @@ export class ChatSendFlow {
     forcedToolIds: string[],
     currentModelId: string
   ): ChatExecutionPlan {
-    const searchEnabled = this.shouldEnableWebSearch(webSearchConversationEnabled, forcedToolIds)
     const enabledToolIds = this.buildEnabledToolIds(selectedToolIds, this.filterNonSearchToolIds(forcedToolIds))
+    const searchEnabled = this.shouldEnableWebSearch(webSearchConversationEnabled, forcedToolIds) ||
+      enabledToolIds.includes('web_search')
     if (searchEnabled && this.deps.toolRegistry.isToolRegistered('web_search')) {
       appendUniqueToolId(enabledToolIds, 'web_search')
     }

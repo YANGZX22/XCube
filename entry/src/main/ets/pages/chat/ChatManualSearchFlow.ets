@@ -24,6 +24,7 @@ import { AppStateManager } from '../../viewmodels/AppStateManager'
 import { getEffectiveApiKey } from '../../config/PresetProviders'
 import {
   cleanSearchQuery,
+  normalizeOptimizedSearchQuery,
   normalizeRelativeTimeForSearchQuery,
   shouldApplyLlmOptimizationByQuery
 } from '../../utils/SearchQueryUtils'
@@ -293,7 +294,7 @@ export class ChatManualSearchFlow {
         }
       }
 
-      optimizedQuery = cleanSearchQuery(optimizedQuery)
+      optimizedQuery = normalizeOptimizedSearchQuery(cleanedQuery, optimizedQuery)
       const normalizedQuery = normalizeRelativeTimeForSearchQuery(cleanedQuery, optimizedQuery)
       if (normalizedQuery !== optimizedQuery) {
         optimizedQuery = normalizedQuery

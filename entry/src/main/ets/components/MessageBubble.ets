@@ -1,11 +1,13 @@
 import { ChatMessage, MessageRole, MessageAttachment, AttachmentType, ToolCall, ToolResult } from '../models/ChatModels'
 import { Markdown, MarkdownController } from '@luvi/lv-markdown-in'
 import { pasteboard } from '@kit.BasicServicesKit'
+import { image } from '@kit.ImageKit'
 import { showToast } from '../utils/ToastUtil'
 import { getModelIconPath, buildIconResourcePath } from '../utils/ProviderIconUtils'
 import { shouldShowAssistantMessageToolbar } from '../utils/MessageBubbleDisplayUtils'
 import { SearchReferenceCard } from './SearchReferenceCard'
 import { ToolCallCard } from './ToolCallCard'
+import { AskUserCard } from './AskUserCard'
 import { HtmlPreviewCard } from './HtmlPreviewCard'
 import { TypingDots } from './TypingDots'
 import { AssistantAvatarView } from './AssistantAvatar'
@@ -64,6 +66,11 @@ export struct MessageBubble {
   @Local showTranslation: boolean = false  // 是否显示翻译结果
   @Local isTranslationExpanded: boolean = true  // 翻译结果是否展开
   @Local currentTranslateLang: string = ''  // 当前翻译的目标语言
+  @Local showLatexPreview: boolean = false
+  @Local latexPreviewText: string = ''
+  @Local latexPreviewPixelMap: image.PixelMap | undefined = undefined
+  @Local latexPreviewImageWidth: number = 0
+  @Local latexPreviewImageHeight: number = 0
   // 深色模式状态（用于主题适配）
   private get isDarkMode(): boolean {
     return getAppUiState().isDarkMode
@@ -140,6 +147,8 @@ export struct MessageBubble {
   // TTS朗读回调
   @Event onTTS: (messageId: string, content: string) => void = () => {}
   @Event onTTSStop: () => void = () => {}
+  @Event onAskUserAnswer: (toolCallId: string, answerJson: string) => void =
+    (_toolCallId: string, _answerJson: string): void => {}
   // 多选模式回调
   @Event onSelect: (messageId: string) => void = () => {}
   @Event onEnterMultiSelect: (messageId: string) => void = () => {}
@@ -305,6 +314,11 @@ export struct MessageBubble {
     this.showTranslation = false
     this.isTranslationExpanded = true
     this.currentTranslateLang = ''
+    this.showLatexPreview = false
+    this.latexPreviewText = ''
+    this.latexPreviewPixelMap = undefined
+    this.latexPreviewImageWidth = 0
+    this.latexPreviewImageHeight = 0
   }
 
   private buildAttachmentSignature(attachments: MessageAttachment[]): string {
@@ -439,6 +453,9 @@ export struct MessageBubble {
       .setHyperlinkClickListener((title: string, src: string): boolean => {
         return this.openWebSheetForLink(title, src)
       })
+      .setLatexClickListener((text: string, pixelMap: image.PixelMap): boolean => {
+        return this.openLatexPreview(text, pixelMap)
+      })
       .setCodeCopyListener((code: string) => {
         this.copyToClipboard(code)
       })
@@ -477,6 +494,9 @@ export struct MessageBubble {
       .setHyperlinkClickListener((title: string, src: string): boolean => {
         return this.openWebSheetForLink(title, src)
       })
+      .setLatexClickListener((text: string, pixelMap: image.PixelMap): boolean => {
+        return this.openLatexPreview(text, pixelMap)
+      })
       .setCodeCopyListener((code: string) => {
         this.copyToClipboard(code)
       })
@@ -510,6 +530,9 @@ export struct MessageBubble {
       .setFootnoteTextColor(linkColor)
       .setHyperlinkClickListener((title: string, src: string): boolean => {
         return this.openWebSheetForLink(title, src)
+      })
+      .setLatexClickListener((text: string, pixelMap: image.PixelMap): boolean => {
+        return this.openLatexPreview(text, pixelMap)
       })
       .setCodeCopyListener((code: string) => {
         this.copyToClipboard(code)
@@ -575,6 +598,42 @@ export struct MessageBubble {
         TransitionEffect.OPACITY
       ).animation({ duration: 250, curve: Curve.EaseOut })
     )
+    .bindSheet($$this.showLatexPreview, this.LatexPreviewSheet(), {
+      height: '25%',
+      detents: ['25%'],
+      dragBar: true,
+      showClose: true,
+      maskColor: '#00000000',
+      title: { title: '公式预览' }
+    })
+  }
+
+  @Builder
+  LatexPreviewSheet() {
+    Column() {
+      if (this.latexPreviewPixelMap !== undefined) {
+        Scroll() {
+          Row() {
+            Image(this.latexPreviewPixelMap as image.PixelMap)
+              .width(this.latexPreviewImageWidth * 1.5)
+              .height(this.latexPreviewImageHeight * 1.5)
+              .objectFit(ImageFit.Contain)
+          }
+          .padding({ left: 16, right: 16, top: 14, bottom: 14 })
+          .justifyContent(FlexAlign.Start)
+        }
+        .width('100%')
+        .layoutWeight(1)
+        .scrollable(ScrollDirection.Horizontal)
+        .scrollBar(BarState.Auto)
+      } else {
+        Blank()
+          .layoutWeight(1)
+      }
+    }
+    .width('100%')
+    .height('100%')
+    .backgroundColor(Color.Transparent)
   }
 
   // 处理翻译
@@ -788,6 +847,38 @@ export struct MessageBubble {
 
   private canReadMessageContent(): boolean {
     return this.hasMessageTextContent()
+  }
+
+  private normalizeToolFunctionName(raw: string): string {
+    const value = raw as string | null | undefined
+    if (value === undefined || value === null) {
+      return ''
+    }
+    return value.trim().toLowerCase().replace(/[\s\-]+/g, '_')
+  }
+
+  private isAskUserToolCall(toolCall: ToolCall): boolean {
+    const normalized = this.normalizeToolFunctionName(toolCall.functionName)
+    return normalized === 'ask_user' || normalized === 'user_input' || normalized === 'ask'
+  }
+
+  private findToolResultForCall(toolCallId: string): ToolResult | null {
+    for (let i = 0; i < this.message.toolResults.length; i++) {
+      if (this.message.toolResults[i].toolCallId === toolCallId) {
+        return this.message.toolResults[i]
+      }
+    }
+    return null
+  }
+
+  private openLatexPreview(text: string, pixelMap: image.PixelMap): boolean {
+    const size = pixelMap.getImageInfoSync().size
+    this.latexPreviewText = text
+    this.latexPreviewPixelMap = pixelMap
+    this.latexPreviewImageWidth = Math.max(1, px2vp(size.width))
+    this.latexPreviewImageHeight = Math.max(1, px2vp(size.height))
+    this.showLatexPreview = true
+    return true
   }
 
   // 生成两列网格行索引
@@ -1293,7 +1384,16 @@ export struct MessageBubble {
             // ========== 工具调用区域 ==========
             if (this.message.hasToolCalls()) {
               ForEach(this.message.toolCalls, (toolCall: ToolCall, index: number) => {
-                if (!this.shouldHideToolCallCard(toolCall)) {
+                if (this.isAskUserToolCall(toolCall)) {
+                  AskUserCard({
+                    toolCall: toolCall,
+                    isAnswered: this.findToolResultForCall(toolCall.id) !== null,
+                    onAnswer: (toolCallId: string, answerJson: string): void => {
+                      this.onAskUserAnswer(toolCallId, answerJson)
+                    }
+                  })
+                    .margin({ bottom: 6 })
+                } else if (!this.shouldHideToolCallCard(toolCall)) {
                   ToolCallCard({
                     toolCall: toolCall,
                     toolResult: index < this.message.toolResults.length ? this.message.toolResults[index] : null,

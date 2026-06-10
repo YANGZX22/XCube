@@ -46,6 +46,55 @@ function isNewsIntent(text: string): boolean {
   return false
 }
 
+function extractDefinitionSubject(query: string): string {
+  let text = query.trim()
+  text = text.replace(/^(?:请问|问一下|想知道|帮我看看|帮我解释一下|解释一下|介绍一下|说说)[\s，,。:：-]*/i, '')
+  const prefixPatterns: RegExp[] = [
+    /^(?:什么是|啥是|何为|什么叫|何谓|介绍一下|解释一下|说说)\s*(.+)$/i,
+    /^(?:what is|what's|whats)\s+(.+)$/i
+  ]
+  for (let i = 0; i < prefixPatterns.length; i++) {
+    const match = prefixPatterns[i].exec(text)
+    if (match !== null && match[1] !== undefined && match[1].trim() !== '') {
+      text = match[1].trim()
+      break
+    }
+  }
+
+  const suffixPatterns: RegExp[] = [
+    /^(.+?)(?:是什么意思|的意思是什么|的含义是什么|的解释是什么)[？?]?$/i,
+    /^(.+?)(?:是啥|是什么|什么意思|是什麼|是什麽|指什么|指的是啥|指的是什么|怎么理解)[？?]?$/i
+  ]
+  for (let i = 0; i < suffixPatterns.length; i++) {
+    const match = suffixPatterns[i].exec(text)
+    if (match !== null && match[1] !== undefined && match[1].trim() !== '') {
+      text = match[1].trim()
+      break
+    }
+  }
+
+  return text.replace(/[？?。!！]+$/g, '').trim()
+}
+
+function isFragmentQuery(candidate: string, originalCore: string): boolean {
+  const compactCandidate = candidate.replace(/\s+/g, '').trim()
+  const compactOriginal = originalCore.replace(/\s+/g, '').trim()
+  if (compactCandidate === '' || compactOriginal === '') {
+    return true
+  }
+  if (compactOriginal === compactCandidate) {
+    return false
+  }
+  if (/^[\u4e00-\u9fff]$/.test(compactCandidate) && compactOriginal.includes(compactCandidate)) {
+    return true
+  }
+  if (/^[\u4e00-\u9fff]{2}$/.test(compactCandidate) && compactOriginal.length >= 3 &&
+    compactOriginal.includes(compactCandidate)) {
+    return true
+  }
+  return false
+}
+
 // 去除口语化前缀、多余空格，保留核心关键词
 export function cleanSearchQuery(query: string): string {
   let cleaned = query.trim()
@@ -80,8 +129,18 @@ export function cleanSearchQuery(query: string): string {
     }
   }
 
+  cleaned = extractDefinitionSubject(cleaned)
   cleaned = cleaned.replace(/\s+/g, ' ')
   return cleaned !== '' ? cleaned : query
+}
+
+export function normalizeOptimizedSearchQuery(userQuery: string, optimizedQuery: string): string {
+  const originalCore = cleanSearchQuery(userQuery)
+  const candidate = cleanSearchQuery(optimizedQuery)
+  if (isFragmentQuery(candidate, originalCore)) {
+    return originalCore
+  }
+  return candidate !== '' ? candidate : originalCore
 }
 
 // 将相对时间词转为具体日期（仅在必要场景做增强，避免过度改写）

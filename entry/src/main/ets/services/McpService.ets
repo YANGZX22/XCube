@@ -149,7 +149,6 @@ export class McpService {
   private toolRegistry: ToolRegistry
   private sessionIds: Map<string, string> = new Map()
   private negotiatedProtocolVersions: Map<string, string> = new Map()
-  private readonly chatSearchToolId: string = 'web_search'
 
   private constructor() {
     this.preferencesService = getPreferencesService()
@@ -227,7 +226,7 @@ export class McpService {
     const ids: string[] = []
     for (let i = 0; i < toolIds.length; i++) {
       const toolId = toolIds[i].trim()
-      if (toolId === '' || toolId === this.chatSearchToolId) {
+      if (toolId === '') {
         continue
       }
       if (!ids.includes(toolId)) {

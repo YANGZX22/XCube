@@ -129,11 +129,17 @@ interface MultimodalContentPart {
   type: string
   text?: string
   image_url?: ImageUrl
+  file?: FileInput
 }
 
 interface ImageUrl {
   url: string
   detail?: string
+}
+
+interface FileInput {
+  filename: string
+  file_data: string
 }
 
 // 多模态消息内容接口
@@ -236,6 +242,10 @@ interface OpenAIResponsesContentPart {
   text?: string
   image_url?: string
   detail?: string
+  filename?: string
+  file_data?: string
+  file_id?: string
+  file_url?: string
 }
 
 interface OpenAIResponsesInputItem {
@@ -663,6 +673,11 @@ export class AIApiService {
   private partialTagBuffer: string = ''
   // Function Calling 工具调用累积状态（流式响应）
   private streamToolCalls: Map<number, ToolCall> = new Map()
+  // 一些 OpenAI 兼容接口会把工具调用以 DSML 文本形式输出，需拦截并转成 ToolCall。
+  private textualToolCallBuffer: string = ''
+  private textualToolCallBlockActive: boolean = false
+  private textualToolCallSeq: number = 0
+  private textualToolCallsEnabled: boolean = false
 
   private constructor() {
     this.httpService = getHttpService()
@@ -676,6 +691,10 @@ export class AIApiService {
     this.minimaxContentBuffer = ''
     this.partialTagBuffer = ''
     this.streamToolCalls = new Map()
+    this.textualToolCallBuffer = ''
+    this.textualToolCallBlockActive = false
+    this.textualToolCallSeq = 0
+    this.textualToolCallsEnabled = false
   }
 
   private toCompatibilityInfo(config: AIApiConfig): CompatibilityProviderInfo {
@@ -749,6 +768,52 @@ export class AIApiService {
       config.openaiTransport === OpenAITransport.RESPONSES
   }
 
+  private buildFileDataUrl(attachment: MessageAttachment): string {
+    const mimeType = attachment.mimeType !== '' ? attachment.mimeType : 'application/octet-stream'
+    return `data:${mimeType};base64,${attachment.base64Data}`
+  }
+
+  private isTextFileAttachment(attachment: MessageAttachment): boolean {
+    const mimeType = attachment.mimeType.toLowerCase()
+    if (mimeType.startsWith('text/')) {
+      return true
+    }
+    const lowerName = attachment.name.toLowerCase()
+    const textExtensions: string[] = [
+      '.txt', '.md', '.markdown', '.json', '.csv', '.tsv', '.xml', '.html', '.htm',
+      '.css', '.js', '.ts', '.ets', '.java', '.kt', '.swift', '.py', '.go', '.rs',
+      '.c', '.cpp', '.h', '.hpp', '.cs', '.php', '.rb', '.sh', '.yaml', '.yml',
+      '.toml', '.ini', '.log'
+    ]
+    for (let i = 0; i < textExtensions.length; i++) {
+      if (lowerName.endsWith(textExtensions[i])) {
+        return true
+      }
+    }
+    return mimeType === 'application/json' || mimeType === 'application/xml' ||
+      mimeType === 'application/x-yaml'
+  }
+
+  private buildTextAttachmentContent(attachment: MessageAttachment): string {
+    if (!this.isTextFileAttachment(attachment) || attachment.base64Data === '') {
+      return ''
+    }
+    try {
+      const base64Helper = new util.Base64Helper()
+      const bytes = base64Helper.decodeSync(attachment.base64Data)
+      const decoder = util.TextDecoder.create('utf-8')
+      const text = decoder.decodeToString(bytes, { stream: false }).trim()
+      if (text === '') {
+        return ''
+      }
+      const fileName = attachment.name !== '' ? attachment.name : 'attachment'
+      return `附件 ${fileName} 内容:\n\`\`\`\n${text}\n\`\`\``
+    } catch (error) {
+      console.warn('AIApiService', `Failed to decode text attachment ${attachment.name}: ${JSON.stringify(error)}`)
+      return ''
+    }
+  }
+
   private buildResponsesUsageInfo(usage?: OpenAIResponsesUsageInfo): UsageInfo | null {
     if (usage === undefined || usage === null) {
       return null
@@ -790,6 +855,11 @@ export class AIApiService {
 
   // 获取累积的工具调用（流式响应完成后调用）
   getAccumulatedToolCalls(): ToolCall[] {
+    if (this.textualToolCallsEnabled && this.textualToolCallBuffer !== '') {
+      this.parseTextualToolCallBlock(this.textualToolCallBuffer)
+      this.textualToolCallBuffer = ''
+      this.textualToolCallBlockActive = false
+    }
     const result: ToolCall[] = []
     this.streamToolCalls.forEach((toolCall, index) => {
       const normalizedId = this.normalizeToolCallId(toolCall.id, index)
@@ -871,6 +941,152 @@ export class AIApiService {
       console.warn('AIApiService', `Failed to stringify tool argument chunk: ${JSON.stringify(error)}`)
       return ''
     }
+  }
+
+  private findTextualToolCallStart(text: string): number {
+    const markers: string[] = ['<｜｜DSML｜｜tool_calls>', '<||DSML||tool_calls>']
+    let found = -1
+    for (let i = 0; i < markers.length; i++) {
+      const index = text.indexOf(markers[i])
+      if (index >= 0 && (found < 0 || index < found)) {
+        found = index
+      }
+    }
+    return found
+  }
+
+  private findTextualToolCallEnd(text: string): number {
+    const markers: string[] = ['</｜｜DSML｜｜tool_calls>', '</||DSML||tool_calls>']
+    let found = -1
+    for (let i = 0; i < markers.length; i++) {
+      const index = text.indexOf(markers[i])
+      if (index >= 0 && (found < 0 || index < found)) {
+        found = index + markers[i].length
+      }
+    }
+    return found
+  }
+
+  private findTrailingTextualToolCallPrefixLength(text: string): number {
+    const markers: string[] = ['<｜｜DSML｜｜tool_calls>', '<||DSML||tool_calls>']
+    let found = 0
+    for (let i = 0; i < markers.length; i++) {
+      const marker = markers[i]
+      for (let len = 3; len < marker.length; len++) {
+        if (text.endsWith(marker.substring(0, len)) && len > found) {
+          found = len
+        }
+      }
+    }
+    return found
+  }
+
+  private stripTextualToolTags(text: string): string {
+    return text
+      .replace(/<[^>]*DSML[^>]*parameter[^>]*>/g, '')
+      .replace(/<\/[^>]*DSML[^>]*parameter>/g, '')
+      .replace(/<[^>]*parameter[^>]*>/g, '')
+      .replace(/<\/[^>]*parameter>/g, '')
+      .trim()
+  }
+
+  private parseTextualToolCallBlock(block: string): void {
+    const invokeRegex = /<[^>]*invoke\s+name=["']([^"']+)["'][^>]*>([\s\S]*?)<\/[^>]*invoke>/gi
+    let invokeMatch = invokeRegex.exec(block)
+    while (invokeMatch !== null) {
+      const rawName = invokeMatch[1] !== undefined ? invokeMatch[1] : ''
+      const functionName = this.normalizeToolFunctionName(rawName)
+      const body = invokeMatch[2] !== undefined ? invokeMatch[2] : ''
+      if (functionName !== '') {
+        const args: Record<string, string> = {}
+        const paramRegex = /<[^>]*parameter\s+name=["']([^"']+)["'][^>]*>([\s\S]*?)<\/[^>]*parameter>/gi
+        let paramMatch = paramRegex.exec(body)
+        while (paramMatch !== null) {
+          const key = paramMatch[1] !== undefined ? paramMatch[1].trim() : ''
+          const value = paramMatch[2] !== undefined ? this.stripTextualToolTags(paramMatch[2]) : ''
+          if (key !== '') {
+            args[key] = value
+          }
+          paramMatch = paramRegex.exec(body)
+        }
+
+        let argText = '{}'
+        const trimmedBody = this.stripTextualToolTags(body)
+        if (Object.keys(args).length > 0) {
+          argText = JSON.stringify(args)
+        } else if (trimmedBody.startsWith('{') && trimmedBody.endsWith('}')) {
+          argText = trimmedBody
+        }
+
+        const index = this.streamToolCalls.size + this.textualToolCallSeq
+        this.textualToolCallSeq += 1
+        const id = `textual_tool_call_${Date.now()}_${this.textualToolCallSeq}`
+        this.streamToolCalls.set(index, new ToolCall(id, functionName, argText))
+        console.info('AIApiService', `Parsed textual tool call: ${functionName}`)
+      }
+      invokeMatch = invokeRegex.exec(block)
+    }
+  }
+
+  private absorbTextualToolCalls(content: string): string {
+    if (content === '') {
+      return ''
+    }
+    if (!this.textualToolCallsEnabled) {
+      return content
+    }
+
+    let remaining = content
+    if (!this.textualToolCallBlockActive && this.textualToolCallBuffer !== '') {
+      remaining = this.textualToolCallBuffer + remaining
+      this.textualToolCallBuffer = ''
+    }
+    let visible = ''
+    while (remaining !== '') {
+      if (this.textualToolCallBlockActive) {
+        this.textualToolCallBuffer += remaining
+        const endIndex = this.findTextualToolCallEnd(this.textualToolCallBuffer)
+        if (endIndex < 0) {
+          return visible
+        }
+        const block = this.textualToolCallBuffer.substring(0, endIndex)
+        const tail = this.textualToolCallBuffer.substring(endIndex)
+        this.parseTextualToolCallBlock(block)
+        this.textualToolCallBuffer = ''
+        this.textualToolCallBlockActive = false
+        remaining = tail
+        continue
+      }
+
+      const startIndex = this.findTextualToolCallStart(remaining)
+      if (startIndex < 0) {
+        const partialPrefixLength = this.findTrailingTextualToolCallPrefixLength(remaining)
+        if (partialPrefixLength > 0) {
+          visible += remaining.substring(0, remaining.length - partialPrefixLength)
+          this.textualToolCallBuffer = remaining.substring(remaining.length - partialPrefixLength)
+        } else {
+          visible += remaining
+        }
+        remaining = ''
+        continue
+      }
+
+      visible += remaining.substring(0, startIndex)
+      this.textualToolCallBuffer = remaining.substring(startIndex)
+      this.textualToolCallBlockActive = true
+      remaining = ''
+      const endIndex = this.findTextualToolCallEnd(this.textualToolCallBuffer)
+      if (endIndex >= 0) {
+        const block = this.textualToolCallBuffer.substring(0, endIndex)
+        const tail = this.textualToolCallBuffer.substring(endIndex)
+        this.parseTextualToolCallBlock(block)
+        this.textualToolCallBuffer = ''
+        this.textualToolCallBlockActive = false
+        remaining = tail
+      }
+    }
+
+    return visible
   }
 
   // 说明：不做“内容像推理”的启发式判断（Kelivo 策略）
@@ -1475,7 +1691,10 @@ export class AIApiService {
         }
 
         const contentParts: OpenAIResponsesContentPart[] = []
-        let fileTextContent = ''
+        const textBlocks: string[] = []
+        if (msg.content !== '') {
+          textBlocks.push(msg.content)
+        }
 
         for (let j = 0; j < msg.attachments.length; j++) {
           const attachment = msg.attachments[j]
@@ -1489,18 +1708,23 @@ export class AIApiService {
               detail: 'auto'
             })
           } else {
-            fileTextContent += `[附件: ${attachment.name} (${attachment.mimeType})]`
+            const textAttachmentContent = this.buildTextAttachmentContent(attachment)
+            if (textAttachmentContent !== '') {
+              textBlocks.push(textAttachmentContent)
+              continue
+            }
+            contentParts.push({
+              type: 'input_file',
+              filename: attachment.name !== '' ? attachment.name : 'attachment',
+              file_data: this.buildFileDataUrl(attachment)
+            })
           }
         }
 
-        let textContent = msg.content
-        if (fileTextContent !== '') {
-          textContent = textContent !== '' ? `${fileTextContent}\n${textContent}` : fileTextContent
-        }
-        if (textContent !== '') {
+        if (textBlocks.length > 0) {
           contentParts.unshift({
             type: 'input_text',
-            text: textContent
+            text: textBlocks.join('\n\n')
           })
         }
 
@@ -1590,7 +1814,10 @@ export class AIApiService {
       if (msg.hasAttachments()) {
         // 构建多模态消息
         const contentParts: MultimodalContentPart[] = []
-        let fileTextContent = ''
+        const textBlocks: string[] = []
+        if (msg.content !== '') {
+          textBlocks.push(msg.content)
+        }
 
         // 处理附件
         for (let j = 0; j < msg.attachments.length; j++) {
@@ -1607,22 +1834,28 @@ export class AIApiService {
               }
               contentParts.push(imagePart)
             } else {
-              // OpenAI 不原生支持 PDF，将文件信息添加到文本中提示
-              // 注意：某些 OpenAI 兼容的第三方 API 可能支持文件
-              fileTextContent += `[附件: ${attachment.name} (${attachment.mimeType})]`
+              const textAttachmentContent = this.buildTextAttachmentContent(attachment)
+              if (textAttachmentContent !== '') {
+                textBlocks.push(textAttachmentContent)
+                continue
+              }
+              const filePart: MultimodalContentPart = {
+                type: 'file',
+                file: {
+                  filename: attachment.name !== '' ? attachment.name : 'attachment',
+                  file_data: this.buildFileDataUrl(attachment)
+                }
+              }
+              contentParts.push(filePart)
             }
           }
         }
 
-        // 添加文本（包含文件提示信息）
-        let textContent = msg.content
-        if (fileTextContent !== '') {
-          textContent = fileTextContent + '\n' + textContent
-        }
-        if (textContent !== '') {
+        // 添加文本
+        if (textBlocks.length > 0) {
           const textPart: MultimodalContentPart = {
             type: 'text',
-            text: textContent
+            text: textBlocks.join('\n\n')
           }
           contentParts.push(textPart)
         }
@@ -2411,6 +2644,7 @@ export class AIApiService {
     onToolCallDelta?: (toolCallDeltas: ToolCallDelta[]) => void
   ): http.HttpRequest {
     this.resetThinkingState()
+    this.textualToolCallsEnabled = tools !== undefined && tools.length > 0 && toolChoice !== 'none'
 
     let url = this.buildChatUrl(config, model, true)
     const headers = this.buildHeaders(config)
@@ -2817,6 +3051,7 @@ export class AIApiService {
       result.reasoningContent !== '' && result.content !== '') {
       result.content = this.stripReasoningOverlap(result.content, result.reasoningContent, hasReasoningDetails)
     }
+    result.content = this.absorbTextualToolCalls(result.content)
     return result
   }
 

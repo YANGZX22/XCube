@@ -36,7 +36,7 @@ import { TTSService } from '../services/TTSService'
 import { McpService } from '../services/McpService'
 import { ToolRegistry } from '../services/ToolRegistry'
 import { ServiceRegistry } from '../services/ServiceRegistry'
-import { registerBuiltinTools } from '../config/BuiltinTools'
+import { ASK_USER_TOOL_ID, registerBuiltinTools } from '../config/BuiltinTools'
 import { AppStorageKeys } from '../config/AppStorageKeys'
 import { inputMethod } from '@kit.IMEKit'
 import { webview } from '@kit.ArkWeb'
@@ -158,6 +158,9 @@ export struct ChatPage {
   @Local isAtTop: boolean = false
   @Local currentScrollOffsetVp: number = 0
   @Local scrollProgress: number = 0
+  @Local scrollPreviewMessageIndex: number = -1
+  @Local isHistoryPreviewExpanded: boolean = false
+  @Local isHistoryPreviewContentVisible: boolean = false
   private firstVisibleListIndex: number = 0
   private lastVisibleListIndex: number = 0
   // 输入框显示状态（true=显示，false=隐藏）
@@ -326,6 +329,7 @@ export struct ChatPage {
   private scrollUiFlow: ChatScrollUiFlow | null = null
   private draftAutosaveTimerId: number = -1
   private readonly draftAutosaveDelayMs: number = 400
+  private historyPreviewCollapseTimerId: number = -1
   private appUiStateDisposers: Array<() => void> = []
   private initialBottomAlignmentRetryTimerIds: number[] = []
   private initialBottomAlignmentCompletionTimerId: number = -1
@@ -480,6 +484,7 @@ export struct ChatPage {
     this.ttsService.destroy()
     this.clearInitialBottomAlignmentRetries()
     this.clearRuntimeStateWatchdog()
+    this.clearHistoryPreviewCollapseTimer()
     this.flushDraftAutosave(true).catch((error: Error): void => {
       console.error('ChatPage', `Failed to flush draft on disappear: ${JSON.stringify(error)}`)
     })
@@ -571,7 +576,8 @@ export struct ChatPage {
     this.initialPromptAutoSent = loadResult.initialPromptAutoSent
     this.sessionId = loadResult.sessionId
     this.sessionTitle = loadResult.sessionTitle
-    this.webSearchConversationEnabled = loadResult.webSearchEnabled && loadResult.webSearchConversationEnabled
+    this.webSearchConversationEnabled = this.selectedToolIds.includes('web_search') ||
+      (loadResult.webSearchEnabled && loadResult.webSearchConversationEnabled)
     this.reasoningLevel = loadResult.reasoningLevel
     this.inputText = loadResult.draftText
     this.pendingAttachments = [...loadResult.draftAttachments]
@@ -750,6 +756,10 @@ export struct ChatPage {
     this.isAtTop = false
     this.isAtBottom = false
     this.scrollProgress = 0
+    this.scrollPreviewMessageIndex = -1
+    this.isHistoryPreviewExpanded = false
+    this.isHistoryPreviewContentVisible = false
+    this.clearHistoryPreviewCollapseTimer()
     this.firstVisibleListIndex = 0
     this.lastVisibleListIndex = 0
     this.maxScrollOffset = 0
@@ -992,26 +1002,40 @@ export struct ChatPage {
 
   private applySelectedToolIdsInMemory(toolIds: string[], enabledMcpServerIds?: Set<string>): void {
     this.selectedToolIds = [...this.normalizeSelectedToolIdsForPicker(toolIds, enabledMcpServerIds)]
+    this.webSearchConversationEnabled = this.selectedToolIds.includes('web_search')
   }
 
   private async setSelectedToolIds(toolIds: string[]): Promise<void> {
     const normalizedToolIds = this.normalizeSelectedToolIdsForPicker(toolIds)
     const savedToolIds = await this.mcpService.saveSelectedToolIds(normalizedToolIds)
+    await this.preferencesService.setBoolean(
+      PreferenceKeys.SEARCH_CONVERSATION_ENABLED,
+      savedToolIds.includes('web_search')
+    )
     const enabledMcpServerIds = await this.loadEnabledMcpServerIds()
     this.applySelectedToolIdsInMemory(savedToolIds, enabledMcpServerIds)
   }
 
-  private async setWebSearchConversationEnabled(enabled: boolean): Promise<void> {
-    const normalized = this.webSearchAvailable && enabled
-    await this.preferencesService.setBoolean(PreferenceKeys.SEARCH_CONVERSATION_ENABLED, normalized)
-    this.webSearchConversationEnabled = normalized
+  private ensureBuiltinChatToolsAvailable(): void {
+    if (!this.toolRegistry.isToolRegistered('web_search') || !this.toolRegistry.isToolRegistered(ASK_USER_TOOL_ID)) {
+      registerBuiltinTools()
+    }
+    const askUserTool = this.toolRegistry.getTool(ASK_USER_TOOL_ID)
+    if (askUserTool !== undefined) {
+      askUserTool.config.enabled = true
+    }
+    const webSearchTool = this.toolRegistry.getTool('web_search')
+    if (webSearchTool !== undefined) {
+      webSearchTool.config.enabled = this.webSearchAvailable
+    }
   }
 
   private rebuildAvailableChatTools(): void {
+    this.ensureBuiltinChatToolsAvailable()
     const configs = this.toolRegistry.getAllToolConfigs()
     const tools: ToolConfig[] = []
     for (let i = 0; i < configs.length; i++) {
-      if (configs[i].enabled && configs[i].id !== 'web_search') {
+      if (configs[i].enabled) {
         tools.push(configs[i])
       }
     }
@@ -1033,7 +1057,7 @@ export struct ChatPage {
     const normalizedToolIds: string[] = []
     for (let i = 0; i < toolIds.length; i++) {
       const toolId = toolIds[i].trim()
-      if (toolId === '' || toolId === 'web_search') {
+      if (toolId === '') {
         continue
       }
       if (!normalizedToolIds.includes(toolId)) {
@@ -1062,14 +1086,16 @@ export struct ChatPage {
       PreferenceKeys.SEARCH_CONVERSATION_ENABLED,
       webSearchAvailable
     )
-    const webSearchTool = this.toolRegistry.getTool('web_search')
-    if (webSearchTool !== undefined) {
-      webSearchTool.config.enabled = webSearchAvailable
-    }
+    this.ensureBuiltinChatToolsAvailable()
     this.rebuildAvailableChatTools()
     const enabledMcpServerIds = await this.loadEnabledMcpServerIds()
     const selectedToolIds = await this.mcpService.loadSelectedToolIds()
-    this.applySelectedToolIdsInMemory(selectedToolIds, enabledMcpServerIds)
+    const migratedToolIds = [...selectedToolIds]
+    if (this.webSearchConversationEnabled && webSearchAvailable && !migratedToolIds.includes('web_search')) {
+      migratedToolIds.push('web_search')
+      await this.mcpService.saveSelectedToolIds(migratedToolIds)
+    }
+    this.applySelectedToolIdsInMemory(migratedToolIds, enabledMcpServerIds)
   }
 
   private async refreshMcpToolAvailability(showError: boolean): Promise<void> {
@@ -1231,6 +1257,9 @@ export struct ChatPage {
         const toolCall = followupMessage.toolCalls[j]
         if (this.isWebSearchToolCall(toolCall)) {
           webSearchEnabled = true
+          if (!selectedToolIds.includes('web_search')) {
+            selectedToolIds.push('web_search')
+          }
           continue
         }
         const resolvedToolId = toolCall.toolId.trim() !== '' ?
@@ -1245,13 +1274,6 @@ export struct ChatPage {
     context.webSearchEnabled = this.webSearchAvailable && webSearchEnabled
     context.selectedToolIds = this.normalizeSelectedToolIdsForPicker(selectedToolIds)
     return context
-  }
-
-  private getActiveComposerWebSearchEnabled(): boolean {
-    if (this.isEditingMessage) {
-      return this.editingWebSearchEnabled
-    }
-    return this.webSearchConversationEnabled
   }
 
   private getActiveComposerSelectedToolIds(): string[] {
@@ -1269,6 +1291,7 @@ export struct ChatPage {
     const normalizedToolIds = this.normalizeSelectedToolIdsForPicker(toolIds)
     if (this.isEditingMessage) {
       this.editingSelectedToolIds = [...normalizedToolIds]
+      this.editingWebSearchEnabled = normalizedToolIds.includes('web_search')
       return Promise.resolve()
     }
     return this.setSelectedToolIds(normalizedToolIds)
@@ -1292,18 +1315,6 @@ export struct ChatPage {
 
   private async persistReasoningPreferenceAsync(level: ReasoningLevel): Promise<void> {
     await this.preferencesService.setString(PreferenceKeys.CHAT_REASONING_LEVEL, level)
-  }
-
-  private handleComposerWebSearchToggle(): void {
-    const nextValue = !this.getActiveComposerWebSearchEnabled()
-    if (this.isEditingMessage) {
-      this.editingWebSearchEnabled = this.webSearchAvailable && nextValue
-      return
-    }
-    this.setWebSearchConversationEnabled(nextValue).catch((error: Object) => {
-      console.error('ChatPage', `Failed to update chat search setting: ${JSON.stringify(error)}`)
-      this.showError(pickLocalizedText('联网查询开关保存失败', 'Failed to save web search toggle'))
-    })
   }
 
   private handleMcpToolGroupSelectionToggle(toolIds: string[], enabled: boolean): void {
@@ -1608,8 +1619,11 @@ export struct ChatPage {
       ): void => {
         this.inputText = content
         this.pendingAttachments = [...attachments]
-        this.webSearchConversationEnabled = this.webSearchAvailable && webSearchEnabled
-        this.applySelectedToolIdsInMemory(selectedToolIds)
+        const nextToolIds = [...selectedToolIds]
+        if (this.webSearchAvailable && webSearchEnabled && !nextToolIds.includes('web_search')) {
+          nextToolIds.push('web_search')
+        }
+        this.applySelectedToolIdsInMemory(nextToolIds)
         this.reasoningLevel = this.normalizeReasoningLevelForCurrentModel(reasoningLevel)
       },
       onTriggerSend: async (
@@ -1621,8 +1635,11 @@ export struct ChatPage {
       ): Promise<void> => {
         this.inputText = content
         this.pendingAttachments = [...attachments]
-        this.webSearchConversationEnabled = this.webSearchAvailable && webSearchEnabled
-        this.applySelectedToolIdsInMemory(selectedToolIds)
+        const nextToolIds = [...selectedToolIds]
+        if (this.webSearchAvailable && webSearchEnabled && !nextToolIds.includes('web_search')) {
+          nextToolIds.push('web_search')
+        }
+        this.applySelectedToolIdsInMemory(nextToolIds)
         this.reasoningLevel = this.normalizeReasoningLevelForCurrentModel(reasoningLevel)
         await this.sendMessage()
       },
@@ -2148,6 +2165,9 @@ export struct ChatPage {
           onTTSStop: (): void => {
             this.handleTTSStop()
           },
+          onAskUserAnswer: (toolCallId: string, answerJson: string): void => {
+            this.handleAskUserAnswer(toolCallId, answerJson)
+          },
           onSelect: (messageId: string): void => {
             this.handleToggleMessageSelection(messageId)
           },
@@ -2172,6 +2192,7 @@ export struct ChatPage {
           onScrollIndex: (firstIndex: number, lastIndex: number): void => {
             this.firstVisibleListIndex = firstIndex
             this.lastVisibleListIndex = lastIndex
+            this.updateScrollPreviewIndex(firstIndex, lastIndex)
           }
         })
           .width('100%')
@@ -2223,6 +2244,8 @@ export struct ChatPage {
           }
         })
 
+        this.HistoryPreviewFloatingBarBuilder()
+
         // 底部输入栏容器（非多选模式时显示）
         if (!this.isMultiSelectMode) {
           Column() {
@@ -2249,11 +2272,6 @@ export struct ChatPage {
               autoFocus: this.autoFocusInput,
               isEditing: this.isEditingMessage,
               isAttachmentPanelOpen: this.showAttachmentPicker,
-              webSearchAvailable: this.webSearchAvailable,
-              webSearchEnabled: this.getActiveComposerWebSearchEnabled(),
-              onToggleWebSearch: (): void => {
-                this.handleComposerWebSearchToggle()
-              },
               toolSelectionAvailable: shouldShowToolSelectionChipForChat(
                 this.availableChatTools.length,
                 this.getActiveComposerSelectedToolIds().length
@@ -2841,6 +2859,380 @@ export struct ChatPage {
     return this.px2vp(this.bottomAvoidHeight) + this.attachmentPanelHeightVp
   }
 
+  private getScrollToTopButtonExtraOffsetY(): number {
+    return this.shouldShowStandardScrollToBottomButton() ? -48 : 0
+  }
+
+  private getHistoryPreviewButtonExtraOffsetY(): number {
+    if (this.shouldShowScrollToTopButton()) {
+      return this.getScrollToTopButtonExtraOffsetY() - 48
+    }
+    return this.getScrollToTopButtonExtraOffsetY()
+  }
+
+  private getHistoryPreviewButtonTranslateY(): number {
+    return -(this.floatingScrollButtonBottomOffsetVp + this.getFloatingOverlayBottomAvoidHeightVp()) +
+      this.getHistoryPreviewButtonExtraOffsetY()
+  }
+
+  private getHistoryPreviewPanelBottomDistanceVp(): number {
+    return Math.max(0, -this.getHistoryPreviewButtonTranslateY() - 40)
+  }
+
+  private getHistoryPreviewPanelWidthVp(): number {
+    if (this.windowWidthVp <= 360) {
+      return Math.max(248, this.windowWidthVp - 32)
+    }
+    if (this.layoutSizeClass === LayoutSizeClass.EXPANDED) {
+      return 340
+    }
+    return 300
+  }
+
+  private getHistoryPreviewListMaxHeightVp(): number {
+    const panelChromeHeight = 66
+    const availableHeight = this.windowHeightVp - this.getMessageListTopSpacerHeight() -
+      this.getHistoryPreviewPanelBottomDistanceVp() - panelChromeHeight - 12
+    if (availableHeight < 160) {
+      return 160
+    }
+    return Math.min(availableHeight, 420)
+  }
+
+  private getHistoryPreviewListHeightVp(): number {
+    const itemHeight = 62
+    const emptyHeight = 64
+    const contentHeight = Math.max(emptyHeight, this.messages.length * itemHeight)
+    return Math.min(contentHeight, this.getHistoryPreviewListMaxHeightVp())
+  }
+
+  private getHistoryPreviewPanelHeightVp(): number {
+    return this.getHistoryPreviewListHeightVp() + 66
+  }
+
+  private getHistoryPreviewSurfaceWidthVp(): number {
+    return this.isHistoryPreviewExpanded ? this.getHistoryPreviewPanelWidthVp() : 40
+  }
+
+  private getHistoryPreviewSurfaceHeightVp(): number {
+    return this.isHistoryPreviewExpanded ? this.getHistoryPreviewPanelHeightVp() : 40
+  }
+
+  private getHistoryPreviewSurfaceRadiusVp(): number {
+    return this.isHistoryPreviewExpanded ? 18 : 20
+  }
+
+  private getHistoryPreviewSurfaceTranslateY(): number {
+    return this.getHistoryPreviewButtonTranslateY() + 40 - this.getHistoryPreviewSurfaceHeightVp()
+  }
+
+  private getHistoryPreviewBackgroundColor(): string {
+    return this.isDarkMode ? 'rgba(30, 30, 30, 0.78)' : 'rgba(255, 255, 255, 0.82)'
+  }
+
+  private getHistoryPreviewBorderColor(): string {
+    return this.isDarkMode ? 'rgba(255, 255, 255, 0.08)' : 'rgba(0, 0, 0, 0.06)'
+  }
+
+  private resolveMessageIndexFromListIndex(listIndex: number): number {
+    if (this.messages.length <= 0) {
+      return -1
+    }
+    let messageIndex = listIndex - 1
+    if (messageIndex < 0) {
+      return 0
+    }
+    if (messageIndex >= this.messages.length) {
+      return this.messages.length - 1
+    }
+    return messageIndex
+  }
+
+  private resolveVisibleMessageIndex(firstIndex: number, lastIndex: number): number {
+    const firstMessageIndex = this.resolveMessageIndexFromListIndex(firstIndex)
+    if (firstMessageIndex >= 0) {
+      return firstMessageIndex
+    }
+    return this.resolveMessageIndexFromListIndex(lastIndex)
+  }
+
+  private updateScrollPreviewIndex(firstIndex: number, lastIndex: number): void {
+    const nextIndex = this.resolveVisibleMessageIndex(firstIndex, lastIndex)
+    if (this.scrollPreviewMessageIndex === nextIndex) {
+      return
+    }
+    this.scrollPreviewMessageIndex = nextIndex
+  }
+
+  private getMessageRoleLabel(role: MessageRole): string {
+    if (role === MessageRole.USER) {
+      return pickLocalizedText('我', 'Me')
+    }
+    if (role === MessageRole.ASSISTANT) {
+      return pickLocalizedText('助手', 'Assistant')
+    }
+    if (role === MessageRole.TOOL) {
+      return pickLocalizedText('工具', 'Tool')
+    }
+    return pickLocalizedText('系统', 'System')
+  }
+
+  private normalizeInlinePreviewText(text: string, maxLength: number): string {
+    const normalized = text.replace(/\s+/g, ' ').trim()
+    if (normalized === '') {
+      return ''
+    }
+    if (normalized.length <= maxLength) {
+      return normalized
+    }
+    return `${normalized.substring(0, maxLength).trimEnd()}...`
+  }
+
+  private buildMessagePreviewText(message: ChatMessage, maxLength: number): string {
+    const contentPreview = this.normalizeInlinePreviewText(message.content, maxLength)
+    if (contentPreview !== '') {
+      return contentPreview
+    }
+    if (message.reasoningContent.trim() !== '') {
+      return this.normalizeInlinePreviewText(message.reasoningContent, maxLength)
+    }
+    if (message.searchQuery.trim() !== '') {
+      return `${pickLocalizedText('搜索：', 'Search: ')}${this.normalizeInlinePreviewText(message.searchQuery, maxLength)}`
+    }
+    if (message.attachments.length > 0) {
+      return pickLocalizedText(`包含 ${message.attachments.length} 个附件`,
+        `${message.attachments.length} ${message.attachments.length === 1 ? 'attachment' : 'attachments'}`)
+    }
+    if (message.toolCalls.length > 0) {
+      return pickLocalizedText('工具调用', 'Tool call')
+    }
+    if (message.toolResults.length > 0) {
+      return pickLocalizedText('工具结果', 'Tool result')
+    }
+    return pickLocalizedText('空消息', 'Empty message')
+  }
+
+  private shouldShowHistoryPreviewFloatingBar(): boolean {
+    return !this.showImagePreview && !this.isMultiSelectMode && !this.isEditingMessage && this.messages.length > 0
+  }
+
+  private isHistoryPreviewMessageActive(index: number): boolean {
+    return index === this.scrollPreviewMessageIndex
+  }
+
+  private getHistoryPreviewItemBackgroundColor(index: number): string {
+    if (this.isHistoryPreviewMessageActive(index)) {
+      return this.themePrimaryLight
+    }
+    return '#00000000'
+  }
+
+  private handleHistoryPreviewJumpToMessage(index: number): void {
+    if (index < 0 || index >= this.messages.length) {
+      return
+    }
+    if (this.showAttachmentPicker) {
+      this.closeAttachmentPanel()
+    }
+    this.setHistoryPreviewExpanded(false)
+    this.scroller.scrollToIndex(toListScrollIndexForMessage(index), true, ScrollAlign.CENTER)
+    this.getScrollUiFlow().setIsAtTop(index === 0)
+    this.getScrollUiFlow().setIsAtBottom(index === this.messages.length - 1)
+    this.scrollPreviewMessageIndex = index
+  }
+
+  private clearHistoryPreviewCollapseTimer(): void {
+    if (this.historyPreviewCollapseTimerId < 0) {
+      return
+    }
+    clearTimeout(this.historyPreviewCollapseTimerId)
+    this.historyPreviewCollapseTimerId = -1
+  }
+
+  private setHistoryPreviewExpanded(expanded: boolean): void {
+    if (this.isHistoryPreviewExpanded === expanded) {
+      return
+    }
+    this.clearHistoryPreviewCollapseTimer()
+    if (expanded) {
+      this.isHistoryPreviewContentVisible = true
+    }
+    this.getUIContext().animateTo({
+      duration: 260,
+      curve: Curve.FastOutSlowIn
+    }, () => {
+      this.isHistoryPreviewExpanded = expanded
+    })
+    if (!expanded) {
+      this.historyPreviewCollapseTimerId = setTimeout(() => {
+        this.historyPreviewCollapseTimerId = -1
+        if (!this.isHistoryPreviewExpanded) {
+          this.isHistoryPreviewContentVisible = false
+        }
+      }, 240)
+    }
+  }
+
+  @Builder
+  private HistoryPreviewCollapsedContentBuilder() {
+    Stack({ alignContent: Alignment.Center }) {
+      SymbolGlyph($r('sys.symbol.ellipsis_message'))
+        .fontSize(18)
+        .fontColor([this.themePrimary])
+    }
+    .width('100%')
+    .height('100%')
+  }
+
+  @Builder
+  private HistoryPreviewExpandedContentBuilder() {
+    Column({ space: 8 }) {
+      Row() {
+        Column({ space: 2 }) {
+          Text(pickLocalizedText('历史概览', 'History'))
+            .fontSize(14)
+            .fontWeight(FontWeight.Medium)
+            .fontColor($r('app.color.text_primary'))
+            .maxLines(1)
+          Text(pickLocalizedText(`${this.messages.length} 条消息`, `${this.messages.length} messages`))
+            .fontSize(11)
+            .fontColor($r('app.color.text_secondary'))
+            .maxLines(1)
+        }
+        .layoutWeight(1)
+
+        Button({ type: ButtonType.Circle }) {
+          SymbolGlyph($r('sys.symbol.xmark'))
+            .fontSize(12)
+            .fontColor([$r('app.color.text_secondary')])
+        }
+        .width(30)
+        .height(30)
+        .backgroundColor(this.isDarkMode ? 'rgba(255, 255, 255, 0.08)' : 'rgba(0, 0, 0, 0.05)')
+        .onClick(() => {
+          this.setHistoryPreviewExpanded(false)
+        })
+      }
+      .width('100%')
+      .height(34)
+
+      Scroll() {
+        Column({ space: 4 }) {
+          ForEach(this.messages, (message: ChatMessage, index: number) => {
+            Row({ space: 8 }) {
+              Text(`${index + 1}`)
+                .fontSize(10)
+                .fontWeight(FontWeight.Medium)
+                .fontColor(this.isHistoryPreviewMessageActive(index) ? this.themePrimary : $r('app.color.text_tertiary'))
+                .width(24)
+                .height(24)
+                .textAlign(TextAlign.Center)
+                .backgroundColor(this.isHistoryPreviewMessageActive(index) ? this.themePrimaryLight : '#00000000')
+                .borderRadius(12)
+
+              Column({ space: 2 }) {
+                Text(this.getMessageRoleLabel(message.role))
+                  .fontSize(10)
+                  .fontWeight(FontWeight.Medium)
+                  .fontColor(this.isHistoryPreviewMessageActive(index) ? this.themePrimary : $r('app.color.text_secondary'))
+                  .maxLines(1)
+
+                Text(this.buildMessagePreviewText(message, 34))
+                  .fontSize(12)
+                  .fontColor($r('app.color.text_primary'))
+                  .maxLines(2)
+                  .textOverflow({ overflow: TextOverflow.Ellipsis })
+              }
+              .layoutWeight(1)
+            }
+            .width('100%')
+            .padding({ left: 8, right: 8, top: 7, bottom: 7 })
+            .backgroundColor(this.getHistoryPreviewItemBackgroundColor(index))
+            .borderRadius(10)
+            .onClick(() => {
+              this.handleHistoryPreviewJumpToMessage(index)
+            })
+          }, (message: ChatMessage): string => message.id)
+        }
+        .width('100%')
+      }
+      .width('100%')
+      .height(this.getHistoryPreviewListHeightVp())
+      .scrollBar(BarState.Auto)
+      .animation({ duration: 220, curve: Curve.FastOutSlowIn })
+    }
+    .width('100%')
+    .height('100%')
+    .padding({ left: 12, right: 12, top: 12, bottom: 12 })
+  }
+
+  @Builder
+  private HistoryPreviewFloatingBarBuilder() {
+    if (this.shouldShowHistoryPreviewFloatingBar()) {
+      if (this.isHistoryPreviewExpanded) {
+        Column()
+          .width('100%')
+          .height('100%')
+          .backgroundColor(Color.Transparent)
+          .position({ x: 0, y: 0 })
+          .zIndex(12)
+          .onClick(() => {
+            this.setHistoryPreviewExpanded(false)
+          })
+          .transition(TransitionEffect.OPACITY.animation({ duration: 160, curve: Curve.EaseOut }))
+      }
+
+      Row() {
+        Stack({ alignContent: this.isHistoryPreviewExpanded ? Alignment.TopStart : Alignment.Center }) {
+          if (this.isHistoryPreviewContentVisible) {
+            this.HistoryPreviewExpandedContentBuilder()
+          } else {
+            this.HistoryPreviewCollapsedContentBuilder()
+          }
+        }
+        .width(this.getHistoryPreviewSurfaceWidthVp())
+        .height(this.getHistoryPreviewSurfaceHeightVp())
+        .backgroundColor(this.getHistoryPreviewBackgroundColor())
+        .backgroundBlurStyle(BlurStyle.COMPONENT_REGULAR)
+        .border({
+          width: 0.5,
+          color: this.getHistoryPreviewBorderColor()
+        })
+        .borderRadius(this.getHistoryPreviewSurfaceRadiusVp())
+        .clip(true)
+        .shadow({
+          radius: this.isHistoryPreviewExpanded ? 16 : 8,
+          color: this.isHistoryPreviewExpanded ?
+            (this.isDarkMode ? 'rgba(0, 0, 0, 0.42)' : 'rgba(0, 0, 0, 0.14)') :
+            (this.isDarkMode ? 'rgba(0, 0, 0, 0.4)' : 'rgba(0, 0, 0, 0.12)'),
+          offsetX: 0,
+          offsetY: this.isHistoryPreviewExpanded ? 5 : 2
+        })
+        .animation({ duration: 260, curve: Curve.FastOutSlowIn })
+        .onClick(() => {
+          if (!this.isHistoryPreviewExpanded) {
+            this.setHistoryPreviewExpanded(true)
+          }
+        })
+      }
+      .width('100%')
+      .padding({ right: 16 })
+      .justifyContent(FlexAlign.End)
+      .position({ x: 0, y: '100%' })
+      .translate({
+        x: 0,
+        y: this.getHistoryPreviewSurfaceTranslateY()
+      })
+      .animation({ duration: 260, curve: Curve.FastOutSlowIn })
+      .zIndex(13)
+      .transition(
+        TransitionEffect.OPACITY.combine(
+          TransitionEffect.translate({ x: 12 })
+        ).animation({ duration: 180, curve: Curve.EaseOut })
+      )
+    }
+  }
+
   private getMultiSelectToolbarBottomInsetVp(): number {
     return Math.max(this.px2vp(this.bottomAvoidHeight) + 10, 20)
   }
@@ -3157,9 +3549,10 @@ export struct ChatPage {
       }
 
       const attachmentsToSend = [...this.pendingAttachments]
-      const searchEnabled = this.webSearchAvailable && this.webSearchConversationEnabled
       const selectedToolIds = [...this.selectedToolIds]
       const forcedToolIds = [...this.forcedToolIdsOnce]
+      const searchEnabled = this.webSearchAvailable &&
+        (selectedToolIds.includes('web_search') || forcedToolIds.includes('web_search'))
       await this.getSendFlow().executeSend(
         messageContent,
         currentProvider,
@@ -3263,6 +3656,13 @@ export struct ChatPage {
       this.pendingToolExecutionApprovalResolver = resolve
       this.showToolExecutionApprovalSheet = true
     })
+  }
+
+  private handleAskUserAnswer(toolCallId: string, answerJson: string): void {
+    const resolved = ServiceRegistry.toolExecution().resolvePendingAskUserAnswer(toolCallId, answerJson)
+    if (!resolved) {
+      console.warn('ChatPage', `handleAskUserAnswer: no pending ask_user resolver for ${toolCallId}`)
+    }
   }
 
   // 处理删除消息

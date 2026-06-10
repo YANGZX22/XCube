@@ -8,7 +8,8 @@ import {
   HdsNavigationTitleBarOptions,
   HdsNavigationTitleMode,
   HdsTabs,
-  HdsTabsFloatingStyle
+  HdsTabsFloatingStyle,
+  hdsMaterial
 } from '@kit.UIDesignKit'
 import {
   buildCompactTabsFloatingStyle,
@@ -31,7 +32,7 @@ import {
   getIndexPageHorizontalPadding,
   LayoutSizeClass
 } from '../config/LayoutProfile'
-import { createButtonTouchHandler, getButtonAnimation, getButtonScale } from '../utils/ButtonAnimationUtils'
+import { createButtonTouchHandler, getButtonScale } from '../utils/ButtonAnimationUtils'
 import {
   countSelectedIdsInCandidates,
   mergeSelectAllIds,
@@ -66,7 +67,6 @@ import {
   getFabOffsetYForIndex,
   INDEX_NEW_CHAT_FAB_BOTTOM_SPACING,
   INDEX_NEW_CHAT_FAB_STACK_HEIGHT,
-  INDEX_NEW_CHAT_FAB_STACK_WIDTH,
   INDEX_NEW_CHAT_FAB_SIZE,
   isHandAdaptiveActiveForIndex,
   shouldPlaceFabOnLeftForIndex
@@ -108,6 +108,10 @@ import { DEFAULT_PRIMARY_COLOR } from '../config/ThemeDefaults'
 struct Index {
   private static readonly COMPACT_TABS_BAR_HEIGHT: number = 56
   private static readonly COMPACT_TABS_FLOATING_SIDE_MARGIN: number = 16
+  private static readonly COMPACT_TABS_WITH_ACTION_SMALL_WIDTH: number = 220
+  private static readonly COMPACT_TABS_WITH_ACTION_MEDIUM_WIDTH: number = 238
+  private static readonly COMPACT_TABS_WITH_ACTION_LARGE_WIDTH: number = 256
+  private static readonly COMPACT_MINI_BAR_WIDTH: number = 56
   private static readonly TAB_ASSISTANTS: number = INDEX_TAB_ASSISTANTS
   private static readonly TAB_CHAT: number = INDEX_TAB_CHAT
   private static readonly TAB_SETTINGS: number = INDEX_TAB_SETTINGS
@@ -1550,6 +1554,8 @@ struct Index {
         .barMode(BarMode.Fixed)
         .barHeight(this.getCompactTabsHostBarHeight())
         .barOverlap(true)
+        .barPosition(BarPosition.End)
+        .vertical(false)
         .barBackgroundColor(Color.Transparent)
         .barFloatingStyle(this.buildBottomTabsFloatingStyle())
         .scrollable(false)
@@ -1835,7 +1841,62 @@ struct Index {
     opts.themePrimary = this.themePrimary
     opts.barSideMargin = Index.COMPACT_TABS_FLOATING_SIDE_MARGIN
     opts.barBottomMargin = this.getCompactTabsFloatingBottomMargin()
-    return buildCompactTabsFloatingStyle(opts)
+    opts.barWidth = {
+      smallWidth: Index.COMPACT_TABS_WITH_ACTION_SMALL_WIDTH,
+      mediumWidth: Index.COMPACT_TABS_WITH_ACTION_MEDIUM_WIDTH,
+      largeWidth: Index.COMPACT_TABS_WITH_ACTION_LARGE_WIDTH
+    }
+    const style = buildCompactTabsFloatingStyle(opts)
+    style.gradientMask = { maskColor: '#66F1F3F5', maskHeight: 92 }
+    style.systemMaterialEffect = {
+      materialType: hdsMaterial.MaterialType.IMMERSIVE,
+      materialLevel: hdsMaterial.MaterialLevel.ADAPTIVE
+    }
+    style.miniBar = {
+      miniBarBuilder: (): void => {
+        this.CompactBottomMiniBarBuilder()
+      },
+      miniBarWidth: {
+        smallWidth: Index.COMPACT_MINI_BAR_WIDTH,
+        mediumWidth: Index.COMPACT_MINI_BAR_WIDTH,
+        largeWidth: Index.COMPACT_MINI_BAR_WIDTH
+      },
+      enableMiniBarBackground: true
+    }
+    return style
+  }
+
+  private handleCompactBottomMiniBarClick(): void {
+    if (this.currentTabIndex === Index.TAB_ASSISTANTS) {
+      this.openAssistantManageForNew()
+      return
+    }
+    if (this.currentTabIndex !== Index.TAB_CHAT) {
+      this.switchToTab(Index.TAB_CHAT)
+    }
+    this.openChatRoute({} as ChatPageRouteParams)
+  }
+
+  @Builder
+  private CompactBottomMiniBarBuilder() {
+    Row() {
+      Column() {
+        SymbolGlyph($r('sys.symbol.plus'))
+          .fontSize(28)
+          .fontColor([this.themePrimary])
+      }
+      .width(Index.COMPACT_MINI_BAR_WIDTH)
+      .height(Index.COMPACT_TABS_BAR_HEIGHT)
+      .justifyContent(FlexAlign.Center)
+      .alignItems(HorizontalAlign.Center)
+    }
+    .width(Index.COMPACT_MINI_BAR_WIDTH)
+    .height(Index.COMPACT_TABS_BAR_HEIGHT)
+    .justifyContent(FlexAlign.Center)
+    .alignItems(VerticalAlign.Center)
+    .onClick(() => {
+      this.handleCompactBottomMiniBarClick()
+    })
   }
 
   @Builder
@@ -2361,7 +2422,9 @@ struct Index {
       .height('100%')
       .backgroundColor(this.themeBackground)
 
-      this.AssistantFloatingActionButton()
+      if (this.isExpandedLayout()) {
+        this.AssistantFloatingActionButton()
+      }
     }
     .width('100%')
     .height('100%')
@@ -3660,9 +3723,8 @@ struct Index {
         .height('100%')
         .backgroundColor(this.themeBackground)
       } else {
-        Stack({ alignContent: Alignment.BottomEnd }) {
+        Stack() {
           this.CompactChatListViewport()
-          this.FloatingActionButton()
         }
         .width('100%')
         .height('100%')

@@ -177,8 +177,8 @@ export struct ChatToolPickerSheetContent {
               Text(this.isRefreshingMcpToolAvailability
                 ? pickLocalizedText('正在后台刷新工具，请稍候再试。', 'Refreshing tools in the background. Try again shortly.')
                 : pickLocalizedText(
-                  '先到工具服务添加并启用 MCP Server，再回这里选择。',
-                  'Add and enable an MCP server in Tool Services first, then come back here.'
+                  '请确认当前模型已开启工具能力，或到工具服务启用联网搜索 / MCP Server。',
+                  'Make sure the current model has tool calling enabled, or enable web search / MCP servers in Tool Services.'
                 ))
                 .fontSize(12)
                 .lineHeight(18)

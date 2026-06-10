@@ -94,6 +94,10 @@ import {
   normalizeStoredChatReasoningLevel,
   resolveModelSwitchReasoningLevel
 } from '../main/ets/pages/chat/ChatReasoningStateHelper'
+import {
+  cleanSearchQuery,
+  normalizeOptimizedSearchQuery
+} from '../main/ets/utils/SearchQueryUtils'
 
 class TestDataChangeListener implements DataChangeListener {
   reloadCount: number = 0
@@ -244,6 +248,13 @@ function createScrollUiFlow(state: TestScrollFlowState): ChatScrollUiFlow {
 
 export default function refactorGuardTest() {
   describe('refactorGuardTest', () => {
+    it('search_query_utils_should_keep_definition_subject_instead_of_single_character_fragment', 0, () => {
+      expect(cleanSearchQuery('什么是忆张师')).assertEqual('忆张师')
+      expect(cleanSearchQuery('忆张师是什么意思')).assertEqual('忆张师')
+      expect(normalizeOptimizedSearchQuery('什么是忆张师', '忆')).assertEqual('忆张师')
+      expect(normalizeOptimizedSearchQuery('什么是忆张师', '忆张')).assertEqual('忆张师')
+    })
+
     it('buildProviderModelGroups_should_keep_brand_order', 0, () => {
       const models: ModelInfo[] = [
         new ModelInfo('deepseek-r1', 'deepseek-r1', 4096, true, false),

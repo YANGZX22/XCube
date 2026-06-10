@@ -426,6 +426,7 @@ export enum SearchEngine {
   BRAVE = 'brave',
   EXA = 'exa',
   TAVILY = 'tavily',
+  BOCHA = 'bocha',
   CUSTOM = 'custom'
 }
 

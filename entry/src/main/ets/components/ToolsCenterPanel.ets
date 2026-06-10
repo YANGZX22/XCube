@@ -47,6 +47,8 @@ export struct ToolsCenterPanel {
   @Local searchTavilyBaseUrl: string = 'https://api.tavily.com'
   @Local searchExaApiKey: string = ''
   @Local searchExaBaseUrl: string = 'https://api.exa.ai'
+  @Local searchBochaApiKey: string = ''
+  @Local searchBochaBaseUrl: string = 'https://api.bochaai.com'
   @Local searchQueryOptimizationEnabled: boolean = false
   @Local isLoading: boolean = false
   @Local isRefreshingMcpServers: boolean = false
@@ -93,7 +95,8 @@ export struct ToolsCenterPanel {
     { value: 'Bing(local)' },
     { value: 'Brave Search' },
     { value: 'Tavily' },
-    { value: 'Exa' }
+    { value: 'Exa' },
+    { value: '博查(Bocha)' }
   ]
   private readonly mcpAuthTypeOptions: Array<SelectOption> = [
     { value: 'None' },
@@ -112,6 +115,8 @@ export struct ToolsCenterPanel {
   private originalSearchTavilyBaseUrl: string = 'https://api.tavily.com'
   private originalSearchExaApiKey: string = ''
   private originalSearchExaBaseUrl: string = 'https://api.exa.ai'
+  private originalSearchBochaApiKey: string = ''
+  private originalSearchBochaBaseUrl: string = 'https://api.bochaai.com'
   private originalSearchQueryOptimizationEnabled: boolean = false
 
   private showToolsSnack(message: string | Resource, duration: number = 2000,
@@ -275,6 +280,9 @@ export struct ToolsCenterPanel {
     if (raw === SearchEngine.EXA) {
       return SearchEngine.EXA
     }
+    if (raw === SearchEngine.BOCHA) {
+      return SearchEngine.BOCHA
+    }
     return SearchEngine.BING
   }
 
@@ -287,6 +295,9 @@ export struct ToolsCenterPanel {
     }
     if (engine === SearchEngine.EXA) {
       return 'Exa'
+    }
+    if (engine === SearchEngine.BOCHA) {
+      return '博查(Bocha)'
     }
     return 'Bing(local)'
   }
@@ -301,6 +312,9 @@ export struct ToolsCenterPanel {
     if (index === 3) {
       return SearchEngine.EXA
     }
+    if (index === 4) {
+      return SearchEngine.BOCHA
+    }
     return SearchEngine.BING
   }
 
@@ -313,6 +327,9 @@ export struct ToolsCenterPanel {
     }
     if (engine === SearchEngine.EXA) {
       return 3
+    }
+    if (engine === SearchEngine.BOCHA) {
+      return 4
     }
     return 0
   }
@@ -335,6 +352,13 @@ export struct ToolsCenterPanel {
     this.preferencesService.setBoolean(PreferenceKeys.SEARCH_SERVICE_ENABLED, enabled)
     if (!enabled) {
       this.preferencesService.setBoolean(PreferenceKeys.SEARCH_CONVERSATION_ENABLED, false)
+      this.mcpService.loadSelectedToolIds()
+        .then((toolIds: string[]): Promise<string[]> => {
+          return this.mcpService.saveSelectedToolIds(toolIds.filter((toolId: string) => toolId !== this.searchToolId))
+        })
+        .catch((error: Object): void => {
+          console.warn('ToolsCenterPanel', `Failed to remove web_search from selected tools: ${JSON.stringify(error)}`)
+        })
     }
   }
 
@@ -347,6 +371,9 @@ export struct ToolsCenterPanel {
       await this.preferencesService.getString(PreferenceKeys.SEARCH_TAVILY_BASE_URL, 'https://api.tavily.com')
     const exaApiKey = await this.preferencesService.getString(PreferenceKeys.SEARCH_EXA_API_KEY, '')
     const exaBaseUrl = await this.preferencesService.getString(PreferenceKeys.SEARCH_EXA_BASE_URL, 'https://api.exa.ai')
+    const bochaApiKey = await this.preferencesService.getString(PreferenceKeys.SEARCH_BOCHA_API_KEY, '')
+    const bochaBaseUrl =
+      await this.preferencesService.getString(PreferenceKeys.SEARCH_BOCHA_BASE_URL, 'https://api.bochaai.com')
     const optimizationEnabled = await this.preferencesService.getBoolean(
       PreferenceKeys.SEARCH_QUERY_OPTIMIZATION_ENABLED,
       false
@@ -361,6 +388,8 @@ export struct ToolsCenterPanel {
     this.searchTavilyBaseUrl = this.normalizeSearchBaseUrl(tavilyBaseUrl, 'https://api.tavily.com')
     this.searchExaApiKey = exaApiKey
     this.searchExaBaseUrl = this.normalizeSearchBaseUrl(exaBaseUrl, 'https://api.exa.ai')
+    this.searchBochaApiKey = bochaApiKey
+    this.searchBochaBaseUrl = this.normalizeSearchBaseUrl(bochaBaseUrl, 'https://api.bochaai.com')
     this.searchQueryOptimizationEnabled = optimizationEnabled
     this.syncOriginalSearchSettings()
   }
@@ -384,6 +413,8 @@ export struct ToolsCenterPanel {
       this.normalizeSearchBaseUrl(this.searchTavilyBaseUrl, 'https://api.tavily.com')
     this.originalSearchExaApiKey = this.searchExaApiKey.trim()
     this.originalSearchExaBaseUrl = this.normalizeSearchBaseUrl(this.searchExaBaseUrl, 'https://api.exa.ai')
+    this.originalSearchBochaApiKey = this.searchBochaApiKey.trim()
+    this.originalSearchBochaBaseUrl = this.normalizeSearchBaseUrl(this.searchBochaBaseUrl, 'https://api.bochaai.com')
     this.originalSearchQueryOptimizationEnabled = this.searchQueryOptimizationEnabled
   }
 
@@ -405,6 +436,13 @@ export struct ToolsCenterPanel {
       return true
     }
     if (this.normalizeSearchBaseUrl(this.searchExaBaseUrl, 'https://api.exa.ai') !== this.originalSearchExaBaseUrl) {
+      return true
+    }
+    if (this.searchBochaApiKey.trim() !== this.originalSearchBochaApiKey) {
+      return true
+    }
+    if (this.normalizeSearchBaseUrl(this.searchBochaBaseUrl, 'https://api.bochaai.com') !==
+      this.originalSearchBochaBaseUrl) {
       return true
     }
     if (this.searchQueryOptimizationEnabled !== this.originalSearchQueryOptimizationEnabled) {
@@ -449,8 +487,10 @@ export struct ToolsCenterPanel {
     const braveKey = this.searchBraveApiKey.trim()
     const tavilyKey = this.searchTavilyApiKey.trim()
     const exaKey = this.searchExaApiKey.trim()
+    const bochaKey = this.searchBochaApiKey.trim()
     const tavilyBaseUrl = this.normalizeSearchBaseUrl(this.searchTavilyBaseUrl, 'https://api.tavily.com')
     const exaBaseUrl = this.normalizeSearchBaseUrl(this.searchExaBaseUrl, 'https://api.exa.ai')
+    const bochaBaseUrl = this.normalizeSearchBaseUrl(this.searchBochaBaseUrl, 'https://api.bochaai.com')
     if (this.searchEngine === SearchEngine.BRAVE && braveKey === '') {
       this.showToolsSnack(pickLocalizedText(
         '请选择 Brave Search 时先填写 API Key',
@@ -469,6 +509,13 @@ export struct ToolsCenterPanel {
       this.showToolsSnack($r('app.string.search_exa_key_required'), 2000, SnackBarTone.ERROR)
       return false
     }
+    if (this.searchEngine === SearchEngine.BOCHA && bochaKey === '') {
+      this.showToolsSnack(pickLocalizedText(
+        '请选择 博查(Bocha) 时先填写 API Key',
+        'Enter the API key before selecting Bocha'
+      ), 2000, SnackBarTone.ERROR)
+      return false
+    }
 
     const shouldValidateTavilyBaseUrl = this.searchEngine === SearchEngine.TAVILY
     if (shouldValidateTavilyBaseUrl && !tavilyBaseUrl.startsWith('http://') && !tavilyBaseUrl.startsWith('https://')) {
@@ -480,6 +527,11 @@ export struct ToolsCenterPanel {
       this.showToolsSnack($r('app.string.search_base_url_invalid'), 2000, SnackBarTone.ERROR)
       return false
     }
+    const shouldValidateBochaBaseUrl = this.searchEngine === SearchEngine.BOCHA
+    if (shouldValidateBochaBaseUrl && !bochaBaseUrl.startsWith('http://') && !bochaBaseUrl.startsWith('https://')) {
+      this.showToolsSnack($r('app.string.search_base_url_invalid'), 2000, SnackBarTone.ERROR)
+      return false
+    }
 
     await this.preferencesService.setString(PreferenceKeys.SEARCH_ENGINE, this.searchEngine)
     await this.preferencesService.setString(PreferenceKeys.SEARCH_BRAVE_API_KEY, braveKey)
@@ -487,6 +539,8 @@ export struct ToolsCenterPanel {
     await this.preferencesService.setString(PreferenceKeys.SEARCH_TAVILY_BASE_URL, tavilyBaseUrl)
     await this.preferencesService.setString(PreferenceKeys.SEARCH_EXA_API_KEY, exaKey)
     await this.preferencesService.setString(PreferenceKeys.SEARCH_EXA_BASE_URL, exaBaseUrl)
+    await this.preferencesService.setString(PreferenceKeys.SEARCH_BOCHA_API_KEY, bochaKey)
+    await this.preferencesService.setString(PreferenceKeys.SEARCH_BOCHA_BASE_URL, bochaBaseUrl)
     await this.preferencesService.setBoolean(
       PreferenceKeys.SEARCH_QUERY_OPTIMIZATION_ENABLED,
       this.searchQueryOptimizationEnabled
@@ -496,6 +550,8 @@ export struct ToolsCenterPanel {
     this.searchTavilyBaseUrl = tavilyBaseUrl
     this.searchExaApiKey = exaKey
     this.searchExaBaseUrl = exaBaseUrl
+    this.searchBochaApiKey = bochaKey
+    this.searchBochaBaseUrl = bochaBaseUrl
     this.syncOriginalSearchSettings()
 
     this.showToolsSnack($r('app.string.search_config_saved'), 2000, SnackBarTone.SUCCESS)
@@ -1148,6 +1204,44 @@ export struct ToolsCenterPanel {
                 .backgroundColor(getAppUiState().themeBackground)
                 .padding({ left: 12, right: 12 })
                 .margin({ top: 8 })
+            }
+
+            if (this.searchEngine === SearchEngine.BOCHA) {
+              TextInput({ text: this.searchBochaApiKey, placeholder: '博查(Bocha) API Key' })
+                .onChange((value: string) => {
+                  this.searchBochaApiKey = value
+                })
+                .type(InputType.Password)
+                .enableAutoFill(false)
+                .fontSize(13)
+                .width('100%')
+                .height(40)
+                .borderRadius(10)
+                .backgroundColor(getAppUiState().themeBackground)
+                .padding({ left: 12, right: 12 })
+                .margin({ top: 8 })
+
+              TextInput({ text: this.searchBochaBaseUrl, placeholder: 'https://api.bochaai.com' })
+                .onChange((value: string) => {
+                  this.searchBochaBaseUrl = value
+                })
+                .fontSize(13)
+                .width('100%')
+                .height(40)
+                .borderRadius(10)
+                .backgroundColor(getAppUiState().themeBackground)
+                .padding({ left: 12, right: 12 })
+                .margin({ top: 8 })
+
+              Text(pickLocalizedText(
+                '博查是国内中文搜索 API，需在 open.bochaai.com 获取 API Key（付费）。',
+                'Bocha is a Chinese search API; get an API key at open.bochaai.com (paid).'
+              ))
+                .fontSize(11)
+                .lineHeight(16)
+                .fontColor($r('app.color.text_tertiary'))
+                .width('100%')
+                .margin({ top: 6 })
             }
 
             Text($r('app.string.search_engine_runtime_hint'))

@@ -14,7 +14,7 @@ import { getToolExecutionService, ToolExecutionService } from '../services/ToolE
 import { getProviderViewModel, ProviderViewModel } from './ProviderViewModel'
 import { getAssistantService, AssistantService, AssistantRuntimeConfig } from '../services/AssistantService'
 import { ChatMessage, ChatSession, MessageRole, ProviderType, ApiStyle, MessageAttachment, AttachmentType, ReasoningLevel, ToolDefinition, ToolCall, ToolResult, SearchReference, ModelParameters } from '../models/ChatModels'
-import { WebSearchResult, SearchResult } from '../services/WebSearchService'
+import { WebSearchResult, SearchResult, getWebSearchService } from '../services/WebSearchService'
 import { http } from '@kit.NetworkKit'
 import { getEffectiveApiKey } from '../config/PresetProviders'
 import { getPreferencesService } from '../services/PreferencesService'
@@ -30,6 +30,7 @@ import {
 } from '../utils/SystemPromptTemplateUtils'
 import {
   cleanSearchQuery as cleanSearchQueryShared,
+  normalizeOptimizedSearchQuery,
   normalizeRelativeTimeForSearchQuery as normalizeRelativeTimeForSearchQueryShared
 } from '../utils/SearchQueryUtils'
 
@@ -49,7 +50,11 @@ export interface ToolCallCallbacks {
 
 // web_search 工具参数接口
 interface WebSearchArgs {
-  query: string
+  query?: string
+  q?: string
+  keywords?: string
+  url?: string
+  page?: number | string
 }
 
 // 搜索结果数据接口
@@ -144,13 +149,21 @@ export class ChatViewModel {
 	    return renderSystemPromptTemplate(template)
 	  }
 
-	  private getCurrentAssistantIdForRequest(): string {
-	    const session = this.sessionStore.getCurrentSession()
-	    if (session !== null && session.assistantId !== '') {
-	      return session.assistantId
-	    }
-	    return 'default'
-	  }
+  private getCurrentAssistantIdForRequest(): string {
+    const session = this.sessionStore.getCurrentSession()
+    if (session !== null && session.assistantId !== '') {
+      return session.assistantId
+    }
+    return 'default'
+  }
+
+  private getOpenAITransportForProvider(providerId: string): string | undefined {
+    const provider = this.providerViewModel.getProviderById(providerId)
+    if (provider === null) {
+      return undefined
+    }
+    return provider.openaiTransport
+  }
 
 	  private async getAssistantRuntimeConfig(): Promise<AssistantRuntimeConfig> {
 	    return await this.assistantService.getRuntimeConfig(this.getCurrentAssistantIdForRequest())
@@ -566,6 +579,8 @@ export class ChatViewModel {
     customHeadersJson?: string
   ): Promise<void> {
     const cancelSnapshot = this.cancelToken
+    this.toolExecutionService.resetWebSearchQueryState()
+    getWebSearchService().resetSearchResultDedup()
     // 首次发送消息时，先持久化待处理的会话
     await this.persistPendingSession()
     if (this.isCancelled(cancelSnapshot)) {
@@ -660,6 +675,7 @@ export class ChatViewModel {
       apiKey: getEffectiveApiKey(providerId, apiKey),
       baseUrl: baseUrl,
       apiPath: apiPath,
+      openaiTransport: this.getOpenAITransportForProvider(providerId),
       customHeadersJson: customHeadersJson
     }
 
@@ -958,6 +974,7 @@ ${webContext.content}
       apiKey: apiKey,
       baseUrl: baseUrl,
       apiPath: apiPath,
+      openaiTransport: this.getOpenAITransportForProvider(providerId),
       customHeadersJson: customHeadersJson
     }
     apiConfig.modelReasoningStrategyOverride = this.getCurrentModelReasoningStrategyOverride(providerId, modelId)
@@ -1275,6 +1292,7 @@ ${limitedSearchContext}
       apiKey: apiKey,
       baseUrl: baseUrl,
       apiPath: apiPath,
+      openaiTransport: this.getOpenAITransportForProvider(providerId),
       customHeadersJson: customHeadersJson
     }
     apiConfig.modelReasoningStrategyOverride = this.getCurrentModelReasoningStrategyOverride(providerId, modelId)
@@ -1531,11 +1549,15 @@ ${limitedSearchContext}
 
     // 检测启用了哪些工具（用于构建 system prompt）
     let hasWebSearchTool = false
+    let hasAskUserTool = false
     for (let i = 0; i < tools.length; i++) {
       if (tools[i].function.name === 'web_search') {
         hasWebSearchTool = true
       }
-      if (hasWebSearchTool) {
+      if (tools[i].function.name === 'ask_user') {
+        hasAskUserTool = true
+      }
+      if (hasWebSearchTool && hasAskUserTool) {
         break
       }
     }
@@ -1574,8 +1596,16 @@ ${limitedSearchContext}
       toolUsageSystemPrompt += `
 - 针对同一个用户问题，最多调用 web_search 5 次;超过 5 次后不再调用，根据已获取的内容整理并返回结果。
 - 生成 web_search.query 时优先保留用户原始关键词，不要擅自改写实体、地点和时间。
+- 如果需要继续搜索，必须主动更换搜索词角度，优先换关键词而不是只增加 page；不要连续提交完全相同或只差空格/标点的 query。
+- 多次搜索同一问题时，每次 query 应尽量覆盖不同信息源或不同角度，例如: 精确短语、官方/作品页、歌词/资料站、作者/制作人、排除百科字典类结果、site: 限定站点。
+- 当工具提示结果为空、重复或已无更多新结果时，下一次 web_search 必须换一组更具体的关键词，或加入 site:/-site:/引号短语等约束来寻找不同来源。
 - 当用户输入只包含一个 URL，或明确要求读取、总结、分析某个网页时，必须调用 web_search。
 - URL 读取场景下，web_search.query 必须原样传入该 URL，不要改写成标题、关键词或搜索语句。`
+    }
+    if (hasAskUserTool) {
+      toolUsageSystemPrompt += `
+- 当用户需求存在关键歧义，且自行假设会导致明显返工时，可以调用 ask_user 一次性向用户提出 1-3 个澄清问题。
+- 不要为了无关紧要的偏好或可以合理默认的细节调用 ask_user；能继续完成时优先继续完成。`
     }
     toolUsageSystemPrompt += `
 - 若用户提到“今天/昨天/明天/现在/最新”等相对时间，请以当前时间为基准理解，不要编造不一致的绝对日期。
@@ -1601,6 +1631,7 @@ ${limitedSearchContext}
       apiKey: getEffectiveApiKey(providerId, apiKey),
       baseUrl: baseUrl,
       apiPath: apiPath,
+      openaiTransport: this.getOpenAITransportForProvider(providerId),
       customHeadersJson: customHeadersJson
     }
 
@@ -1761,6 +1792,12 @@ ${limitedSearchContext}
     if (!toolsEnabledInThisRound) {
       console.warn('ChatViewModel', `Max tool iterations (${this.MAX_TOOL_ITERATIONS}) reached, forcing final answer without tools`)
     }
+    const requestMessagesForRound = toolsEnabledInThisRound ? requestMessages : requestMessages.concat([
+      new RequestMessage(
+        'system',
+        '工具调用次数已达上限。不要再调用任何工具，也不要输出工具调用标记；请仅根据前文已有工具结果，直接用自然语言回答用户。'
+      )
+    ])
 
     console.info('ChatViewModel', `Tool call loop iteration ${iteration + 1}`)
     let roundContentBuffer = ''
@@ -1850,7 +1887,7 @@ ${limitedSearchContext}
     // 发送流式请求（带工具）
     const httpRequest = this.aiApiService.streamChatRequestWithTools(
       apiConfig,
-      requestMessages,
+      requestMessagesForRound,
       modelId,
       (contentChunk: string) => {
         if (isCancelledFn()) {
@@ -1932,10 +1969,11 @@ ${limitedSearchContext}
               aiMessage.isSearching = true
               try {
                 const args = JSON.parse(toolCalls[i].arguments) as WebSearchArgs
-                aiMessage.searchQuery = args.query
-                console.info('ChatViewModel', `[Function Calling] web_search(query="${args.query}")`)
+                const displayQuery = this.resolveWebSearchArgsQuery(args)
+                aiMessage.searchQuery = displayQuery
+                console.info('ChatViewModel', `[Function Calling] web_search(query="${displayQuery}")`)
                 if (toolCallbacks !== undefined && toolCallbacks.onSearching !== undefined) {
-                  toolCallbacks.onSearching(args.query)
+                  toolCallbacks.onSearching(displayQuery)
                 }
               } catch (e) {
                 console.warn('ChatViewModel', `Failed to parse web_search args: ${JSON.stringify(e)}`)
@@ -2155,7 +2193,7 @@ ${limitedSearchContext}
       },
       reasoningLevel,
       toolsEnabledInThisRound ? tools : undefined,
-      toolsEnabledInThisRound ? 'auto' : undefined,
+      toolsEnabledInThisRound ? 'auto' : 'none',
       (toolCallDeltas: ToolCallDelta[]) => {
         if (isCancelledFn() || !toolsEnabledInThisRound || toolCallDeltas.length <= 0) {
           return
@@ -2357,6 +2395,7 @@ ${limitedSearchContext}
   stopGeneration(): void {
     // 取消令牌前移：确保”仍在准备阶段的发送流程”也能被终止
     this.cancelToken = this.cancelToken + 1
+    this.toolExecutionService.cancelAllPendingAskUserAnswers()
 
     // 停止前持久化所有待处理的 AI 消息
     this.persistPendingAIMessageIfNeeded()
@@ -2449,6 +2488,84 @@ ${limitedSearchContext}
       || normalized === 'search_web' || normalized === 'internet_search' || normalized === 'web_search_exa'
   }
 
+  private isLyricsSearchQuery(text: string): boolean {
+    const normalized = text.toLowerCase()
+    return normalized.includes('歌词') || normalized.includes('lyric') || normalized.includes('lyrics')
+      || normalized.includes('作词') || normalized.includes('作曲')
+  }
+
+  private normalizeLyricsTerm(text: string): string {
+    return text
+      .replace(/[“”"']/g, '')
+      .replace(/(的)?(歌词|lyrics?|lyric|作词|作曲)/gi, '')
+      .replace(/\s+/g, ' ')
+      .trim()
+  }
+
+  private getLyricsCoreTerms(text: string): string[] {
+    const terms: string[] = []
+    const normalized = this.normalizeLyricsTerm(text)
+    const byMatch = /^(.+?)\s+by\s+(.+)$/i.exec(normalized)
+    if (byMatch && byMatch[1] !== undefined && byMatch[2] !== undefined) {
+      const song = this.normalizeLyricsTerm(byMatch[1])
+      const artist = this.normalizeLyricsTerm(byMatch[2])
+      if (song !== '') {
+        terms.push(song)
+      }
+      if (artist !== '') {
+        terms.push(artist)
+      }
+      return terms
+    }
+
+    if (normalized.includes('太阳之子')) {
+      terms.push('太阳之子')
+    }
+    if (normalized.includes('周杰伦')) {
+      terms.push('周杰伦')
+    }
+    return terms
+  }
+
+  private shouldUseLatestLyricsQuery(candidateQuery: string, latestUserQuery: string): boolean {
+    if (candidateQuery === '') {
+      return true
+    }
+    if (candidateQuery.includes('site:') || candidateQuery.includes('"') || candidateQuery.includes('“')) {
+      return false
+    }
+
+    const coreTerms = this.getLyricsCoreTerms(latestUserQuery)
+    if (coreTerms.length === 0) {
+      return false
+    }
+
+    const normalizedCandidate = this.normalizeLyricsTerm(candidateQuery)
+    const compactCandidate = normalizedCandidate.replace(/\s+/g, '')
+    if (compactCandidate.length <= 2) {
+      return true
+    }
+    for (let i = 0; i < coreTerms.length; i++) {
+      if (candidateQuery.includes(coreTerms[i])) {
+        return false
+      }
+    }
+    // 只在明显被模型截断成短片段时回退。像“方文山 黄俊郎”这类虽不含歌名/歌手、
+    // 但属于模型主动换角度的关键词，应保留给工具真实搜索。
+    return compactCandidate.length <= 4
+  }
+
+  private isObviouslyFragmentSearchQuery(query: string): boolean {
+    const compact = query.replace(/\s+/g, '').trim()
+    if (compact === '') {
+      return true
+    }
+    if (/^[\u4e00-\u9fff]$/.test(compact)) {
+      return true
+    }
+    return false
+  }
+
   private getLatestUserQueryFromRequestMessages(requestMessages: RequestMessage[]): string {
     for (let i = requestMessages.length - 1; i >= 0; i--) {
       const msg = requestMessages[i]
@@ -2459,13 +2576,50 @@ ${limitedSearchContext}
     return ''
   }
 
+  private resolveWebSearchArgsQuery(args: WebSearchArgs): string {
+    const candidates: string[] = []
+    if (args.url !== undefined) {
+      candidates.push(args.url)
+    }
+    if (args.query !== undefined) {
+      candidates.push(args.query)
+    }
+    if (args.q !== undefined) {
+      candidates.push(args.q)
+    }
+    if (args.keywords !== undefined) {
+      candidates.push(args.keywords)
+    }
+    for (let i = 0; i < candidates.length; i++) {
+      const candidate = candidates[i].trim()
+      if (candidate !== '') {
+        return candidate
+      }
+    }
+    return ''
+  }
+
+  private resolveWebSearchArgsPage(args: WebSearchArgs): number {
+    if (args.page === undefined) {
+      return 0
+    }
+    if (typeof args.page === 'number') {
+      return args.page > 0 ? args.page : 0
+    }
+    const parsed = Number(args.page)
+    if (Number.isNaN(parsed) || parsed <= 0) {
+      return 0
+    }
+    return parsed
+  }
+
   private normalizeWebSearchToolCallQuery(toolCall: ToolCall, latestUserQuery: string): string {
     let parsedQuery = ''
+    let parsedPage = 0
     try {
       const args = JSON.parse(toolCall.arguments) as WebSearchArgs
-      if (args.query !== undefined) {
-        parsedQuery = this.cleanSearchQuery(args.query)
-      }
+      parsedQuery = this.cleanSearchQuery(this.resolveWebSearchArgsQuery(args))
+      parsedPage = this.resolveWebSearchArgsPage(args)
     } catch (error) {
       parsedQuery = ''
       console.warn('ChatViewModel', `Failed to parse search tool args before normalize: ${JSON.stringify(error)}`)
@@ -2473,14 +2627,25 @@ ${limitedSearchContext}
 
     let finalQuery = parsedQuery
     if (latestUserQuery !== '') {
-      finalQuery = this.normalizeRelativeTimeForSearchQuery(latestUserQuery, parsedQuery)
+      finalQuery = normalizeOptimizedSearchQuery(latestUserQuery, parsedQuery)
+      if (!this.isObviouslyFragmentSearchQuery(parsedQuery) && this.isLyricsSearchQuery(latestUserQuery) &&
+        this.shouldUseLatestLyricsQuery(parsedQuery, latestUserQuery)) {
+        finalQuery = this.cleanSearchQuery(latestUserQuery)
+      }
+    }
+    if (latestUserQuery !== '') {
+      finalQuery = this.normalizeRelativeTimeForSearchQuery(latestUserQuery, finalQuery)
     }
     if (finalQuery === '' && latestUserQuery !== '') {
       finalQuery = this.cleanSearchQuery(latestUserQuery)
     }
 
     toolCall.functionName = 'web_search'
-    toolCall.arguments = JSON.stringify({ query: finalQuery })
+    if (parsedPage > 0) {
+      toolCall.arguments = JSON.stringify({ query: finalQuery, page: parsedPage })
+    } else {
+      toolCall.arguments = JSON.stringify({ query: finalQuery })
+    }
     return finalQuery
   }
 
@@ -2612,6 +2777,7 @@ ${context !== '' ? context : '(无历史对话)'}
         apiStyle: apiStyle,
         apiKey: apiKey,
         baseUrl: baseUrl,
+        openaiTransport: this.getOpenAITransportForProvider(providerId),
         customHeadersJson: customHeadersJson
       }
 
@@ -2625,11 +2791,12 @@ ${context !== '' ? context : '(无历史对话)'}
 
       if (result.success && result.content.trim() !== '') {
         const optimized = this.cleanOptimizedSearchQuery(result.content)
-        if (!this.isOptimizedQueryAcceptable(cleanedUserQuery, optimized)) {
+        const normalizedOptimized = normalizeOptimizedSearchQuery(cleanedUserQuery, optimized)
+        if (!this.isOptimizedQueryAcceptable(cleanedUserQuery, normalizedOptimized)) {
           console.warn('ChatViewModel', `[关键词优化] 结果不可靠,回退原始查询. 原始: ${cleanedUserQuery}, 优化: ${optimized}`)
           return cleanedUserQuery
         }
-        const finalQuery = this.cleanSearchQuery(optimized)
+        const finalQuery = this.cleanSearchQuery(normalizedOptimized)
         console.info('ChatViewModel', `[关键词优化] 优化后查询: ${finalQuery}`)
         return finalQuery !== '' ? finalQuery : cleanedUserQuery
       }

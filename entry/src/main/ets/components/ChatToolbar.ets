@@ -9,9 +9,6 @@ import { getAppUiState } from '../state/AppUiState'
 
 @ComponentV2
 export struct ChatToolbar {
-  @Param webSearchAvailable: boolean = false
-  @Param webSearchEnabled: boolean = false
-  @Event onToggleWebSearch: () => void = (): void => {}
   @Param toolSelectionAvailable: boolean = false
   @Param hasSelectedTools: boolean = false
   @Event onOpenTools: () => void = (): void => {}
@@ -69,36 +66,6 @@ export struct ChatToolbar {
 
   build() {
     Row() {
-      if (this.webSearchAvailable) {
-        Button({ type: ButtonType.Capsule, stateEffect: false }) {
-          Row() {
-            SymbolGlyph($r('sys.symbol.magnifyingglass'))
-              .fontSize(16)
-              .fontColor([this.webSearchEnabled ? this.themePrimary : $r('app.color.text_secondary')])
-
-            Text($r('app.string.chat_toolbar_web_search'))
-              .fontSize(14)
-              .fontColor(this.webSearchEnabled ? this.themePrimary : $r('app.color.text_secondary'))
-              .fontWeight(this.webSearchEnabled ? FontWeight.Medium : FontWeight.Regular)
-              .margin({ left: 4 })
-          }
-        }
-        .height(32)
-        .padding({ left: 12, right: 12 })
-        .borderRadius(16)
-        .backgroundColor(this.getChipBackgroundColor())
-        .backgroundBlurStyle(BlurStyle.COMPONENT_REGULAR)
-        .border({
-          width: 1,
-          color: this.webSearchEnabled ? this.getActiveChipBorderColor() : this.getInactiveChipBorderColor()
-        })
-        .shadow({ radius: 10, color: this.getChipShadowColor(), offsetX: 0, offsetY: 2 })
-        .animation({ duration: 200, curve: Curve.EaseOut })
-        .onClick(() => {
-          this.onToggleWebSearch()
-        })
-      }
-
       if (this.toolSelectionAvailable) {
         Button({ type: ButtonType.Capsule, stateEffect: false }) {
           Row() {
@@ -123,7 +90,6 @@ export struct ChatToolbar {
           color: this.hasSelectedTools ? this.getActiveChipBorderColor() : this.getInactiveChipBorderColor()
         })
         .shadow({ radius: 10, color: this.getChipShadowColor(), offsetX: 0, offsetY: 2 })
-        .margin({ left: this.webSearchAvailable ? 8 : 0 })
         .animation({ duration: 200, curve: Curve.EaseOut })
         .onClick(() => {
           this.onOpenTools()
@@ -166,7 +132,7 @@ export struct ChatToolbar {
           color: this.isReasoningEnabled() ? this.getActiveChipBorderColor() : this.getInactiveChipBorderColor()
         })
         .shadow({ radius: 10, color: this.getChipShadowColor(), offsetX: 0, offsetY: 2 })
-        .margin({ left: this.webSearchAvailable || this.toolSelectionAvailable ? 8 : 0 })
+        .margin({ left: this.toolSelectionAvailable ? 8 : 0 })
         .animation({ duration: 200, curve: Curve.EaseOut })
         .bindMenu(this.ReasoningMenuBuilder(), {
           placement: Placement.BottomLeft,

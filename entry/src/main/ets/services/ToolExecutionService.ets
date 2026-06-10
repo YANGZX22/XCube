@@ -1,9 +1,26 @@
 import { ToolCall, ToolResult } from '../models/ChatModels'
+import { ASK_USER_TOOL_ID } from '../config/BuiltinTools'
 import { getToolRegistry, RegisteredTool, ToolRegistry } from './ToolRegistry'
 
 // 取消检查回调类型
 type CancelCheckCallback = () => boolean
 type ToolApprovalCallback = (toolCall: ToolCall, tool: RegisteredTool) => Promise<boolean>
+
+interface WebSearchPaginationArgs {
+  query?: string
+  q?: string
+  keywords?: string
+  url?: string
+  page?: number
+}
+
+class PendingAskUserRuntime {
+  resolve: (answerJson: string | null) => void
+
+  constructor(resolve: (answerJson: string | null) => void) {
+    this.resolve = resolve
+  }
+}
 
 // 工具执行服务 - 负责执行工具调用
 export class ToolExecutionService {
@@ -12,6 +29,8 @@ export class ToolExecutionService {
   // 当前取消检查回调
   private cancelCheckCallback: CancelCheckCallback | null = null
   private approvalCallback: ToolApprovalCallback | null = null
+  private pendingAskUserAnswers: Map<string, PendingAskUserRuntime> = new Map()
+  private webSearchQueryCounts: Map<string, number> = new Map()
 
   private constructor() {
     this.registry = getToolRegistry()
@@ -36,6 +55,30 @@ export class ToolExecutionService {
 
   setApprovalCallback(callback: ToolApprovalCallback | null): void {
     this.approvalCallback = callback
+  }
+
+  resolvePendingAskUserAnswer(toolCallId: string, answerJson: string | null): boolean {
+    const runtime = this.pendingAskUserAnswers.get(toolCallId)
+    if (runtime === undefined) {
+      return false
+    }
+    this.pendingAskUserAnswers.delete(toolCallId)
+    runtime.resolve(answerJson)
+    return true
+  }
+
+  cancelAllPendingAskUserAnswers(): void {
+    const ids: string[] = []
+    this.pendingAskUserAnswers.forEach((_runtime: PendingAskUserRuntime, key: string) => {
+      ids.push(key)
+    })
+    for (let i = 0; i < ids.length; i++) {
+      this.resolvePendingAskUserAnswer(ids[i], null)
+    }
+  }
+
+  resetWebSearchQueryState(): void {
+    this.webSearchQueryCounts.clear()
   }
 
   // 检查是否已取消
@@ -71,6 +114,71 @@ export class ToolExecutionService {
     return undefined
   }
 
+  private isAskUserFunctionName(functionName: string): boolean {
+    const normalized = functionName.toLowerCase().replace(/[\s\-]+/g, '_')
+    return normalized === ASK_USER_TOOL_ID || normalized === 'user_input' || normalized === 'ask'
+  }
+
+  private isWebSearchToolId(toolId: string): boolean {
+    return toolId === 'web_search'
+  }
+
+  private normalizeSearchQueryKey(query: string): string {
+    return query.toLowerCase().replace(/\s+/g, ' ').trim()
+  }
+
+  private resolveSearchPaginationQuery(args: WebSearchPaginationArgs): string {
+    const candidates: string[] = []
+    if (args.url !== undefined) {
+      candidates.push(args.url)
+    }
+    if (args.query !== undefined) {
+      candidates.push(args.query)
+    }
+    if (args.q !== undefined) {
+      candidates.push(args.q)
+    }
+    if (args.keywords !== undefined) {
+      candidates.push(args.keywords)
+    }
+    for (let i = 0; i < candidates.length; i++) {
+      const candidate = candidates[i].trim()
+      if (candidate !== '') {
+        return candidate
+      }
+    }
+    return ''
+  }
+
+  private applyWebSearchPagination(toolCall: ToolCall): void {
+    let parsed: WebSearchPaginationArgs = {}
+    try {
+      parsed = JSON.parse(toolCall.arguments) as WebSearchPaginationArgs
+    } catch (_error) {
+      return
+    }
+
+    const rawQuery = this.resolveSearchPaginationQuery(parsed)
+    if (rawQuery === '') {
+      return
+    }
+
+    const existingPage = parsed.page
+    if (typeof existingPage === 'number' && existingPage > 0) {
+      return
+    }
+
+    const key = this.normalizeSearchQueryKey(rawQuery)
+    const previousCount = this.webSearchQueryCounts.get(key)
+    const nextPage = previousCount === undefined ? 1 : previousCount + 1
+    this.webSearchQueryCounts.set(key, nextPage)
+    parsed.page = nextPage
+    toolCall.arguments = JSON.stringify(parsed)
+    if (nextPage > 1) {
+      console.info('ToolExecutionService', `Repeated web_search query detected, using page ${nextPage}: ${rawQuery}`)
+    }
+  }
+
   private buildCancelledResult(toolCall: ToolCall, displayName: string, sourceLabel: string): ToolResult {
     return new ToolResult(
       toolCall.id,
@@ -96,6 +204,56 @@ export class ToolExecutionService {
     }
   }
 
+  private async handleAskUser(toolCall: ToolCall): Promise<ToolResult> {
+    toolCall.toolId = ASK_USER_TOOL_ID
+    toolCall.displayName = '向用户提问'
+    toolCall.sourceLabel = '内置工具'
+    toolCall.permissionLevel = 'read'
+
+    let answerJson: string | null = null
+    try {
+      answerJson = await new Promise<string | null>((resolve) => {
+        const existing = this.pendingAskUserAnswers.get(toolCall.id)
+        if (existing !== undefined) {
+          existing.resolve(null)
+          this.pendingAskUserAnswers.delete(toolCall.id)
+        }
+        this.pendingAskUserAnswers.set(toolCall.id, new PendingAskUserRuntime(resolve))
+      })
+    } catch (error) {
+      console.error('ToolExecutionService', `ask_user failed: ${JSON.stringify(error)}`)
+      return new ToolResult(
+        toolCall.id,
+        JSON.stringify({ error: `ask_user 失败: ${JSON.stringify(error)}`, cancelled: true }),
+        true,
+        toolCall.displayName,
+        toolCall.sourceLabel
+      )
+    }
+
+    if (this.isCancelled()) {
+      return this.buildCancelledResult(toolCall, toolCall.displayName, toolCall.sourceLabel)
+    }
+
+    if (answerJson === null) {
+      return new ToolResult(
+        toolCall.id,
+        JSON.stringify({ error: '用户未回答该问题', cancelled: true }),
+        true,
+        toolCall.displayName,
+        toolCall.sourceLabel
+      )
+    }
+
+    return new ToolResult(
+      toolCall.id,
+      answerJson,
+      false,
+      toolCall.displayName,
+      toolCall.sourceLabel
+    )
+  }
+
   // 执行单个工具调用
   async executeToolCall(toolCall: ToolCall): Promise<ToolResult> {
     console.info('ToolExecutionService', `Executing tool call: ${toolCall.functionName} (${toolCall.id})`)
@@ -107,6 +265,10 @@ export class ToolExecutionService {
     }
 
     const normalizedFunctionName = this.normalizeFunctionName(toolCall.functionName)
+    if (this.isAskUserFunctionName(normalizedFunctionName)) {
+      return await this.handleAskUser(toolCall)
+    }
+
     // 通过函数名获取工具 ID
     const toolId = this.resolveToolId(normalizedFunctionName)
     if (toolId === undefined) {
@@ -138,6 +300,9 @@ export class ToolExecutionService {
     toolCall.sourceType = registeredTool.config.sourceType
     toolCall.sourceLabel = registeredTool.config.sourceLabel
     toolCall.permissionLevel = registeredTool.config.permissionLevel
+    if (this.isWebSearchToolId(toolId)) {
+      this.applyWebSearchPagination(toolCall)
+    }
 
     const approved = await this.requestApprovalIfNeeded(toolCall, registeredTool)
     if (!approved) {
@@ -228,6 +393,9 @@ export class ToolExecutionService {
   // 检查工具是否可用
   isToolAvailable(functionName: string): boolean {
     const normalizedFunctionName = this.normalizeFunctionName(functionName)
+    if (this.isAskUserFunctionName(normalizedFunctionName)) {
+      return true
+    }
     const toolId = this.resolveToolId(normalizedFunctionName)
     return toolId !== undefined
   }

@@ -23,9 +23,6 @@ export struct ChatInputAreaSection {
   @Param currentProviderBrandColor: ResourceColor = ''
   @Param autoFocus: boolean = false
   @Param isEditing: boolean = false
-  @Param webSearchAvailable: boolean = false
-  @Param webSearchEnabled: boolean = false
-  @Event onToggleWebSearch: () => void = (): void => {}
   @Param toolSelectionAvailable: boolean = false
   @Param hasSelectedTools: boolean = false
   @Event onOpenTools: () => void = (): void => {}
@@ -74,11 +71,6 @@ export struct ChatInputAreaSection {
         .padding({ right: 4, bottom: 8 })
 
         ChatToolbar({
-          webSearchAvailable: this.webSearchAvailable,
-          webSearchEnabled: this.webSearchEnabled,
-          onToggleWebSearch: (): void => {
-            this.onToggleWebSearch()
-          },
           toolSelectionAvailable: this.toolSelectionAvailable,
           hasSelectedTools: this.hasSelectedTools,
           onOpenTools: (): void => {
