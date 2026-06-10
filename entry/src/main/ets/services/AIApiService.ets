@@ -991,6 +991,11 @@ export class AIApiService {
   }
 
   private parseTextualToolCallBlock(block: string): void {
+    // 工具被禁用（如达到调用上限、最后一轮强制出答案）时，仍要把 DSML 块从可见文本里吞掉，
+    // 但不再解析为工具调用，避免泄漏成乱码或产生意外调用。
+    if (!this.textualToolCallsEnabled) {
+      return
+    }
     const invokeRegex = /<[^>]*invoke\s+name=["']([^"']+)["'][^>]*>([\s\S]*?)<\/[^>]*invoke>/gi
     let invokeMatch = invokeRegex.exec(block)
     while (invokeMatch !== null) {
@@ -1031,9 +1036,6 @@ export class AIApiService {
   private absorbTextualToolCalls(content: string): string {
     if (content === '') {
       return ''
-    }
-    if (!this.textualToolCallsEnabled) {
-      return content
     }
 
     let remaining = content

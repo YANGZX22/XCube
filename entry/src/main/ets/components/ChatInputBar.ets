@@ -9,9 +9,11 @@ import {
 } from '@kit.MediaLibraryKit'
 import { fileIo } from '@kit.CoreFileKit'
 import { util } from '@kit.ArkTS'
+import { hdsMaterial } from '@kit.UIDesignKit'
 import { getAttachmentStorageService } from '../services/AttachmentStorageService'
 import { getAppUiState } from '../state/AppUiState'
 import { withColorAlpha } from '../utils/ColorAlphaUtils'
+import { HdsMiniBarButton } from 'hds_button'
 
 @ComponentV2
 export struct ChatInputBar {
@@ -163,43 +165,63 @@ export struct ChatInputBar {
       // 输入栏主体
       Row() {
         // 模型图标按钮 - 点击触发快速切换（编辑模式下也可点击切换模型）
-        Button({ type: ButtonType.Circle }) {
-          if (this.currentModelId !== '') {
-            if (this.hasCurrentModelIcon()) {
-              Column() {
-                Image(this.getCurrentModelIconResourcePath())
-                  .width(18)
-                  .height(18)
-                  .objectFit(ImageFit.Contain)
-              }
-              .width(28)
-              .height(28)
-              .borderRadius(7)
-              .backgroundColor($r('app.color.model_icon_bg'))
-              .justifyContent(FlexAlign.Center)
-              .alignItems(HorizontalAlign.Center)
-            } else {
-              Column() {
-                SymbolGlyph($r('sys.symbol.ai_edit'))
-                  .fontSize(14)
-                  .fontColor([$r('app.color.text_tertiary')])
-              }
-              .width(28)
-              .height(28)
-              .borderRadius(7)
-              .backgroundColor($r('app.color.model_icon_bg'))
-              .justifyContent(FlexAlign.Center)
-              .alignItems(HorizontalAlign.Center)
+        Stack({ alignContent: Alignment.Center }) {
+          HdsMiniBarButton({
+            barWidth: 40,
+            barHeight: 40,
+            contentPadding: 0,
+            containerSize: { width: 40, height: 40 },
+            maskColor: Color.Transparent,
+            enableGradientMask: false,
+            barBottomMargin: 0,
+            materialType: hdsMaterial.MaterialType.IMMERSIVE,
+            materialLevel: hdsMaterial.MaterialLevel.ADAPTIVE,
+            barBackgroundColor: withColorAlpha(this.themeUserBubble, '40'),
+            clipToBarShape: true,
+            onButtonClick: (): void => {
+              this.onModelIconClick()
             }
-          } else {
-            SymbolGlyph($r('sys.symbol.ai_edit'))
-              .fontSize(22)
-              .fontColor([$r('app.color.text_secondary')])
+          }) {
+            Stack({ alignContent: Alignment.Center }) {
+              if (this.currentModelId !== '') {
+                if (this.hasCurrentModelIcon()) {
+                  Column() {
+                    Image(this.getCurrentModelIconResourcePath())
+                      .width(18)
+                      .height(18)
+                      .objectFit(ImageFit.Contain)
+                  }
+                  .width(28)
+                  .height(28)
+                  .borderRadius(7)
+                  .justifyContent(FlexAlign.Center)
+                  .alignItems(HorizontalAlign.Center)
+                } else {
+                  Column() {
+                    SymbolGlyph($r('sys.symbol.ai_edit'))
+                      .fontSize(14)
+                      .fontColor([this.themePrimary])
+                  }
+                  .width(28)
+                  .height(28)
+                  .borderRadius(7)
+                  .justifyContent(FlexAlign.Center)
+                  .alignItems(HorizontalAlign.Center)
+                }
+              } else {
+                SymbolGlyph($r('sys.symbol.ai_edit'))
+                  .fontSize(22)
+                  .fontColor([this.themePrimary])
+              }
+            }
+            .width(40)
+            .height(40)
+            .translate({ y: -4 })
           }
         }
         .width(40)
         .height(40)
-        .backgroundColor(this.modelBtnPressed ? this.themeDivider : this.themeAiBubble)
+        .clip(false)
         .scale({ x: this.modelBtnPressed ? 0.95 : 1, y: this.modelBtnPressed ? 0.95 : 1 })
         .animation({ duration: 150, curve: Curve.EaseOut })
         .onTouch((event: TouchEvent) => {
@@ -208,9 +230,6 @@ export struct ChatInputBar {
           } else if (event.type === TouchType.Up || event.type === TouchType.Cancel) {
             this.modelBtnPressed = false
           }
-        })
-        .onClick(() => {
-          this.onModelIconClick()
         })
 
         // 输入框
@@ -266,26 +285,40 @@ export struct ChatInputBar {
         })
 
         // 发送/停止按钮（编辑模式下为"保存并发送"）
-        Button({ type: ButtonType.Circle }) {
-          SymbolGlyph(this.getSendButtonSymbol())
-            .fontSize(this.isSending ? 20 : 22)
-            .fontColor([Color.White])
-            .symbolEffect(
-              new ReplaceSymbolEffect(EffectScope.WHOLE),
-              this.iconTrigger
-            )
-            .opacity(this.breathOpacity)
-            .animation({ duration: 850, curve: Curve.EaseInOut })
+        Stack({ alignContent: Alignment.Center }) {
+          HdsMiniBarButton({
+            barWidth: 40,
+            barHeight: 40,
+            contentPadding: 0,
+            containerSize: { width: 40, height: 40 },
+            maskColor: Color.Transparent,
+            enableGradientMask: false,
+            barBottomMargin: 0,
+            materialType: hdsMaterial.MaterialType.IMMERSIVE,
+            materialLevel: hdsMaterial.MaterialLevel.ADAPTIVE,
+            iconResource: this.getSendButtonSymbol(),
+            iconSize: this.isSending ? 20 : 22,
+            iconColor: [this.themePrimary],
+            iconOffsetY: -4,
+            barBackgroundColor: withColorAlpha(this.themeUserBubble, '40'),
+            clipToBarShape: true,
+            onButtonClick: (): void => {
+              if (this.isSending) {
+                this.onStop()
+              } else {
+                if (!this.computeHasContent()) {
+                  return
+                }
+                this.onSend()
+              }
+            }
+          })
+          .opacity(this.breathOpacity)
+          .animation({ duration: 850, curve: Curve.EaseInOut })
         }
         .width(40)
         .height(40)
-        .backgroundColor(this.themeUserBubble)
-        .shadow({
-          radius: this.sendBtnPressed ? 24 : 16,
-          color: this.themeUserBubble + (this.sendBtnPressed ? '66' : '40'),
-          offsetX: 0,
-          offsetY: this.sendBtnPressed ? 6 : 4
-        })
+        .clip(false)
         .scale({
           x: this.sendBtnPressed ? 0.95 * this.sendBtnScale : this.sendBtnScale,
           y: this.sendBtnPressed ? 0.95 * this.sendBtnScale : this.sendBtnScale
@@ -299,16 +332,6 @@ export struct ChatInputBar {
             this.sendBtnPressed = false
           }
         })
-        .onClick(() => {
-          if (this.isSending) {
-            this.onStop()
-          } else {
-            if (!this.computeHasContent()) {
-              return
-            }
-            this.onSend()
-          }
-        })
       }
       .width('100%')
       .padding({
@@ -320,8 +343,7 @@ export struct ChatInputBar {
     }
     .width('100%')
     .borderRadius(24)
-    .backgroundColor(this.themeAiBubble)
-    .backgroundBlurStyle(BlurStyle.COMPONENT_REGULAR)
+    .backgroundColor(withColorAlpha(this.themeAiBubble, 'B8'))
     .border({
       width: this.isEditing ? 2 : 0.5,
       color: this.isEditing ? this.themePrimary : this.themeDivider

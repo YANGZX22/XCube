@@ -30,6 +30,10 @@ export struct ChatToolbar {
     return getAppUiState().themeSurface
   }
 
+  private get themeAiBubble(): string {
+    return getAppUiState().themeAiBubble
+  }
+
   private get themeDivider(): string {
     return getAppUiState().themeDivider
   }
@@ -49,7 +53,7 @@ export struct ChatToolbar {
   }
 
   private getChipBackgroundColor(): string {
-    return this.withAlpha(this.themeSurface, this.isDarkMode ? '14' : '1A')
+    return this.withAlpha(this.themeAiBubble, '33')
   }
 
   private getInactiveChipBorderColor(): string {
@@ -67,24 +71,22 @@ export struct ChatToolbar {
   build() {
     Row() {
       if (this.toolSelectionAvailable) {
-        Button({ type: ButtonType.Capsule, stateEffect: false }) {
-          Row() {
-            SymbolGlyph($r('sys.symbol.gearshape'))
-              .fontSize(16)
-              .fontColor([this.hasSelectedTools ? this.themePrimary : $r('app.color.text_secondary')])
+        Row() {
+          SymbolGlyph($r('sys.symbol.gearshape'))
+            .fontSize(16)
+            .fontColor([this.hasSelectedTools ? this.themePrimary : $r('app.color.text_secondary')])
 
-            Text($r('app.string.chat_toolbar_tools'))
-              .fontSize(14)
-              .fontColor(this.hasSelectedTools ? this.themePrimary : $r('app.color.text_secondary'))
-              .fontWeight(this.hasSelectedTools ? FontWeight.Medium : FontWeight.Regular)
-              .margin({ left: 4 })
-          }
+          Text($r('app.string.chat_toolbar_tools'))
+            .fontSize(14)
+            .fontColor(this.hasSelectedTools ? this.themePrimary : $r('app.color.text_secondary'))
+            .fontWeight(this.hasSelectedTools ? FontWeight.Medium : FontWeight.Regular)
+            .margin({ left: 4 })
         }
         .height(32)
         .padding({ left: 12, right: 12 })
         .borderRadius(16)
         .backgroundColor(this.getChipBackgroundColor())
-        .backgroundBlurStyle(BlurStyle.COMPONENT_REGULAR)
+        .backdropBlur(16)
         .border({
           width: 1,
           color: this.hasSelectedTools ? this.getActiveChipBorderColor() : this.getInactiveChipBorderColor()
@@ -98,35 +100,33 @@ export struct ChatToolbar {
 
       if (this.reasoningAvailable) {
         // 推理控制按钮
-        Button({ type: ButtonType.Capsule, stateEffect: false }) {
-          Row() {
-            SymbolGlyph($r('sys.symbol.lightbulb'))
-              .fontSize(16)
-              .fontColor([this.isReasoningEnabled() ? this.themePrimary : $r('app.color.text_secondary')])
+        Row() {
+          SymbolGlyph($r('sys.symbol.lightbulb'))
+            .fontSize(16)
+            .fontColor([this.isReasoningEnabled() ? this.themePrimary : $r('app.color.text_secondary')])
 
-            Text($r('app.string.chat_toolbar_reasoning'))
-              .fontSize(14)
-              .fontColor(this.isReasoningEnabled() ? this.themePrimary : $r('app.color.text_secondary'))
-              .fontWeight(this.isReasoningEnabled() ? FontWeight.Medium : FontWeight.Regular)
-              .margin({ left: 4 })
+          Text($r('app.string.chat_toolbar_reasoning'))
+            .fontSize(14)
+            .fontColor(this.isReasoningEnabled() ? this.themePrimary : $r('app.color.text_secondary'))
+            .fontWeight(this.isReasoningEnabled() ? FontWeight.Medium : FontWeight.Regular)
+            .margin({ left: 4 })
 
-            Text(this.getReasoningLevelText(this.reasoningLevel))
-              .fontSize(13)
-              .fontColor(this.isReasoningEnabled() ? this.themePrimary : $r('app.color.text_secondary'))
-              .fontWeight(this.isReasoningEnabled() ? FontWeight.Medium : FontWeight.Regular)
-              .margin({ left: 6 })
+          Text(this.getReasoningLevelText(this.reasoningLevel))
+            .fontSize(13)
+            .fontColor(this.isReasoningEnabled() ? this.themePrimary : $r('app.color.text_secondary'))
+            .fontWeight(this.isReasoningEnabled() ? FontWeight.Medium : FontWeight.Regular)
+            .margin({ left: 6 })
 
-            SymbolGlyph($r('sys.symbol.chevron_up'))
-              .fontSize(12)
-              .fontColor([this.isReasoningEnabled() ? this.themePrimary : $r('app.color.text_secondary')])
-              .margin({ left: 2 })
-          }
+          SymbolGlyph($r('sys.symbol.chevron_up'))
+            .fontSize(12)
+            .fontColor([this.isReasoningEnabled() ? this.themePrimary : $r('app.color.text_secondary')])
+            .margin({ left: 2 })
         }
         .height(32)
         .padding({ left: 12, right: 12 })
         .borderRadius(16)
         .backgroundColor(this.getChipBackgroundColor())
-        .backgroundBlurStyle(BlurStyle.COMPONENT_REGULAR)
+        .backdropBlur(16)
         .border({
           width: 1,
           color: this.isReasoningEnabled() ? this.getActiveChipBorderColor() : this.getInactiveChipBorderColor()
@@ -137,8 +137,8 @@ export struct ChatToolbar {
         .bindMenu(this.ReasoningMenuBuilder(), {
           placement: Placement.BottomLeft,
           offset: { x: 0, y: 8 },
-          backgroundColor: this.themeSurface,
-          backgroundBlurStyle: BlurStyle.Regular
+          backgroundColor: this.getChipBackgroundColor(),
+          backgroundBlurStyle: BlurStyle.COMPONENT_REGULAR
         })
       }
 

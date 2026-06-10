@@ -38,6 +38,24 @@ export struct EditMessageSheet {
     return getAppUiState().themePrimary
   }
 
+  private get themeAiBubble(): string {
+    return getAppUiState().themeAiBubble
+  }
+
+  private get themeDivider(): string {
+    return getAppUiState().themeDivider
+  }
+
+  private withAlpha(color: string, alphaHex: string): string {
+    if (color.startsWith('#') && color.length === 7) {
+      return `#${alphaHex}${color.slice(1)}`
+    }
+    if (color.startsWith('#') && color.length === 9) {
+      return `#${alphaHex}${color.slice(3)}`
+    }
+    return color
+  }
+
   build() {
     Column() {
       // 顶部工具栏（联网查询 + 推理）
@@ -82,43 +100,45 @@ export struct EditMessageSheet {
         }
         .padding({ left: 10, right: 10, top: 4, bottom: 4 })
         .borderRadius(16)
-        .backgroundColor(this.themePrimary)
+        .backgroundColor(this.withAlpha(this.themeAiBubble, '33'))
+        .backdropBlur(16)
+        .border({ width: 0.5, color: this.themePrimary })
       }
 
       if (this.reasoningAvailable) {
         // 推理控制按钮
-        Button({ type: ButtonType.Capsule, stateEffect: false }) {
-          Row() {
-            SymbolGlyph($r('sys.symbol.lightbulb'))
-              .fontSize(14)
-              .fontColor([this.isReasoningEnabled() ? Color.White : $r('app.color.text_secondary')])
-            Text($r('app.string.chat_toolbar_reasoning'))
-              .fontSize(13)
-              .fontColor(this.isReasoningEnabled() ? Color.White : $r('app.color.text_secondary'))
-              .margin({ left: 4 })
-            Text(this.getReasoningLevelText(this.reasoningLevel))
-              .fontSize(12)
-              .fontColor(this.isReasoningEnabled() ? Color.White : $r('app.color.text_secondary'))
-              .margin({ left: 6 })
-            SymbolGlyph($r('sys.symbol.chevron_down'))
-              .fontSize(10)
-              .fontColor([this.isReasoningEnabled() ? Color.White : $r('app.color.text_secondary')])
-              .margin({ left: 2 })
-          }
+        Row() {
+          SymbolGlyph($r('sys.symbol.lightbulb'))
+            .fontSize(14)
+            .fontColor([this.isReasoningEnabled() ? Color.White : $r('app.color.text_secondary')])
+          Text($r('app.string.chat_toolbar_reasoning'))
+            .fontSize(13)
+            .fontColor(this.isReasoningEnabled() ? Color.White : $r('app.color.text_secondary'))
+            .margin({ left: 4 })
+          Text(this.getReasoningLevelText(this.reasoningLevel))
+            .fontSize(12)
+            .fontColor(this.isReasoningEnabled() ? Color.White : $r('app.color.text_secondary'))
+            .margin({ left: 6 })
+          SymbolGlyph($r('sys.symbol.chevron_down'))
+            .fontSize(10)
+            .fontColor([this.isReasoningEnabled() ? Color.White : $r('app.color.text_secondary')])
+            .margin({ left: 2 })
         }
         .padding({ left: 10, right: 10, top: 4, bottom: 4 })
-        .backgroundColor(this.isReasoningEnabled() ? this.themePrimary : $r('app.color.surface'))
-        .margin({ left: this.hasSelectedTools ? 8 : 0 })
-        .border(this.isReasoningEnabled() ? undefined : {
+        .borderRadius(16)
+        .backgroundColor(this.withAlpha(this.themeAiBubble, '33'))
+        .backdropBlur(16)
+        .border({
           width: 0.5,
-          color: $r('app.color.divider')
+          color: this.isReasoningEnabled() ? this.themePrimary : this.themeDivider
         })
+        .margin({ left: this.hasSelectedTools ? 8 : 0 })
         .animation({ duration: 200, curve: Curve.EaseOut })
         .bindMenu(this.ReasoningMenuBuilder(), {
           placement: Placement.BottomLeft,
           offset: { x: 0, y: 8 },
-          backgroundColor: $r('app.color.surface'),
-          backgroundBlurStyle: BlurStyle.Regular
+          backgroundColor: this.withAlpha(this.themeAiBubble, '33'),
+          backgroundBlurStyle: BlurStyle.COMPONENT_REGULAR
         })
       }
 
@@ -321,4 +341,3 @@ export struct EditMessageSheet {
     .padding({ left: 8, right: 16 })
   }
 }
-

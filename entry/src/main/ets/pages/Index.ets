@@ -1847,7 +1847,6 @@ struct Index {
       largeWidth: Index.COMPACT_TABS_WITH_ACTION_LARGE_WIDTH
     }
     const style = buildCompactTabsFloatingStyle(opts)
-    style.gradientMask = { maskColor: '#66F1F3F5', maskHeight: 92 }
     style.systemMaterialEffect = {
       materialType: hdsMaterial.MaterialType.IMMERSIVE,
       materialLevel: hdsMaterial.MaterialLevel.ADAPTIVE
