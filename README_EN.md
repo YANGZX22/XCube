@@ -15,6 +15,11 @@
 
 ---
 
+## Fork Note
+
+> [!NOTE]
+> The original author has released their version on the app market, so the [upstream repository](https://github.com/LongLiveY96/ChatCube) is no longer being updated. This repository continues development based on the original project, aiming to preserve the native ArkTS experience while exploring different product ideas, interaction patterns, and capability extensions.
+
 ## Why ChatCube?
 
 - Built entirely with ArkTS — a true HarmonyOS native app, not a web wrapper
@@ -33,26 +38,11 @@ These screenshots reflect the current HarmonyOS 6 (API 23) build:
 
 <table>
   <tr>
-    <td align="center"><img src="docs/screenshots/chat_new.png" width="200" /><br/><sub>Chat</sub></td>
-    <td align="center"><img src="docs/screenshots/settings_new.png" width="200" /><br/><sub>Settings</sub></td>
+    <td align="center"><img src="docs/screenshots/IMAGE1.jpg" width="200" /><br/><sub>Chat</sub></td>
+    <td align="center"><img src="docs/screenshots/IMAGE2.jpg" width="200" /><br/><sub>Conversations</sub></td>
     <td align="center"><img src="docs/screenshots/providers_new.jpg" width="200" /><br/><sub>Providers</sub></td>
-    <td align="center"><img src="docs/screenshots/tool_calling_new.png" width="200" /><br/><sub>Tool Calling</sub></td>
-  </tr>
-  <tr>
-    <td align="center"><img src="docs/screenshots/color_themes_new.png" width="200" /><br/><sub>Themes</sub></td>
-    <td align="center"><img src="docs/screenshots/blur_preview.png" width="200" /><br/><sub>Glass Surface</sub></td>
-    <td align="center"><img src="docs/screenshots/latex_preview_new.png" width="200" /><br/><sub>Formula Preview</sub></td>
-    <td align="center"><img src="docs/screenshots/html_preview_new.png" width="200" /><br/><sub>HTML Preview</sub></td>
   </tr>
 </table>
-
-## Highlights in 1.1.0
-
-- Added an Assistant module for managing multiple assistants, viewing their conversations, and starting assistant-specific chats
-- The Assistant module includes custom assistant avatars with text, image links, QQ avatars, and gallery images, rendered more consistently across the app
-- The chat card page now uses HDS material navigation with gradient blur, and search, favorites, and title state behave more consistently while scrolling
-- Reasoning controls now adapt more precisely to provider and model capability, including auto, low, medium, high, and extra-high levels
-- Added the Xiaomi MiMo preset provider; exports now include connection settings by default so imports are ready to use
 
 ## Features
 
@@ -62,7 +52,7 @@ Connect to 15+ AI providers out of the box. Bring your own API key, pick a model
 
 ### Tools, web search, and MCP
 
-Built-in web search supports Bing(local), Tavily, and Exa. When a model supports function calling, it can use tools directly, and the tools center can also connect to remote streamable MCP servers.
+Built-in web search supports Bocha, Bing(local), Tavily, and Exa. When a model supports function calling, it can use tools directly, and the tools center can also connect to remote streamable MCP servers.
 
 ### Markdown & beyond
 
@@ -131,24 +121,6 @@ Open in DevEco Studio → Sync → Run.
 ### Configure providers
 
 In the app: **Settings → Provider Management** → add your API keys.
-
-## Project Structure
-
-```
-entry/src/main/ets/
-├── components/         # Reusable UI components
-├── config/             # App & provider configuration
-├── models/             # Data models
-├── pages/              # App pages
-├── services/           # Business logic
-├── viewmodels/         # ViewModels (MVVM)
-├── utils/              # Utilities
-└── widget/             # Home screen widget
-```
-
-## Community
-
-For the Chinese beta test link and community group, see the main Chinese README: [README.md](./README.md).
 
 ## License
 

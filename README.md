@@ -15,6 +15,11 @@
 
 ---
 
+## Fork 说明
+
+> [!NOTE]
+> 原作者已将其版本上架应用市场，因此[原仓库](https://github.com/LongLiveY96/ChatCube)目前已停止更新。本仓库基于原项目继续维护，旨在保留原生 ArkTS 体验的基础上，尝试更多不一样的产品思路、交互方案和能力扩展。
+
 ## 为什么选 ChatCube？
 
 - 完全使用 ArkTS 原生开发，不是 WebView 套壳
@@ -36,7 +41,6 @@
     <td align="center"><img src="docs/screenshots/IMAGE1.jpg" width="200" /><br/><sub>对话</sub></td>
     <td align="center"><img src="docs/screenshots/IMAGE2.jpg" width="200" /><br/><sub>会话</sub></td>
     <td align="center"><img src="docs/screenshots/providers_new.jpg" width="200" /><br/><sub>服务商管理</sub></td>
-    <td align="center"><img src="docs/screenshots/tool_calling_new.png" width="200" /><br/><sub>工具调用</sub></td>
   </tr>
 </table>
 
@@ -114,31 +118,10 @@ cp build-profile.json5.example build-profile.json5
 
 用 DevEco Studio 打开 → 同步 → 运行。
 
-### 邀请测试
-
-已开启华为应用市场邀测，欢迎体验最新版本：
-
-- 邀测地址：<https://appgallery.huawei.com/link/invite-test-wap?taskId=c38ffe7d89732a23c4a81f4e583c954a&invitationCode=1QiZlcbjMqB>
-
-当前邀测版本基于鸿蒙 6（API 23）。
-
 ### 配置服务商
 
 在应用中：**设置 → 服务商管理** → 添加你的 API Key。
 
-## 项目结构
-
-```
-entry/src/main/ets/
-├── components/         # 可复用 UI 组件
-├── config/             # 应用和服务商配置
-├── models/             # 数据模型
-├── pages/              # 应用页面
-├── services/           # 业务逻辑服务
-├── viewmodels/         # ViewModel（MVVM）
-├── utils/              # 工具函数
-└── widget/             # 桌面小组件
-```
 ## 许可证
 
 本项目基于 [LongLiveY96/ChatCube](https://github.com/LongLiveY96/ChatCube) fork 并继续采用 [MIT License](./LICENSE)。
