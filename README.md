@@ -33,26 +33,12 @@
 
 <table>
   <tr>
-    <td align="center"><img src="docs/screenshots/chat_new.png" width="200" /><br/><sub>对话</sub></td>
-    <td align="center"><img src="docs/screenshots/settings_new.png" width="200" /><br/><sub>设置</sub></td>
+    <td align="center"><img src="docs/screenshots/IMAGE1.jpg" width="200" /><br/><sub>对话</sub></td>
+    <td align="center"><img src="docs/screenshots/IMAGE2.jpg" width="200" /><br/><sub>会话</sub></td>
     <td align="center"><img src="docs/screenshots/providers_new.jpg" width="200" /><br/><sub>服务商管理</sub></td>
     <td align="center"><img src="docs/screenshots/tool_calling_new.png" width="200" /><br/><sub>工具调用</sub></td>
   </tr>
-  <tr>
-    <td align="center"><img src="docs/screenshots/color_themes_new.png" width="200" /><br/><sub>配色主题</sub></td>
-    <td align="center"><img src="docs/screenshots/blur_preview.png" width="200" /><br/><sub>玻璃质感</sub></td>
-    <td align="center"><img src="docs/screenshots/latex_preview_new.png" width="200" /><br/><sub>公式预览</sub></td>
-    <td align="center"><img src="docs/screenshots/html_preview_new.png" width="200" /><br/><sub>HTML 预览</sub></td>
-  </tr>
 </table>
-
-## 1.1.0 版本亮点
-
-- 新增助手模块，可管理多个助手、按助手查看会话，并快速创建专属对话
-- 助手模块内支持自定义助手头像，可使用文字、图片链接、QQ 头像和本地图库图片，列表与编辑页展示更统一
-- 聊天卡片页顶部接入 HDS 材质导航与渐变模糊，搜索、收藏和标题栏滚动状态更稳定
-- 推理控制按服务商和模型能力细分，补齐自动、低、中、高、最高等推理级别
-- 新增小米 MiMo 预置服务商；导出数据默认包含连接配置，导入后可直接使用
 
 ## 功能特性
 
@@ -62,7 +48,7 @@
 
 ### 工具、联网搜索与 MCP
 
-内置联网搜索，支持 Bing(local)、Tavily、Exa。支持 Function Calling 的模型可以自主调用工具获取实时信息，工具中心也支持接入远端 streamable MCP Server，把能力继续往外扩。
+内置联网搜索，支持 博查、Bing(local)、Tavily、Exa。支持 Function Calling 的模型可以自主调用工具获取实时信息，工具中心也支持接入远端 streamable MCP Server，把能力继续往外扩。
 
 ### Markdown 及更多
 
@@ -153,54 +139,8 @@ entry/src/main/ets/
 ├── utils/              # 工具函数
 └── widget/             # 桌面小组件
 ```
-
-## 交流反馈
-
-欢迎加入 ChatCube 交流反馈群，一起提建议、聊体验、报问题。
-
-- QQ 群号：`752237762`
-
-<p align="center">
-  <img src="assets/qrcode_1772160303793.jpg" width="280" alt="ChatCube QQ 群二维码" />
-</p>
-
-## English README
-
-英文说明请查看：[README_EN.md](./README_EN.md)
-
 ## 许可证
 
-[MIT](./LICENSE) — 随便用，开心就好。
+本项目基于 [LongLiveY96/ChatCube](https://github.com/LongLiveY96/ChatCube) fork 并继续采用 [MIT License](./LICENSE)。
 
-## 赞助支持
-
-如果 ChatCube 对你有帮助,欢迎自愿赞助开发。**赞助完全自愿,不影响应用任何功能的使用,也不会解锁任何隐藏内容。**
-
-### 赞助方式
-
-**爱发电(推荐)** —— 一次性赞助,无需订阅;留言可写需求,作者会在 QQ 群里联系你。
-
-> 主页:<https://afdian.com/a/longlive>
-
-**或扫码微信打赏:**
-
-<p align="center">
-  <img src="assets/wechat-pay.png" width="240" alt="ChatCube 微信打赏码" />
-</p>
-
-### 你的支持将用于
-
-- 购买各模型的 API token,联调和测试不同服务商
-- 服务器、域名、邀测发布等基础开支
-- 持续迭代和打磨 ChatCube
-
-### 赞助者福利
-
-为感谢支持,通过爱发电赞助的用户可享受:
-
-- **优先响应** —— 你在 QQ 群提的需求 / Bug 进入优先处理队列
-- **专属交流通道** —— 加入赞助者专属讨论区,直接和作者沟通
-- **资源共享** —— 不定期分享作者自用的部分 AI 服务资源,用于个人学习测试
-
-> 💡 **赞助时请在留言中填写你的 QQ 号**,以便核对身份、加入赞助者群、兑现福利。
-> 交流 QQ 群:`752237762`
+原项目版权声明已保留在 `LICENSE` 中；本 fork 的修改部分同样以 MIT License 发布。

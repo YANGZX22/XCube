@@ -49,7 +49,6 @@ const TO_DELETE = new Set([
   'model_picker_select_all',
   'model_picker_added',
   'function_calling_not_supported',
-  'about_wechat_support_desc',
   // 平板空状态
   'tablet_provider_detail_empty_title',
   'tablet_provider_detail_empty_desc',

@@ -16,6 +16,5 @@ export enum SettingsRouteName {
   WEBDAV_SYNC = 'WebDAVSyncPage',
   USAGE_STATS = 'UsageStatsPage',
   ABOUT = 'AboutPage',
-  PRIVACY_POLICY = 'PrivacyPolicyPage',
-  SUPPORT_DEVELOPMENT = 'SupportDevelopmentPage'
+  PRIVACY_POLICY = 'PrivacyPolicyPage'
 }

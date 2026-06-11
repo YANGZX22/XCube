@@ -9,7 +9,7 @@ import {
 } from '@kit.MediaLibraryKit'
 import { fileIo } from '@kit.CoreFileKit'
 import { util } from '@kit.ArkTS'
-import { hdsMaterial } from '@kit.UIDesignKit'
+import { hdsMaterial, HdsTabs } from '@kit.UIDesignKit'
 import { getAttachmentStorageService } from '../services/AttachmentStorageService'
 import { getAppUiState } from '../state/AppUiState'
 import { withColorAlpha } from '../utils/ColorAlphaUtils'
@@ -22,6 +22,10 @@ export struct ChatInputBar {
   @Local attachIconTrigger: number = 0
   // pause 呼吸动效透明度
   @Local breathOpacity: number = 1
+  // 输入栏主体高度，驱动沉浸光感浮动栏的 barHeight/height（40 按钮 + 上下各 6 padding = 52）
+  @Local inputAreaHeight: number = 52
+  // 输入栏容器宽度，驱动沉浸光感浮动栏的 barWidth（百分比对 HdsTabs.barWidth 无效，需实测数值）
+  @Local inputAreaWidth: number = 0
   // 按钮按下状态
   @Local sendBtnPressed: boolean = false
   @Local sendBtnScale: number = 1
@@ -165,10 +169,72 @@ export struct ChatInputBar {
       // 附件预览区域
       this.AttachmentPreview()
 
-      // 输入栏主体
-      Row() {
-        // 模型图标按钮 - 点击触发快速切换（编辑模式下也可点击切换模型）
-        Stack({ alignContent: Alignment.Center }) {
+      // 输入栏主体（整条沉浸光感浮动面）
+      this.ImmersiveBar()
+    }
+    .width('100%')
+    .borderRadius(24)
+    .backgroundColor(Color.Transparent)
+    .border({
+      width: this.isEditing ? 2 : 0,
+      color: this.isEditing ? this.themePrimary : Color.Transparent
+    })
+    .shadow({
+      radius: this.isEditing ? 16 : 32,
+      color: this.isEditing ? withColorAlpha(this.themePrimary, '26') : 'rgba(0, 0, 0, 0.1)',
+      offsetX: 0,
+      offsetY: this.isEditing ? -4 : 8
+    })
+    .animation({ duration: 200 })
+    .width('100%')
+    .clip(false)
+  }
+
+  // 整条输入栏作为单一 HdsTabs 浮动栏，承载沉浸光感材质；高度随主体内容动态跟随
+  @Builder
+  ImmersiveBar() {
+    HdsTabs() {
+      TabContent()
+        .tabBar(this.InputRow())
+    }
+    .barHeight(this.inputAreaHeight)
+    .barOverlap(true)
+    .barPosition(BarPosition.End)
+    .vertical(false)
+    .barBackgroundColor(Color.Transparent)
+    .width('100%')
+    .height(this.inputAreaHeight)
+    .backgroundColor(Color.Transparent)
+    .borderRadius(24)
+    .clip(false)
+    .barFloatingStyle({
+      barBottomMargin: 0,
+      barSideMargin: 0,
+      barWidth: {
+        smallWidth: this.inputAreaWidth,
+        mediumWidth: this.inputAreaWidth,
+        largeWidth: this.inputAreaWidth
+      },
+      gradientMask: { maskColor: Color.Transparent },
+      systemMaterialEffect: {
+        materialType: hdsMaterial.MaterialType.IMMERSIVE,
+        materialLevel: hdsMaterial.MaterialLevel.ADAPTIVE
+      }
+    })
+    .onAreaChange((_oldValue: Area, newValue: Area) => {
+      const w = Number(newValue.width)
+      if (w > 0 && w !== this.inputAreaWidth) {
+        this.inputAreaWidth = w
+      }
+    })
+    .animation({ duration: 200, curve: Curve.EaseOut })
+  }
+
+  @Builder
+  InputRow() {
+    Row() {
+      // 模型图标按钮 - 点击触发快速切换（编辑模式下也可点击切换模型）
+      Stack({ alignContent: Alignment.Center }) {
           HdsMiniBarButton({
             barWidth: 40,
             barHeight: 40,
@@ -344,23 +410,13 @@ export struct ChatInputBar {
         top: 6,
         bottom: 6
       })
-    }
-    .width('100%')
-    .borderRadius(24)
-    .backgroundColor(withColorAlpha(this.themeAiBubble, 'B8'))
-    .border({
-      width: this.isEditing ? 2 : 0.5,
-      color: this.isEditing ? this.themePrimary : this.themeDivider
-    })
-    .shadow({
-      radius: this.isEditing ? 16 : 32,
-      color: this.isEditing ? withColorAlpha(this.themePrimary, '26') : 'rgba(0, 0, 0, 0.1)',
-      offsetX: 0,
-      offsetY: this.isEditing ? -4 : 8
-    })
-    .animation({ duration: 200 })
-    .width('100%')
-    .clip(false)
+      .onAreaChange((_oldValue: Area, newValue: Area) => {
+        const h = Number(newValue.height)
+        const clamped = h < 52 ? 52 : (h > 132 ? 132 : h)
+        if (clamped !== this.inputAreaHeight) {
+          this.inputAreaHeight = clamped
+        }
+      })
   }
 
   @Builder

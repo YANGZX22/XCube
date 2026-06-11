@@ -152,4 +152,6 @@ For the Chinese beta test link and community group, see the main Chinese README:
 
 ## License
 
-[MIT](./LICENSE) — do whatever you want with it.
+This project is forked from [LongLiveY96/ChatCube](https://github.com/LongLiveY96/ChatCube) and continues to use the [MIT License](./LICENSE).
+
+The original copyright notice is preserved in `LICENSE`; modifications in this fork are also released under the MIT License.
