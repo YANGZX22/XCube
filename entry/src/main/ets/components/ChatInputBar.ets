@@ -61,6 +61,9 @@ export struct ChatInputBar {
   private get themeAiBubble(): string {
     return getAppUiState().themeAiBubble
   }
+  private get inputButtonIconColor(): ResourceColor {
+    return getAppUiState().isDarkMode ? Color.White : this.themePrimary
+  }
   private get chatInputEnterKeySend(): boolean {
     return getAppUiState().chatInputEnterKeySend
   }
@@ -190,6 +193,7 @@ export struct ChatInputBar {
                       .width(18)
                       .height(18)
                       .objectFit(ImageFit.Contain)
+                      .fillColor(this.inputButtonIconColor)
                   }
                   .width(28)
                   .height(28)

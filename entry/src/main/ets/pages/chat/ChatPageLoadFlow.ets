@@ -27,6 +27,9 @@ export class ChatPageLoadResult {
   assistantId: string = DEFAULT_ASSISTANT_ID
   assistantAvatarSymbol: string = 'AI'
   assistantColor: string = DEFAULT_PRIMARY_COLOR
+  branchIndex: number = 0
+  branchCount: number = 1
+  branchPointIndex: number = -1
 }
 
 export interface ChatPageLoadFlowDependencies {
@@ -79,9 +82,13 @@ export class ChatPageLoadFlow {
       const session = await this.deps.chatViewModel.loadSession(routeParams.sessionId)
       if (session !== null) {
         result.sessionTitle = session.title
-        result.messages = [...session.messages]
+        // 展示当前活跃路径（对话树），而非全部消息（含非活跃版本）
+        result.messages = this.deps.chatViewModel.getActivePathForSession(session)
         result.draftText = session.draftText
         result.draftAttachments = this.cloneDraftAttachments(session.draftAttachments)
+        result.branchIndex = session.branchIndex
+        result.branchCount = session.branchCount
+        result.branchPointIndex = session.branchPointIndex
         const assistant = await this.loadAssistantSnapshot(session.assistantId)
         this.applyAssistantSnapshot(result, assistant)
       }

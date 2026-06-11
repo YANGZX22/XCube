@@ -79,7 +79,6 @@ import {
   HdsTopNavigationBlurOptions
 } from '../utils/HdsVisualEffectUtil'
 import {
-  collectTailMessageIds,
   findMessageIndexById,
   resolveUserMessageIndexForRegenerate,
   toListScrollIndexForMessage
@@ -309,6 +308,9 @@ export struct ChatPage {
   // 当前服务商配置
   private currentProvider: ModelProvider | null = null
   private sessionId: string = ''
+  @Local branchIndex: number = 0
+  @Local branchCount: number = 1
+  @Local branchPointIndex: number = -1
   private pendingInitialPrompt: string = ''
   private pendingInitialToolIds: string[] = []
   private initialPromptAutoSent: boolean = false
@@ -333,6 +335,7 @@ export struct ChatPage {
   private appUiStateDisposers: Array<() => void> = []
   private initialBottomAlignmentRetryTimerIds: number[] = []
   private initialBottomAlignmentCompletionTimerId: number = -1
+  private branchSwitchScrollRestoreToken: number = 0
   private assistantAvatarReloadToken: number = 0
 
   private showChatSnack(message: string | Resource, duration: number = 2000,
@@ -569,6 +572,20 @@ export struct ChatPage {
     this.messageListSyncVersion = this.messageListSyncVersion + 1
   }
 
+  // 重算当前展示消息的对话树版本信息（versionIndex / versionCount），并触发列表刷新
+  private refreshActivePathVersions(): void {
+    const session = this.chatViewModel.getCurrentSession()
+    if (session === null) {
+      return
+    }
+    for (let i = 0; i < this.messages.length; i++) {
+      const info = this.chatViewModel.getMessageVersionInfo(this.messages[i])
+      this.messages[i].versionIndex = info.index
+      this.messages[i].versionCount = info.count
+    }
+    this.markMessageListChanged()
+  }
+
   private applyLoadedSessionData(loadResult: ChatPageLoadResult): void {
     this.pendingInitialBottomAlignment = false
     this.pendingInitialPrompt = loadResult.pendingInitialPrompt
@@ -576,6 +593,9 @@ export struct ChatPage {
     this.initialPromptAutoSent = loadResult.initialPromptAutoSent
     this.sessionId = loadResult.sessionId
     this.sessionTitle = loadResult.sessionTitle
+    this.branchIndex = loadResult.branchIndex
+    this.branchCount = loadResult.branchCount
+    this.branchPointIndex = loadResult.branchPointIndex
     this.webSearchConversationEnabled = this.selectedToolIds.includes('web_search') ||
       (loadResult.webSearchEnabled && loadResult.webSearchConversationEnabled)
     this.reasoningLevel = loadResult.reasoningLevel
@@ -1426,6 +1446,10 @@ export struct ChatPage {
       },
       onSetSending: (value: boolean): void => {
         this.isSending = value
+        // 生成结束时重算版本信息，使新生成的版本立即显示 <n/n> 指示器
+        if (!value) {
+          this.refreshActivePathVersions()
+        }
       },
       onSetCurrentTaskId: (taskId: string): void => {
         this.currentTaskId = taskId
@@ -1600,6 +1624,9 @@ export struct ChatPage {
       },
       onSyncMessages: (): void => {
         this.markMessageListChanged()
+      },
+      onTruncateActivePath: (prefix: ChatMessage[]): void => {
+        this.replaceMessages(prefix)
       },
       onResetEditState: (): void => {
         this.isEditingMessage = false
@@ -2173,6 +2200,12 @@ export struct ChatPage {
           },
           onEnterMultiSelect: (messageId: string): void => {
             this.handleEnterMultiSelectMode(messageId)
+          },
+          onSwitchVersion: (message: ChatMessage, delta: number): void => {
+            this.handleSwitchMessageVersion(message, delta).catch((error: Error): void => {
+              console.error('ChatPage', `Failed to switch message version: ${JSON.stringify(error)}`)
+              this.showError($r('app.string.action_failed_retry'))
+            })
           },
           onListAppear: (): void => {
             this.handleListAppear()
@@ -3344,6 +3377,46 @@ export struct ChatPage {
     }
   }
 
+  private restoreBranchSwitchScrollPosition(scrollOffset: number, firstVisibleIndex: number, wasAtBottom: boolean): void {
+    const token = this.branchSwitchScrollRestoreToken + 1
+    this.branchSwitchScrollRestoreToken = token
+    const delays: number[] = [0, 50, 120]
+    for (let i = 0; i < delays.length; i++) {
+      setTimeout(() => {
+        if (token !== this.branchSwitchScrollRestoreToken) {
+          return
+        }
+        if (wasAtBottom) {
+          this.getScrollUiFlow().setIsAtBottom(true)
+          this.getScrollUiFlow().setIsAtTop(false)
+          this.getScrollUiFlow().alignToBottomAfterLayout()
+          return
+        }
+        const totalItems = this.getTotalListItemCount()
+        if (totalItems <= 0) {
+          return
+        }
+        const targetOffset = Math.max(0, scrollOffset)
+        if (targetOffset > 0) {
+          try {
+            this.scroller.scrollTo({ xOffset: 0, yOffset: targetOffset })
+            this.currentScrollOffsetVp = targetOffset
+          } catch (_error) {
+            const targetIndex = Math.max(0, Math.min(firstVisibleIndex, totalItems - 1))
+            this.scroller.scrollToIndex(targetIndex, false, ScrollAlign.START)
+            this.currentScrollOffsetVp = this.readCurrentScrollOffset()
+          }
+        } else {
+          const targetIndex = Math.max(0, Math.min(firstVisibleIndex, totalItems - 1))
+          this.scroller.scrollToIndex(targetIndex, false, ScrollAlign.START)
+          this.currentScrollOffsetVp = this.readCurrentScrollOffset()
+        }
+        this.getScrollUiFlow().setIsAtTop(targetOffset <= 0 && firstVisibleIndex <= 0)
+        this.getScrollUiFlow().setIsAtBottom(false)
+      }, delays[i])
+    }
+  }
+
   private alignListToBottomAfterLayout(): void {
     this.getScrollUiFlow().alignToBottomAfterLayout()
   }
@@ -3441,6 +3514,9 @@ export struct ChatPage {
     }
     this.sessionId = session.id
     this.sessionTitle = session.title
+    this.branchIndex = session.branchIndex
+    this.branchCount = session.branchCount
+    this.branchPointIndex = session.branchPointIndex
     this.syncActiveSessionBinding()
   }
 
@@ -3459,6 +3535,9 @@ export struct ChatPage {
     if (this.sessionId === deletingSessionId) {
       this.sessionId = ''
       this.sessionTitle = ''
+      this.branchIndex = 0
+      this.branchCount = 1
+      this.branchPointIndex = -1
       this.isNewEmptySession = false
       this.syncActiveSessionBinding()
     }
@@ -3517,15 +3596,19 @@ export struct ChatPage {
     this.showChatSnack($r('app.string.model_switched'), 2000, SnackBarTone.SUCCESS)
   }
 
-  async sendMessage(): Promise<void> {
+  async sendMessage(contentOverride?: string, attachmentsOverride?: MessageAttachment[]): Promise<void> {
     if (this.isSendDispatching || this.isSending) {
       return
     }
+    // 分叉重发（重新生成）：内容/附件来自原用户消息，不读取也不清空输入框草稿
+    const isOverride = contentOverride !== undefined
+    const sourceText = isOverride ? (contentOverride as string) : this.inputText
+    const sourceAttachments = isOverride ? (attachmentsOverride ?? []) : this.pendingAttachments
     this.isSendDispatching = true
     try {
       const prepareResult = this.getSendFlow().prepareSendRequest(
-        this.inputText,
-        this.pendingAttachments.length,
+        sourceText,
+        sourceAttachments.length,
         this.isSending,
         this.currentProvider,
         this.currentModelId,
@@ -3548,7 +3631,7 @@ export struct ChatPage {
         this.refreshMcpToolAvailabilityInBackground(false)
       }
 
-      const attachmentsToSend = [...this.pendingAttachments]
+      const attachmentsToSend = [...sourceAttachments]
       const selectedToolIds = [...this.selectedToolIds]
       const forcedToolIds = [...this.forcedToolIdsOnce]
       const searchEnabled = this.webSearchAvailable &&
@@ -3573,7 +3656,7 @@ export struct ChatPage {
     }
   }
 
-  // 处理重新生成（支持非最后一条消息，支持用户消息和 AI 消息）
+  // 处理重新生成：在对应用户消息下新建一个 AI 版本（不删除旧答案，旧答案保留为可切换的历史版本）
   async handleRegenerate(message: ChatMessage): Promise<void> {
     if (this.isSending) {
       return
@@ -3586,16 +3669,18 @@ export struct ChatPage {
     const savedContent = userMsg.content
     const savedAttachments = userMsg.attachments.slice()
     const isFirstRound = userMsgIndex === 0
-    const messageIdsToDelete = collectTailMessageIds(this.messages, userMsgIndex)
-    await this.chatViewModel.deleteMessagesFromIndex(messageIdsToDelete)
-    this.messages.splice(userMsgIndex)
-    this.markMessageListChanged()
+
+    // 截断活跃路径到该用户消息（含），作为发送历史；
+    // 设置分叉上下文：新 AI 消息直接挂到该用户消息下，作为其新版本，不删除旧答案。
+    const truncatedPath = this.messages.slice(0, userMsgIndex + 1)
+    this.replaceMessages(truncatedPath)
     if (isFirstRound) {
       this.titleGenerateFailed = false
     }
-    this.inputText = savedContent
-    this.pendingAttachments = savedAttachments
-    this.handleSend()
+    // 走正常发送链路（保留工具/联网执行计划路由），但内容来自原用户消息、不触碰输入框草稿。
+    // 分叉上下文会被本次发送消费，使新 AI 消息成为该用户消息的新版本。
+    this.chatViewModel.setPendingForkContext({ aiParentId: userMsg.id })
+    this.sendMessage(savedContent, savedAttachments)
   }
 
   showError(message: string | Resource): void {
@@ -3665,15 +3750,21 @@ export struct ChatPage {
     }
   }
 
-  // 处理删除消息
+  // 处理删除消息：删除该消息及其整条对话树子树，并切换到修正后的活跃路径
   async handleDeleteMessage(message: ChatMessage): Promise<void> {
     const index = findMessageIndexById(this.messages, message.id)
     if (index < 0) {
       return
     }
-    this.messages.splice(index, 1)
-    this.markMessageListChanged()
-    await this.chatViewModel.deleteMessage(message.id)
+    const newPath = await this.chatViewModel.deleteMessageSubtree(message)
+    if (newPath !== null) {
+      this.replaceMessages(newPath)
+    } else {
+      // 回退：无对话树信息时按旧逻辑删除单条
+      this.messages.splice(index, 1)
+      this.markMessageListChanged()
+      await this.chatViewModel.deleteMessage(message.id)
+    }
     this.showChatSnack($r('app.string.message_deleted'), 2000, SnackBarTone.SUCCESS)
   }
 
@@ -3745,6 +3836,9 @@ export struct ChatPage {
     // 更新会话ID和标题
     this.sessionId = session.id
     this.sessionTitle = session.title
+    this.branchIndex = session.branchIndex
+    this.branchCount = session.branchCount
+    this.branchPointIndex = session.branchPointIndex
     this.applyAssistantSnapshot(assistant.id, assistant.avatarSymbol, assistant.color)
     // 重置标题状态
     this.isTitleGenerating = false
@@ -3865,6 +3959,22 @@ export struct ChatPage {
       this.editingSelectedToolIds,
       this.editingReasoningLevel
     )
+  }
+
+  // 消息级版本切换：在指定消息的兄弟版本之间切换，替换当前展示路径
+  private async handleSwitchMessageVersion(message: ChatMessage, delta: number): Promise<void> {
+    if (this.isSending || delta === 0) {
+      return
+    }
+    const restoreScrollOffset = this.syncCurrentScrollOffsetFromScroller()
+    const restoreFirstVisibleIndex = this.firstVisibleListIndex
+    const restoreWasAtBottom = this.isAtBottom || this.syncIsAtBottomBoundaryFromScroller()
+    const newPath = await this.chatViewModel.switchMessageVersion(message, delta)
+    if (newPath === null) {
+      return
+    }
+    this.replaceMessages(newPath)
+    this.restoreBranchSwitchScrollPosition(restoreScrollOffset, restoreFirstVisibleIndex, restoreWasAtBottom)
   }
 
   // 分享单条消息：进入多选模式并触发分享

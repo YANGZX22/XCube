@@ -22,6 +22,15 @@ import { PreferenceKeys } from '../services/PreferencesService'
 import { AppStorageKeys } from '../config/AppStorageKeys'
 import { setAppUiStateValue } from '../state/AppUiState'
 import { ChatSessionStore } from './ChatSessionStore'
+import {
+  computeActivePath,
+  buildLegacyChain,
+  getSiblings,
+  resolveLeafOfSubtree,
+  collectSubtreeIds,
+  getVersionInfo,
+  MessageVersionInfo
+} from '../pages/chat/ChatMessageTreeHelper'
 import { createThrottle, ThrottleUtil } from '../utils/ThrottleUtil'
 import {
   buildCurrentTimeContext,
@@ -78,6 +87,18 @@ interface PendingAIMessageInfo {
   persisted: boolean
 }
 
+// 重新生成分叉上下文：本次发送不创建新的用户消息，
+// 直接把新的 AI 消息挂到 aiParentId 指向的已存在用户消息下（作为其新版本）。
+export interface SendForkContext {
+  aiParentId: string
+}
+
+// 本次发送的父子关系解析结果
+interface SendParentage {
+  forkContext: SendForkContext | null
+  userParentId: string
+}
+
 // 活跃请求信息（每请求独立，用于 stopGeneration 时取消）
 interface ActiveRequestInfo {
   httpRequest: http.HttpRequest
@@ -103,6 +124,8 @@ export class ChatViewModel {
 
   // 当前会话
   private currentSession: ChatSession | null = null
+  // 下一次发送的分叉上下文（由 regenerate 设置，发送时消费一次后清空）
+  private pendingForkContext: SendForkContext | null = null
   // 活跃请求 Map（key = requestId，支持多个并发请求）
   private activeRequests: Map<string, ActiveRequestInfo> = new Map()
   // 待持久化 AI 消息 Map（key = messageId，支持多个并发请求）
@@ -205,6 +228,23 @@ export class ChatViewModel {
     return cloned
   }
 
+  cloneAttachmentsForNewMessage(attachments: MessageAttachment[]): MessageAttachment[] {
+    const cloned: MessageAttachment[] = []
+    for (let i = 0; i < attachments.length; i++) {
+      const attachment = new MessageAttachment(
+        this.generateId(),
+        attachments[i].type,
+        attachments[i].name,
+        attachments[i].filePath,
+        attachments[i].mimeType,
+        attachments[i].size
+      )
+      attachment.base64Data = attachments[i].base64Data
+      cloned.push(attachment)
+    }
+    return cloned
+  }
+
   private async ensureAttachmentBase64Data(attachment: MessageAttachment): Promise<boolean> {
     if (attachment.base64Data !== '') {
       return true
@@ -282,6 +322,48 @@ export class ChatViewModel {
     session.messageCount = session.messageCount + 1
   }
 
+  // 设置下一次发送的分叉上下文（由重新生成调用，发送时消费一次）
+  setPendingForkContext(context: SendForkContext | null): void {
+    this.pendingForkContext = context
+  }
+
+  // 消费分叉上下文并解析本次发送的父子关系。
+  // messages 是 UI 传入的当前活跃路径，末条消息即新用户消息的父节点。
+  private resolveSendParentage(messages: ChatMessage[]): SendParentage {
+    const forkContext = this.pendingForkContext
+    this.pendingForkContext = null
+    let userParentId = ''
+    if (messages.length > 0) {
+      userParentId = messages[messages.length - 1].id
+    }
+    return { forkContext, userParentId }
+  }
+
+  // 构建本次请求的历史来源。
+  // 分叉模式（重新生成）下，messages 是当前活跃路径，需截断到被复用用户消息(aiParentId)之前，
+  // 因为该用户消息的内容会作为本轮 user 消息单独发送，避免历史中重复出现。
+  private buildForkAwareHistorySource(messages: ChatMessage[], forkContext: SendForkContext | null): ChatMessage[] {
+    if (forkContext === null) {
+      return messages
+    }
+    for (let i = 0; i < messages.length; i++) {
+      if (messages[i].id === forkContext.aiParentId) {
+        return messages.slice(0, i)
+      }
+    }
+    return messages
+  }
+
+  // AI 消息持久化后，推进会话活跃叶子指针
+  private async advanceActiveLeaf(session: ChatSession | null, sessionId: string, leafId: string): Promise<void> {
+    if (session !== null) {
+      session.activeLeafId = leafId
+    }
+    if (sessionId !== '' && leafId !== '') {
+      await this.databaseService.updateSessionActiveLeaf(sessionId, leafId)
+    }
+  }
+
   private mergePendingAIMessagesIntoMessages(sessionId: string, messages: ChatMessage[]): ChatMessage[] {
     this.pendingAIMessages.forEach((info: PendingAIMessageInfo) => {
       if (info.sessionId !== sessionId) {
@@ -309,9 +391,59 @@ export class ChatViewModel {
     if (session.messageCount < session.messages.length) {
       session.messageCount = session.messages.length
     }
+    // 旧数据惰性建链：没有 activeLeafId 时，按时间把消息串成单链并回写
+    this.migrateLegacyChainIfNeeded(session)
     this.currentSession = session
     this.sessionStore.setCurrentSession(session)
     return session
+  }
+
+  // 旧数据迁移：会话尚未初始化对话树（activeLeafId 为空）时，
+  // 按 timestamp 升序把全部消息串成单链，并把 parentId / activeLeafId 回写数据库。
+  private migrateLegacyChainIfNeeded(session: ChatSession): void {
+    if (session.activeLeafId !== '' || session.messages.length === 0) {
+      return
+    }
+    const result = buildLegacyChain(session.messages)
+    const fixById = new Map<string, string>()
+    for (let i = 0; i < result.fixes.length; i++) {
+      fixById.set(result.fixes[i].messageId, result.fixes[i].parentId)
+    }
+    // 内存即时生效
+    for (let i = 0; i < session.messages.length; i++) {
+      const newParent = fixById.get(session.messages[i].id)
+      if (newParent !== undefined) {
+        session.messages[i].parentId = newParent
+      }
+    }
+    session.activeLeafId = result.leafId
+    // 异步回写，不阻塞首屏
+    const sessionId = session.id
+    const fixes = result.fixes
+    const leafId = result.leafId
+    ;(async () => {
+      try {
+        for (let i = 0; i < fixes.length; i++) {
+          await this.databaseService.updateMessageParentId(fixes[i].messageId, fixes[i].parentId)
+        }
+        await this.databaseService.updateSessionActiveLeaf(sessionId, leafId)
+      } catch (e) {
+        console.error('ChatViewModel', `Failed to migrate legacy chain: ${JSON.stringify(e)}`)
+      }
+    })()
+  }
+
+  // 计算当前会话的活跃展示路径（从 activeLeafId 回溯）
+  getActivePath(): ChatMessage[] {
+    if (this.currentSession === null) {
+      return []
+    }
+    return computeActivePath(this.currentSession.messages, this.currentSession.activeLeafId)
+  }
+
+  // 计算指定会话的活跃展示路径
+  getActivePathForSession(session: ChatSession): ChatMessage[] {
+    return computeActivePath(session.messages, session.activeLeafId)
   }
 
   private isCancelled(snapshot: number): boolean {
@@ -433,6 +565,11 @@ export class ChatViewModel {
       ;(async () => {
         try {
           await this.databaseService.addMessage(sessionId, msgToSave)
+          // 中断保存的 AI 消息同样推进活跃叶子，保证退出后回来展示这条分支
+          await this.databaseService.updateSessionActiveLeaf(sessionId, messageId)
+          if (this.currentSession !== null && this.currentSession.id === sessionId) {
+            this.currentSession.activeLeafId = messageId
+          }
           this.clearPendingAIMessageIfMatches(messageId)
           console.info('ChatViewModel', `Pending AI message persisted on stop: ${messageId}`)
         } catch (e) {
@@ -600,28 +737,35 @@ export class ChatViewModel {
     const snapshotSessionId = this.currentSession?.id ?? ''
     const snapshotSession = this.currentSession
     const shouldAutoGenerateTitle = this.isFirstRoundSession(snapshotSession)
-    const historyMessages = this.buildConversationRequestHistory(messages, contextStartIndex)
+    // 解析对话树父子关系（分叉模式下不创建新用户消息）
+    const parentage = this.resolveSendParentage(messages)
+    // 分叉模式下 messages 末条是被重发的用户消息，构建历史时需排除它（其内容作为本轮 user 消息）
+    const historySource = this.buildForkAwareHistorySource(messages, parentage.forkContext)
+    const historyMessages = this.buildConversationRequestHistory(historySource, contextStartIndex)
     const requestAttachments = await this.prepareOutgoingAttachments(attachments)
     if (this.isCancelled(cancelSnapshot)) {
       return
     }
 
-    // 创建用户消息
-    const userMessage = new ChatMessage(
-      this.generateId(),
-      MessageRole.USER,
-      content,
-      ''
-    )
-    // 添加附件到用户消息
-    if (attachments.length > 0) {
-      for (let i = 0; i < attachments.length; i++) {
-        userMessage.attachments.push(attachments[i])
+    // 创建用户消息（分叉模式下复用已存在的用户消息，不新建）
+    let userMessage: ChatMessage | null = null
+    if (parentage.forkContext === null) {
+      userMessage = new ChatMessage(
+        this.generateId(),
+        MessageRole.USER,
+        content,
+        ''
+      )
+      userMessage.parentId = parentage.userParentId
+      // 添加附件到用户消息
+      if (attachments.length > 0) {
+        for (let i = 0; i < attachments.length; i++) {
+          userMessage.attachments.push(attachments[i])
+        }
       }
+      // 通知 UI 添加用户消息（优先渲染，避免”返回再进来只剩用户消息/无模型信息”）
+      onUserMessageAdded(userMessage)
     }
-
-    // 通知 UI 添加用户消息（优先渲染，避免”返回再进来只剩用户消息/无模型信息”）
-    onUserMessageAdded(userMessage)
 
     // 提前创建 AI 消息占位符：如果用户在模型响应前退出页面，stopGeneration 仍能持久化该消息
     const aiMessage = new ChatMessage(
@@ -631,14 +775,17 @@ export class ChatViewModel {
       modelName,
       modelId
     )
+    aiMessage.parentId = parentage.forkContext !== null ? parentage.forkContext.aiParentId : (userMessage !== null ? userMessage.id : '')
     aiMessage.isGenerating = true
     onAIMessageAdded(aiMessage)
     this.addPendingAIMessage(aiMessage, snapshotSessionId)
 
     // 保存用户消息到数据库
-    if (snapshotSession !== null) {
+    if (snapshotSession !== null && userMessage !== null) {
       await this.databaseService.addMessage(snapshotSessionId, userMessage)
       this.appendMessageToSessionIfMissing(snapshotSession, userMessage)
+      // 先把活跃叶子推进到新用户消息，保证中途中断也展示新分支
+      await this.advanceActiveLeaf(snapshotSession, snapshotSessionId, userMessage.id)
       if (shouldAutoGenerateTitle) {
         const title = content.length > 20 ? content.substring(0, 20) + '...' : content
         snapshotSession.title = title
@@ -774,6 +921,7 @@ export class ChatViewModel {
         if (snapshotSession !== null) {
           await this.databaseService.addMessage(snapshotSessionId, aiMessage)
           this.appendMessageToSessionIfMissing(snapshotSession, aiMessage)
+          await this.advanceActiveLeaf(snapshotSession, snapshotSessionId, aiMessage.id)
           this.markPendingAIMessagePersisted(aiMessage.id)
           this.clearPendingAIMessageIfMatches(aiMessage.id)
 
@@ -905,7 +1053,11 @@ export class ChatViewModel {
     const snapshotSessionId = this.currentSession?.id ?? ''
     const snapshotSession = this.currentSession
     const shouldAutoGenerateTitle = this.isFirstRoundSession(snapshotSession)
-    const historyMessages = this.buildConversationRequestHistory(messages, contextStartIndex)
+    // 解析对话树父子关系（分叉模式下不创建新用户消息）
+    const parentage = this.resolveSendParentage(messages)
+    // 分叉模式下 messages 末条是被重发的用户消息，构建历史时需排除它
+    const historySource = this.buildForkAwareHistorySource(messages, parentage.forkContext)
+    const historyMessages = this.buildConversationRequestHistory(historySource, contextStartIndex)
     const requestAttachments = await this.prepareOutgoingAttachments(attachments)
     if (this.isCancelled(cancelSnapshot)) {
       return
@@ -921,18 +1073,21 @@ ${webContext.content}
 
 请基于以上网页内容回答用户的问题。如果网页内容不完整或无法回答，请告知用户。`
 
-    // 创建用户消息
-    const userMessage = new ChatMessage(
-      this.generateId(),
-      MessageRole.USER,
-      content,
-      ''
-    )
-    for (let i = 0; i < attachments.length; i++) {
-      userMessage.attachments.push(attachments[i])
+    // 创建用户消息（分叉模式下复用已存在的用户消息，不新建）
+    let userMessage: ChatMessage | null = null
+    if (parentage.forkContext === null) {
+      userMessage = new ChatMessage(
+        this.generateId(),
+        MessageRole.USER,
+        content,
+        ''
+      )
+      userMessage.parentId = parentage.userParentId
+      for (let i = 0; i < attachments.length; i++) {
+        userMessage.attachments.push(attachments[i])
+      }
+      onUserMessageAdded(userMessage)
     }
-
-    onUserMessageAdded(userMessage)
 
     const aiMessage = new ChatMessage(
       this.generateId(),
@@ -941,13 +1096,15 @@ ${webContext.content}
       modelName,
       modelId
     )
+    aiMessage.parentId = parentage.forkContext !== null ? parentage.forkContext.aiParentId : (userMessage !== null ? userMessage.id : '')
     aiMessage.isGenerating = true
     onAIMessageAdded(aiMessage)
     this.addPendingAIMessage(aiMessage, snapshotSessionId)
 
-    if (snapshotSession !== null) {
+    if (snapshotSession !== null && userMessage !== null) {
       await this.databaseService.addMessage(snapshotSessionId, userMessage)
       this.appendMessageToSessionIfMissing(snapshotSession, userMessage)
+      await this.advanceActiveLeaf(snapshotSession, snapshotSessionId, userMessage.id)
     }
     if (this.isCancelled(cancelSnapshot)) {
       return
@@ -1062,6 +1219,7 @@ ${webContext.content}
         if (snapshotSession !== null) {
           await this.databaseService.addMessage(snapshotSessionId, aiMessage)
           this.appendMessageToSessionIfMissing(snapshotSession, aiMessage)
+          await this.advanceActiveLeaf(snapshotSession, snapshotSessionId, aiMessage.id)
           this.markPendingAIMessagePersisted(aiMessage.id)
           this.clearPendingAIMessageIfMatches(aiMessage.id)
           if (shouldAutoGenerateTitle) {
@@ -1192,7 +1350,11 @@ ${webContext.content}
     const snapshotSessionId = this.currentSession?.id ?? ''
     const snapshotSession = this.currentSession
     const shouldAutoGenerateTitle = this.isFirstRoundSession(snapshotSession)
-    const historyMessages = this.buildConversationRequestHistory(messages, contextStartIndex)
+    // 解析对话树父子关系（分叉模式下不创建新用户消息）
+    const parentage = this.resolveSendParentage(messages)
+    // 分叉模式下 messages 末条是被重发的用户消息，构建历史时需排除它
+    const historySource = this.buildForkAwareHistorySource(messages, parentage.forkContext)
+    const historyMessages = this.buildConversationRequestHistory(historySource, contextStartIndex)
     const requestAttachments = await this.prepareOutgoingAttachments(attachments)
     if (this.isCancelled(cancelSnapshot)) {
       return
@@ -1219,27 +1381,29 @@ ${limitedSearchContext}
     console.info('ChatViewModel', `[搜索上下文] 系统提示长度: ${systemPrompt.length} 字符`)
     console.info('ChatViewModel', `[搜索上下文] 预览: ${systemPrompt.substring(0, 240)}...`)
 
-    // 创建用户消息
-    const userMessage = new ChatMessage(
-      this.generateId(),
-      MessageRole.USER,
-      content,
-      ''
-    )
-    for (let i = 0; i < attachments.length; i++) {
-      userMessage.attachments.push(attachments[i])
+    // 创建用户消息（分叉模式下复用已存在的用户消息，不新建）
+    let userMessage: ChatMessage | null = null
+    if (parentage.forkContext === null) {
+      userMessage = new ChatMessage(
+        this.generateId(),
+        MessageRole.USER,
+        content,
+        ''
+      )
+      userMessage.parentId = parentage.userParentId
+      for (let i = 0; i < attachments.length; i++) {
+        userMessage.attachments.push(attachments[i])
+      }
+      // 添加搜索引用数据和查询内容
+      userMessage.searchQuery = searchResult.query
+      userMessage.searchEngine = searchResult.searchEngine || 'Web'
+      userMessage.searchSource = 'manual'
+      userMessage.isSearching = false  // 搜索已完成
+      for (let i = 0; i < searchResult.references.length; i++) {
+        userMessage.searchReferences.push(searchResult.references[i])
+      }
+      onUserMessageAdded(userMessage)
     }
-
-    // 添加搜索引用数据和查询内容
-    userMessage.searchQuery = searchResult.query
-    userMessage.searchEngine = searchResult.searchEngine || 'Web'
-    userMessage.searchSource = 'manual'
-    userMessage.isSearching = false  // 搜索已完成
-    for (let i = 0; i < searchResult.references.length; i++) {
-      userMessage.searchReferences.push(searchResult.references[i])
-    }
-
-    onUserMessageAdded(userMessage)
 
     const aiMessage = new ChatMessage(
       this.generateId(),
@@ -1248,6 +1412,7 @@ ${limitedSearchContext}
       modelName,
       modelId
     )
+    aiMessage.parentId = parentage.forkContext !== null ? parentage.forkContext.aiParentId : (userMessage !== null ? userMessage.id : '')
     aiMessage.isGenerating = true
 
     // 将搜索引用数据复制到 AI 消息，确保 SearchReferenceCard 可以正确显示
@@ -1261,9 +1426,10 @@ ${limitedSearchContext}
     onAIMessageAdded(aiMessage)
     this.addPendingAIMessage(aiMessage, snapshotSessionId)
 
-    if (snapshotSession !== null) {
+    if (snapshotSession !== null && userMessage !== null) {
       await this.databaseService.addMessage(snapshotSessionId, userMessage)
       this.appendMessageToSessionIfMissing(snapshotSession, userMessage)
+      await this.advanceActiveLeaf(snapshotSession, snapshotSessionId, userMessage.id)
     }
     if (this.isCancelled(cancelSnapshot)) {
       return
@@ -1380,6 +1546,7 @@ ${limitedSearchContext}
         if (snapshotSession !== null) {
           await this.databaseService.addMessage(snapshotSessionId, aiMessage)
           this.appendMessageToSessionIfMissing(snapshotSession, aiMessage)
+          await this.advanceActiveLeaf(snapshotSession, snapshotSessionId, aiMessage.id)
           this.markPendingAIMessagePersisted(aiMessage.id)
           this.clearPendingAIMessageIfMatches(aiMessage.id)
           if (shouldAutoGenerateTitle) {
@@ -1514,28 +1681,35 @@ ${limitedSearchContext}
     const snapshotSessionId = this.currentSession?.id ?? ''
     const snapshotSession = this.currentSession
     const shouldAutoGenerateTitle = this.isFirstRoundSession(snapshotSession)
-    const historyMessages = this.buildConversationRequestHistory(messages, contextStartIndex)
+    // 解析对话树父子关系（分叉模式下不创建新用户消息）
+    const parentage = this.resolveSendParentage(messages)
+    // 分叉模式下 messages 末条是被重发的用户消息，构建历史时需排除它（其内容作为本轮 user 消息）
+    const historySource = this.buildForkAwareHistorySource(messages, parentage.forkContext)
+    const historyMessages = this.buildConversationRequestHistory(historySource, contextStartIndex)
     const requestAttachments = await this.prepareOutgoingAttachments(attachments)
     if (this.isCancelled(cancelSnapshot)) {
       return
     }
 
-    // 创建用户消息
-    const userMessage = new ChatMessage(
-      this.generateId(),
-      MessageRole.USER,
-      content,
-      ''
-    )
-    // 添加附件到用户消息
-    if (attachments.length > 0) {
-      for (let i = 0; i < attachments.length; i++) {
-        userMessage.attachments.push(attachments[i])
+    // 创建用户消息（分叉模式下复用已存在的用户消息，不新建）
+    let userMessage: ChatMessage | null = null
+    if (parentage.forkContext === null) {
+      userMessage = new ChatMessage(
+        this.generateId(),
+        MessageRole.USER,
+        content,
+        ''
+      )
+      userMessage.parentId = parentage.userParentId
+      // 添加附件到用户消息
+      if (attachments.length > 0) {
+        for (let i = 0; i < attachments.length; i++) {
+          userMessage.attachments.push(attachments[i])
+        }
       }
+      // 通知 UI 添加用户消息（优先渲染）
+      onUserMessageAdded(userMessage)
     }
-
-    // 通知 UI 添加用户消息（优先渲染）
-    onUserMessageAdded(userMessage)
 
     // 提前创建 AI 消息占位符，确保中途退出页面也能恢复模型信息/重新生成
     const aiMessage = new ChatMessage(
@@ -1545,6 +1719,7 @@ ${limitedSearchContext}
       modelName,
       modelId
     )
+    aiMessage.parentId = parentage.forkContext !== null ? parentage.forkContext.aiParentId : (userMessage !== null ? userMessage.id : '')
     aiMessage.isGenerating = true
 
     // 检测启用了哪些工具（用于构建 system prompt）
@@ -1566,9 +1741,10 @@ ${limitedSearchContext}
     this.addPendingAIMessage(aiMessage, snapshotSessionId)
 
     // 保存用户消息到数据库
-    if (snapshotSession !== null) {
+    if (snapshotSession !== null && userMessage !== null) {
       await this.databaseService.addMessage(snapshotSessionId, userMessage)
       this.appendMessageToSessionIfMissing(snapshotSession, userMessage)
+      await this.advanceActiveLeaf(snapshotSession, snapshotSessionId, userMessage.id)
       if (shouldAutoGenerateTitle) {
         const title = content.length > 20 ? content.substring(0, 20) + '...' : content
         snapshotSession.title = title
@@ -1746,6 +1922,7 @@ ${limitedSearchContext}
     if (snapshotSession !== null) {
       await this.databaseService.addMessage(snapshotSessionId, aiMessage)
       this.appendMessageToSessionIfMissing(snapshotSession, aiMessage)
+      await this.advanceActiveLeaf(snapshotSession, snapshotSessionId, aiMessage.id)
       this.markPendingAIMessagePersisted(aiMessage.id)
       this.clearPendingAIMessageIfMatches(aiMessage.id)
       if (shouldAutoGenerateTitle) {
@@ -2349,6 +2526,85 @@ ${limitedSearchContext}
         }
       }
     }
+  }
+
+  // ============ 消息级对话树版本 ============
+
+  // 计算某消息在其兄弟版本中的序号信息
+  getMessageVersionInfo(message: ChatMessage): MessageVersionInfo {
+    if (this.currentSession === null) {
+      return { index: 0, count: 1 }
+    }
+    return getVersionInfo(this.currentSession.messages, message)
+  }
+
+  /**
+   * 在指定消息的兄弟版本之间切换（delta=±1），返回切换后的新活跃路径。
+   * 切换逻辑：选中目标兄弟 → 沿其子树最新分支走到叶子 → 更新 activeLeafId。
+   */
+  async switchMessageVersion(message: ChatMessage, delta: number): Promise<ChatMessage[] | null> {
+    if (this.currentSession === null || delta === 0) {
+      return null
+    }
+    const all = this.currentSession.messages
+    const siblings = getSiblings(all, message)
+    if (siblings.length <= 1) {
+      return null
+    }
+    let currentIndex = 0
+    for (let i = 0; i < siblings.length; i++) {
+      if (siblings[i].id === message.id) {
+        currentIndex = i
+        break
+      }
+    }
+    const targetIndex = currentIndex + delta
+    if (targetIndex < 0 || targetIndex >= siblings.length) {
+      return null
+    }
+    const targetSibling = siblings[targetIndex]
+    const leaf = resolveLeafOfSubtree(all, targetSibling)
+    this.currentSession.activeLeafId = leaf.id
+    await this.databaseService.updateSessionActiveLeaf(this.currentSession.id, leaf.id)
+    return computeActivePath(all, leaf.id)
+  }
+
+  /**
+   * 删除某条消息及其整条子树（其全部后代）。
+   * 删除后把活跃叶子修正到被删消息的父节点（若父节点存在），否则回退到时间线最后一条。
+   * 返回删除后的新活跃路径。
+   */
+  async deleteMessageSubtree(message: ChatMessage): Promise<ChatMessage[] | null> {
+    if (this.currentSession === null) {
+      return null
+    }
+    const all = this.currentSession.messages
+    const idsToDelete = collectSubtreeIds(all, message)
+    if (idsToDelete.length === 0) {
+      return null
+    }
+    await this.databaseService.deleteMessagesByIds(idsToDelete)
+    const deleteSet = new Set<string>(idsToDelete)
+    // 从内存移除
+    for (let i = all.length - 1; i >= 0; i--) {
+      if (deleteSet.has(all[i].id)) {
+        this.clearPendingAIMessageIfMatches(all[i].id)
+        all.splice(i, 1)
+      }
+    }
+    this.currentSession.messageCount = all.length
+    // 修正活跃叶子
+    const parentId = message.parentId
+    let newLeafId = ''
+    if (parentId !== '') {
+      const parentExists = all.some((m: ChatMessage) => m.id === parentId)
+      if (parentExists) {
+        newLeafId = parentId
+      }
+    }
+    this.currentSession.activeLeafId = newLeafId
+    await this.databaseService.updateSessionActiveLeaf(this.currentSession.id, newLeafId)
+    return computeActivePath(all, this.currentSession.activeLeafId)
   }
 
   // 更新消息内容

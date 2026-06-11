@@ -49,6 +49,7 @@ export struct ChatMessageListSection {
     (_toolCallId: string, _answerJson: string): void => {}
   @Event onSelect: (messageId: string) => void = (_messageId: string): void => {}
   @Event onEnterMultiSelect: (messageId: string) => void = (_messageId: string): void => {}
+  @Event onSwitchVersion: (message: ChatMessage, delta: number) => void = (_message: ChatMessage, _delta: number): void => {}
   @Event onListAppear: () => void = (): void => {}
   @Event onReachStart: () => void = (): void => {}
   @Event onReachEnd: () => void = (): void => {}
@@ -307,7 +308,7 @@ export struct ChatMessageListSection {
             }
           }
 
-          LazyForEach(this.messageRowDataSource, (item: ChatMessageRowData, _index: number) => {
+          LazyForEach(this.messageRowDataSource, (item: ChatMessageRowData, index: number) => {
             ListItem({ style: ListItemStyle.NONE }) {
               ChatMessageListItem({
                 message: item.message,
@@ -367,6 +368,9 @@ export struct ChatMessageListSection {
                 },
                 onEnterMultiSelect: (messageId: string): void => {
                   this.onEnterMultiSelect(messageId)
+                },
+                onSwitchVersion: (delta: number): void => {
+                  this.onSwitchVersion(item.message, delta)
                 }
               })
                 .width('100%')

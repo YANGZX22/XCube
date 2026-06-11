@@ -152,6 +152,7 @@ export struct MessageBubble {
   // 多选模式回调
   @Event onSelect: (messageId: string) => void = () => {}
   @Event onEnterMultiSelect: (messageId: string) => void = () => {}
+  @Event onSwitchVersion: (delta: number) => void = (_delta: number): void => {}
 
   // 支持的翻译语言列表
   private translateLanguages: TranslateLanguage[] = [
@@ -849,6 +850,18 @@ export struct MessageBubble {
     return this.hasMessageTextContent()
   }
 
+  private shouldShowVersionSwitcher(): boolean {
+    return !this.isMultiSelectMode && !this.isEditing && this.message.versionCount > 1
+  }
+
+  private canSwitchToPreviousVersion(): boolean {
+    return this.message.versionIndex > 0
+  }
+
+  private canSwitchToNextVersion(): boolean {
+    return this.message.versionIndex < this.message.versionCount - 1
+  }
+
   private normalizeToolFunctionName(raw: string): string {
     const value = raw as string | null | undefined
     if (value === undefined || value === null) {
@@ -938,6 +951,39 @@ export struct MessageBubble {
   }
 
   @Builder
+  VersionSwitcher() {
+    Row({ space: 4 }) {
+      SymbolGlyph($r('sys.symbol.chevron_left'))
+        .fontSize(13)
+        .fontColor([this.canSwitchToPreviousVersion() ? $r('app.color.text_tertiary') : $r('app.color.divider')])
+        .onClick(() => {
+          if (this.canSwitchToPreviousVersion()) {
+            this.onSwitchVersion(-1)
+          }
+        })
+
+      Text(`${this.message.versionIndex + 1}/${this.message.versionCount}`)
+        .fontSize(12)
+        .fontColor($r('app.color.text_tertiary'))
+        .width(34)
+        .textAlign(TextAlign.Center)
+
+      SymbolGlyph($r('sys.symbol.chevron_right'))
+        .fontSize(13)
+        .fontColor([this.canSwitchToNextVersion() ? $r('app.color.text_tertiary') : $r('app.color.divider')])
+        .onClick(() => {
+          if (this.canSwitchToNextVersion()) {
+            this.onSwitchVersion(1)
+          }
+        })
+    }
+    .height(24)
+    .padding({ left: 6, right: 6 })
+    .borderRadius(12)
+    .backgroundColor($r('app.color.divider'))
+  }
+
+  @Builder
   UserMessage() {
     Column() {
       Row() {
@@ -1001,6 +1047,13 @@ export struct MessageBubble {
       if (this.shouldShowUserToolbar()) {
         Row() {
           Blank()
+
+          if (this.shouldShowVersionSwitcher()) {
+            Row() {
+              this.VersionSwitcher()
+            }
+              .margin({ right: 14 })
+          }
 
           // 复制
           if (this.canCopyMessageContent()) {
@@ -1483,6 +1536,14 @@ export struct MessageBubble {
           // ========== 工具栏 ==========
           if (this.shouldShowAssistantToolbar()) {
             Row() {
+              // 版本切换器（同一问题的多个 AI 答案版本）
+              if (this.shouldShowVersionSwitcher()) {
+                Row() {
+                  this.VersionSwitcher()
+                }
+                  .margin({ right: 16 })
+              }
+
               // 复制
               if (this.canCopyMessageContent()) {
                 SymbolGlyph($r('sys.symbol.checkmark_square_on_square'))

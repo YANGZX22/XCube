@@ -376,6 +376,35 @@ export class ModelCapabilityMatcher {
     return lower
   }
 
+  private getKnownLogoProviderForFamily(family: string): string {
+    const root = this.extractBrandRoot(family)
+    if (root === 'gpt' || root === 'chatgpt' || root === 'o1' || root === 'o3' || root === 'o4') {
+      return 'openai'
+    }
+    if (root === 'claude') {
+      return 'anthropic'
+    }
+    return ''
+  }
+
+  private getKnownLogoProviderForModelId(modelId: string): string {
+    const lower = modelId.toLowerCase()
+    const slashIndex = lower.lastIndexOf('/')
+    const baseId = slashIndex >= 0 ? lower.substring(slashIndex + 1) : lower
+    if (baseId.startsWith('gpt-') || baseId.startsWith('chatgpt-') ||
+      baseId.startsWith('o1') || baseId.startsWith('o3') || baseId.startsWith('o4')) {
+      return 'openai'
+    }
+    if (baseId.startsWith('claude-')) {
+      return 'anthropic'
+    }
+    return ''
+  }
+
+  private buildLogoUrl(providerId: string): string {
+    return `${this.baseUrl !== '' ? this.baseUrl : DEFAULT_MODELS_DEV_BASE_URL}/logos/${providerId}.svg`
+  }
+
   // 通过小写索引查找缓存条目（大小写不敏感回退）
   private getCaseInsensitive(key: string): ModelsDevEntry | null {
     const originalId = this.lowerCaseIndex.get(key.toLowerCase())
@@ -563,9 +592,18 @@ export class ModelCapabilityMatcher {
 
   // 从模型 ID 推断原厂供应商 key，用于获取正确的 logo
   private findLogoProvider(modelId: string): string {
+    const knownById = this.getKnownLogoProviderForModelId(modelId)
+    if (knownById !== '') {
+      return knownById
+    }
+
     // 1. 通过模型条目的 family 字段查找
     const entry = this.findEntry(modelId)
     if (entry !== null && entry.family !== undefined && entry.family !== '') {
+      const knownByFamily = this.getKnownLogoProviderForFamily(entry.family)
+      if (knownByFamily !== '') {
+        return knownByFamily
+      }
       const provider = this.familyLogoMap.get(entry.family)
       if (provider !== undefined) {
         return provider
@@ -616,6 +654,13 @@ export class ModelCapabilityMatcher {
 
   // 获取模型的 models.dev logo URL，优先实时缓存，失败回退本地持久化索引
   getLogoUrl(modelId: string): string {
+    const knownProviderId = this.getKnownLogoProviderForModelId(modelId)
+    if (knownProviderId !== '') {
+      const knownLogoUrl = this.buildLogoUrl(knownProviderId)
+      this.recordModelLogo(modelId, knownLogoUrl)
+      return knownLogoUrl
+    }
+
     const onlineLogoUrl = this.getLogoUrlFromCache(modelId)
     if (onlineLogoUrl !== '') {
       this.recordModelLogo(modelId, onlineLogoUrl)
@@ -632,7 +677,7 @@ export class ModelCapabilityMatcher {
     if (providerId === '') {
       return ''
     }
-    return `${this.baseUrl}/logos/${providerId}.svg`
+    return this.buildLogoUrl(providerId)
   }
 
   private getPersistedLogoUrl(modelId: string): string {

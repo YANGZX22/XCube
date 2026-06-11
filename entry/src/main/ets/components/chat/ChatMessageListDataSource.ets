@@ -156,6 +156,8 @@ export function buildChatMessageContentRenderSignature(
     encodeValue(themeRenderKey),
     encodeValue(message.modelId),
     encodeValue(message.modelName),
+    encodeNumber(message.versionIndex),
+    encodeNumber(message.versionCount),
     encodeValue(message.content),
     encodeValue(message.reasoningContent),
     encodeValue(message.searchQuery),

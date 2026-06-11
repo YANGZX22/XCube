@@ -188,6 +188,11 @@ export class DatabaseService {
         message_count INTEGER DEFAULT 0,
         draft_text TEXT DEFAULT '',
         draft_attachments_json TEXT DEFAULT '',
+        branch_group_id TEXT DEFAULT '',
+        branch_index INTEGER DEFAULT 0,
+        branch_count INTEGER DEFAULT 1,
+        branch_point_index INTEGER DEFAULT -1,
+        active_leaf_id TEXT DEFAULT '',
         sync_version INTEGER DEFAULT 0,
         last_modified INTEGER DEFAULT 0,
         sync_status TEXT DEFAULT 'synced',
@@ -310,12 +315,17 @@ export class DatabaseService {
 	      // 尝试添加草稿字段（用于会话级草稿恢复）
 	      await this.addSessionDraftColumnsIfNeeded()
 	      await this.addSessionAssistantColumnIfNeeded()
+	      await this.addSessionBranchColumnsIfNeeded()
+	      // 尝试添加会话 active_leaf_id 字段（用于消息级对话树版本）
+	      await this.addSessionActiveLeafColumnIfNeeded()
 	      // 尝试添加搜索引用相关字段（用于联网搜索）
 	      await this.addSearchColumnsIfNeeded()
       // 尝试添加工具事件元数据字段（用于通用 tools/MCP）
       await this.addToolEventMetaColumnsIfNeeded()
       // 尝试添加消息 model_id 字段（用于图标匹配）
       await this.addMessageModelIdColumnIfNeeded()
+      // 尝试添加消息 parent_id 字段（用于消息级对话树版本）
+      await this.addMessageParentIdColumnIfNeeded()
 	      // 迁移现有供应商数据
 	      await this.migrateExistingProviders()
 	      await this.ensureDefaultAssistant()
@@ -586,6 +596,56 @@ export class DatabaseService {
 	      )
 	    } catch (error) {
 	      console.info('DatabaseService', 'assistant_id backfill skipped')
+	    }
+	  }
+
+	  private async addSessionBranchColumnsIfNeeded(): Promise<void> {
+	    if (this.rdbStore === null) {
+	      return
+	    }
+	    try {
+	      await this.rdbStore.executeSql(`ALTER TABLE ${TableNames.SESSIONS} ADD COLUMN branch_group_id TEXT DEFAULT ''`)
+	    } catch (error) {
+	      console.info('DatabaseService', 'branch_group_id column may already exist')
+	    }
+	    try {
+	      await this.rdbStore.executeSql(`ALTER TABLE ${TableNames.SESSIONS} ADD COLUMN branch_index INTEGER DEFAULT 0`)
+	    } catch (error) {
+	      console.info('DatabaseService', 'branch_index column may already exist')
+	    }
+	    try {
+	      await this.rdbStore.executeSql(`ALTER TABLE ${TableNames.SESSIONS} ADD COLUMN branch_count INTEGER DEFAULT 1`)
+	    } catch (error) {
+	      console.info('DatabaseService', 'branch_count column may already exist')
+	    }
+	    try {
+	      await this.rdbStore.executeSql(`ALTER TABLE ${TableNames.SESSIONS} ADD COLUMN branch_point_index INTEGER DEFAULT -1`)
+	    } catch (error) {
+	      console.info('DatabaseService', 'branch_point_index column may already exist')
+	    }
+	  }
+
+	  // 添加会话 active_leaf_id 字段（用于消息级对话树版本）
+	  private async addSessionActiveLeafColumnIfNeeded(): Promise<void> {
+	    if (this.rdbStore === null) {
+	      return
+	    }
+	    try {
+	      await this.rdbStore.executeSql(`ALTER TABLE ${TableNames.SESSIONS} ADD COLUMN active_leaf_id TEXT DEFAULT ''`)
+	    } catch (error) {
+	      console.info('DatabaseService', 'active_leaf_id column may already exist')
+	    }
+	  }
+
+	  // 添加消息 parent_id 字段（用于消息级对话树版本）
+	  private async addMessageParentIdColumnIfNeeded(): Promise<void> {
+	    if (this.rdbStore === null) {
+	      return
+	    }
+	    try {
+	      await this.rdbStore.executeSql(`ALTER TABLE ${TableNames.MESSAGES} ADD COLUMN parent_id TEXT DEFAULT ''`)
+	    } catch (error) {
+	      console.info('DatabaseService', 'parent_id column may already exist')
 	    }
 	  }
 
@@ -1133,7 +1193,12 @@ export class DatabaseService {
       last_message_preview: session.lastMessagePreview,
       message_count: session.messageCount,
       draft_text: session.draftText,
-      draft_attachments_json: this.serializeDraftAttachments(session.draftAttachments)
+      draft_attachments_json: this.serializeDraftAttachments(session.draftAttachments),
+      branch_group_id: session.branchGroupId,
+      branch_index: session.branchIndex,
+      branch_count: session.branchCount,
+      branch_point_index: session.branchPointIndex,
+      active_leaf_id: session.activeLeafId
     }
     try {
       await this.rdbStore.insert(TableNames.SESSIONS, valueBucket)
@@ -1153,7 +1218,12 @@ export class DatabaseService {
 	      model_id: session.modelId,
 	      provider_id: session.providerId,
 	      assistant_id: session.assistantId !== '' ? session.assistantId : DEFAULT_ASSISTANT_ID,
-	      updated_at: Date.now()
+	      updated_at: Date.now(),
+	      branch_group_id: session.branchGroupId,
+	      branch_index: session.branchIndex,
+	      branch_count: session.branchCount,
+	      branch_point_index: session.branchPointIndex,
+	      active_leaf_id: session.activeLeafId
     }
     const predicates = new relationalStore.RdbPredicates(TableNames.SESSIONS)
     predicates.equalTo('id', session.id)
@@ -1248,6 +1318,51 @@ export class DatabaseService {
       await this.rdbStore.update(valueBucket, predicates)
     } catch (error) {
       console.error('DatabaseService', `Failed to update session title: ${JSON.stringify(error)}`)
+    }
+  }
+
+  async updateSessionBranchInfo(
+    sessionId: string,
+    branchGroupId: string,
+    branchIndex: number,
+    branchCount: number,
+    branchPointIndex: number
+  ): Promise<void> {
+    await this.waitForInitialization()
+    if (this.rdbStore === null || sessionId === '') {
+      return
+    }
+    const valueBucket: relationalStore.ValuesBucket = {
+      branch_group_id: branchGroupId,
+      branch_index: branchIndex,
+      branch_count: branchCount,
+      branch_point_index: branchPointIndex
+    }
+    const predicates = new relationalStore.RdbPredicates(TableNames.SESSIONS)
+    predicates.equalTo('id', sessionId)
+    try {
+      await this.rdbStore.update(valueBucket, predicates)
+      setAppUiStateValue(AppStorageKeys.SESSION_LIST_REFRESH_AT, Date.now())
+    } catch (error) {
+      console.error('DatabaseService', `Failed to update session branch info: ${JSON.stringify(error)}`)
+    }
+  }
+
+  // 更新会话当前活跃叶子消息 ID（用于消息级对话树版本切换）
+  async updateSessionActiveLeaf(sessionId: string, activeLeafId: string): Promise<void> {
+    await this.waitForInitialization()
+    if (this.rdbStore === null || sessionId === '') {
+      return
+    }
+    const valueBucket: relationalStore.ValuesBucket = {
+      active_leaf_id: activeLeafId
+    }
+    const predicates = new relationalStore.RdbPredicates(TableNames.SESSIONS)
+    predicates.equalTo('id', sessionId)
+    try {
+      await this.rdbStore.update(valueBucket, predicates)
+    } catch (error) {
+      console.error('DatabaseService', `Failed to update session active leaf: ${JSON.stringify(error)}`)
     }
   }
 
@@ -1434,6 +1549,11 @@ export class DatabaseService {
         } catch (e) {
           session.draftAttachments = []
         }
+        session.branchGroupId = this.safeGetString(resultSet, 'branch_group_id')
+        session.branchIndex = this.safeGetLong(resultSet, 'branch_index', 0)
+        session.branchCount = this.safeGetLong(resultSet, 'branch_count', 1)
+        session.branchPointIndex = this.safeGetLong(resultSet, 'branch_point_index', -1)
+        session.activeLeafId = this.safeGetString(resultSet, 'active_leaf_id')
         sessions.push(session)
       }
       resultSet.close()
@@ -1514,6 +1634,11 @@ export class DatabaseService {
         } catch (e) {
           session.draftAttachments = []
         }
+        session.branchGroupId = this.safeGetString(resultSet, 'branch_group_id')
+        session.branchIndex = this.safeGetLong(resultSet, 'branch_index', 0)
+        session.branchCount = this.safeGetLong(resultSet, 'branch_count', 1)
+        session.branchPointIndex = this.safeGetLong(resultSet, 'branch_point_index', -1)
+        session.activeLeafId = this.safeGetString(resultSet, 'active_leaf_id')
         resultSet.close()
         return session
       }
@@ -1559,6 +1684,7 @@ export class DatabaseService {
       model_id: message.modelId || '',
       timestamp: message.timestamp,
       reasoning_content: message.reasoningContent,
+      parent_id: message.parentId || '',
       // 保存搜索引用数据
       search_query: message.searchQuery || '',
       search_engine: message.searchEngine || '',
@@ -1700,6 +1826,7 @@ export class DatabaseService {
     message.modelId = this.safeGetString(resultSet, 'model_id')
     message.timestamp = resultSet.getLong(resultSet.getColumnIndex('timestamp'))
     message.reasoningContent = this.safeGetString(resultSet, 'reasoning_content')
+    message.parentId = this.safeGetString(resultSet, 'parent_id')
     message.searchQuery = this.safeGetString(resultSet, 'search_query')
     message.searchEngine = this.safeGetString(resultSet, 'search_engine')
     message.searchSource = this.safeGetString(resultSet, 'search_source')
@@ -1858,6 +1985,24 @@ export class DatabaseService {
       }
     } catch (error) {
       console.error('DatabaseService', `Failed to update message: ${JSON.stringify(error)}`)
+    }
+  }
+
+  // 更新消息的对话树父指针（用于惰性建链迁移与版本分叉）
+  async updateMessageParentId(messageId: string, parentId: string): Promise<void> {
+    await this.waitForInitialization()
+    if (this.rdbStore === null || messageId === '') {
+      return
+    }
+    const valueBucket: relationalStore.ValuesBucket = {
+      parent_id: parentId
+    }
+    const predicates = new relationalStore.RdbPredicates(TableNames.MESSAGES)
+    predicates.equalTo('id', messageId)
+    try {
+      await this.rdbStore.update(valueBucket, predicates)
+    } catch (error) {
+      console.error('DatabaseService', `Failed to update message parent: ${JSON.stringify(error)}`)
     }
   }
 
@@ -2424,6 +2569,14 @@ export class DatabaseService {
   private safeGetString(resultSet: relationalStore.ResultSet, columnName: string, defaultValue: string = ''): string {
     try {
       return resultSet.getString(resultSet.getColumnIndex(columnName))
+    } catch (_error) {
+      return defaultValue
+    }
+  }
+
+  private safeGetLong(resultSet: relationalStore.ResultSet, columnName: string, defaultValue: number = 0): number {
+    try {
+      return resultSet.getLong(resultSet.getColumnIndex(columnName))
     } catch (_error) {
       return defaultValue
     }

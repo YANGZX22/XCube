@@ -41,6 +41,7 @@ export struct ChatMessageListItem {
     (_toolCallId: string, _answerJson: string): void => {}
   @Event onSelect: (messageId: string) => void = (_messageId: string): void => {}
   @Event onEnterMultiSelect: (messageId: string) => void = (_messageId: string): void => {}
+  @Event onSwitchVersion: (delta: number) => void = (_delta: number): void => {}
 
   private getEffectiveContentMaxWidth(): number {
     return this.contentMaxWidth > 0 ? this.contentMaxWidth : 99999
@@ -108,6 +109,9 @@ export struct ChatMessageListItem {
           },
           onEnterMultiSelect: (messageId: string): void => {
             this.onEnterMultiSelect(messageId)
+          },
+          onSwitchVersion: (delta: number): void => {
+            this.onSwitchVersion(delta)
           }
         })
       }

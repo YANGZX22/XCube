@@ -6,6 +6,7 @@
 import { ReasoningLevel } from '../models/ChatModels'
 import { ReasoningControlMode } from '../services/ProviderCompatibilityRegistry'
 import { getAppUiState } from '../state/AppUiState'
+import { HdsTabs, hdsMaterial } from '@kit.UIDesignKit'
 
 @ComponentV2
 export struct ChatToolbar {
@@ -21,25 +22,12 @@ export struct ChatToolbar {
   @Event onReasoningLevelChange: (value: ReasoningLevel) => void =
     (_value: ReasoningLevel): void => {}
 
-  // 主题颜色
   private get themePrimary(): string {
     return getAppUiState().themePrimary
   }
 
-  private get themeSurface(): string {
-    return getAppUiState().themeSurface
-  }
-
   private get themeAiBubble(): string {
     return getAppUiState().themeAiBubble
-  }
-
-  private get themeDivider(): string {
-    return getAppUiState().themeDivider
-  }
-
-  private get isDarkMode(): boolean {
-    return getAppUiState().isDarkMode
   }
 
   private withAlpha(color: string, alphaHex: string): string {
@@ -56,97 +44,223 @@ export struct ChatToolbar {
     return this.withAlpha(this.themeAiBubble, '33')
   }
 
-  private getInactiveChipBorderColor(): string {
-    return this.withAlpha(this.themeDivider, this.isDarkMode ? 'A6' : '73')
+  private getToolbarChipBarHeight(): number {
+    return 32
   }
 
-  private getActiveChipBorderColor(): string {
-    return this.themePrimary
+  private getToolbarChipContentPadding(): number {
+    return 3
   }
 
-  private getChipShadowColor(): string {
-    return this.isDarkMode ? 'rgba(0, 0, 0, 0.18)' : 'rgba(15, 23, 42, 0.06)'
+  private getToolbarChipContainerHeight(): number {
+    return this.getToolbarChipBarHeight() + this.getToolbarChipContentPadding() * 4
+  }
+
+  private getToolbarChipContainerWidth(barWidth: number): number {
+    return barWidth + this.getToolbarChipContentPadding() * 4
+  }
+
+  private getToolChipWidth(): number {
+    return 68
+  }
+
+  private getReasoningChipWidth(): number {
+    return 112
+  }
+
+  private getToolChipForegroundColor(): ResourceColor {
+    return this.hasSelectedTools ? this.themePrimary : $r('app.color.text_secondary')
+  }
+
+  private getReasoningChipForegroundColor(): ResourceColor {
+    return this.isReasoningEnabled() ? this.themePrimary : $r('app.color.text_secondary')
   }
 
   build() {
     Row() {
       if (this.toolSelectionAvailable) {
-        Row() {
-          SymbolGlyph($r('sys.symbol.gearshape'))
-            .fontSize(16)
-            .fontColor([this.hasSelectedTools ? this.themePrimary : $r('app.color.text_secondary')])
-
-          Text($r('app.string.chat_toolbar_tools'))
-            .fontSize(14)
-            .fontColor(this.hasSelectedTools ? this.themePrimary : $r('app.color.text_secondary'))
-            .fontWeight(this.hasSelectedTools ? FontWeight.Medium : FontWeight.Regular)
-            .margin({ left: 4 })
-        }
-        .height(32)
-        .padding({ left: 12, right: 12 })
-        .borderRadius(16)
-        .backgroundColor(this.getChipBackgroundColor())
-        .backdropBlur(16)
-        .border({
-          width: 1,
-          color: this.hasSelectedTools ? this.getActiveChipBorderColor() : this.getInactiveChipBorderColor()
-        })
-        .shadow({ radius: 10, color: this.getChipShadowColor(), offsetX: 0, offsetY: 2 })
-        .animation({ duration: 200, curve: Curve.EaseOut })
-        .onClick(() => {
-          this.onOpenTools()
-        })
+        this.ToolImmersiveChip()
       }
 
       if (this.reasoningAvailable) {
-        // 推理控制按钮
-        Row() {
-          SymbolGlyph($r('sys.symbol.lightbulb'))
-            .fontSize(16)
-            .fontColor([this.isReasoningEnabled() ? this.themePrimary : $r('app.color.text_secondary')])
-
-          Text($r('app.string.chat_toolbar_reasoning'))
-            .fontSize(14)
-            .fontColor(this.isReasoningEnabled() ? this.themePrimary : $r('app.color.text_secondary'))
-            .fontWeight(this.isReasoningEnabled() ? FontWeight.Medium : FontWeight.Regular)
-            .margin({ left: 4 })
-
-          Text(this.getReasoningLevelText(this.reasoningLevel))
-            .fontSize(13)
-            .fontColor(this.isReasoningEnabled() ? this.themePrimary : $r('app.color.text_secondary'))
-            .fontWeight(this.isReasoningEnabled() ? FontWeight.Medium : FontWeight.Regular)
-            .margin({ left: 6 })
-
-          SymbolGlyph($r('sys.symbol.chevron_up'))
-            .fontSize(12)
-            .fontColor([this.isReasoningEnabled() ? this.themePrimary : $r('app.color.text_secondary')])
-            .margin({ left: 2 })
-        }
-        .height(32)
-        .padding({ left: 12, right: 12 })
-        .borderRadius(16)
-        .backgroundColor(this.getChipBackgroundColor())
-        .backdropBlur(16)
-        .border({
-          width: 1,
-          color: this.isReasoningEnabled() ? this.getActiveChipBorderColor() : this.getInactiveChipBorderColor()
-        })
-        .shadow({ radius: 10, color: this.getChipShadowColor(), offsetX: 0, offsetY: 2 })
-        .margin({ left: this.toolSelectionAvailable ? 8 : 0 })
-        .animation({ duration: 200, curve: Curve.EaseOut })
-        .bindMenu(this.ReasoningMenuBuilder(), {
-          placement: Placement.BottomLeft,
-          offset: { x: 0, y: 8 },
-          backgroundColor: this.getChipBackgroundColor(),
-          backgroundBlurStyle: BlurStyle.COMPONENT_REGULAR
-        })
+        this.ReasoningImmersiveChip()
       }
 
       Blank()
     }
     .width('100%')
     .padding({ left: 4, right: 4 })
-    .margin({ bottom: 8 })
+    .margin({ bottom: 2 })
+  }
+
+  @Builder
+  private ToolImmersiveChip() {
+    Stack({ alignContent: Alignment.Center }) {
+      HdsTabs() {
+        TabContent() {
+        }
+        .tabBar(this.ToolChipContent())
+      }
+      .barWidth(this.getToolChipWidth())
+      .barHeight(this.getToolbarChipBarHeight())
+      .barOverlap(true)
+      .barPosition(BarPosition.End)
+      .vertical(false)
+      .barBackgroundColor(Color.Transparent)
+      .width(this.getToolChipWidth())
+      .height(this.getToolbarChipBarHeight())
+      .backgroundColor(Color.Transparent)
+      .borderRadius(this.getToolbarChipBarHeight() / 2)
+      .clip(false)
+      .barFloatingStyle({
+        barBottomMargin: 2,
+        gradientMask: { maskColor: Color.Transparent },
+        systemMaterialEffect: {
+          materialType: hdsMaterial.MaterialType.IMMERSIVE,
+          materialLevel: hdsMaterial.MaterialLevel.ADAPTIVE
+        }
+      })
+      .onTabBarClick(() => {
+        this.onOpenTools()
+      })
+
+      Row() {
+      }
+      .size({
+        width: this.getToolbarChipContainerWidth(this.getToolChipWidth()),
+        height: this.getToolbarChipContainerHeight()
+      })
+      .backgroundColor(Color.Transparent)
+      .hitTestBehavior(HitTestMode.Block)
+      .onClick(() => {
+        this.onOpenTools()
+      })
+    }
+    .size({
+      width: this.getToolbarChipContainerWidth(this.getToolChipWidth()),
+      height: this.getToolbarChipContainerHeight()
+    })
+    .backgroundColor(Color.Transparent)
+  }
+
+  @Builder
+  private ToolChipContent() {
+    Row() {
+      SymbolGlyph($r('sys.symbol.gearshape'))
+        .fontSize(16)
+        .fontColor([this.getToolChipForegroundColor()])
+
+      Text($r('app.string.chat_toolbar_tools'))
+        .fontSize(14)
+        .fontColor(this.getToolChipForegroundColor())
+        .fontWeight(this.hasSelectedTools ? FontWeight.Medium : FontWeight.Regular)
+        .maxLines(1)
+        .textOverflow({ overflow: TextOverflow.Ellipsis })
+        .margin({ left: 4 })
+    }
+    .width(this.getToolChipWidth())
+    .height(this.getToolbarChipBarHeight())
+    .padding({ left: 8, right: 8 })
+    .borderRadius(this.getToolbarChipBarHeight() / 2)
+    .backgroundColor(Color.Transparent)
+    .alignItems(VerticalAlign.Center)
+    .justifyContent(FlexAlign.Center)
+    .translate({ y: -4 })
+    .animation({ duration: 200, curve: Curve.EaseOut })
+  }
+
+  @Builder
+  private ReasoningImmersiveChip() {
+    Stack({ alignContent: Alignment.Center }) {
+      HdsTabs() {
+        TabContent() {
+        }
+        .tabBar(this.ReasoningChipContent())
+      }
+      .barWidth(this.getReasoningChipWidth())
+      .barHeight(this.getToolbarChipBarHeight())
+      .barOverlap(true)
+      .barPosition(BarPosition.End)
+      .vertical(false)
+      .barBackgroundColor(Color.Transparent)
+      .width(this.getReasoningChipWidth())
+      .height(this.getToolbarChipBarHeight())
+      .backgroundColor(Color.Transparent)
+      .borderRadius(this.getToolbarChipBarHeight() / 2)
+      .clip(false)
+      .barFloatingStyle({
+        barBottomMargin: 2,
+        gradientMask: { maskColor: Color.Transparent },
+        systemMaterialEffect: {
+          materialType: hdsMaterial.MaterialType.IMMERSIVE,
+          materialLevel: hdsMaterial.MaterialLevel.ADAPTIVE
+        }
+      })
+      .onTabBarClick(() => {
+      })
+
+      Row() {
+      }
+      .size({
+        width: this.getToolbarChipContainerWidth(this.getReasoningChipWidth()),
+        height: this.getToolbarChipContainerHeight()
+      })
+      .backgroundColor(Color.Transparent)
+      .hitTestBehavior(HitTestMode.Block)
+      .bindMenu(this.ReasoningMenuBuilder(), {
+        placement: Placement.BottomLeft,
+        offset: { x: 0, y: 6 },
+        backgroundColor: this.getChipBackgroundColor(),
+        backgroundBlurStyle: BlurStyle.COMPONENT_REGULAR
+      })
+    }
+    .size({
+      width: this.getToolbarChipContainerWidth(this.getReasoningChipWidth()),
+      height: this.getToolbarChipContainerHeight()
+    })
+    .backgroundColor(Color.Transparent)
+    .margin({ left: this.toolSelectionAvailable ? 4 : 0 })
+  }
+
+  @Builder
+  private ReasoningChipContent() {
+    Row() {
+      SymbolGlyph($r('sys.symbol.lightbulb'))
+        .fontSize(16)
+        .fontColor([this.getReasoningChipForegroundColor()])
+
+      Text($r('app.string.chat_toolbar_reasoning'))
+        .fontSize(14)
+        .fontColor(this.getReasoningChipForegroundColor())
+        .fontWeight(this.isReasoningEnabled() ? FontWeight.Medium : FontWeight.Regular)
+        .maxLines(1)
+        .textOverflow({ overflow: TextOverflow.Ellipsis })
+        .constraintSize({ maxWidth: 44 })
+        .margin({ left: 4 })
+
+      Text(this.getReasoningLevelText(this.reasoningLevel))
+        .fontSize(13)
+        .fontColor(this.getReasoningChipForegroundColor())
+        .fontWeight(this.isReasoningEnabled() ? FontWeight.Medium : FontWeight.Regular)
+        .maxLines(1)
+        .textOverflow({ overflow: TextOverflow.Ellipsis })
+        .constraintSize({ maxWidth: 34 })
+        .margin({ left: 4 })
+
+      SymbolGlyph($r('sys.symbol.chevron_up'))
+        .fontSize(12)
+        .fontColor([this.getReasoningChipForegroundColor()])
+        .margin({ left: 2 })
+    }
+    .width(this.getReasoningChipWidth())
+    .height(this.getToolbarChipBarHeight())
+    .padding({ left: 8, right: 6 })
+    .borderRadius(this.getToolbarChipBarHeight() / 2)
+    .backgroundColor(Color.Transparent)
+    .alignItems(VerticalAlign.Center)
+    .justifyContent(FlexAlign.Center)
+    .translate({ y: -4 })
+    .animation({ duration: 200, curve: Curve.EaseOut })
   }
 
   private isReasoningEnabled(): boolean {

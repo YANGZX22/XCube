@@ -1,6 +1,6 @@
 import { ChatMessage, MessageAttachment, ReasoningLevel } from '../../models/ChatModels'
 import { ChatViewModel } from '../../viewmodels/ChatViewModel'
-import { collectTailMessageIds, findMessageIndexById } from './ChatMessageActionHelper'
+import { findMessageIndexById } from './ChatMessageActionHelper'
 
 export interface ChatInlineEditFlowDependencies {
   chatViewModel: ChatViewModel
@@ -13,6 +13,8 @@ export interface ChatInlineEditFlowDependencies {
     reasoningLevel: ReasoningLevel
   ) => boolean
   onSyncMessages: () => void
+  // 把当前展示路径截断为指定的前缀消息（编辑时去掉被编辑消息及其后续，使新消息成为同级版本）
+  onTruncateActivePath: (prefix: ChatMessage[]) => void
   onResetEditState: () => void
   onApplySavedDraft: (
     content: string,
@@ -66,13 +68,13 @@ export class ChatInlineEditFlow {
     }
 
     try {
-      const savedAttachments = pendingAttachments.slice()
+      const savedAttachments = this.deps.chatViewModel.cloneAttachmentsForNewMessage(pendingAttachments)
       const savedContent = inputText.trim()
       const savedWebSearchEnabled = editingWebSearchEnabled
       const savedToolIds = [...editingSelectedToolIds]
       const savedReasoningLevel = editingReasoningLevel
 
-      // 在真正改写消息链之前，先复用正常发送链路做一次前置校验。
+      // 在创建分支并发送之前，先复用正常发送链路做一次前置校验。
       // 失败时保留原消息和当前编辑态，避免“内容没了但也没发出去”的烂体验。
       const canCommit = this.deps.onValidateBeforeCommit(
         savedContent,
@@ -85,10 +87,10 @@ export class ChatInlineEditFlow {
         return
       }
 
-      const messageIdsToDelete = collectTailMessageIds(messages, messageIndex)
-
-      await this.deps.chatViewModel.deleteMessagesFromIndex(messageIdsToDelete)
-      this.deps.getMessages().splice(messageIndex)
+      // 截断当前展示路径到被编辑消息之前：新消息将作为被编辑消息的同级版本，
+      // 旧消息及其后续对话保留在对话树中，可通过 <n/n> 切回。
+      const prefix = messages.slice(0, messageIndex)
+      this.deps.onTruncateActivePath(prefix)
       this.deps.onSyncMessages()
 
       this.deps.onResetEditState()

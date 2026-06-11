@@ -512,6 +512,12 @@ export class ChatMessage {
   @Trace modelId: string
   // 推理内容（用于支持 o1, DeepSeek R1 等推理模型）
   @Trace reasoningContent: string
+  // 对话树父消息 ID（指向对话链中的前驱消息，根消息为空）
+  // 同一 parentId 的多条消息互为"版本"（兄弟），用于消息级多版本切换
+  @Trace parentId: string
+  // 以下两个为运行时展示字段（不持久化）：该消息在其兄弟版本中的序号与总数
+  @Trace versionIndex: number = 0
+  @Trace versionCount: number = 1
   // 附件列表（图片、文件等）
   @Trace attachments: MessageAttachment[]
   // 是否正在生成中（用于 UI 显示动态效果）
@@ -539,6 +545,9 @@ export class ChatMessage {
     this.modelName = modelName
     this.modelId = modelId
     this.reasoningContent = ''
+    this.parentId = ''
+    this.versionIndex = 0
+    this.versionCount = 1
     this.attachments = []
     this.isGenerating = false
     this.searchReferences = []
@@ -800,6 +809,12 @@ export class ChatSession {
   @Trace messageCount: number
   @Trace draftText: string
   @Trace draftAttachments: MessageAttachment[]
+  @Trace branchGroupId: string
+  @Trace branchIndex: number
+  @Trace branchCount: number
+  @Trace branchPointIndex: number
+  // 对话树当前活跃路径的叶子消息 ID（从此回溯 parentId 得到当前展示路径）
+  @Trace activeLeafId: string
   // 同步相关字段(为 WebDAV 同步预留)
   @Trace syncVersion: number = 0
   @Trace lastModified: number = Date.now()
@@ -820,6 +835,11 @@ export class ChatSession {
     this.messageCount = 0
     this.draftText = ''
     this.draftAttachments = []
+    this.branchGroupId = ''
+    this.branchIndex = 0
+    this.branchCount = 1
+    this.branchPointIndex = -1
+    this.activeLeafId = ''
     this.syncVersion = 0
     this.lastModified = Date.now()
     this.syncStatus = 'synced'
