@@ -3,13 +3,8 @@
  * 支持快速到顶部 / 快速到底部
  */
 
-import {
-  createButtonTouchHandler,
-  getButtonScale,
-  getButtonAnimation
-} from '../utils/ButtonAnimationUtils'
 import { getAppUiState } from '../state/AppUiState'
-import { withColorAlpha } from '../utils/ColorAlphaUtils'
+import { ChatFloatingImmersiveButton } from './ChatFloatingImmersiveButton'
 
 @ComponentV2
 export struct ScrollToBottomButton {
@@ -29,27 +24,9 @@ export struct ScrollToBottomButton {
   @Event onScrollToBottom: () => void = () => {}
   @Event onScrollToTop: () => void = () => {}
 
-  // 按钮按下状态
-  @Local private scrollBtnPressed: boolean = false
   // 滚动快捷按钮应跟随当前主题主色
   private get themePrimary(): string {
     return getAppUiState().themePrimary
-  }
-
-  private get isDark(): boolean {
-    return getAppUiState().isDarkMode
-  }
-
-  private get materialBg(): string {
-    return this.isDark ? 'rgba(30, 30, 30, 0.72)' : 'rgba(255, 255, 255, 0.72)'
-  }
-
-  private get materialBorder(): string {
-    return this.isDark ? 'rgba(255, 255, 255, 0.08)' : 'rgba(0, 0, 0, 0.06)'
-  }
-
-  private get materialShadowColor(): string {
-    return this.isDark ? 'rgba(0, 0, 0, 0.4)' : 'rgba(0, 0, 0, 0.12)'
   }
 
   private get ringTrackColor(): string {
@@ -72,52 +49,46 @@ export struct ScrollToBottomButton {
 
   build() {
     if (this.isVisible) {
-      Button({ type: ButtonType.Circle }) {
-        Stack({ alignContent: Alignment.Center }) {
-          if (this.shouldShowProgressRing()) {
-            Progress({ value: this.resolveProgressPercent(), total: 100, type: ProgressType.Ring })
-              .width(36)
-              .height(36)
-              .color(this.themePrimary)
-              .backgroundColor(this.ringTrackColor)
-              .style({
-                strokeWidth: 2.4,
-                shadow: false,
-                enableScanEffect: false
-              })
+      Stack({ alignContent: Alignment.Center }) {
+        ChatFloatingImmersiveButton({
+          barWidth: 40,
+          barHeight: 40,
+          iconResource: this.buttonDirection === 1 ? $r('sys.symbol.arrow_up_to_line') : $r('sys.symbol.chevron_down'),
+          iconSize: this.shouldShowProgressRing() ? 16 : 20,
+          iconColor: [this.themePrimary],
+          onButtonClick: (): void => {
+            if (this.buttonDirection === 1) {
+              this.onScrollToTop()
+            } else {
+              this.onScrollToBottom()
+            }
           }
+        }) {
+          Stack({ alignContent: Alignment.Center }) {
+            if (this.shouldShowProgressRing()) {
+              Progress({ value: this.resolveProgressPercent(), total: 100, type: ProgressType.Ring })
+                .width(36)
+                .height(36)
+                .color(this.themePrimary)
+                .backgroundColor(this.ringTrackColor)
+                .style({
+                  strokeWidth: 2.4,
+                  shadow: false,
+                  enableScanEffect: false
+                })
+            }
 
-          SymbolGlyph(this.buttonDirection === 1 ? $r('sys.symbol.arrow_up_to_line') : $r('sys.symbol.chevron_down'))
-            .fontSize(this.shouldShowProgressRing() ? 16 : 20)
-            .fontColor([this.themePrimary])
+            SymbolGlyph(this.buttonDirection === 1 ? $r('sys.symbol.arrow_up_to_line') : $r('sys.symbol.chevron_down'))
+              .fontSize(this.shouldShowProgressRing() ? 16 : 20)
+              .fontColor([this.themePrimary])
+          }
+          .width(40)
+          .height(40)
+          .translate({ y: -4 })
         }
       }
       .width(40)
       .height(40)
-      .backgroundColor(this.materialBg)
-      .backgroundBlurStyle(BlurStyle.COMPONENT_REGULAR)
-      .border({
-        width: 0.5,
-        color: this.materialBorder
-      })
-      .shadow({
-        radius: this.scrollBtnPressed ? 16 : 8,
-        color: this.scrollBtnPressed ? withColorAlpha(this.themePrimary, '33') : this.materialShadowColor,
-        offsetX: 0,
-        offsetY: this.scrollBtnPressed ? 4 : 2
-      })
-      .scale(getButtonScale(this.scrollBtnPressed))
-      .animation(getButtonAnimation())
-      .onTouch(createButtonTouchHandler((pressed: boolean) => {
-        this.scrollBtnPressed = pressed
-      }))
-      .onClick(() => {
-        if (this.buttonDirection === 1) {
-          this.onScrollToTop()
-        } else {
-          this.onScrollToBottom()
-        }
-      })
       .position({ x: '100%', y: '100%' })
       .translate({
         x: -56,

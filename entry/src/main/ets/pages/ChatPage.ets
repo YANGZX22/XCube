@@ -24,6 +24,7 @@ import { AttachmentPicker } from '../components/AttachmentPicker'
 import { ImagePreview } from '../components/ImagePreview'
 import { ScrollToBottomButton } from '../components/ScrollToBottomButton'
 import { ScrollToBottomLoadingButton } from '../components/ScrollToBottomLoadingButton'
+import { ChatFloatingImmersiveButton } from '../components/ChatFloatingImmersiveButton'
 import { SharePreviewSheet } from '../components/SharePreviewSheet'
 import { ChatViewModel, TitleGenerationCallbacks } from '../viewmodels/ChatViewModel'
 import { ProviderViewModel } from '../viewmodels/ProviderViewModel'
@@ -3216,37 +3217,41 @@ export struct ChatPage {
       }
 
       Row() {
-        Stack({ alignContent: this.isHistoryPreviewExpanded ? Alignment.TopStart : Alignment.Center }) {
-          if (this.isHistoryPreviewContentVisible) {
+        if (this.isHistoryPreviewExpanded) {
+          Stack({ alignContent: Alignment.TopStart }) {
             this.HistoryPreviewExpandedContentBuilder()
-          } else {
+          }
+          .width(this.getHistoryPreviewSurfaceWidthVp())
+          .height(this.getHistoryPreviewSurfaceHeightVp())
+          .backgroundColor(this.getHistoryPreviewBackgroundColor())
+          .backgroundBlurStyle(BlurStyle.COMPONENT_REGULAR)
+          .border({
+            width: 0.5,
+            color: this.getHistoryPreviewBorderColor()
+          })
+          .borderRadius(this.getHistoryPreviewSurfaceRadiusVp())
+          .clip(true)
+          .shadow({
+            radius: 16,
+            color: this.isDarkMode ? 'rgba(0, 0, 0, 0.42)' : 'rgba(0, 0, 0, 0.14)',
+            offsetX: 0,
+            offsetY: 5
+          })
+          .animation({ duration: 260, curve: Curve.FastOutSlowIn })
+        } else {
+          ChatFloatingImmersiveButton({
+            barWidth: 40,
+            barHeight: 40,
+            iconResource: $r('sys.symbol.ellipsis_message'),
+            iconSize: 18,
+            iconColor: [this.themePrimary],
+            onButtonClick: (): void => {
+              this.setHistoryPreviewExpanded(true)
+            }
+          }) {
             this.HistoryPreviewCollapsedContentBuilder()
           }
         }
-        .width(this.getHistoryPreviewSurfaceWidthVp())
-        .height(this.getHistoryPreviewSurfaceHeightVp())
-        .backgroundColor(this.getHistoryPreviewBackgroundColor())
-        .backgroundBlurStyle(BlurStyle.COMPONENT_REGULAR)
-        .border({
-          width: 0.5,
-          color: this.getHistoryPreviewBorderColor()
-        })
-        .borderRadius(this.getHistoryPreviewSurfaceRadiusVp())
-        .clip(true)
-        .shadow({
-          radius: this.isHistoryPreviewExpanded ? 16 : 8,
-          color: this.isHistoryPreviewExpanded ?
-            (this.isDarkMode ? 'rgba(0, 0, 0, 0.42)' : 'rgba(0, 0, 0, 0.14)') :
-            (this.isDarkMode ? 'rgba(0, 0, 0, 0.4)' : 'rgba(0, 0, 0, 0.12)'),
-          offsetX: 0,
-          offsetY: this.isHistoryPreviewExpanded ? 5 : 2
-        })
-        .animation({ duration: 260, curve: Curve.FastOutSlowIn })
-        .onClick(() => {
-          if (!this.isHistoryPreviewExpanded) {
-            this.setHistoryPreviewExpanded(true)
-          }
-        })
       }
       .width('100%')
       .padding({ right: 16 })

@@ -3,12 +3,8 @@
  * 仅在 AI 流式生成中且用户不在底部时显示
  */
 
-import {
-  createButtonTouchHandler,
-  getButtonScale,
-  getButtonAnimation
-} from '../utils/ButtonAnimationUtils'
 import { getAppUiState } from '../state/AppUiState'
+import { ChatFloatingImmersiveButton } from './ChatFloatingImmersiveButton'
 
 @ComponentV2
 export struct ScrollToBottomLoadingButton {
@@ -17,23 +13,10 @@ export struct ScrollToBottomLoadingButton {
   @Param bottomAvoidHeight: number = 0
   @Event onScrollToBottom: () => void = () => {}
 
-  @Local private btnPressed: boolean = false
   @Local private loadingAngle: number = 0
   private rotationTimer: number = -1
   private get themePrimary(): string {
     return getAppUiState().themePrimary
-  }
-
-  private get isDark(): boolean {
-    return getAppUiState().isDarkMode
-  }
-
-  private get materialBg(): string {
-    return this.isDark ? 'rgba(30, 30, 30, 0.72)' : 'rgba(255, 255, 255, 0.72)'
-  }
-
-  private get materialBorder(): string {
-    return this.isDark ? 'rgba(255, 255, 255, 0.08)' : 'rgba(0, 0, 0, 0.06)'
   }
 
   aboutToAppear(): void {
@@ -86,35 +69,32 @@ export struct ScrollToBottomLoadingButton {
           .rotate({ angle: this.loadingAngle })
 
         // 中心向下箭头按钮
-        Button({ type: ButtonType.Circle }) {
-          SymbolGlyph($r('sys.symbol.chevron_down'))
-            .fontSize(20)
-            .fontColor([this.themePrimary])
+        ChatFloatingImmersiveButton({
+          barWidth: 40,
+          barHeight: 40,
+          iconResource: $r('sys.symbol.chevron_down'),
+          iconSize: 20,
+          iconColor: [this.themePrimary],
+          onButtonClick: (): void => {
+            this.onScrollToBottom()
+          }
+        }) {
+          Stack({ alignContent: Alignment.Center }) {
+            SymbolGlyph($r('sys.symbol.chevron_down'))
+              .fontSize(20)
+              .fontColor([this.themePrimary])
+          }
+          .width(40)
+          .height(40)
+          .translate({ y: -4 })
         }
-        .width(40)
-        .height(40)
-        .backgroundColor(this.materialBg)
-        .backgroundBlurStyle(BlurStyle.COMPONENT_REGULAR)
-        .border({
-          width: 0.5,
-          color: this.materialBorder
-        })
-        .shadow({ radius: 8, color: this.isDark ? 'rgba(0,0,0,0.4)' : 'rgba(0,0,0,0.12)', offsetX: 0, offsetY: 2 })
-        .scale(getButtonScale(this.btnPressed))
-        .animation(getButtonAnimation())
-        .onTouch(createButtonTouchHandler((pressed: boolean) => {
-          this.btnPressed = pressed
-        }))
-        .onClick(() => {
-          this.onScrollToBottom()
-        })
       }
       .position({ x: '50%', y: '100%' })
       .translate({
         x: '-50%',
         y: this.isInputBarVisible
-          ? (-140 - this.bottomAvoidHeight)
-          : (-72 - this.bottomAvoidHeight)
+          ? (-160 - this.bottomAvoidHeight)
+          : (-92 - this.bottomAvoidHeight)
       })
       .transition(
         TransitionEffect.OPACITY.combine(
@@ -124,4 +104,3 @@ export struct ScrollToBottomLoadingButton {
     }
   }
 }
-

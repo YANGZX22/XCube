@@ -2505,26 +2505,73 @@ struct Index {
       .alignItems(VerticalAlign.Center)
     }
     .width('100%')
-    .padding({ left: 20, right: 20, top: 12, bottom: 8 })
+    .padding({ left: 20, right: 20, top: 4, bottom: 6 })
     .alignItems(HorizontalAlign.Start)
   }
 
   @Builder
   private AssistantHeaderPill(value: string, label: ResourceStr) {
-    Row({ space: 4 }) {
-      Text(value)
-        .fontSize(13)
-        .fontWeight(FontWeight.Bold)
-        .fontColor($r('app.color.text_primary'))
-      Text(label)
-        .fontSize(12)
-        .fontColor($r('app.color.text_secondary'))
+    HdsTabs() {
+      TabContent() {
+      }
+      .tabBar(this.AssistantHeaderPillContent(value, label))
     }
-    .height(30)
-    .padding({ left: 10, right: 10 })
-    .backgroundColor(this.themeSurface)
-    .borderRadius(15)
-    .border({ width: 1, color: $r('app.color.divider') })
+    .barOverlap(true)
+    .barPosition(BarPosition.End)
+    .barHeight(this.getAssistantHeaderPillHeight())
+    .vertical(false)
+    .barBackgroundColor(Color.Transparent)
+    .width(this.getAssistantHeaderPillWidth(value))
+    .height(this.getAssistantHeaderPillHeight())
+    .backgroundColor(Color.Transparent)
+    .borderRadius(this.getAssistantHeaderPillHeight() / 2)
+    .clip(false)
+    .divider({ mode: DividerMode.NONE })
+    .barFloatingStyle({
+      barBottomMargin: 0,
+      barSideMargin: 0,
+      barWidth: {
+        smallWidth: this.getAssistantHeaderPillWidth(value),
+        mediumWidth: this.getAssistantHeaderPillWidth(value),
+        largeWidth: this.getAssistantHeaderPillWidth(value)
+      },
+      gradientMask: { maskColor: '#00000000', maskHeight: 1 },
+      systemMaterialEffect: {
+        materialType: hdsMaterial.MaterialType.IMMERSIVE,
+        materialLevel: hdsMaterial.MaterialLevel.ADAPTIVE
+      }
+    })
+  }
+
+  @Builder
+  private AssistantHeaderPillContent(value: string, label: ResourceStr) {
+    Stack({ alignContent: Alignment.Center }) {
+      Row({ space: 4 }) {
+        Text(value)
+          .fontSize(11)
+          .fontWeight(FontWeight.Bold)
+          .fontColor($r('app.color.text_primary'))
+          .textAlign(TextAlign.Center)
+        Text(label)
+          .fontSize(10)
+          .fontColor($r('app.color.text_secondary'))
+          .textAlign(TextAlign.Center)
+      }
+      .justifyContent(FlexAlign.Center)
+      .alignItems(VerticalAlign.Center)
+      .translate({ y: -4 })
+    }
+    .width(this.getAssistantHeaderPillWidth(value))
+    .height(this.getAssistantHeaderPillHeight())
+    .padding({ left: 8, right: 8 })
+  }
+
+  private getAssistantHeaderPillHeight(): number {
+    return 26
+  }
+
+  private getAssistantHeaderPillWidth(value: string): number {
+    return Math.min(96, Math.max(66, 58 + value.length * 8))
   }
 
   @Builder

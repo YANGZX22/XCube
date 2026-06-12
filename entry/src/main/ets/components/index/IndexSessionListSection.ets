@@ -1,3 +1,4 @@
+import { DividerMode, HdsTabs, hdsMaterial } from '@kit.UIDesignKit'
 import { ChatSession } from '../../models/ChatModels'
 import { SessionListGroupViewModel, SessionListItemData } from '../../pages/index/IndexSessionListDataSource'
 import { IndexSessionListItem } from './IndexSessionListItem'
@@ -21,6 +22,21 @@ export struct IndexSessionListSection {
   @Event onShareSession: (session: ChatSession) => void = (_session: ChatSession): void => {}
   @Event onToggleFavorite: (session: ChatSession) => void = (_session: ChatSession): void => {}
 
+  private getFavoriteSwipeColor(session: ChatSession): ResourceColor {
+    if (session.isFavorite) {
+      return $r('app.color.status_error')
+    }
+    return getAppUiState().themePrimary
+  }
+
+  private getSwipeButtonRadius(): number {
+    return this.getSwipeButtonHeight() / 2
+  }
+
+  private getSwipeButtonHeight(): number {
+    return 56
+  }
+
   @Builder
   private SessionGroupHeader(groupKey: string, count: number) {
     Row() {
@@ -39,35 +55,129 @@ export struct IndexSessionListSection {
   }
 
   @Builder
-  private FavoriteSwipeButton(session: ChatSession) {
-    Button() {
-      Column() {
-        SymbolGlyph(session.isFavorite ? $r('sys.symbol.heart_fill') : $r('sys.symbol.heart'))
-          .fontSize(18)
-          .fontColor([Color.White])
+  private FavoriteSwipeContent(session: ChatSession) {
+    Column() {
+      SymbolGlyph(session.isFavorite ? $r('sys.symbol.heart_fill') : $r('sys.symbol.heart'))
+        .fontSize(18)
+        .fontColor([this.getFavoriteSwipeColor(session)])
 
-        Text(session.isFavorite ? $r('app.string.menu_unfavorite') : $r('app.string.menu_favorite'))
-          .fontSize(11)
-          .fontWeight(FontWeight.Medium)
-          .fontColor(Color.White)
-          .maxLines(1)
-          .textOverflow({ overflow: TextOverflow.Ellipsis })
-          .textAlign(TextAlign.Center)
-          .margin({ top: 2 })
+      Text(session.isFavorite ? $r('app.string.cancel') : $r('app.string.menu_favorite'))
+        .fontSize(11)
+        .fontWeight(FontWeight.Medium)
+        .fontColor(this.getFavoriteSwipeColor(session))
+        .maxLines(1)
+        .textOverflow({ overflow: TextOverflow.Ellipsis })
+        .textAlign(TextAlign.Center)
+        .margin({ top: 2 })
+    }
+    .width('100%')
+    .height(this.getSwipeButtonHeight())
+    .padding({ left: 4, right: 4 })
+    .justifyContent(FlexAlign.Center)
+    .alignItems(HorizontalAlign.Center)
+    .translate({ y: -3 })
+  }
+
+  @Builder
+  private FavoriteSwipeButton(session: ChatSession) {
+    Row() {
+      HdsTabs() {
+        TabContent() {
+        }
+        .tabBar(this.FavoriteSwipeContent(session))
       }
-      .width('100%')
-      .padding({ left: 4, right: 4 })
-      .justifyContent(FlexAlign.Center)
-      .alignItems(HorizontalAlign.Center)
+      .barOverlap(true)
+      .barPosition(BarPosition.End)
+      .vertical(false)
+      .barBackgroundColor(Color.Transparent)
+      .width(72)
+      .height(this.getSwipeButtonHeight())
+      .backgroundColor(Color.Transparent)
+      .borderRadius(this.getSwipeButtonRadius())
+      .clip(false)
+      .divider({ mode: DividerMode.NONE })
+      .barFloatingStyle({
+        barBottomMargin: 0,
+        barSideMargin: 0,
+        barWidth: {
+          smallWidth: 72,
+          mediumWidth: 72,
+          largeWidth: 72
+        },
+        gradientMask: { maskColor: '#00000000', maskHeight: 1 },
+        systemMaterialEffect: {
+          materialType: hdsMaterial.MaterialType.IMMERSIVE,
+          materialLevel: hdsMaterial.MaterialLevel.ADAPTIVE
+        }
+      })
+      .onTabBarClick(() => {
+        this.sessionListScroller.closeAllSwipeActions()
+        this.onToggleFavorite(session)
+      })
     }
     .width(72)
     .height('100%')
-    .borderRadius({ topLeft: 12, bottomLeft: 12 })
-    .backgroundColor(session.isFavorite ? $r('app.color.status_error') : getAppUiState().themePrimary)
-    .onClick(() => {
-      this.sessionListScroller.closeAllSwipeActions()
-      this.onToggleFavorite(session)
-    })
+    .justifyContent(FlexAlign.Center)
+    .alignItems(VerticalAlign.Center)
+    .translate({ y: -2 })
+    .clip(false)
+  }
+
+  @Builder
+  private DeleteSwipeContent() {
+    Stack({ alignContent: Alignment.Center }) {
+      SymbolGlyph($r('sys.symbol.trash'))
+        .fontSize(24)
+        .fontColor([$r('app.color.status_error')])
+    }
+      .width('100%')
+      .height(this.getSwipeButtonHeight())
+      .translate({ y: -3 })
+  }
+
+  @Builder
+  private DeleteSwipePanel(sessionId: string) {
+    Row() {
+      HdsTabs() {
+        TabContent() {
+        }
+        .tabBar(this.DeleteSwipeContent())
+      }
+      .barOverlap(true)
+      .barPosition(BarPosition.End)
+      .vertical(false)
+      .barBackgroundColor(Color.Transparent)
+      .width(64)
+      .height(this.getSwipeButtonHeight())
+      .backgroundColor(Color.Transparent)
+      .borderRadius(this.getSwipeButtonRadius())
+      .clip(false)
+      .divider({ mode: DividerMode.NONE })
+      .barFloatingStyle({
+        barBottomMargin: 0,
+        barSideMargin: 0,
+        barWidth: {
+          smallWidth: 64,
+          mediumWidth: 64,
+          largeWidth: 64
+        },
+        gradientMask: { maskColor: '#00000000', maskHeight: 1 },
+        systemMaterialEffect: {
+          materialType: hdsMaterial.MaterialType.IMMERSIVE,
+          materialLevel: hdsMaterial.MaterialLevel.ADAPTIVE
+        }
+      })
+      .onTabBarClick(() => {
+        this.sessionListScroller.closeAllSwipeActions()
+        this.onDeleteSession(sessionId)
+      })
+    }
+    .width(64)
+    .height('100%')
+    .justifyContent(FlexAlign.Center)
+    .alignItems(VerticalAlign.Center)
+    .translate({ y: -2 })
+    .clip(false)
   }
 
   @Builder
@@ -107,23 +217,6 @@ export struct IndexSessionListSection {
   }
 
   @Builder
-  private DeleteSwipePanel(sessionId: string) {
-    Button() {
-      SymbolGlyph($r('sys.symbol.trash'))
-        .fontSize(24)
-        .fontColor([Color.White])
-    }
-    .width(64)
-    .height('100%')
-    .backgroundColor($r('app.color.status_error'))
-    .borderRadius({ topRight: 12, bottomRight: 12 })
-    .onClick(() => {
-      this.sessionListScroller.closeAllSwipeActions()
-      this.onDeleteSession(sessionId)
-    })
-  }
-
-  @Builder
   private SessionGroup(group: SessionListGroupViewModel) {
     ListItemGroup({
       header: this.SessionGroupHeader(group.key, group.count)
@@ -159,7 +252,7 @@ export struct IndexSessionListSection {
           end: this.DeleteSwipePanel(item.session.id)
         })
         .borderRadius(12)
-        .clip(true)
+        .clip(false)
       }, (item: SessionListItemData): string => item.key)
     }
     .divider(null)
