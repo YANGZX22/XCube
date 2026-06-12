@@ -6,7 +6,7 @@
   "author": "",
   "license": "",
   "dependencies": {
-    "@luvi/lv-markdown-in": "^3.4.0",
+    "@cangjie-tpc/markdown_hybrid": "^1.3.6",
     "hds_button": "file:../HdsButton_Component/hds_button"
   },
   "devDependencies": {},

@@ -5,15 +5,8 @@
 import { ChatMessage, MessageRole, MessageAttachment, AttachmentType } from '../models/ChatModels'
 import { getPresetProviderById } from '../config/PresetProviders'
 import { getCachedModelIconPath, buildIconResourcePath, resolveShareModelIdentity } from '../utils/ProviderIconUtils'
-import { Markdown, MarkdownController } from '@luvi/lv-markdown-in'
+import { ChatMarkdownHybridRenderer } from './ChatMarkdownHybridRenderer'
 import { getAppUiState } from '../state/AppUiState'
-import {
-  getMarkdownBlockSpacing,
-  getMarkdownQuotePadding,
-  getMarkdownTextLineHeight,
-  getMarkdownTitleLineHeights,
-  getMarkdownTitleSizes
-} from '../utils/MarkdownTypographyUtils'
 
 @ComponentV2
 export struct ShareMessageCard {
@@ -21,7 +14,6 @@ export struct ShareMessageCard {
   @Param appName: string = 'ChatCube'
   @Param currentModelId: string = ''
   @Param iconRenderVersion: number = 0
-  private markdownControllers: Map<string, MarkdownController> = new Map()
   private get isDarkMode(): boolean {
     return getAppUiState().isDarkMode
   }
@@ -36,64 +28,6 @@ export struct ShareMessageCard {
   }
   private get themeAiBubble(): string {
     return getAppUiState().themeAiBubble
-  }
-
-  // 配置 Markdown 样式（与聊天页面保持一致，避免深色模式下不可读）
-  private configureMarkdownController(controller: MarkdownController): void {
-    const titleColor = $r('app.color.markdown_title')
-    const textColor = $r('app.color.markdown_text')
-    const quoteBgColor = $r('app.color.markdown_quote_bg')
-    const linkColor = $r('app.color.markdown_link')
-    const linkBgColor = $r('app.color.markdown_link_bg')
-    const inlineCodeBgColor = $r('app.color.markdown_code_bg')
-    const inlineCodeTextColor = $r('app.color.markdown_code_text')
-    const tableBgColor = $r('app.color.markdown_table_bg')
-    const tableHeaderBgColor = $r('app.color.markdown_table_header_bg')
-    const tableAltBgColor = $r('app.color.markdown_table_alt_bg')
-    const tableBorderColor = $r('app.color.markdown_table_border')
-    const codeTheme = this.isDarkMode ? 'dark' : 'light'
-    const textSize = 14
-    const titleSizes = getMarkdownTitleSizes(textSize)
-
-    // 数学公式颜色接口需要 number（ARGB），不能直接传 ResourceColor
-    const latexTextColor = this.isDarkMode ? 0xFFE0E0E0 : 0xFF333333
-
-    controller
-      .setTitleColor(titleColor)
-      .setTextColor(textColor)
-      .setTextSize(textSize)
-      .setTextLineHeight(getMarkdownTextLineHeight(textSize))
-      .setTitleSize(titleSizes)
-      .setTitleLineHeight(getMarkdownTitleLineHeights(titleSizes))
-      .setQuoteBackgroundColor(quoteBgColor)
-      .setQuoteBorderColor(linkColor)
-      .setQuotePadding(getMarkdownQuotePadding(textSize))
-      .setHyperlinkTextColor(linkColor)
-      .setHyperlinkBackgroundColor(linkBgColor)
-      .setInlineCodeColor(inlineCodeTextColor)
-      .setInlineCodeBackgroundColor(inlineCodeBgColor)
-      .setCodeBlockTheme(codeTheme)
-      .setLatexMathTextColor(latexTextColor)
-      .setTableBackgroundColor(tableBgColor)
-      .setTableTitleBackgroundColor(tableHeaderBgColor)
-      .setTableInterleaveBackgroundColor(tableAltBgColor)
-      .setTableOuterBorderColor(tableBorderColor)
-      .setTableInnerBorderColor(tableBorderColor)
-      .setUlPointColor(textColor)
-      .setLineColor(tableBorderColor)
-      .setFootnoteTextColor(linkColor)
-    controller.setBlockSpacing(getMarkdownBlockSpacing(textSize))
-  }
-
-  // 获取或创建 MarkdownController
-  private getMarkdownController(messageId: string): MarkdownController {
-    let controller = this.markdownControllers.get(messageId)
-    if (controller === undefined) {
-      controller = new MarkdownController()
-      this.configureMarkdownController(controller)
-      this.markdownControllers.set(messageId, controller)
-    }
-    return controller
   }
 
   // 获取卡片背景色
@@ -341,9 +275,14 @@ export struct ShareMessageCard {
 
               // 消息内容 - 使用 Markdown 渲染（紧凑样式）
               if (message.content.length > 0) {
-                Markdown({
-                  controller: this.getMarkdownController(message.id),
-                  text: message.content
+                ChatMarkdownHybridRenderer({
+                  content: message.content,
+                  isInputEnded: true,
+                  incrementalAnalysis: false,
+                  useCangjieComponent: true,
+                  chatFontSize: 14,
+                  themeRenderKey: message.id,
+                  showCodeFullScreen: false
                 })
                   .width('100%')
                   .backgroundColor(Color.Transparent)

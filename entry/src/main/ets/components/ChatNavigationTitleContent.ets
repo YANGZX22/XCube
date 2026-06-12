@@ -1,6 +1,6 @@
-import { Markdown, MarkdownController } from '@luvi/lv-markdown-in'
+import { ChatMarkdownHybridRenderer } from './ChatMarkdownHybridRenderer'
 import { ProviderIconSmall } from './ProviderIcon'
-import { getAppUiState, observeAppUiState } from '../state/AppUiState'
+import { getAppUiState } from '../state/AppUiState'
 import { buildIconResourcePath, getModelIconPath, isNetworkIconPath, isSandboxIconPath } from '../utils/ProviderIconUtils'
 
 export const CHAT_NAVIGATION_TITLE_STACK_BUILDER_HEIGHT = 56
@@ -34,42 +34,12 @@ export struct ChatNavigationTitleContent {
   @Local private editingTitleInput: string = ''
   private handledEditTitleRequestTick: number = 0
   private readonly titleInputFocusId: string = 'chat_navigation_title_input'
-  private titleMarkdownController: MarkdownController = new MarkdownController()
-  private themeObserverDisposer: (() => void) | null = null
-
   private get themePrimary(): string {
     return getAppUiState().themePrimary
   }
 
   private get isDarkMode(): boolean {
     return getAppUiState().isDarkMode
-  }
-
-  aboutToAppear(): void {
-    this.configureTitleMarkdownStyles()
-    if (this.themeObserverDisposer === null) {
-      this.themeObserverDisposer = observeAppUiState(['isDarkMode', 'themePrimary'], (): void => {
-        this.configureTitleMarkdownStyles()
-      })
-    }
-  }
-
-  aboutToDisappear(): void {
-    if (this.themeObserverDisposer !== null) {
-      this.themeObserverDisposer()
-      this.themeObserverDisposer = null
-    }
-  }
-
-  private configureTitleMarkdownStyles(): void {
-    const latexTextColor = this.isDarkMode ? 0xFFE0E0E0 : 0xFF333333
-    this.titleMarkdownController
-      .setTitleColor($r('app.color.text_primary'))
-      .setTextColor($r('app.color.text_primary'))
-      .setTextSize(14)
-      .setTextLineHeight(17)
-      .setLatexMathTextColor(latexTextColor)
-      .setLatexMathTextSize(15)
   }
 
   private getModelIdentityTextColor(): string {
@@ -254,9 +224,17 @@ export struct ChatNavigationTitleContent {
             Column({ space: 1 }) {
               Row() {
                 if (this.titleContainsLatex()) {
-                  Markdown({
-                    controller: this.titleMarkdownController,
-                    text: this.normalizeLatexInTitle(this.sessionTitle)
+                  ChatMarkdownHybridRenderer({
+                    content: this.normalizeLatexInTitle(this.sessionTitle),
+                    isInputEnded: true,
+                    incrementalAnalysis: false,
+                    useCangjieComponent: true,
+                    chatFontSize: 15,
+                    compact: true,
+                    latexFontSize: 15,
+                    textColorOverride: getAppUiState().themeTextPrimary,
+                    titleColorOverride: getAppUiState().themeTextPrimary,
+                    themeRenderKey: this.sessionTitle
                   })
                     .layoutWeight(1)
                     .constraintSize({ maxHeight: 22 })

@@ -1,5 +1,4 @@
 import { ChatMessage, MessageRole, MessageAttachment, AttachmentType, ToolCall, ToolResult } from '../models/ChatModels'
-import { Markdown, MarkdownController } from '@luvi/lv-markdown-in'
 import { pasteboard } from '@kit.BasicServicesKit'
 import { image } from '@kit.ImageKit'
 import { showToast } from '../utils/ToastUtil'
@@ -10,17 +9,11 @@ import { ToolCallCard } from './ToolCallCard'
 import { AskUserCard } from './AskUserCard'
 import { HtmlPreviewCard } from './HtmlPreviewCard'
 import { TypingDots } from './TypingDots'
+import { ChatMarkdownHybridRenderer } from './ChatMarkdownHybridRenderer'
 import { AssistantAvatarView } from './AssistantAvatar'
 import { hilog } from '@kit.PerformanceAnalysisKit'
 import { SymbolGlyphModifier } from '@kit.ArkUI'
 import { getAppUiState } from '../state/AppUiState'
-import {
-  getMarkdownBlockSpacing,
-  getMarkdownQuotePadding,
-  getMarkdownTextLineHeight,
-  getMarkdownTitleLineHeights,
-  getMarkdownTitleSizes
-} from '../utils/MarkdownTypographyUtils'
 import { withColorAlpha } from '../utils/ColorAlphaUtils'
 
 const DOMAIN = 0x0002
@@ -95,11 +88,6 @@ export struct MessageBubble {
   // 聊天字体大小
   @Param chatFontSize: number = 15
 
-  // ========== Markdown 配置 ==========
-  // MarkdownController 实例
-  private markdownController: MarkdownController = new MarkdownController()
-  private reasoningMarkdownController: MarkdownController = new MarkdownController()
-  private translationMarkdownController: MarkdownController = new MarkdownController()
   private multiSelectTouchStartX: number = 0
   private multiSelectTouchStartY: number = 0
   private multiSelectTouchActive: boolean = false
@@ -252,12 +240,6 @@ export struct MessageBubble {
   aboutToAppear(): void {
     this.syncMessageScopedState()
     this.syncDerivedRenderCaches()
-    // 翻译内容动态变化，使用新的 Controller
-    this.translationMarkdownController = new MarkdownController()
-
-    // 配置 Markdown 样式
-    this.configureMarkdownStyles()
-
     this.isReasoningExpanded = false
   }
 
@@ -390,166 +372,103 @@ export struct MessageBubble {
     this.cachedMessageImageGridRows = this.buildImageGridRows(this.cachedMessageImageEntries.length)
   }
 
-  // 配置 Markdown 样式
-  private configureMarkdownStyles(): void {
-    const uiState = getAppUiState()
-    const titleColor = uiState.themeMarkdownTitle
-    const textColor = uiState.themeMarkdownText
-    const reasoningTextColor = uiState.themeTextSecondary
-    const quoteBgColor = uiState.themeMarkdownQuoteBg
-    const linkColor = uiState.themeMarkdownLink
-    const linkBgColor = uiState.themeMarkdownLinkBg
-    const inlineCodeBgColor = uiState.themeMarkdownCodeBg
-    const inlineCodeTextColor = uiState.themeMarkdownCodeText
-    const tableBgColor = uiState.themeMarkdownTableBg
-    const tableHeaderBgColor = uiState.themeMarkdownTableHeaderBg
-    const tableAltBgColor = uiState.themeMarkdownTableAltBg
-    const tableBorderColor = uiState.themeMarkdownTableBorder
-    const codeTheme = this.isDarkMode ? 'dark' : 'light'
-
-    // 数学公式颜色接口需要 number（ARGB），不能直接传 ResourceColor
-    const latexTextColor = this.isDarkMode ? 0xFFE0E0E0 : 0xFF333333
-    const latexTextColorSecondary = 0xFF999999
-
-    const fs = this.chatFontSize
-    const mainTextSize = fs - 1
-    const compactTextSize = fs - 2
-    const mainTitleSizes = getMarkdownTitleSizes(mainTextSize)
-    const compactTitleSizes = getMarkdownTitleSizes(compactTextSize, true)
-    const mainBlockSpacing = getMarkdownBlockSpacing(mainTextSize)
-    const compactBlockSpacing = getMarkdownBlockSpacing(compactTextSize, true)
-    const mainQuotePadding = getMarkdownQuotePadding(mainTextSize)
-    const compactQuotePadding = getMarkdownQuotePadding(compactTextSize, true)
-
-    // 配置主内容 Markdown
-    const markdownController = this.markdownController
-    const reasoningMarkdownController = this.reasoningMarkdownController
-    const translationMarkdownController = this.translationMarkdownController
-
-    markdownController
-      .setTitleColor(titleColor)
-      .setTextColor(textColor)
-      .setTextSize(mainTextSize)
-      .setTextLineHeight(getMarkdownTextLineHeight(mainTextSize))
-      .setTitleSize(mainTitleSizes)
-      .setTitleLineHeight(getMarkdownTitleLineHeights(mainTitleSizes))
-      .setQuoteBackgroundColor(quoteBgColor)
-      .setQuoteBorderColor(linkColor)
-      .setQuotePadding(mainQuotePadding)
-      .setHyperlinkTextColor(linkColor)
-      .setHyperlinkBackgroundColor(linkBgColor)
-      .setInlineCodeColor(inlineCodeTextColor)
-      .setInlineCodeBackgroundColor(inlineCodeBgColor)
-      .setCodeBlockTheme(codeTheme)
-      .setLatexMathTextColor(latexTextColor)
-      .setLatexMathTextSize(fs + 2)
-      .setTableBackgroundColor(tableBgColor)
-      .setTableTitleBackgroundColor(tableHeaderBgColor)
-      .setTableInterleaveBackgroundColor(tableAltBgColor)
-      .setTableOuterBorderColor(tableBorderColor)
-      .setTableInnerBorderColor(tableBorderColor)
-      .setUlPointColor(textColor)
-      .setLineColor(tableBorderColor)
-      .setFootnoteTextColor(linkColor)
-      .setHyperlinkClickListener((title: string, src: string): boolean => {
-        return this.openWebSheetForLink(title, src)
-      })
-      .setLatexClickListener((text: string, pixelMap: image.PixelMap): boolean => {
-        return this.openLatexPreview(text, pixelMap)
-      })
-      .setCodeCopyListener((code: string) => {
-        this.copyToClipboard(code)
-      })
-      .setTextSelectionEnable(true)
-      .setTextSelectionCopyListener((text: string) => {
+  // 流式正文渲染：必须在 Builder 内直接访问 this.message.content（@Trace 字段），
+  // 才能让 CJMarkdown 的 text 建立响应式依赖，流式增量追加才会实时刷新。
+  // 若把 content 在父 Builder 提取成 string 再传参，依赖会在参数边界断链，表现为正文流式不刷新。
+  @Builder
+  MessageContentMarkdown() {
+    ChatMarkdownHybridRenderer({
+      content: this.message.content,
+      isInputEnded: !this.message.isGenerating,
+      incrementalAnalysis: this.message.isGenerating,
+      useCangjieComponent: true,
+      chatFontSize: this.chatFontSize,
+      latexFontSize: this.chatFontSize,
+      themeRenderKey: this.themeRenderKey,
+      onOpenLink: (title: string, url: string): void => {
+        this.openWebSheetForLink(title, url)
+      },
+      onImageClick: (src: string): void => {
+        this.onImageClick([src], 0)
+      },
+      onCopyText: (text: string): void => {
         this.copyToClipboard(text)
-      })
-    markdownController.setBlockSpacing(mainBlockSpacing)
-
-    // 配置推理内容 Markdown（更紧凑）
-    reasoningMarkdownController
-      .setTitleColor(reasoningTextColor)
-      .setTextColor(reasoningTextColor)
-      .setTextSize(compactTextSize)
-      .setTextLineHeight(getMarkdownTextLineHeight(compactTextSize, true))
-      .setTitleSize(compactTitleSizes)
-      .setTitleLineHeight(getMarkdownTitleLineHeights(compactTitleSizes, true))
-      .setQuoteBackgroundColor(quoteBgColor)
-      .setQuoteBorderColor(linkColor)
-      .setQuotePadding(compactQuotePadding)
-      .setHyperlinkTextColor(linkColor)
-      .setHyperlinkBackgroundColor(linkBgColor)
-      .setInlineCodeColor(inlineCodeTextColor)
-      .setInlineCodeBackgroundColor(inlineCodeBgColor)
-      .setCodeBlockTheme(codeTheme)
-      .setLatexMathTextColor(latexTextColorSecondary)
-      .setLatexMathTextSize(fs)
-      .setTableBackgroundColor(tableBgColor)
-      .setTableTitleBackgroundColor(tableHeaderBgColor)
-      .setTableInterleaveBackgroundColor(tableAltBgColor)
-      .setTableOuterBorderColor(tableBorderColor)
-      .setTableInnerBorderColor(tableBorderColor)
-      .setUlPointColor(reasoningTextColor)
-      .setLineColor(tableBorderColor)
-      .setFootnoteTextColor(linkColor)
-      .setHyperlinkClickListener((title: string, src: string): boolean => {
-        return this.openWebSheetForLink(title, src)
-      })
-      .setLatexClickListener((text: string, pixelMap: image.PixelMap): boolean => {
-        return this.openLatexPreview(text, pixelMap)
-      })
-      .setCodeCopyListener((code: string) => {
+      },
+      onCopyCode: (code: string): void => {
         this.copyToClipboard(code)
-      })
-    reasoningMarkdownController.setBlockSpacing(compactBlockSpacing)
-
-    // 配置翻译内容 Markdown
-    translationMarkdownController
-      .setTitleColor(titleColor)
-      .setTextColor(textColor)
-      .setTextSize(compactTextSize)
-      .setTextLineHeight(getMarkdownTextLineHeight(compactTextSize, true))
-      .setTitleSize(compactTitleSizes)
-      .setTitleLineHeight(getMarkdownTitleLineHeights(compactTitleSizes, true))
-      .setQuoteBackgroundColor(quoteBgColor)
-      .setQuoteBorderColor(linkColor)
-      .setQuotePadding(compactQuotePadding)
-      .setHyperlinkTextColor(linkColor)
-      .setHyperlinkBackgroundColor(linkBgColor)
-      .setInlineCodeColor(inlineCodeTextColor)
-      .setInlineCodeBackgroundColor(inlineCodeBgColor)
-      .setCodeBlockTheme(codeTheme)
-      .setLatexMathTextColor(latexTextColor)
-      .setLatexMathTextSize(this.chatFontSize)
-      .setTableBackgroundColor(tableBgColor)
-      .setTableTitleBackgroundColor(tableHeaderBgColor)
-      .setTableInterleaveBackgroundColor(tableAltBgColor)
-      .setTableOuterBorderColor(tableBorderColor)
-      .setTableInnerBorderColor(tableBorderColor)
-      .setUlPointColor(textColor)
-      .setLineColor(tableBorderColor)
-      .setFootnoteTextColor(linkColor)
-      .setHyperlinkClickListener((title: string, src: string): boolean => {
-        return this.openWebSheetForLink(title, src)
-      })
-      .setLatexClickListener((text: string, pixelMap: image.PixelMap): boolean => {
-        return this.openLatexPreview(text, pixelMap)
-      })
-      .setCodeCopyListener((code: string) => {
+      },
+      onCodeFullScreen: (code: string, _codeType: string): void => {
         this.copyToClipboard(code)
-      })
-    translationMarkdownController.setBlockSpacing(compactBlockSpacing)
+      }
+    })
+      .constraintSize({ maxWidth: '100%' })
+      .backgroundColor(Color.Transparent)
   }
 
-  @Monitor('themeRenderKey')
-  onThemeRenderKeyChange(): void {
-    this.configureMarkdownStyles()
+  // 流式推理内容渲染：同样需在 Builder 内直接访问 this.message.reasoningContent（@Trace 字段）。
+  @Builder
+  ReasoningMarkdown() {
+    ChatMarkdownHybridRenderer({
+      content: this.message.reasoningContent,
+      isInputEnded: !this.message.isGenerating,
+      incrementalAnalysis: this.message.isGenerating,
+      useCangjieComponent: true,
+      chatFontSize: this.chatFontSize,
+      compact: true,
+      latexFontSize: this.chatFontSize,
+      textColorOverride: getAppUiState().themeTextSecondary,
+      titleColorOverride: getAppUiState().themeTextSecondary,
+      themeRenderKey: this.themeRenderKey,
+      onOpenLink: (title: string, url: string): void => {
+        this.openWebSheetForLink(title, url)
+      },
+      onImageClick: (src: string): void => {
+        this.onImageClick([src], 0)
+      },
+      onCopyText: (text: string): void => {
+        this.copyToClipboard(text)
+      },
+      onCopyCode: (code: string): void => {
+        this.copyToClipboard(code)
+      },
+      onCodeFullScreen: (code: string, _codeType: string): void => {
+        this.copyToClipboard(code)
+      }
+    })
+      .constraintSize({ maxWidth: '100%' })
+      .backgroundColor(Color.Transparent)
   }
 
-  // 字体大小变化监听
-  @Monitor('chatFontSize')
-  onFontSizeChange(): void {
-    this.configureMarkdownStyles()
+  // 静态内容渲染（翻译结果 / HTML 分段正文）：仅在非流式时出现，传参不涉及响应式断链问题。
+  @Builder
+  StaticMarkdown(content: string, compact: boolean) {
+    ChatMarkdownHybridRenderer({
+      content: content,
+      isInputEnded: true,
+      incrementalAnalysis: false,
+      useCangjieComponent: true,
+      chatFontSize: this.chatFontSize,
+      compact: compact,
+      latexFontSize: this.chatFontSize,
+      themeRenderKey: this.themeRenderKey,
+      onOpenLink: (title: string, url: string): void => {
+        this.openWebSheetForLink(title, url)
+      },
+      onImageClick: (src: string): void => {
+        this.onImageClick([src], 0)
+      },
+      onCopyText: (text: string): void => {
+        this.copyToClipboard(text)
+      },
+      onCopyCode: (code: string): void => {
+        this.copyToClipboard(code)
+      },
+      onCodeFullScreen: (code: string, _codeType: string): void => {
+        this.copyToClipboard(code)
+      }
+    })
+      .constraintSize({ maxWidth: '100%' })
+      .backgroundColor(Color.Transparent)
   }
 
   // 计算是否应该显示推理内容（生成中自动展开）
@@ -1483,8 +1402,6 @@ export struct MessageBubble {
                 (this.message.isGenerating || this.message.isSearching)) {
               if (this.message.isSearching) {
                 this.SearchingIndicatorInline()
-              } else {
-                this.TypingIndicator()
               }
             } else {
               if (this.hasHtmlSegments()) {
@@ -1499,12 +1416,7 @@ export struct MessageBubble {
                         }
                       })
                     } else {
-                      Markdown({
-                        controller: this.markdownController,
-                        text: segment.renderContent
-                      })
-                        .width('100%')
-                        .backgroundColor(Color.Transparent)
+                      this.StaticMarkdown(segment.renderContent, false)
                     }
                   },
                   (segment: ContentSegment, index: number) => {
@@ -1512,12 +1424,10 @@ export struct MessageBubble {
                   }
                 )
               } else {
-                Markdown({
-                  controller: this.markdownController,
-                  text: this.getReadonlyMessageContent()
-                })
+                Column() {
+                  this.MessageContentMarkdown()
+                }
                   .width('100%')
-                  .backgroundColor(Color.Transparent)
                   .transition(TransitionEffect.OPACITY.animation({ duration: 200 }))
               }
             }
@@ -1617,34 +1527,6 @@ export struct MessageBubble {
     })
   }
 
-  // 等待 AI 响应的跳动点动画
-  @Builder
-  TypingIndicator() {
-    Row() {
-      // 三个跳动的点
-      TypingDots({ dotSize: 7, spacing: 5 })
-      .padding({ left: 14, right: 14, top: 10, bottom: 10 })
-      .backgroundColor(this.themeAiBubble)
-      .borderRadius({
-        topLeft: 4,
-        topRight: 18,
-        bottomLeft: 18,
-        bottomRight: 18
-      })
-      .clip(true)
-      .shadow({
-        radius: 8,
-        color: 'rgba(0, 0, 0, 0.05)',
-        offsetX: 0,
-        offsetY: 1
-      })
-    }
-    .width('100%')
-    .justifyContent(FlexAlign.Start)
-    // 跳动点淡出过渡动画
-    .transition(TransitionEffect.OPACITY.animation({ duration: 150 }))
-  }
-
   // 搜索状态指示器（AI 消息区域内联显示）
   @Builder
   SearchingIndicatorInline() {
@@ -1727,12 +1609,7 @@ export struct MessageBubble {
             .padding({ left: 12, right: 12, bottom: 12 })
           } else if (this.translatedText !== '') {
             Column() {
-              Markdown({
-                controller: this.translationMarkdownController,
-                text: this.getReadonlyTranslatedText()
-              })
-                .constraintSize({ maxWidth: '100%' })
-                .backgroundColor(Color.Transparent)
+              this.StaticMarkdown(this.getReadonlyTranslatedText(), true)
             }
             .width('100%')
             .padding({ left: 12, right: 12, bottom: 12 })
@@ -1748,87 +1625,95 @@ export struct MessageBubble {
     .clip(true)
   }
 
-  // 推理内容区域（可折叠）
+  // ===== Timeline 主题色 helper（与设计稿一致：底色跟随 AI 气泡，竖线/边框用主题色半透明） =====
+  private getTimelineBackgroundColor(): string {
+    return this.themeAiBubble
+  }
+  private getTimelineRailColor(): string {
+    return withColorAlpha(this.themePrimary, this.isDarkMode ? '88' : '55')
+  }
+
+  // 推理内容区域（timeline 串珠样式：左竖线 + 圆形串珠图标 + 标题 + 可展开正文）
   @Builder
   ReasoningSection() {
     Column() {
-      // 推理标题栏（点击可折叠/展开）
-      Row() {
-        // 思考图标
-        SymbolGlyph($r('sys.symbol.lightbulb'))
-          .fontSize(14)
-          .fontColor([this.message.isGenerating ? this.themePrimary : $r('app.color.text_secondary')])
+      Stack({ alignContent: Alignment.TopStart }) {
+        // 贯穿竖线：由图标内圆（20×20）遮挡，形成"线串珠"时间线
+        // left=11.5 = (图标列 24 - 线宽 1) / 2，与图标圆心对齐
+        Column()
+          .width(1)
+          .layoutWeight(1)
+          .margin({ left: 11.5, top: 6, bottom: 6 })
+          .backgroundColor(this.getTimelineRailColor())
 
-        // 标题文本：根据生成状态显示不同内容
-        if (this.message.isGenerating && this.message.content.length === 0) {
-          // 正在思考状态：显示跳动点动画（仅在内容尚未开始生成时）
-          Row({ space: 4 }) {
-            Text($r('app.string.reasoning_thinking'))
-              .fontSize(12)
-              .fontWeight(FontWeight.Medium)
-              .fontColor(this.themePrimary)
-
-            // 三个跳动的点
-            TypingDots({ dotSize: 4, spacing: 2 })
+        // 单条 reasoning step：左图标 + 右内容
+        Row({ space: 10 }) {
+          Stack() {
+            Column()
+              .width(20)
+              .height(20)
+              .borderRadius(10)
+              .backgroundColor(this.getTimelineBackgroundColor())
+            SymbolGlyph($r('sys.symbol.AI_deep_thinking'))
+              .fontSize(13)
+              .fontColor([$r('app.color.text_secondary')])
           }
-          .margin({ left: 6 })
-        } else {
-          // 静态状态：显示"思考过程"
-          Text($r('app.string.reasoning_process'))
-            .fontSize(12)
-            .fontWeight(FontWeight.Medium)
-            .fontColor($r('app.color.text_secondary'))
-            .margin({ left: 6 })
-        }
+          .width(22)
+          .height(22)
+          .translate({ y: this.isReasoningExpanded ? -2 : 0 })
 
-        Blank()
+          Column() {
+            // 标题行（点击 toggle）
+            Row({ space: 6 }) {
+              Text(this.message.isGenerating ? $r('app.string.reasoning_thinking') : $r('app.string.reasoning_process'))
+                .fontSize(13)
+                .fontWeight(FontWeight.Medium)
+                .fontColor($r('app.color.text_primary'))
+                .layoutWeight(1)
 
-        // 展开/折叠状态提示
-        Text(this.isReasoningExpanded ? $r('app.string.common_collapse') : $r('app.string.common_expand'))
-          .fontSize(11)
-          .fontColor($r('app.color.text_secondary'))
+              SymbolGlyph($r('sys.symbol.chevron_down'))
+                .fontSize(12)
+                .fontColor([$r('app.color.text_secondary')])
+                .rotate({ angle: this.isReasoningExpanded ? 0 : -90 })
+                .animation({ duration: 200, curve: Curve.EaseOut })
+            }
+            .width('100%')
+            .height(22)
+            .alignItems(VerticalAlign.Center)
+            .onClick(() => {
+              this.getUIContext().animateTo({ duration: 200, curve: Curve.EaseInOut }, () => {
+                this.isReasoningExpanded = !this.isReasoningExpanded
+              })
+            })
 
-        // 展开/折叠箭头
-        SymbolGlyph($r('sys.symbol.chevron_down'))
-          .fontSize(12)
-          .fontColor([$r('app.color.text_secondary')])
-          .rotate({ angle: this.isReasoningExpanded ? 180 : 0 })
-          .animation({ duration: 200, curve: Curve.EaseOut })
-          .margin({ left: 4 })
-      }
-      .width('100%')
-      .height(36)
-      .padding({ left: 10, right: 10 })
-      .backgroundColor($r('app.color.divider'))
-      .borderRadius(8)
-      .clip(true)
-      .onClick(() => {
-        this.isReasoningExpanded = !this.isReasoningExpanded
-        this.getUIContext().animateTo({ duration: 200, curve: Curve.EaseOut }, () => {
-        })
-      })
-
-      // 推理内容默认折叠，仅在用户显式展开后显示
-      if (this.isReasoningExpanded) {
-        Column() {
-          Markdown({
-            controller: this.reasoningMarkdownController,
-            text: this.getReadonlyReasoningContent()
-          })
-            .constraintSize({ maxWidth: '100%' })
-            .backgroundColor(Color.Transparent)
+            // 展开时显示推理正文
+            if (this.isReasoningExpanded && this.message.reasoningContent.length > 0) {
+              Column() {
+                this.ReasoningMarkdown()
+              }
+              .width('100%')
+              .margin({ top: 6 })
+              .transition(TransitionEffect.OPACITY.animation({ duration: 200 }))
+            }
+          }
+          .layoutWeight(1)
+          .alignItems(HorizontalAlign.Start)
         }
         .width('100%')
-        .padding({ left: 10, right: 10, top: 8, bottom: 8 })
-        .backgroundColor($r('app.color.divider'))
-        .borderRadius({ topLeft: 0, topRight: 0, bottomLeft: 8, bottomRight: 8 })
-        .clip(true)
-        .margin({ top: -8 })
-        .transition(TransitionEffect.OPACITY.animation({ duration: 200 }))
+        .padding({
+          top: this.isReasoningExpanded ? 3 : 1,
+          bottom: this.isReasoningExpanded ? 3 : 1
+        })
+        .alignItems(this.isReasoningExpanded ? VerticalAlign.Top : VerticalAlign.Center)
       }
+      .width('100%')
     }
     .width('100%')
-    .margin({ bottom: 4 })
+    .padding({ left: 10, right: 10, top: 6, bottom: 6 })
+    .backgroundColor(this.getTimelineBackgroundColor())
+    .borderRadius(12)
+    .border({ width: 0.5, color: this.getTimelineRailColor() })
+    .margin({ bottom: 8 })
   }
 
   /**

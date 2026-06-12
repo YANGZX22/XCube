@@ -4,6 +4,7 @@ import { getAppUiState } from '../state/AppUiState'
 export struct TypingDots {
   @Param dotSize: number = 7
   @Param spacing: number = 5
+  @Param color: string = ''
 
   @Local private dot1Scale: number = 0.6
   @Local private dot2Scale: number = 0.6
@@ -11,7 +12,7 @@ export struct TypingDots {
   private dotAnimationTimer: number = -1
 
   private get themePrimary(): string {
-    return getAppUiState().themePrimary
+    return this.color !== '' ? this.color : getAppUiState().themePrimary
   }
 
   aboutToAppear(): void {
