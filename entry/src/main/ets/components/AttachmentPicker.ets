@@ -12,6 +12,7 @@ import { util } from '@kit.ArkTS'
 import { BusinessError } from '@kit.BasicServicesKit'
 import { getAttachmentStorageService, AttachmentStorageService } from '../services/AttachmentStorageService'
 import { getAppUiState } from '../state/AppUiState'
+import { DividerMode, HdsTabs, hdsMaterial } from '@kit.UIDesignKit'
 
 // 附件选项
 interface AttachmentOption {
@@ -29,12 +30,8 @@ export struct AttachmentPicker {
   @Event onClose: () => void = () => {
   }
 
-  private get themeBackground(): string {
-    return getAppUiState().themeBackground
-  }
-
-  private get themeSurface(): string {
-    return getAppUiState().themeSurface
+  private get themePrimary(): string {
+    return getAppUiState().themePrimary
   }
 
   build() {
@@ -65,35 +62,101 @@ export struct AttachmentPicker {
       }
       .width('100%')
       .justifyContent(FlexAlign.SpaceEvenly)
-      .padding({ left: 16, right: 16, top: this.showDragBar ? 0 : 16, bottom: 12 })
+      .padding({ left: 10, right: 10, top: this.showDragBar ? 0 : 10, bottom: 10 })
     }
     .width('100%')
-    .backgroundColor(this.themeSurface)
+    .backgroundColor(Color.Transparent)
+  }
+
+  @Builder
+  private OptionButtonContent(icon: Resource, label: string) {
+    Column() {
+      SymbolGlyph(icon)
+        .fontSize(22)
+        .fontColor([this.themePrimary])
+
+      Text(label)
+        .fontSize(12)
+        .fontWeight(FontWeight.Medium)
+        .fontColor(this.themePrimary)
+        .maxLines(1)
+        .margin({ top: 4 })
+    }
+    .width('100%')
+    .height('100%')
+    .justifyContent(FlexAlign.Center)
+    .alignItems(HorizontalAlign.Center)
+  }
+
+  private getOptionButtonWidth(): number {
+    return 86
+  }
+
+  private getOptionButtonHeight(): number {
+    return 64
+  }
+
+  private getOptionButtonRadius(): number {
+    return 18
+  }
+
+  @Builder
+  private OptionMaterialButton(icon: Resource, label: string, action: () => void) {
+    Stack({ alignContent: Alignment.Center }) {
+      HdsTabs() {
+        TabContent() {
+        }
+        .tabBar(this.OptionButtonContent(icon, label))
+      }
+      .barOverlap(true)
+      .barPosition(BarPosition.End)
+      .vertical(false)
+      .barWidth(this.getOptionButtonWidth())
+      .barHeight(this.getOptionButtonHeight())
+      .width(this.getOptionButtonWidth())
+      .height(this.getOptionButtonHeight())
+      .barBackgroundColor(Color.Transparent)
+      .backgroundColor(Color.Transparent)
+      .borderRadius(this.getOptionButtonRadius())
+      .clip(false)
+      .divider({ mode: DividerMode.NONE })
+      .barFloatingStyle({
+        barBottomMargin: 0,
+        barSideMargin: 0,
+        barWidth: {
+          smallWidth: this.getOptionButtonWidth(),
+          mediumWidth: this.getOptionButtonWidth(),
+          largeWidth: this.getOptionButtonWidth()
+        },
+        gradientMask: { maskColor: '#00000000', maskHeight: 1 },
+        systemMaterialEffect: {
+          materialType: hdsMaterial.MaterialType.IMMERSIVE,
+          materialLevel: hdsMaterial.MaterialLevel.ADAPTIVE
+        }
+      })
+      .onTabBarClick(() => {
+        action()
+      })
+
+      Row() {
+      }
+      .width(this.getOptionButtonWidth())
+      .height(this.getOptionButtonHeight())
+      .borderRadius(this.getOptionButtonRadius())
+      .backgroundColor(Color.Transparent)
+      .hitTestBehavior(HitTestMode.Transparent)
+      .onClick(() => {
+        action()
+      })
+    }
+    .width(this.getOptionButtonWidth())
+    .height(this.getOptionButtonHeight())
+    .backgroundColor(Color.Transparent)
   }
 
   @Builder
   OptionButton(icon: Resource, label: string, action: () => void) {
-    Column() {
-      Column() {
-        SymbolGlyph(icon)
-          .fontSize(24)
-          .fontColor([$r('app.color.text_primary')])
-      }
-      .width(64)
-      .height(64)
-      .borderRadius(16)
-      .backgroundColor(this.themeBackground)
-      .justifyContent(FlexAlign.Center)
-      .alignItems(HorizontalAlign.Center)
-
-      Text(label)
-        .fontSize(13)
-        .fontColor($r('app.color.text_secondary'))
-        .margin({ top: 8 })
-    }
-    .onClick(() => {
-      action()
-    })
+    this.OptionMaterialButton(icon, label, action)
   }
 
   // 打开相机拍照

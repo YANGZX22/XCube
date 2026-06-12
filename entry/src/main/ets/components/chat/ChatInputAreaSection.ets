@@ -2,6 +2,7 @@ import { MessageAttachment, ReasoningLevel } from '../../models/ChatModels'
 import { ChatToolbar } from '../ChatToolbar'
 import { ChatInputBar } from '../ChatInputBar'
 import { ScreenshotBanner } from '../ScreenshotBanner'
+import { AttachmentPicker } from '../AttachmentPicker'
 import { ReasoningControlMode } from '../../services/ProviderCompatibilityRegistry'
 
 @ComponentV2
@@ -41,6 +42,9 @@ export struct ChatInputAreaSection {
   @Event onModelIconClick: () => void = () => {}
   @Param isAttachmentPanelOpen: boolean = false
   @Event onAttachmentClick: () => void = () => {}
+  @Event onSelectAttachments: (attachments: MessageAttachment[]) => void =
+    (_attachments: MessageAttachment[]): void => {}
+  @Event onCloseAttachmentPicker: () => void = (): void => {}
   @Event onInputFocus: () => void = () => {}
   @Event onInputBlur: () => void = () => {}
   @Event onComposerContentChanged: () => void = () => {}
@@ -135,6 +139,27 @@ export struct ChatInputAreaSection {
           onRecentPhotoDetected: (detected: boolean): void => {
             this.onRecentPhotoDetected(detected)
           }
+        })
+
+        Column() {
+          AttachmentPicker({
+            showDragBar: false,
+            onSelectAttachments: (attachments: MessageAttachment[]): void => {
+              this.onSelectAttachments(attachments)
+            },
+            onClose: (): void => {
+              this.onCloseAttachmentPicker()
+            }
+          })
+        }
+        .width('100%')
+        .height(this.isAttachmentPanelOpen ? 84 : 0)
+        .opacity(this.isAttachmentPanelOpen ? 1 : 0)
+        .clip(false)
+        .enabled(this.isAttachmentPanelOpen)
+        .animation({
+          duration: this.isAttachmentPanelOpen ? 260 : 200,
+          curve: Curve.FastOutSlowIn
         })
 
         Column()
