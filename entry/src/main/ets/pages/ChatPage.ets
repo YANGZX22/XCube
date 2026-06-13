@@ -2495,6 +2495,7 @@ export struct ChatPage {
             }
           })
 
+
         // 多选工具栏（多选模式时显示）
         if (this.isMultiSelectMode) {
           Column() {

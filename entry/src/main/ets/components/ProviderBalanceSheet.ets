@@ -1,0 +1,160 @@
+/**
+ * 服务商余额弹层
+ * 展示已开启余额查询的各服务商余额，支持刷新。
+ */
+import { getAppUiState } from '../state/AppUiState'
+import { BalanceResult } from '../services/ProviderBalanceService'
+
+@ComponentV2
+export struct ProviderBalanceSheet {
+  @Param results: BalanceResult[] = []
+  @Param loading: boolean = false
+  @Event onRefresh: () => void = (): void => {}
+  @Event onClose: () => void = (): void => {}
+
+  private get themePrimary(): string {
+    return getAppUiState().themePrimary
+  }
+
+  private get themeBackground(): string {
+    return getAppUiState().themeBackground
+  }
+
+  build() {
+    Column() {
+      // 顶部标题 + 刷新
+      Row() {
+        Button({ type: ButtonType.Circle, stateEffect: false }) {
+          SymbolGlyph($r('sys.symbol.xmark'))
+            .fontSize(17)
+            .fontColor([$r('app.color.text_secondary')])
+        }
+        .width(40)
+        .height(40)
+        .backgroundColor($r('app.color.divider'))
+        .onClick(() => {
+          this.onClose()
+        })
+
+        Text($r('app.string.balance_query'))
+          .fontSize(17)
+          .fontWeight(FontWeight.Bold)
+          .fontColor($r('app.color.text_primary'))
+          .layoutWeight(1)
+          .textAlign(TextAlign.Center)
+
+        Button({ type: ButtonType.Circle, stateEffect: false }) {
+          if (this.loading) {
+            LoadingProgress()
+              .width(20)
+              .height(20)
+              .color(this.themePrimary)
+          } else {
+            SymbolGlyph($r('sys.symbol.arrow_clockwise'))
+              .fontSize(18)
+              .fontColor([this.themePrimary])
+          }
+        }
+        .width(40)
+        .height(40)
+        .backgroundColor(Color.Transparent)
+        .enabled(!this.loading)
+        .onClick(() => {
+          this.onRefresh()
+        })
+      }
+      .width('100%')
+      .padding({ left: 20, right: 16, top: 8, bottom: 12 })
+
+      // 列表 / 空态
+      if (this.results.length === 0 && this.loading) {
+        Column() {
+          LoadingProgress()
+            .width(32)
+            .height(32)
+            .color(this.themePrimary)
+            .margin({ bottom: 14 })
+          Text($r('app.string.loading'))
+            .fontSize(14)
+            .fontColor($r('app.color.text_tertiary'))
+        }
+        .width('100%')
+        .padding({ top: 34, bottom: 42, left: 24, right: 24 })
+        .justifyContent(FlexAlign.Center)
+        .alignItems(HorizontalAlign.Center)
+      } else if (this.results.length === 0) {
+        Column() {
+          SymbolGlyph($r('sys.symbol.creditcard'))
+            .fontSize(40)
+            .fontColor([$r('app.color.text_tertiary')])
+            .margin({ bottom: 12 })
+          Text($r('app.string.balance_query_empty'))
+            .fontSize(14)
+            .fontColor($r('app.color.text_tertiary'))
+            .textAlign(TextAlign.Center)
+        }
+        .width('100%')
+        .padding({ top: 32, bottom: 40, left: 24, right: 24 })
+        .justifyContent(FlexAlign.Center)
+        .alignItems(HorizontalAlign.Center)
+      } else {
+        Column() {
+          ForEach(this.results, (item: BalanceResult) => {
+            this.BalanceRow(item)
+          }, (item: BalanceResult) => item.providerId)
+        }
+        .width('100%')
+        .padding({ left: 16, right: 16, bottom: 16 })
+      }
+    }
+    .width('100%')
+    .padding({ bottom: 8 })
+  }
+
+  @Builder
+  BalanceRow(item: BalanceResult) {
+    Row() {
+      Column() {
+        Text(item.providerName)
+          .fontSize(15)
+          .fontWeight(FontWeight.Medium)
+          .fontColor($r('app.color.text_primary'))
+          .maxLines(1)
+          .textOverflow({ overflow: TextOverflow.Ellipsis })
+
+        if (!item.success) {
+          Text(item.error !== '' ? item.error : $r('app.string.balance_query_failed'))
+            .fontSize(12)
+            .fontColor($r('app.color.status_error'))
+            .maxLines(1)
+            .textOverflow({ overflow: TextOverflow.Ellipsis })
+            .margin({ top: 2 })
+        }
+      }
+      .alignItems(HorizontalAlign.Start)
+      .layoutWeight(1)
+
+      if (item.success) {
+        Row() {
+          Text(item.balance)
+            .fontSize(17)
+            .fontWeight(FontWeight.Bold)
+            .fontColor(this.themePrimary)
+          if (item.currency !== '') {
+            Text(item.currency)
+              .fontSize(12)
+              .fontColor($r('app.color.text_secondary'))
+              .margin({ left: 4 })
+          }
+        }
+        .alignItems(VerticalAlign.Bottom)
+      }
+    }
+    .width('100%')
+    .padding(14)
+    .borderRadius(14)
+    .backgroundColor(this.themeBackground)
+    .margin({ bottom: 10 })
+    .alignItems(VerticalAlign.Center)
+  }
+}

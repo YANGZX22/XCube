@@ -14,6 +14,7 @@ import { ModelPickerSheetHost } from '../components/ModelPickerSheetHost'
 import { ProviderViewModel } from '../viewmodels/ProviderViewModel'
 import { buildIconResourcePath, getModelIconPath, isNetworkIconPath, isSandboxIconPath } from '../utils/ProviderIconUtils'
 import { showToast } from '../utils/ToastUtil'
+import { getProviderBalanceService, ProviderBalanceConfig, createDefaultBalanceConfig } from '../services/ProviderBalanceService'
 import { ProviderIcon } from './ProviderIcon'
 import { generateDefaultTextIcon } from '../utils/IconGeneratorUtils'
 import { applyPresetIconDefaults } from '../config/PresetProviders'
@@ -175,6 +176,8 @@ export struct ProviderDetailPanel {
   @Local showTextIconEditor: boolean = false
   @Local providerCustomHeaderEntries: ProviderHeaderEntry[] = []
   @Local showProviderCustomHeadersEditor: boolean = false
+  // 余额查询配置编辑态
+  @Local balanceConfig: ProviderBalanceConfig = createDefaultBalanceConfig()
   // 手动添加模型相关状态
   @Local showAddModelInput: boolean = false
   @Local addModelIdText: string = ''
@@ -255,6 +258,7 @@ export struct ProviderDetailPanel {
       this.provider = provider
       this.providerCustomHeaderEntries = this.parseProviderHeaderEntries(provider.customHeadersJson)
       this.showProviderCustomHeadersEditor = this.providerCustomHeaderEntries.length > 0
+      this.balanceConfig = this.parseBalanceConfig(provider.balanceConfigJson)
       this.isLoading = false
       return
     }
@@ -266,9 +270,54 @@ export struct ProviderDetailPanel {
       this.provider = provider
       this.providerCustomHeaderEntries = this.parseProviderHeaderEntries(provider.customHeadersJson)
       this.showProviderCustomHeadersEditor = this.providerCustomHeaderEntries.length > 0
+      this.balanceConfig = this.parseBalanceConfig(provider.balanceConfigJson)
       this.buildModelGroups()
     }
     this.isLoading = false
+  }
+
+  // 解析余额查询配置（失败返回默认空配置）
+  private parseBalanceConfig(json: string): ProviderBalanceConfig {
+    const parsed = getProviderBalanceService().parseConfig(json)
+    return parsed !== null ? parsed : createDefaultBalanceConfig()
+  }
+
+  // 将余额配置编辑态写回 provider
+  private syncBalanceConfigToProvider(): void {
+    if (this.provider === null) {
+      return
+    }
+    this.provider.balanceConfigJson = JSON.stringify(this.balanceConfig)
+  }
+
+  // 切换余额查询开关（重建对象以触发列表显隐刷新）
+  private updateBalanceEnabled(enabled: boolean): void {
+    const c = this.balanceConfig
+    this.balanceConfig = {
+      enabled: enabled,
+      url: c.url,
+      apiPath: c.apiPath,
+      balanceJsonPath: c.balanceJsonPath,
+      currency: c.currency,
+      currencyJsonPath: c.currencyJsonPath
+    }
+    this.syncBalanceConfigToProvider()
+  }
+
+  // 更新余额配置某个字段并写回 provider
+  private updateBalanceField(field: string, value: string): void {
+    if (field === 'url') {
+      this.balanceConfig.url = value
+    } else if (field === 'apiPath') {
+      this.balanceConfig.apiPath = value
+    } else if (field === 'balanceJsonPath') {
+      this.balanceConfig.balanceJsonPath = value
+    } else if (field === 'currency') {
+      this.balanceConfig.currency = value
+    } else if (field === 'currencyJsonPath') {
+      this.balanceConfig.currencyJsonPath = value
+    }
+    this.syncBalanceConfigToProvider()
   }
 
   // 构建模型分组
@@ -377,6 +426,7 @@ export struct ProviderDetailPanel {
     if (this.provider === null) {
       return
     }
+    this.syncBalanceConfigToProvider()
     await this.providerViewModel.saveProvider(this.provider, this.isCreateMode)
   }
 
@@ -2365,11 +2415,79 @@ export struct ProviderDetailPanel {
       }
       .width('100%')
       .padding({ left: 16, right: 16, bottom: 16 })
+
+      Divider()
+        .color($r('app.color.divider'))
+        .margin({ left: 16, right: 16, bottom: 16 })
+
+      this.BalanceConfigSection()
   }
   .width('100%')
   .backgroundColor(getAppUiState().themeSurface)
   .borderRadius(16)
   .margin({ left: 16, right: 16, top: 8 })
+}
+
+// 余额查询配置区
+@Builder
+BalanceConfigSection() {
+  Column({ space: 12 }) {
+    Row({ space: 8 }) {
+      Text($r('app.string.balance_config_title'))
+        .fontSize(13)
+        .fontWeight(FontWeight.Medium)
+        .fontColor($r('app.color.text_secondary'))
+        .layoutWeight(1)
+        .maxLines(1)
+        .textOverflow({ overflow: TextOverflow.Ellipsis })
+
+      Toggle({ type: ToggleType.Switch, isOn: this.balanceConfig.enabled })
+        .selectedColor(this.themePrimary)
+        .onChange((isOn: boolean) => {
+          this.updateBalanceEnabled(isOn)
+        })
+    }
+    .width('100%')
+
+    if (this.balanceConfig.enabled) {
+      this.BalanceInput($r('app.string.balance_config_url'),
+        $r('app.string.balance_config_url_placeholder'), this.balanceConfig.url, 'url')
+      this.BalanceInput($r('app.string.balance_config_api_path'),
+        $r('app.string.balance_config_api_path_placeholder'), this.balanceConfig.apiPath, 'apiPath')
+      this.BalanceInput($r('app.string.balance_config_balance_path'),
+        $r('app.string.balance_config_balance_path_placeholder'), this.balanceConfig.balanceJsonPath, 'balanceJsonPath')
+      this.BalanceInput($r('app.string.balance_config_currency'),
+        $r('app.string.balance_config_currency_placeholder'), this.balanceConfig.currency, 'currency')
+      this.BalanceInput($r('app.string.balance_config_currency_path'),
+        $r('app.string.balance_config_currency_path_placeholder'), this.balanceConfig.currencyJsonPath, 'currencyJsonPath')
+    }
+  }
+  .width('100%')
+  .padding({ left: 16, right: 16, bottom: 16 })
+}
+
+// 单个余额配置输入项；field 指定写入 balanceConfig 的哪个字段
+@Builder
+BalanceInput(label: Resource, placeholder: Resource, value: string, field: string) {
+  Column({ space: 6 }) {
+    Text(label)
+      .fontSize(12)
+      .fontColor($r('app.color.text_tertiary'))
+      .width('100%')
+
+    TextInput({ text: value, placeholder: placeholder })
+      .fontSize(14)
+      .fontColor($r('app.color.text_primary'))
+      .backgroundColor(getAppUiState().themeBackground)
+      .borderRadius(8)
+      .height(44)
+      .width('100%')
+      .padding({ left: 12, right: 12 })
+      .onChange((v: string) => {
+        this.updateBalanceField(field, v)
+      })
+  }
+  .width('100%')
 }
 
 @Builder

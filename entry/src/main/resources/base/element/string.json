@@ -97,6 +97,62 @@
       "value": "Microphone permission denied"
     },
     {
+      "name": "balance_query",
+      "value": "Balance"
+    },
+    {
+      "name": "balance_query_empty",
+      "value": "No provider has balance query enabled. Enable it in the provider's config."
+    },
+    {
+      "name": "balance_query_failed",
+      "value": "Query failed"
+    },
+    {
+      "name": "balance_config_title",
+      "value": "Balance Query"
+    },
+    {
+      "name": "balance_config_url",
+      "value": "Query URL (defaults to Base URL)"
+    },
+    {
+      "name": "balance_config_url_placeholder",
+      "value": "Blank uses the provider Base URL"
+    },
+    {
+      "name": "balance_config_api_path",
+      "value": "API Path"
+    },
+    {
+      "name": "balance_config_api_path_placeholder",
+      "value": "Blank defaults to /user/balance"
+    },
+    {
+      "name": "balance_config_balance_path",
+      "value": "Balance JSON Path"
+    },
+    {
+      "name": "balance_config_balance_path_placeholder",
+      "value": "Blank defaults to balance_infos[0].total_balance"
+    },
+    {
+      "name": "balance_config_currency",
+      "value": "Currency (fixed text)"
+    },
+    {
+      "name": "balance_config_currency_placeholder",
+      "value": "Optional, e.g. CNY"
+    },
+    {
+      "name": "balance_config_currency_path",
+      "value": "Currency JSON Path (preferred)"
+    },
+    {
+      "name": "balance_config_currency_path_placeholder",
+      "value": "Blank defaults to balance_infos[0].currency"
+    },
+    {
       "name": "new_chat",
       "value": "New Chat"
     },

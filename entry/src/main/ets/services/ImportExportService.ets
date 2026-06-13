@@ -109,6 +109,7 @@ export interface ProviderExportData {
   textIcon: string
   textIconBgColor: string
   customImagePath: string
+  balanceConfigJson?: string
 }
 
 export interface AssistantExportData {
@@ -440,7 +441,8 @@ export class ImportExportService {
         iconType: p.iconType,
         textIcon: p.textIcon,
         textIconBgColor: p.textIconBgColor,
-        customImagePath: p.customImagePath
+        customImagePath: p.customImagePath,
+        balanceConfigJson: p.balanceConfigJson
       }
       providers.push(providerData)
     }
@@ -1204,6 +1206,7 @@ export class ImportExportService {
     provider.textIcon = providerData.textIcon
     provider.textIconBgColor = providerData.textIconBgColor
     provider.customImagePath = providerData.customImagePath
+    provider.balanceConfigJson = providerData.balanceConfigJson !== undefined ? providerData.balanceConfigJson : ''
     provider.models = models
 
     // 保存到数据库

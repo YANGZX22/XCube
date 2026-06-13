@@ -289,6 +289,7 @@ export class ProviderViewModel {
       ? OpenAITransport.RESPONSES
       : OpenAITransport.CHAT_COMPLETIONS
     provider.customHeadersJson = config.customHeadersJson !== undefined ? config.customHeadersJson : ''
+    provider.balanceConfigJson = config.balanceConfigJson !== undefined ? config.balanceConfigJson : ''
 
     // 设置图标类型相关字段
     provider.iconType = (config.iconType !== undefined && config.iconType !== '') ? config.iconType as ProviderIconType : ProviderIconType.SVG

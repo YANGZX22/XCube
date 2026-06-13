@@ -97,6 +97,62 @@
       "value": "麦克风权限被拒绝"
     },
     {
+      "name": "balance_query",
+      "value": "余额"
+    },
+    {
+      "name": "balance_query_empty",
+      "value": "暂无已开启余额查询的服务商，可在服务商配置中开启。"
+    },
+    {
+      "name": "balance_query_failed",
+      "value": "查询失败"
+    },
+    {
+      "name": "balance_config_title",
+      "value": "余额查询"
+    },
+    {
+      "name": "balance_config_url",
+      "value": "查询地址（留空用 Base URL）"
+    },
+    {
+      "name": "balance_config_url_placeholder",
+      "value": "留空默认使用服务商 Base URL"
+    },
+    {
+      "name": "balance_config_api_path",
+      "value": "API 路径"
+    },
+    {
+      "name": "balance_config_api_path_placeholder",
+      "value": "留空默认 /user/balance"
+    },
+    {
+      "name": "balance_config_balance_path",
+      "value": "余额 JSON 路径"
+    },
+    {
+      "name": "balance_config_balance_path_placeholder",
+      "value": "留空默认 balance_infos[0].total_balance"
+    },
+    {
+      "name": "balance_config_currency",
+      "value": "币种（固定文本）"
+    },
+    {
+      "name": "balance_config_currency_placeholder",
+      "value": "可留空，如 CNY"
+    },
+    {
+      "name": "balance_config_currency_path",
+      "value": "币种 JSON 路径（优先）"
+    },
+    {
+      "name": "balance_config_currency_path_placeholder",
+      "value": "留空默认 balance_infos[0].currency"
+    },
+    {
       "name": "new_chat",
       "value": "新建对话"
     },

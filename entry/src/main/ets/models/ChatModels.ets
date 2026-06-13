@@ -757,6 +757,8 @@ export class ModelProvider {
   @Trace textIcon: string = ''
   @Trace textIconBgColor: string = ''
   @Trace customImagePath: string = ''
+  // 余额查询配置（JSON 字符串，结构见 ProviderBalanceService.ProviderBalanceConfig）
+  @Trace balanceConfigJson: string = ''
 
   constructor(
     id: string,
@@ -790,6 +792,7 @@ export class ModelProvider {
     this.textIcon = ''
     this.textIconBgColor = ''
     this.customImagePath = ''
+    this.balanceConfigJson = ''
   }
 }
 

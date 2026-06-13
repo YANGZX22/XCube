@@ -308,6 +308,7 @@ export class DatabaseService {
       await this.addOpenAITransportColumnIfNeeded()
       await this.addProviderCustomHeadersColumnIfNeeded()
       await this.addProviderRequiresApiKeyColumnIfNeeded()
+      await this.addProviderBalanceConfigColumnIfNeeded()
       // 尝试添加同步相关字段（为 WebDAV 同步预留）
       await this.addSyncColumnsIfNeeded()
       // 尝试添加会话元信息字段（用于会话列表增强）
@@ -498,6 +499,18 @@ export class DatabaseService {
       await this.rdbStore.executeSql(`ALTER TABLE ${TableNames.PROVIDERS} ADD COLUMN api_path TEXT DEFAULT ''`)
     } catch (error) {
       console.info('DatabaseService', 'api_path column may already exist')
+    }
+  }
+
+  // 添加 balance_config_json 字段（用于服务商余额查询配置）
+  private async addProviderBalanceConfigColumnIfNeeded(): Promise<void> {
+    if (this.rdbStore === null) {
+      return
+    }
+    try {
+      await this.rdbStore.executeSql(`ALTER TABLE ${TableNames.PROVIDERS} ADD COLUMN balance_config_json TEXT DEFAULT ''`)
+    } catch (error) {
+      console.info('DatabaseService', 'balance_config_json column may already exist')
     }
   }
 
@@ -2108,7 +2121,8 @@ export class DatabaseService {
       icon_type: provider.iconType,
       text_icon: provider.textIcon,
       text_icon_bg_color: provider.textIconBgColor,
-      custom_image_path: provider.customImagePath
+      custom_image_path: provider.customImagePath,
+      balance_config_json: provider.balanceConfigJson
     }
 
     try {
@@ -2229,6 +2243,12 @@ export class DatabaseService {
         } catch (e) {
           requiresApiKey = true
         }
+        let balanceConfigJson = ''
+        try {
+          balanceConfigJson = resultSet.getString(resultSet.getColumnIndex('balance_config_json'))
+        } catch (e) {
+          balanceConfigJson = ''
+        }
 
         const config: ProviderConfig = {
           id: resultSet.getString(resultSet.getColumnIndex('id')),
@@ -2250,7 +2270,8 @@ export class DatabaseService {
           iconType: iconType,
           textIcon: textIcon,
           textIconBgColor: textIconBgColor,
-          customImagePath: customImagePath
+          customImagePath: customImagePath,
+          balanceConfigJson: balanceConfigJson
         }
         providers.push(config)
       }
@@ -2808,6 +2829,7 @@ export interface ProviderConfig {
   textIcon: string    // 文字图标内容
   textIconBgColor: string  // 文字图标背景色
   customImagePath: string  // 自定义图片路径
+  balanceConfigJson: string  // 余额查询配置 JSON
 }
 
 // 导出单例实例获取方法

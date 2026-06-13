@@ -25,8 +25,10 @@ import { ThemeMode, AppLanguage, PreferenceKeys } from '../services/PreferencesS
 import { dismissActiveSnackBarOnBack, showSnackBar, SnackBarDisplayOptions, SnackBarTone } from '../utils/ToastUtil'
 import { MultiSelectToolbar } from '../components/MultiSelectToolbar'
 import { SharePreviewSheet } from '../components/SharePreviewSheet'
+import { ProviderBalanceSheet } from '../components/ProviderBalanceSheet'
 import { ColorTheme, ThemeColorConfig } from '../models/ThemeColors'
 import { ServiceRegistry } from '../services/ServiceRegistry'
+import { BalanceResult, getProviderBalanceService, ProviderBalanceService } from '../services/ProviderBalanceService'
 import { AppStorageKeys } from '../config/AppStorageKeys'
 import { SettingsRouteName } from '../config/SettingsRouteName'
 import {
@@ -275,6 +277,10 @@ struct Index {
   // 分享预览弹窗状态
   @Local showSharePreview: boolean = false
   @Local shareMessages: ChatMessage[] = []
+  // 服务商余额查询弹窗状态
+  @Local showBalanceSheet: boolean = false
+  @Local balanceResults: BalanceResult[] = []
+  @Local balanceLoading: boolean = false
   // Settings Sheet 关闭动画期间的状态机（避免“关闭回调晚到”误关新弹窗）
   private settingsSheetClosing: boolean = false
   private pendingSettingsSheetType: SettingsSheetType = SettingsSheetType.NONE
@@ -291,6 +297,7 @@ struct Index {
   private preferencesService = ServiceRegistry.preferences()
   private assistantService = ServiceRegistry.assistant()
   private providerViewModel = ServiceRegistry.provider()
+  private providerBalanceService: ProviderBalanceService = getProviderBalanceService()
   private assistantListScroller: ListScroller = new ListScroller()
   private sessionListScroller: ListScroller = new ListScroller()
   private settingsRootScroller: Scroller = new Scroller()
@@ -299,6 +306,7 @@ struct Index {
   private handAdaptiveLoadSeq: number = 0
   private sessionLoadSeq: number = 0
   private assistantLoadSeq: number = 0
+  private balanceQuerySeq: number = 0
   private assistantAvatarStateKey: string = ''
   private appUiStateDisposers: Array<() => void> = []
   private handledAssistantAvatarRefreshAt: number = 0
@@ -669,6 +677,12 @@ struct Index {
     // 如果分享预览弹窗打开，关闭弹窗
     if (this.showSharePreview) {
       this.showSharePreview = false
+      return true
+    }
+
+    // 如果余额查询弹窗打开，关闭弹窗
+    if (this.showBalanceSheet) {
+      this.showBalanceSheet = false
       return true
     }
 
@@ -1415,6 +1429,21 @@ struct Index {
       Column()
         .width(0)
         .height(0)
+        .bindSheet($$this.showBalanceSheet, this.BalanceSheetBuilder(), {
+          height: SheetSize.FIT_CONTENT,
+          dragBar: true,
+          showClose: false,
+          backgroundColor: this.themeSurface,
+          blurStyle: BlurStyle.Thin,
+          preferType: SheetType.BOTTOM,
+          onDisappear: () => {
+            this.showBalanceSheet = false
+          }
+        })
+
+      Column()
+        .width(0)
+        .height(0)
         .bindSheet($$this.showSettingsSheet, this.SettingsSheetBuilder(), {
           height: this.getActiveSettingsSheetHeight(),
           dragBar: true,
@@ -1706,6 +1735,20 @@ struct Index {
       messages: this.shareMessages,
       onClose: () => {
         this.showSharePreview = false
+      }
+    })
+  }
+
+  @Builder
+  BalanceSheetBuilder() {
+    ProviderBalanceSheet({
+      results: this.balanceResults,
+      loading: this.balanceLoading,
+      onRefresh: () => {
+        this.refreshBalanceResults()
+      },
+      onClose: () => {
+        this.showBalanceSheet = false
       }
     })
   }
@@ -2009,6 +2052,39 @@ struct Index {
     this.setSessionFilter(this.isFavoriteFilterActive() ? SessionFilterType.ALL : SessionFilterType.FAVORITE)
   }
 
+  private openBalanceSheet(): void {
+    this.showBalanceSheet = true
+    this.refreshBalanceResults()
+  }
+
+  private async refreshBalanceResults(): Promise<void> {
+    if (this.balanceLoading) {
+      return
+    }
+
+    const querySeq = ++this.balanceQuerySeq
+    this.balanceLoading = true
+    try {
+      const providers = await this.providerViewModel.loadAllProviders()
+      const results = await this.providerBalanceService.queryAllEnabled(providers)
+      if (querySeq !== this.balanceQuerySeq) {
+        return
+      }
+      this.balanceResults = results
+    } catch (error) {
+      if (querySeq !== this.balanceQuerySeq) {
+        return
+      }
+      console.error('Index', `Failed to query provider balances: ${JSON.stringify(error)}`)
+      this.balanceResults = []
+      this.showIndexSnack($r('app.string.balance_query_failed'), 2000, SnackBarTone.ERROR)
+    } finally {
+      if (querySeq === this.balanceQuerySeq) {
+        this.balanceLoading = false
+      }
+    }
+  }
+
   private buildCompactChatTitleBarMenuIcon(symbol: Resource, color: ResourceColor): SymbolGlyphModifier {
     const icon = new SymbolGlyphModifier(symbol)
     icon.fontSize(20)
@@ -2022,6 +2098,16 @@ struct Index {
     }
 
     const menus: Array<HdsNavigationMenuItemOptions> = [
+      {
+        content: {
+          label: $r('app.string.balance_query'),
+          icon: this.buildCompactChatTitleBarMenuIcon($r('sys.symbol.creditcard'),
+            $r('app.color.text_primary')),
+          action: () => {
+            this.openBalanceSheet()
+          }
+        }
+      },
       {
         content: {
           label: $r('app.string.filter_favorite'),
