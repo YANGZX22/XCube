@@ -48,6 +48,7 @@ import { ChatMultiSelectToolbar } from '../components/chat/ChatMultiSelectToolba
 import { ChatMessageListSection } from '../components/chat/ChatMessageListSection'
 import { ChatToolPickerSheetContent } from '../components/chat/ChatToolPickerSheetContent'
 import { ChatToolExecutionApprovalSheetContent } from '../components/chat/ChatToolExecutionApprovalSheetContent'
+import { VoiceInputSheet } from '../components/VoiceInputSheet'
 import {
   ChatNavigationTitleContent,
   CHAT_NAVIGATION_TITLE_STACK_BUILDER_HEIGHT
@@ -149,6 +150,8 @@ export struct ChatPage {
   // 附件相关状态
   @Local pendingAttachments: MessageAttachment[] = []
   @Local showAttachmentPicker: boolean = false
+  // 语音输入录音浮层
+  @Local showVoiceInputSheet: boolean = false
   @Local attachmentPanelHeightVp: number = 0
   private readonly ATTACHMENT_PANEL_EXPANDED_HEIGHT: number = 84
   private attachmentOpenAutoCloseGuardUntil: number = 0
@@ -317,7 +320,7 @@ export struct ChatPage {
   private initialPromptAutoSent: boolean = false
   private forcedToolIdsOnce: string[] = []
   private currentTaskId: string = ''
-  private isSendDispatching: boolean = false
+  @Local isSendDispatching: boolean = false
   private lastHandledAlertTimestamp: number = 0
   private isPageVisible: boolean = false
   // 兜底 watcher：页面切换时可能错过一次任务完成事件，这里只负责回收发送态，不碰消息内容同步
@@ -2293,6 +2296,7 @@ export struct ChatPage {
                 this.pendingAttachments = [...value]
               },
               isSending: this.isSending,
+              isSendDispatching: this.isSendDispatching,
               isAwaitingResponse: this.calcIsAwaitingAiOutput(),
               currentModelId: this.currentModelId,
               currentProviderId: this.currentProvider?.id ?? '',
@@ -2311,6 +2315,9 @@ export struct ChatPage {
               },
               onCloseAttachmentPicker: (): void => {
                 this.closeAttachmentPanel()
+              },
+              onVoiceInput: (): void => {
+                this.showVoiceInputSheet = true
               },
               toolSelectionAvailable: shouldShowToolSelectionChipForChat(
                 this.availableChatTools.length,
@@ -2469,6 +2476,22 @@ export struct ChatPage {
             maskColor: '#66000000',
             onDisappear: () => {
               this.handleToolExecutionApprovalSheetDisappear()
+            }
+          })
+
+        Column()
+          .width(0)
+          .height(0)
+          .bindSheet($$this.showVoiceInputSheet, this.VoiceInputSheetBuilder(), {
+            height: SheetSize.FIT_CONTENT,
+            dragBar: true,
+            showClose: false,
+            backgroundColor: this.themeBackground,
+            blurStyle: BlurStyle.Thick,
+            preferType: SheetType.BOTTOM,
+            title: { title: $r('app.string.voice_input') },
+            onDisappear: () => {
+              this.showVoiceInputSheet = false
             }
           })
 
@@ -2725,6 +2748,33 @@ export struct ChatPage {
         this.handleMcpToolGroupSelectionToggle(toolIds, enabled)
       }
     })
+  }
+
+  @Builder
+  VoiceInputSheetBuilder() {
+    VoiceInputSheet({
+      onRecognized: (text: string): void => {
+        this.handleVoiceRecognized(text)
+      },
+      onClose: (): void => {
+        this.showVoiceInputSheet = false
+      }
+    })
+  }
+
+  // 语音识别结果追加到输入框末尾
+  private handleVoiceRecognized(text: string): void {
+    const trimmed = text.trim()
+    if (trimmed === '') {
+      return
+    }
+    const current = this.inputText
+    if (current === '') {
+      this.inputText = trimmed
+    } else {
+      const needsSpace = !/\s$/.test(current)
+      this.inputText = current + (needsSpace ? ' ' : '') + trimmed
+    }
   }
 
   @Builder

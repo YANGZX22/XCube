@@ -36,6 +36,7 @@ export struct ChatInputBar {
   @Param attachments: MessageAttachment[] = []
   @Event onAttachmentsChange: (value: MessageAttachment[]) => void = (_value: MessageAttachment[]): void => {}
   @Param isSending: boolean = false
+  @Param isSendDispatching: boolean = false
   // isSending 为 true 时，pause 在整个发送期都保留轻微呼吸感
   @Param isAwaitingResponse: boolean = false
   @Param currentModelId: string = ''
@@ -326,7 +327,7 @@ export struct ChatInputBar {
             if (!this.chatInputEnterKeySend) {
               return
             }
-            if (!this.isSending && this.computeHasContent()) {
+            if (!this.isSendBusy() && this.computeHasContent()) {
               this.onSend()
             }
           })
@@ -375,6 +376,8 @@ export struct ChatInputBar {
             onButtonClick: (): void => {
               if (this.isSending) {
                 this.onStop()
+              } else if (this.isSendDispatching) {
+                return
               } else {
                 if (!this.computeHasContent()) {
                   return
@@ -547,6 +550,10 @@ export struct ChatInputBar {
     return this.inputText.trim() !== '' || this.attachments.length > 0
   }
 
+  private isSendBusy(): boolean {
+    return this.isSending || this.isSendDispatching
+  }
+
   private getSendButtonSymbol(): Resource {
     if (this.isSending) {
       return $r('sys.symbol.pause')
@@ -565,10 +572,10 @@ export struct ChatInputBar {
 
   @Monitor('inputText', 'attachments')
   onInputOrAttachmentsChanged(): void {
-    if (!this.isSending) {
+    if (!this.isSendBusy()) {
       this.onComposerContentChanged()
     }
-    if (this.isSending) {
+    if (this.isSendBusy()) {
       return
     }
 
@@ -590,6 +597,13 @@ export struct ChatInputBar {
     this.animateSendButton()
   }
 
+  @Monitor('isSendDispatching')
+  onSendDispatchingChanged(): void {
+    this.iconTrigger++
+    this.updateBreathing()
+    this.animateSendButton()
+  }
+
   @Monitor('isAttachmentPanelOpen')
   onAttachmentPanelOpenChanged(): void {
     this.attachIconTrigger++
@@ -601,7 +615,7 @@ export struct ChatInputBar {
       duration: 200,
       curve: Curve.EaseOut
     }, () => {
-      this.sendBtnScale = this.isSending ? 0.9 : 1
+      this.sendBtnScale = this.isSendBusy() ? 0.9 : 1
       this.sendBtnRotation = 0
     })
   }
@@ -613,7 +627,7 @@ export struct ChatInputBar {
   }
 
   private updateBreathing(): void {
-    if (this.isSending) {
+    if (this.isSendBusy()) {
       this.startBreathing()
       return
     }

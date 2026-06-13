@@ -29,6 +29,9 @@ export struct AttachmentPicker {
   }
   @Event onClose: () => void = () => {
   }
+  // 点击「语音输入」回调（由父组件打开录音浮层）
+  @Event onVoiceInput: () => void = () => {
+  }
 
   private get themePrimary(): string {
     return getAppUiState().themePrimary
@@ -58,6 +61,11 @@ export struct AttachmentPicker {
 
         this.OptionButton($r('sys.symbol.paperclip'), '上传文件', () => {
           this.openFilePicker()
+        })
+
+        this.OptionButton($r('sys.symbol.mic'), '语音输入', () => {
+          this.onClose()
+          this.onVoiceInput()
         })
       }
       .width('100%')
@@ -89,7 +97,7 @@ export struct AttachmentPicker {
   }
 
   private getOptionButtonWidth(): number {
-    return 86
+    return 76
   }
 
   private getOptionButtonHeight(): number {

@@ -24,3 +24,8 @@ docs/appgallery
 
 # MCP 配置含本机绝对路径(D:\..., C:\Program Files\...)
 .mcp.json
+
+# 语音识别模型文件（体积大，不入库；构建前需手动放入 rawfile）
+# 下载: https://github.com/k2-fsa/sherpa-onnx/releases/download/asr-models/sherpa-onnx-sense-voice-zh-en-ja-ko-yue-2024-07-17.tar.bz2
+**/rawfile/sherpa-onnx-sense-voice-*/
+*.onnx

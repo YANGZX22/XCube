@@ -12,6 +12,7 @@ export struct ChatInputAreaSection {
   @Param attachments: MessageAttachment[] = []
   @Event onAttachmentsChange: (value: MessageAttachment[]) => void = (_value: MessageAttachment[]): void => {}
   @Param isSending: boolean = false
+  @Param isSendDispatching: boolean = false
   @Param isAwaitingResponse: boolean = false
   @Param currentModelId: string = ''
   @Param currentProviderId: string = ''
@@ -45,6 +46,7 @@ export struct ChatInputAreaSection {
   @Event onSelectAttachments: (attachments: MessageAttachment[]) => void =
     (_attachments: MessageAttachment[]): void => {}
   @Event onCloseAttachmentPicker: () => void = (): void => {}
+  @Event onVoiceInput: () => void = (): void => {}
   @Event onInputFocus: () => void = () => {}
   @Event onInputBlur: () => void = () => {}
   @Event onComposerContentChanged: () => void = () => {}
@@ -100,6 +102,7 @@ export struct ChatInputAreaSection {
             this.onAttachmentsChange(value)
           },
           isSending: this.isSending,
+          isSendDispatching: this.isSendDispatching,
           isAwaitingResponse: this.isAwaitingResponse,
           currentModelId: this.currentModelId,
           currentProviderId: this.currentProviderId,
@@ -149,6 +152,9 @@ export struct ChatInputAreaSection {
             },
             onClose: (): void => {
               this.onCloseAttachmentPicker()
+            },
+            onVoiceInput: (): void => {
+              this.onVoiceInput()
             }
           })
         }

@@ -65,6 +65,38 @@
       "value": "This app needs gesture detection permission to adapt button positions based on holding hand."
     },
     {
+      "name": "permission_microphone_reason",
+      "value": "This app needs microphone access to convert your speech to text for voice input."
+    },
+    {
+      "name": "voice_input",
+      "value": "Voice Input"
+    },
+    {
+      "name": "voice_input_hold_to_talk",
+      "value": "Hold to talk"
+    },
+    {
+      "name": "voice_input_listening",
+      "value": "Listening…"
+    },
+    {
+      "name": "voice_input_recognizing",
+      "value": "Recognizing…"
+    },
+    {
+      "name": "voice_input_release_to_finish",
+      "value": "Release to finish"
+    },
+    {
+      "name": "voice_input_loading_model",
+      "value": "Loading voice model…"
+    },
+    {
+      "name": "voice_input_no_permission",
+      "value": "Microphone permission denied"
+    },
+    {
       "name": "new_chat",
       "value": "New Chat"
     },
