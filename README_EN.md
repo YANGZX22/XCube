@@ -6,7 +6,7 @@
 
 <p align="center">
   A native AI chat client for HarmonyOS 6 (API 23).<br/>
-  One app, 15+ providers, web search, MCP, and ArkTS-native UX.
+  One app, 15+ providers, web search, built-in tools, MCP, and ArkTS-native UX.
 </p>
 
 <p align="center">
@@ -27,6 +27,7 @@
 - Polished UI with dynamic blur, 8 color themes, advanced materials, and glass-like surfaces
 - Adaptive layouts for phones, tablets, and large screens
 - Highly customizable providers — add any OpenAI / Anthropic / Gemini compatible service in seconds
+- Built-in tools for web search, Python sandboxing, chart generation, and calendar workflows
 - The tools center can connect to remote streamable MCP servers for expandable tool capability
 - Simple and intuitive — configure your API key and start chatting
 - Home screen widget for quick access
@@ -53,6 +54,18 @@ Connect to 15+ AI providers out of the box. Bring your own API key, pick a model
 ### Tools, web search, and MCP
 
 Built-in web search supports Bocha, Bing(local), Tavily, and Exa. When a model supports function calling, it can use tools directly, and the tools center can also connect to remote streamable MCP servers.
+
+### Built-in intelligent tools
+
+ChatCube includes local tools that capable models can call directly from a conversation:
+
+- **Web search**: fetch real-time information with a search budget and user-approved extra searches.
+- **Python sandbox**: run necessary Python code in a sandboxed environment for calculation, data processing, and intermediate reasoning.
+- **Math charts**: generate VChart specs for line, bar, area, scatter/bubble, pie, donut, rose, funnel, word cloud, Sankey, and dual-axis/combo charts.
+- **Calendar read/write**: read a user-confirmed date range or create new schedule events; users can adjust range, limits, location, and note visibility to protect privacy.
+- **Ask user**: let the model ask for clarification through a dedicated card when guessing would be risky.
+
+Tool calls follow permission and confirmation flows. Operations involving system data or writes show an approval UI first; if the user refuses, the model continues with the information already available.
 
 ### Markdown & beyond
 
