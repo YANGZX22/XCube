@@ -1,23 +1,25 @@
-export function withColorAlpha(color: string, alphaHex: string): string {
+export function withColorAlpha(color: string | null | undefined, alphaHex: string | null | undefined): string {
+  const fallbackColor = 'rgba(0, 0, 0, 0)'
+  const safeColor = typeof color === 'string' && color !== '' ? color : fallbackColor
   const normalizedAlpha = normalizeAlphaHex(alphaHex)
-  if (!isHexColor(color) || normalizedAlpha === '') {
-    return color
+  if (!isHexColor(safeColor) || normalizedAlpha === '') {
+    return safeColor
   }
-  if (color.length === 4) {
-    return '#' + normalizedAlpha + color.charAt(1) + color.charAt(1) + color.charAt(2) + color.charAt(2) +
-      color.charAt(3) + color.charAt(3)
+  if (safeColor.length === 4) {
+    return '#' + normalizedAlpha + safeColor.charAt(1) + safeColor.charAt(1) + safeColor.charAt(2) + safeColor.charAt(2) +
+      safeColor.charAt(3) + safeColor.charAt(3)
   }
-  if (color.length === 7) {
-    return '#' + normalizedAlpha + color.substring(1)
+  if (safeColor.length === 7) {
+    return '#' + normalizedAlpha + safeColor.substring(1)
   }
-  if (color.length === 9) {
-    return '#' + normalizedAlpha + color.substring(3)
+  if (safeColor.length === 9) {
+    return '#' + normalizedAlpha + safeColor.substring(3)
   }
-  return color
+  return safeColor
 }
 
-function normalizeAlphaHex(alphaHex: string): string {
-  let value = alphaHex
+function normalizeAlphaHex(alphaHex: string | null | undefined): string {
+  let value = typeof alphaHex === 'string' ? alphaHex : ''
   if (value.startsWith('#')) {
     value = value.substring(1)
   }
@@ -31,6 +33,9 @@ function normalizeAlphaHex(alphaHex: string): string {
 }
 
 function isHexColor(color: string): boolean {
+  if (color === '') {
+    return false
+  }
   if (!color.startsWith('#')) {
     return false
   }

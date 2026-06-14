@@ -7,14 +7,19 @@ import {
   ToolPermissionLevel,
   ToolSourceType
 } from '../models/ChatModels'
+import { util } from '@kit.ArkTS'
 import { ToolExecutor, RegisteredTool, getToolRegistry } from '../services/ToolRegistry'
 import { getWebSearchService, SearchResult, WebSearchResult } from '../services/WebSearchService'
 import { cleanSearchQuery } from '../utils/SearchQueryUtils'
 import { getCalendarWriteService, ReadScheduleRequest, WriteScheduleRequest } from '../services/CalendarWriteService'
+import { getPythonSandboxService, PythonSandboxRequest } from '../services/PythonSandboxService'
+import { getPyodideRuntimeService } from '../services/PyodideRuntimeService'
 
 export const ASK_USER_TOOL_ID: string = 'ask_user'
 export const READ_SCHEDULE_TOOL_ID: string = 'read_schedule'
 export const WRITE_SCHEDULE_TOOL_ID: string = 'write_schedule'
+export const MATH_CHART_TOOL_ID: string = 'math_chart'
+export const PYTHON_SANDBOX_TOOL_ID: string = 'python_sandbox'
 
 // web_search 工具参数接口
 interface WebSearchArgs {
@@ -54,6 +59,39 @@ interface ReadScheduleArgs {
   includeDescription?: boolean
   include_location?: boolean
   includeLocation?: boolean
+}
+
+interface MathChartSeriesArgs {
+  name?: string
+  values?: number[]
+  color?: string
+}
+
+interface MathChartLinkArgs {
+  source?: string
+  target?: string
+  value?: number | string
+}
+
+interface MathChartArgs {
+  chart_type?: string
+  title?: string
+  x_label?: string
+  y_label?: string
+  labels?: string[]
+  values?: number[]
+  x_values?: number[]
+  y_values?: number[]
+  sizes?: number[]
+  colors?: string[]
+  words?: string[]
+  sources?: string[]
+  targets?: string[]
+  links?: MathChartLinkArgs[]
+  series?: MathChartSeriesArgs[]
+  width?: number
+  height?: number
+  show_points?: boolean
 }
 
 // 搜索结果项接口（用于格式化输出）
@@ -98,9 +136,855 @@ class ErrorOutput {
   }
 }
 
+class MathChartSeriesStats {
+  name: string = ''
+  count: number = 0
+  min: number = 0
+  max: number = 0
+  sum: number = 0
+  mean: number = 0
+  median: number = 0
+  stddev: number = 0
+  slope: number = 0
+  intercept: number = 0
+
+  constructor(
+    name: string,
+    count: number,
+    min: number,
+    max: number,
+    sum: number,
+    mean: number,
+    median: number,
+    stddev: number,
+    slope: number,
+    intercept: number
+  ) {
+    this.name = name
+    this.count = count
+    this.min = min
+    this.max = max
+    this.sum = sum
+    this.mean = mean
+    this.median = median
+    this.stddev = stddev
+    this.slope = slope
+    this.intercept = intercept
+  }
+}
+
+class MathChartOutput {
+  ok: boolean = true
+  chartType: string = ''
+  summary: string = ''
+  stats: MathChartSeriesStats[] = []
+  // VChart spec 的 JSON 字符串，由消息侧的 VChartCard 解析并实时渲染
+  chart_spec: string = ''
+
+  constructor(chartType: string, summary: string, stats: MathChartSeriesStats[], chartSpec: string) {
+    this.chartType = chartType
+    this.summary = summary
+    this.stats = stats
+    this.chart_spec = chartSpec
+  }
+}
+
 class AskUserExecutor implements ToolExecutor {
   async execute(_args: string): Promise<string> {
     return JSON.stringify(new ErrorOutput('ask_user should be resolved by the user, not executed directly'))
+  }
+}
+
+class PythonSandboxExecutor implements ToolExecutor {
+  async execute(args: string): Promise<string> {
+    try {
+      const params = JSON.parse(args) as PythonSandboxRequest
+      const code = params.code ?? ''
+      // 优先走 Pyodide（真正的 CPython 运行时）
+      const pyResult = await getPyodideRuntimeService().run(code, params.variables)
+      if (!pyResult.fallback) {
+        return JSON.stringify(pyResult)
+      }
+      // 运行时未就绪/加载失败/超时：降级到本地受限解释器
+      const fallback = getPythonSandboxService().run(params)
+      fallback.warnings.unshift(`Python 运行时未就绪（${pyResult.error}），已用受限子集执行；完整能力请确保联网后重试。`)
+      return JSON.stringify(fallback)
+    } catch (error) {
+      return JSON.stringify(new ErrorOutput(`Python 执行失败: ${this.stringifyError(error)}`))
+    }
+  }
+
+  private stringifyError(error: Object): string {
+    if (error instanceof Error) {
+      return error.message
+    }
+    return JSON.stringify(error)
+  }
+}
+
+class MathChartSeriesRuntime {
+  name: string = ''
+  values: number[] = []
+  color: string = ''
+
+  constructor(name: string, values: number[], color: string) {
+    this.name = name
+    this.values = values
+    this.color = color
+  }
+}
+
+class MathChartDataPoint {
+  category: string = ''
+  series: string = ''
+  value: number = 0
+
+  constructor(category: string, series: string, value: number) {
+    this.category = category
+    this.series = series
+    this.value = value
+  }
+}
+
+class MathChartScatterPoint {
+  x: number = 0
+  y: number = 0
+  size: number = 8
+  series: string = ''
+  category: string = ''
+
+  constructor(x: number, y: number, size: number, series: string, category: string) {
+    this.x = x
+    this.y = y
+    this.size = size
+    this.series = series
+    this.category = category
+  }
+}
+
+class MathChartFlowPoint {
+  source: string = ''
+  target: string = ''
+  value: number = 0
+
+  constructor(source: string, target: string, value: number) {
+    this.source = source
+    this.target = target
+    this.value = value
+  }
+}
+
+class MathChartSankeyNode {
+  name: string = ''
+
+  constructor(name: string) {
+    this.name = name
+  }
+}
+
+class MathChartSankeyGraph {
+  nodes: MathChartSankeyNode[] = []
+  links: MathChartFlowPoint[] = []
+
+  constructor(nodes: MathChartSankeyNode[], links: MathChartFlowPoint[]) {
+    this.nodes = nodes
+    this.links = links
+  }
+}
+
+class MathChartVChartData {
+  values: Object[] = []
+
+  constructor(values: Object[]) {
+    this.values = values
+  }
+}
+
+class MathChartVChartTitle {
+  visible: boolean = true
+  text: string = ''
+
+  constructor(text: string) {
+    this.text = text
+  }
+}
+
+class MathChartVChartLegend {
+  visible: boolean = false
+  position: string = 'middle'
+  orient: string = 'bottom'
+
+  constructor(visible: boolean) {
+    this.visible = visible
+  }
+}
+
+class MathChartVChartAxisTitle {
+  visible: boolean = false
+  text: string = ''
+
+  constructor(text: string) {
+    this.visible = text !== ''
+    this.text = text
+  }
+}
+
+class MathChartVChartAxis {
+  orient: string = ''
+  title: MathChartVChartAxisTitle = new MathChartVChartAxisTitle('')
+
+  constructor(orient: string, title: string) {
+    this.orient = orient
+    this.title = new MathChartVChartAxisTitle(title)
+  }
+}
+
+class MathChartVChartPoint {
+  visible: boolean = true
+
+  constructor(visible: boolean) {
+    this.visible = visible
+  }
+}
+
+class MathChartVChartTooltip {
+  visible: boolean = true
+}
+
+class MathChartCommonSeriesSpec {
+  type: string = ''
+  xField: string = 'category'
+  yField: string = 'value'
+  seriesField: string = 'series'
+
+  constructor(type: string) {
+    this.type = type
+  }
+}
+
+class MathChartVChartSpec {
+  type: string = 'line'
+  width: number = 720
+  height: number = 440
+  data: MathChartVChartData = new MathChartVChartData([])
+  xField: string | string[] = 'category'
+  yField: string = 'value'
+  seriesField: string = 'series'
+  color: string[] = []
+  title: MathChartVChartTitle = new MathChartVChartTitle('')
+  legends: MathChartVChartLegend = new MathChartVChartLegend(false)
+  axes: MathChartVChartAxis[] = []
+  point: MathChartVChartPoint = new MathChartVChartPoint(true)
+  tooltip: MathChartVChartTooltip = new MathChartVChartTooltip()
+
+  constructor(
+    type: string,
+    width: number,
+    height: number,
+    data: MathChartVChartData,
+    xField: string | string[],
+    color: string[],
+    title: MathChartVChartTitle,
+    legends: MathChartVChartLegend,
+    axes: MathChartVChartAxis[],
+    point: MathChartVChartPoint
+  ) {
+    this.type = type
+    this.width = width
+    this.height = height
+    this.data = data
+    this.xField = xField
+    this.color = color
+    this.title = title
+    this.legends = legends
+    this.axes = axes
+    this.point = point
+  }
+}
+
+class MathChartExecutor implements ToolExecutor {
+  private readonly palette: string[] = ['#2563EB', '#E11D48', '#059669', '#D97706', '#7C3AED', '#0891B2']
+
+  async execute(args: string): Promise<string> {
+    try {
+      const params = JSON.parse(args) as MathChartArgs
+      const chartType = this.normalizeChartType(params.chart_type)
+      const series = this.resolveSeries(params)
+      if (series.length === 0 || series[0].values.length === 0) {
+        return JSON.stringify(new ErrorOutput('缺少可分析的数值数据。请传入 values 或 series[].values。'))
+      }
+      const labels = this.resolveLabels(params.labels, series[0].values.length)
+      const title = this.resolveString(params.title, this.getDefaultTitle(chartType))
+      const stats = this.buildStats(series)
+      const summary = this.buildSummary(chartType, stats)
+      const width = this.clampInteger(params.width, 720, 360, 1200)
+      const height = this.clampInteger(params.height, 440, 260, 900)
+      const spec = this.buildVChartSpec(chartType, title, this.resolveString(params.x_label),
+        this.resolveString(params.y_label), labels, series, width, height, params.show_points !== false, params)
+      return JSON.stringify(new MathChartOutput(chartType, summary, stats, JSON.stringify(spec)))
+    } catch (error) {
+      return JSON.stringify(new ErrorOutput(`数学分析/绘图失败: ${this.stringifyError(error)}`))
+    }
+  }
+
+  private normalizeChartType(value: string | undefined): string {
+    const normalized = (value ?? 'line').trim().toLowerCase()
+    if (normalized === 'bar' || normalized === 'column' || normalized === '柱状图' || normalized === '条形图') {
+      return 'bar'
+    }
+    if (normalized === 'area' || normalized === 'area_chart' || normalized === '面积图') {
+      return 'area'
+    }
+    if (normalized === 'scatter' || normalized === 'bubble' || normalized === '散点图' || normalized === '气泡图') {
+      return 'scatter'
+    }
+    if (normalized === 'pie' || normalized === '饼图') {
+      return 'pie'
+    }
+    if (normalized === 'donut' || normalized === 'doughnut' || normalized === '环形图') {
+      return 'donut'
+    }
+    if (normalized === 'rose' || normalized === '玫瑰图' || normalized === '南丁格尔玫瑰图') {
+      return 'rose'
+    }
+    if (normalized === 'funnel' || normalized === '漏斗图') {
+      return 'funnel'
+    }
+    if (normalized === 'wordcloud' || normalized === 'word_cloud' || normalized === '词云图' || normalized === '词云') {
+      return 'wordCloud'
+    }
+    if (normalized === 'sankey' || normalized === '桑基图') {
+      return 'sankey'
+    }
+    if (normalized === 'dualaxis' || normalized === 'dual_axis' || normalized === 'combo' || normalized === '双轴图' || normalized === '组合图') {
+      return 'dualAxis'
+    }
+    return 'line'
+  }
+
+  private resolveSeries(params: MathChartArgs): MathChartSeriesRuntime[] {
+    const result: MathChartSeriesRuntime[] = []
+    if (params.series !== undefined && Array.isArray(params.series)) {
+      for (let i = 0; i < params.series.length; i++) {
+        const item = params.series[i]
+        const values = this.normalizeValues(item.values)
+        if (values.length > 0) {
+          result.push(new MathChartSeriesRuntime(
+            this.resolveString(item.name, `系列 ${i + 1}`),
+            values,
+            this.resolveColor(item.color, i)
+          ))
+        }
+      }
+    }
+    const singleValues = this.normalizeValues(params.values)
+    if (result.length === 0 && singleValues.length > 0) {
+      result.push(new MathChartSeriesRuntime('数据', singleValues, this.palette[0]))
+    }
+    const yValues = this.normalizeValues(params.y_values)
+    if (result.length === 0 && yValues.length > 0) {
+      result.push(new MathChartSeriesRuntime('数据', yValues, this.palette[0]))
+    }
+    const linkValues = this.normalizeLinkValues(params.links)
+    if (result.length === 0 && linkValues.length > 0) {
+      result.push(new MathChartSeriesRuntime('流量', linkValues, this.palette[0]))
+    }
+    return result
+  }
+
+  private normalizeLinkValues(links: MathChartLinkArgs[] | undefined): number[] {
+    const result: number[] = []
+    if (links === undefined || !Array.isArray(links)) {
+      return result
+    }
+    for (let i = 0; i < links.length; i++) {
+      const value = Number(links[i].value)
+      if (Number.isFinite(value)) {
+        result.push(value)
+      }
+    }
+    return result
+  }
+
+  private normalizeValues(values: number[] | undefined): number[] {
+    const result: number[] = []
+    if (values === undefined || !Array.isArray(values)) {
+      return result
+    }
+    for (let i = 0; i < values.length; i++) {
+      const value = Number(values[i])
+      if (Number.isFinite(value)) {
+        result.push(value)
+      }
+    }
+    return result
+  }
+
+  private resolveLabels(labels: string[] | undefined, count: number): string[] {
+    const result: string[] = []
+    if (labels !== undefined && Array.isArray(labels)) {
+      for (let i = 0; i < labels.length && i < count; i++) {
+        result.push(`${labels[i]}`)
+      }
+    }
+    while (result.length < count) {
+      result.push(`${result.length + 1}`)
+    }
+    return result
+  }
+
+  private buildVChartSpec(
+    chartType: string,
+    title: string,
+    xLabel: string,
+    yLabel: string,
+    labels: string[],
+    series: MathChartSeriesRuntime[],
+    width: number,
+    height: number,
+    showPoints: boolean,
+    params: MathChartArgs
+  ): Record<string, Object> {
+    const values: MathChartDataPoint[] = []
+    const count = labels.length
+    const colors: string[] = []
+    for (let i = 0; i < series.length; i++) {
+      colors.push(series[i].color)
+      for (let j = 0; j < series[i].values.length && j < count; j++) {
+        values.push(new MathChartDataPoint(labels[j], series[i].name, series[i].values[j]))
+      }
+    }
+
+    if (chartType === 'scatter') {
+      return this.buildScatterSpec(title, xLabel, yLabel, labels, series, width, height, colors, params)
+    }
+    if (chartType === 'pie' || chartType === 'donut' || chartType === 'rose' || chartType === 'funnel' ||
+      chartType === 'wordCloud') {
+      return this.buildCategoryValueSpec(chartType, title, labels, series, width, height, colors, params)
+    }
+    if (chartType === 'sankey') {
+      return this.buildSankeySpec(title, series, width, height, colors, params)
+    }
+    if (chartType === 'dualAxis') {
+      return this.buildDualAxisSpec(title, xLabel, yLabel, labels, series, width, height, colors)
+    }
+
+    const axes: MathChartVChartAxis[] = [
+      new MathChartVChartAxis('bottom', xLabel),
+      new MathChartVChartAxis('left', yLabel)
+    ]
+    const xField: string | string[] = chartType === 'bar' && series.length > 1 ? ['category', 'series'] : 'category'
+    const spec = this.createBaseSpec(chartType, width, height, title, colors)
+    spec['data'] = new MathChartVChartData(values)
+    spec['xField'] = xField
+    spec['yField'] = 'value'
+    spec['seriesField'] = 'series'
+    spec['legends'] = new MathChartVChartLegend(series.length > 1)
+    spec['axes'] = axes
+    spec['point'] = new MathChartVChartPoint(chartType === 'line' && showPoints)
+    if (chartType === 'area' && series.length > 1) {
+      spec['stack'] = true
+    }
+    return spec
+  }
+
+  private buildScatterSpec(
+    title: string,
+    xLabel: string,
+    yLabel: string,
+    labels: string[],
+    series: MathChartSeriesRuntime[],
+    width: number,
+    height: number,
+    colors: string[],
+    params: MathChartArgs
+  ): Record<string, Object> {
+    const points: Object[] = []
+    const xValues = this.normalizeValues(params.x_values)
+    const sizes = this.normalizeValues(params.sizes)
+    const count = series[0].values.length
+    for (let i = 0; i < count; i++) {
+      points.push(new MathChartScatterPoint(
+        i < xValues.length ? xValues[i] : i + 1,
+        series[0].values[i],
+        i < sizes.length ? sizes[i] : 8,
+        series[0].name,
+        i < labels.length ? labels[i] : `${i + 1}`
+      ))
+    }
+    const spec = this.createBaseSpec('scatter', width, height, title, colors)
+    spec['data'] = new MathChartVChartData(points)
+    spec['xField'] = 'x'
+    spec['yField'] = 'y'
+    spec['sizeField'] = 'size'
+    spec['seriesField'] = 'series'
+    spec['legends'] = new MathChartVChartLegend(series.length > 1)
+    spec['axes'] = [
+      new MathChartVChartAxis('bottom', xLabel),
+      new MathChartVChartAxis('left', yLabel)
+    ]
+    return spec
+  }
+
+  private buildCategoryValueSpec(
+    chartType: string,
+    title: string,
+    labels: string[],
+    series: MathChartSeriesRuntime[],
+    width: number,
+    height: number,
+    colors: string[],
+    params: MathChartArgs
+  ): Record<string, Object> {
+    const values: Object[] = []
+    const words = params.words !== undefined && Array.isArray(params.words) ? params.words : []
+    const count = series[0].values.length
+    for (let i = 0; i < count; i++) {
+      const label = chartType === 'wordCloud' && i < words.length ? `${words[i]}` : (i < labels.length ? labels[i] : `${i + 1}`)
+      values.push(new MathChartDataPoint(label, series[0].name, series[0].values[i]))
+    }
+    const specType = chartType === 'donut' ? 'pie' : chartType
+    const spec = this.createBaseSpec(specType, width, height, title,
+      this.buildCategoryPalette(values.length, params.colors, colors))
+    spec['data'] = new MathChartVChartData(values)
+    spec['categoryField'] = 'category'
+    spec['valueField'] = 'value'
+    spec['nameField'] = 'category'
+    this.applyCategoryColorEncoding(spec)
+    spec['legends'] = new MathChartVChartLegend(chartType !== 'wordCloud')
+    if (chartType === 'donut') {
+      spec['innerRadius'] = 0.58
+      spec['outerRadius'] = 0.82
+    }
+    if (chartType === 'pie') {
+      spec['outerRadius'] = 0.82
+    }
+    if (chartType === 'rose') {
+      spec['outerRadius'] = 0.82
+    }
+    return spec
+  }
+
+  private buildSankeySpec(
+    title: string,
+    series: MathChartSeriesRuntime[],
+    width: number,
+    height: number,
+    colors: string[],
+    params: MathChartArgs
+  ): Record<string, Object> {
+    const links: MathChartFlowPoint[] = []
+    if (params.links !== undefined && Array.isArray(params.links)) {
+      for (let i = 0; i < params.links.length; i++) {
+        const source = this.resolveString(params.links[i].source)
+        const target = this.resolveString(params.links[i].target)
+        const value = Number(params.links[i].value)
+        if (source !== '' && target !== '' && Number.isFinite(value)) {
+          links.push(new MathChartFlowPoint(source, target, value))
+        }
+      }
+    }
+    if (links.length === 0) {
+      const sources = params.sources !== undefined && Array.isArray(params.sources) ? params.sources : []
+      const targets = params.targets !== undefined && Array.isArray(params.targets) ? params.targets : []
+      const count = Math.min(series[0].values.length, Math.min(sources.length, targets.length))
+      for (let i = 0; i < count; i++) {
+        links.push(new MathChartFlowPoint(`${sources[i]}`, `${targets[i]}`, series[0].values[i]))
+      }
+    }
+    const nodes = this.buildSankeyNodes(links)
+    const spec = this.createBaseSpec('sankey', width, height, title,
+      this.buildCategoryPalette(Math.max(nodes.length, links.length, 1), params.colors, colors))
+    spec['data'] = new MathChartVChartData([new MathChartSankeyGraph(nodes, links)])
+    spec['nodeKey'] = 'name'
+    spec['sourceField'] = 'source'
+    spec['targetField'] = 'target'
+    spec['valueField'] = 'value'
+    spec['legends'] = new MathChartVChartLegend(false)
+    return spec
+  }
+
+  private buildSankeyNodes(links: MathChartFlowPoint[]): MathChartSankeyNode[] {
+    const names: string[] = []
+    for (let i = 0; i < links.length; i++) {
+      if (!names.includes(links[i].source)) {
+        names.push(links[i].source)
+      }
+      if (!names.includes(links[i].target)) {
+        names.push(links[i].target)
+      }
+    }
+    const nodes: MathChartSankeyNode[] = []
+    for (let i = 0; i < names.length; i++) {
+      nodes.push(new MathChartSankeyNode(names[i]))
+    }
+    return nodes
+  }
+
+  private buildDualAxisSpec(
+    title: string,
+    xLabel: string,
+    yLabel: string,
+    labels: string[],
+    series: MathChartSeriesRuntime[],
+    width: number,
+    height: number,
+    colors: string[]
+  ): Record<string, Object> {
+    const values: MathChartDataPoint[] = []
+    const count = labels.length
+    for (let i = 0; i < series.length && i < 2; i++) {
+      for (let j = 0; j < series[i].values.length && j < count; j++) {
+        values.push(new MathChartDataPoint(labels[j], series[i].name, series[i].values[j]))
+      }
+    }
+    const spec = this.createBaseSpec('common', width, height, title, colors)
+    spec['data'] = new MathChartVChartData(values)
+    spec['seriesField'] = 'series'
+    spec['axes'] = [
+      new MathChartVChartAxis('bottom', xLabel),
+      new MathChartVChartAxis('left', yLabel),
+      new MathChartVChartAxis('right', '')
+    ]
+    spec['series'] = [
+      new MathChartCommonSeriesSpec('bar'),
+      new MathChartCommonSeriesSpec('line')
+    ]
+    spec['legends'] = new MathChartVChartLegend(true)
+    return spec
+  }
+
+  private createBaseSpec(type: string, width: number, height: number, title: string, colors: string[]): Record<string, Object> {
+    const spec = JSON.parse('{}') as Record<string, Object>
+    spec['type'] = type
+    spec['width'] = width
+    spec['height'] = height
+    spec['title'] = new MathChartVChartTitle(title)
+    spec['tooltip'] = new MathChartVChartTooltip()
+    spec['color'] = colors
+    return spec
+  }
+
+  private applyCategoryColorEncoding(spec: Record<string, Object>): void {
+    spec['seriesField'] = 'category'
+    spec['colorField'] = 'category'
+  }
+
+  private buildCategoryPalette(count: number, categoryColors: string[] | undefined, seriesColors: string[]): string[] {
+    const explicitColors = this.normalizeColors(categoryColors)
+    const result: string[] = []
+    const source = explicitColors.length > 0 ? explicitColors : (seriesColors.length > 1 ? seriesColors : this.palette)
+    for (let i = 0; i < count; i++) {
+      result.push(source[i % source.length])
+    }
+    return result
+  }
+
+  private normalizeColors(values: string[] | undefined): string[] {
+    const result: string[] = []
+    if (values === undefined || !Array.isArray(values)) {
+      return result
+    }
+    for (let i = 0; i < values.length; i++) {
+      const color = this.resolveColor(values[i], i)
+      if (color !== '') {
+        result.push(color)
+      }
+    }
+    return result
+  }
+
+  private getDefaultTitle(chartType: string): string {
+    switch (chartType) {
+      case 'bar':
+        return '柱状图'
+      case 'area':
+        return '面积图'
+      case 'scatter':
+        return '散点图'
+      case 'pie':
+        return '饼图'
+      case 'donut':
+        return '环形图'
+      case 'rose':
+        return '玫瑰图'
+      case 'funnel':
+        return '漏斗图'
+      case 'wordCloud':
+        return '词云图'
+      case 'sankey':
+        return '桑基图'
+      case 'dualAxis':
+        return '双轴图'
+      default:
+        return '折线图'
+    }
+  }
+
+  private buildLegacyVChartSpec(
+    chartType: string,
+    width: number,
+    height: number,
+    data: MathChartVChartData,
+    xField: string | string[],
+    color: string[],
+    title: MathChartVChartTitle,
+    legends: MathChartVChartLegend,
+    axes: MathChartVChartAxis[],
+    point: MathChartVChartPoint
+  ): MathChartVChartSpec {
+    return new MathChartVChartSpec(
+      chartType,
+      width,
+      height,
+      data,
+      xField,
+      color,
+      title,
+      legends,
+      axes,
+      point
+    )
+  }
+
+  private buildStats(series: MathChartSeriesRuntime[]): MathChartSeriesStats[] {
+    const result: MathChartSeriesStats[] = []
+    for (let i = 0; i < series.length; i++) {
+      const values = series[i].values.slice().sort((a, b) => a - b)
+      const count = values.length
+      const sum = series[i].values.reduce((acc, cur) => acc + cur, 0)
+      const mean = count > 0 ? sum / count : 0
+      const median = count === 0 ? 0 : (count % 2 === 1 ? values[Math.floor(count / 2)] : (values[count / 2 - 1] + values[count / 2]) / 2)
+      let variance = 0
+      for (let j = 0; j < series[i].values.length; j++) {
+        variance += Math.pow(series[i].values[j] - mean, 2)
+      }
+      variance = count > 0 ? variance / count : 0
+      const regression = this.linearRegression(series[i].values)
+      result.push(new MathChartSeriesStats(
+        series[i].name,
+        count,
+        count > 0 ? values[0] : 0,
+        count > 0 ? values[count - 1] : 0,
+        sum,
+        mean,
+        median,
+        Math.sqrt(variance),
+        regression[0],
+        regression[1]
+      ))
+    }
+    return result
+  }
+
+  private linearRegression(values: number[]): number[] {
+    const n = values.length
+    if (n <= 1) {
+      return [0, n === 1 ? values[0] : 0]
+    }
+    let sumX = 0
+    let sumY = 0
+    let sumXY = 0
+    let sumXX = 0
+    for (let i = 0; i < n; i++) {
+      const x = i + 1
+      const y = values[i]
+      sumX += x
+      sumY += y
+      sumXY += x * y
+      sumXX += x * x
+    }
+    const denominator = n * sumXX - sumX * sumX
+    const slope = denominator === 0 ? 0 : (n * sumXY - sumX * sumY) / denominator
+    const intercept = (sumY - slope * sumX) / n
+    return [slope, intercept]
+  }
+
+  private buildSummary(chartType: string, stats: MathChartSeriesStats[]): string {
+    if (stats.length === 0) {
+      return '没有可分析数据。'
+    }
+    const first = stats[0]
+    const trend = first.slope > 0 ? '整体上升' : (first.slope < 0 ? '整体下降' : '整体基本持平')
+    return `${this.getDefaultTitle(chartType)}已生成。${first.name} 共 ${first.count} 个数据点，最小值 ${this.formatNumber(first.min)}，最大值 ${this.formatNumber(first.max)}，均值 ${this.formatNumber(first.mean)}，趋势 ${trend}。`
+  }
+
+  private resolveMinMax(series: MathChartSeriesRuntime[]): number[] {
+    let min = Number.POSITIVE_INFINITY
+    let max = Number.NEGATIVE_INFINITY
+    for (let i = 0; i < series.length; i++) {
+      for (let j = 0; j < series[i].values.length; j++) {
+        min = Math.min(min, series[i].values[j])
+        max = Math.max(max, series[i].values[j])
+      }
+    }
+    if (!Number.isFinite(min) || !Number.isFinite(max)) {
+      return [0, 1]
+    }
+    if (min === max) {
+      return [min - 1, max + 1]
+    }
+    const padding = (max - min) * 0.12
+    return [Math.min(0, min - padding), max + padding]
+  }
+
+  private scaleY(value: number, minY: number, range: number, marginTop: number, plotH: number): number {
+    return marginTop + plotH - (value - minY) / range * plotH
+  }
+
+  private encodeUtf8ToBase64(value: string): string {
+    const bytes = new util.TextEncoder().encodeInto(value)
+    const helper = new util.Base64Helper()
+    return helper.encodeToStringSync(bytes)
+  }
+
+  private clampInteger(value: number | undefined, fallback: number, min: number, max: number): number {
+    if (value === undefined || !Number.isFinite(value)) {
+      return fallback
+    }
+    return Math.min(Math.max(Math.floor(value), min), max)
+  }
+
+  private resolveString(value: string | undefined, fallback: string = ''): string {
+    if (value === undefined) {
+      return fallback
+    }
+    return `${value}`.trim()
+  }
+
+  private resolveColor(value: string | undefined, index: number): string {
+    const raw = this.resolveString(value)
+    if (/^#[0-9a-fA-F]{6}$/.test(raw)) {
+      return raw
+    }
+    return this.palette[index % this.palette.length]
+  }
+
+  private truncateLabel(value: string): string {
+    return value.length > 12 ? `${value.substring(0, 12)}...` : value
+  }
+
+  private formatNumber(value: number): string {
+    if (!Number.isFinite(value)) {
+      return '0'
+    }
+    return `${Math.round(value * 1000) / 1000}`
+  }
+
+  private escapeXml(value: string): string {
+    return value
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&apos;')
+  }
+
+  private stringifyError(error: Object): string {
+    if (error instanceof Error) {
+      return error.message
+    }
+    return JSON.stringify(error)
   }
 }
 
@@ -479,6 +1363,191 @@ function createAskUserToolConfig(): ToolConfig {
   )
 }
 
+function createPythonSandboxToolDefinition(): ToolDefinition {
+  const parameters = new ToolParameters()
+  const rawSchemaJson: string = `{
+    "type": "object",
+    "properties": {
+      "code": {
+        "type": "string",
+        "description": "要执行的 Python 3 代码。支持完整 Python 3 语法（if/while/for、函数 def、类、字典、元组、f-string、列表推导式、切片、字符串方法等）与标准库（math、statistics、json、re、datetime、itertools、collections 等），以及随附的 numpy 等科学计算包（基于 Pyodide/CPython）。可用 print 输出，最后一个表达式的值会作为 result 返回。不支持文件系统读写、网络请求和系统命令。"
+      },
+      "variables": {
+        "type": "object",
+        "description": "可选。预置到全局命名空间的变量，只传 JSON 可序列化的数字、字符串、布尔值、数组和对象。"
+      },
+      "max_iterations": {
+        "type": "number",
+        "description": "可选。已废弃，保留向后兼容；仅在运行时未就绪降级到受限子集时生效。"
+      }
+    },
+    "required": ["code"]
+  }`
+  parameters.setRawSchema(JSON.parse(rawSchemaJson) as object)
+
+  const func = new ToolFunction(
+    PYTHON_SANDBOX_TOOL_ID,
+    '模型可在本地运行真正的 Python 3（基于 Pyodide/CPython，在沙箱化的 WebAssembly 环境中执行），支持完整语法与标准库，用于数学计算、数据处理、统计分析、算法验证和中间推导。可使用 import 导入标准库与 numpy 等随附科学计算包，但不能访问文件系统、网络或系统命令。若需要画折线图/柱状图，优先使用 math_chart。',
+    parameters
+  )
+
+  return new ToolDefinition(func)
+}
+
+function createPythonSandboxToolConfig(): ToolConfig {
+  return new ToolConfig(
+    PYTHON_SANDBOX_TOOL_ID,
+    'Python',
+    '模型可在本地运行 Pyodide/CPython',
+    null,
+    true,
+    false,
+    ToolSourceType.BUILTIN,
+    'builtin',
+    PYTHON_SANDBOX_TOOL_ID,
+    '内置工具',
+    ToolPermissionLevel.READ
+  )
+}
+
+function createMathChartToolDefinition(): ToolDefinition {
+  const parameters = new ToolParameters()
+  const rawSchemaJson: string = `{
+    "type": "object",
+    "properties": {
+      "chart_type": {
+        "type": "string",
+        "enum": ["line", "bar", "area", "scatter", "pie", "donut", "rose", "funnel", "wordCloud", "sankey", "dualAxis"],
+        "description": "图表类型。line 折线图，bar 柱状图，area 面积图，scatter 散点/气泡图，pie 饼图，donut 环形图，rose 玫瑰图，funnel 漏斗图，wordCloud 词云图，sankey 桑基图，dualAxis 双轴/柱线组合图。默认 line。"
+      },
+      "title": {
+        "type": "string",
+        "description": "图表标题。"
+      },
+      "x_label": {
+        "type": "string",
+        "description": "横轴名称，可选。"
+      },
+      "y_label": {
+        "type": "string",
+        "description": "纵轴名称，可选。"
+      },
+      "labels": {
+        "type": "array",
+        "description": "横轴标签，数量应与数据点对应。",
+        "items": { "type": "string" }
+      },
+      "values": {
+        "type": "array",
+        "description": "单系列数值数据。折线/柱状/面积/饼图/环形/玫瑰/漏斗/词云使用该字段；桑基图中表示每条流量；只接受有限数字，不要传表达式字符串。",
+        "items": { "type": "number" }
+      },
+      "x_values": {
+        "type": "array",
+        "description": "散点/气泡图的 X 轴数值；不传则自动使用 1..n。",
+        "items": { "type": "number" }
+      },
+      "y_values": {
+        "type": "array",
+        "description": "散点/气泡图的 Y 轴数值；若没有 values，可用 y_values 作为主数值序列。",
+        "items": { "type": "number" }
+      },
+      "sizes": {
+        "type": "array",
+        "description": "散点/气泡图的气泡大小，可选。",
+        "items": { "type": "number" }
+      },
+      "colors": {
+        "type": "array",
+        "description": "分类图每个分类项的颜色，可选。用于饼图、环形图、玫瑰图、漏斗图、词云图、桑基图等；应按 labels/words/sources 顺序传多个颜色。不要只用 series.color 表示分类颜色；不传则自动按分类数量使用内置多色调色板。",
+        "items": { "type": "string" }
+      },
+      "words": {
+        "type": "array",
+        "description": "词云图的词条；不传则使用 labels。",
+        "items": { "type": "string" }
+      },
+      "sources": {
+        "type": "array",
+        "description": "桑基图每条流的源节点，数量应与 targets/values 对应。优先使用 links；只有无法构造 links 时再使用该字段。",
+        "items": { "type": "string" }
+      },
+      "targets": {
+        "type": "array",
+        "description": "桑基图每条流的目标节点，数量应与 sources/values 对应。优先使用 links；只有无法构造 links 时再使用该字段。",
+        "items": { "type": "string" }
+      },
+      "links": {
+        "type": "array",
+        "description": "桑基图推荐输入。每一项表示一条流向，包含 source、target、value。画桑基图时优先使用 chart_type='sankey' 与 links；不要只传 labels。",
+        "items": {
+          "type": "object",
+          "properties": {
+            "source": { "type": "string", "description": "源节点名称。" },
+            "target": { "type": "string", "description": "目标节点名称。" },
+            "value": { "type": "number", "description": "该流向的数值。" }
+          },
+          "required": ["source", "target", "value"]
+        }
+      },
+      "series": {
+        "type": "array",
+        "description": "多系列数据。折线/柱状/面积/双轴图可使用多系列；dualAxis 通常提供两个系列，第一组用柱状，第二组用折线。",
+        "items": {
+          "type": "object",
+          "properties": {
+            "name": { "type": "string", "description": "系列名称。" },
+            "values": {
+              "type": "array",
+              "description": "该系列数值。",
+              "items": { "type": "number" }
+            },
+            "color": { "type": "string", "description": "可选，#RRGGBB 颜色。" }
+          },
+          "required": ["values"]
+        }
+      },
+      "width": {
+        "type": "number",
+        "description": "图表渲染宽度，默认 720。"
+      },
+      "height": {
+        "type": "number",
+        "description": "图表渲染高度，默认 440。"
+      },
+      "show_points": {
+        "type": "boolean",
+        "description": "折线图是否显示数据点，默认 true。"
+      }
+    }
+  }`
+  parameters.setRawSchema(JSON.parse(rawSchemaJson) as object)
+
+  const func = new ToolFunction(
+    MATH_CHART_TOOL_ID,
+    '本地数学分析与图表绘制工具，在应用沙箱内根据结构化数据生成统计结果和 VChart 图表配置。支持折线图、柱状图、面积图、散点/气泡图、饼图、环形图、玫瑰图、漏斗图、词云图、桑基图、双轴/柱线组合图，以及基础统计和趋势分析。桑基图请使用 chart_type="sankey" 和 links:[{source,target,value}]。不要传任意 Python 代码；如用户要求用 Python 绘图，请将需求转换为结构化 labels/values/series/x_values/y_values/links/sources/targets 后调用本工具。',
+    parameters
+  )
+
+  return new ToolDefinition(func)
+}
+
+function createMathChartToolConfig(): ToolConfig {
+  return new ToolConfig(
+    MATH_CHART_TOOL_ID,
+    '数学绘图',
+    '模型可在本地沙箱中分析数据并生成多类型图表',
+    null,
+    true,
+    false,
+    ToolSourceType.BUILTIN,
+    'builtin',
+    MATH_CHART_TOOL_ID,
+    '内置工具',
+    ToolPermissionLevel.READ
+  )
+}
+
 function createReadScheduleToolDefinition(): ToolDefinition {
   const parameters = new ToolParameters()
   const rawSchemaJson: string = `{
@@ -529,7 +1598,7 @@ function createReadScheduleToolConfig(): ToolConfig {
   return new ToolConfig(
     READ_SCHEDULE_TOOL_ID,
     '读取日程',
-    '经你确认后按指定范围读取系统日历事件供模型分析',
+    '模型可经用户确认后按指定范围读取系统日历事件进行分析',
     null,
     true,
     false,
@@ -636,6 +1705,28 @@ export function registerBuiltinTools(): void {
     registeredNow += 1
   }
 
+  if (!registry.isToolRegistered(PYTHON_SANDBOX_TOOL_ID)) {
+    const pythonSandboxTool = new RegisteredTool(
+      PYTHON_SANDBOX_TOOL_ID,
+      createPythonSandboxToolConfig(),
+      createPythonSandboxToolDefinition(),
+      new PythonSandboxExecutor()
+    )
+    registry.registerTool(pythonSandboxTool)
+    registeredNow += 1
+  }
+
+  if (!registry.isToolRegistered(MATH_CHART_TOOL_ID)) {
+    const mathChartTool = new RegisteredTool(
+      MATH_CHART_TOOL_ID,
+      createMathChartToolConfig(),
+      createMathChartToolDefinition(),
+      new MathChartExecutor()
+    )
+    registry.registerTool(mathChartTool)
+    registeredNow += 1
+  }
+
   if (!registry.isToolRegistered(READ_SCHEDULE_TOOL_ID)) {
     const readScheduleTool = new RegisteredTool(
       READ_SCHEDULE_TOOL_ID,
@@ -666,5 +1757,5 @@ export function registerBuiltinTools(): void {
 
 // 获取所有内置工具 ID
 export function getBuiltinToolIds(): string[] {
-  return ['web_search', ASK_USER_TOOL_ID, READ_SCHEDULE_TOOL_ID, WRITE_SCHEDULE_TOOL_ID]
+  return ['web_search', ASK_USER_TOOL_ID, PYTHON_SANDBOX_TOOL_ID, MATH_CHART_TOOL_ID, READ_SCHEDULE_TOOL_ID, WRITE_SCHEDULE_TOOL_ID]
 }

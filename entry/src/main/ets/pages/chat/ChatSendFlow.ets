@@ -13,6 +13,7 @@ import { ToolRegistry } from '../../services/ToolRegistry'
 import { appendUniqueToolId } from './ChatToolIdHelper'
 import { syncChatMessageFromSource } from './ChatMessageActionHelper'
 import { validateProviderConfig } from '../../utils/ProviderValidationUtils'
+import { ASK_USER_TOOL_ID } from '../../config/BuiltinTools'
 
 export class ChatSendPrepareResult {
   shouldSend: boolean = false
@@ -266,6 +267,9 @@ export class ChatSendFlow {
     }
 
     if (this.isCurrentModelSupportsTools(currentProvider, currentModelId)) {
+      if (searchEnabled && this.deps.toolRegistry.isToolRegistered(ASK_USER_TOOL_ID)) {
+        appendUniqueToolId(enabledToolIds, ASK_USER_TOOL_ID)
+      }
       return new ChatExecutionPlan(ChatExecutionPlanKind.TOOLS, enabledToolIds)
     }
 

@@ -38,6 +38,8 @@ import { ToolRegistry } from '../services/ToolRegistry'
 import { ServiceRegistry } from '../services/ServiceRegistry'
 import {
   ASK_USER_TOOL_ID,
+  MATH_CHART_TOOL_ID,
+  PYTHON_SANDBOX_TOOL_ID,
   READ_SCHEDULE_TOOL_ID,
   WRITE_SCHEDULE_TOOL_ID,
   registerBuiltinTools
@@ -54,6 +56,7 @@ import { ChatMessageListSection } from '../components/chat/ChatMessageListSectio
 import { ChatToolPickerSheetContent } from '../components/chat/ChatToolPickerSheetContent'
 import { ChatToolExecutionApprovalSheetContent } from '../components/chat/ChatToolExecutionApprovalSheetContent'
 import { VoiceInputSheet } from '../components/VoiceInputSheet'
+import { PyodideWebHost } from '../components/PyodideWebHost'
 import {
   ChatNavigationTitleContent,
   CHAT_NAVIGATION_TITLE_STACK_BUILDER_HEIGHT
@@ -1079,6 +1082,8 @@ export struct ChatPage {
 
   private ensureBuiltinChatToolsAvailable(): void {
     if (!this.toolRegistry.isToolRegistered('web_search') || !this.toolRegistry.isToolRegistered(ASK_USER_TOOL_ID) ||
+      !this.toolRegistry.isToolRegistered(PYTHON_SANDBOX_TOOL_ID) ||
+      !this.toolRegistry.isToolRegistered(MATH_CHART_TOOL_ID) ||
       !this.toolRegistry.isToolRegistered(READ_SCHEDULE_TOOL_ID) ||
       !this.toolRegistry.isToolRegistered(WRITE_SCHEDULE_TOOL_ID)) {
       registerBuiltinTools()
@@ -2581,6 +2586,9 @@ export struct ChatPage {
           })
             .transition(TransitionEffect.OPACITY.animation({ duration: 200 }))
         }
+
+        // 隐藏的 Pyodide 运行时宿主（在 WebView 内运行真正的 CPython，供 python 工具使用）
+        PyodideWebHost()
       }
       .width('100%')
       .height('100%')

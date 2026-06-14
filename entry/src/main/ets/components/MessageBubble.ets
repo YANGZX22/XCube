@@ -8,6 +8,7 @@ import { SearchReferenceCard } from './SearchReferenceCard'
 import { ToolCallCard } from './ToolCallCard'
 import { AskUserCard } from './AskUserCard'
 import { HtmlPreviewCard } from './HtmlPreviewCard'
+import { VChartCard } from './VChartCard'
 import { TypingDots } from './TypingDots'
 import { ChatMarkdownHybridRenderer } from './ChatMarkdownHybridRenderer'
 import { AssistantAvatarView } from './AssistantAvatar'
@@ -15,6 +16,7 @@ import { hilog } from '@kit.PerformanceAnalysisKit'
 import { SymbolGlyphModifier } from '@kit.ArkUI'
 import { getAppUiState } from '../state/AppUiState'
 import { withColorAlpha } from '../utils/ColorAlphaUtils'
+import { MATH_CHART_TOOL_ID } from '../config/BuiltinTools'
 
 const DOMAIN = 0x0002
 const TAG = 'MessageBubble'
@@ -35,6 +37,28 @@ interface ContentSegment {
 interface ImageAttachmentEntry {
   attachment: MessageAttachment
   originalIndex: number
+}
+
+interface MathChartToolPayload {
+  ok?: boolean
+  chartType?: string
+  chart_type?: string
+  summary?: string
+  chart_spec?: string
+}
+
+class MessageVChartPayload {
+  id: string = ''
+  specJson: string = ''
+  summary: string = ''
+  chartType: string = ''
+
+  constructor(id: string, specJson: string, summary: string, chartType: string) {
+    this.id = id
+    this.specJson = specJson
+    this.summary = summary
+    this.chartType = chartType
+  }
 }
 
 @ComponentV2
@@ -794,6 +818,12 @@ export struct MessageBubble {
     return normalized === 'ask_user' || normalized === 'user_input' || normalized === 'ask'
   }
 
+  private isMathChartToolCall(toolCall: ToolCall): boolean {
+    const normalizedFunctionName = this.normalizeToolFunctionName(toolCall.functionName)
+    const normalizedToolId = this.normalizeToolFunctionName(toolCall.toolId)
+    return normalizedFunctionName === MATH_CHART_TOOL_ID || normalizedToolId === MATH_CHART_TOOL_ID
+  }
+
   private findToolResultForCall(toolCallId: string): ToolResult | null {
     for (let i = 0; i < this.message.toolResults.length; i++) {
       if (this.message.toolResults[i].toolCallId === toolCallId) {
@@ -801,6 +831,43 @@ export struct MessageBubble {
       }
     }
     return null
+  }
+
+  private parseMathChartToolPayload(content: string): MathChartToolPayload | null {
+    try {
+      return JSON.parse(content) as MathChartToolPayload
+    } catch (_error) {
+      return null
+    }
+  }
+
+  private getVChartPayloads(): MessageVChartPayload[] {
+    const payloads: MessageVChartPayload[] = []
+    for (let i = 0; i < this.message.toolCalls.length; i++) {
+      const toolCall = this.message.toolCalls[i]
+      if (!this.isMathChartToolCall(toolCall)) {
+        continue
+      }
+      const toolResult = this.findToolResultForCall(toolCall.id)
+      if (toolResult === null || toolResult.isError) {
+        continue
+      }
+      const payload = this.parseMathChartToolPayload(toolResult.content)
+      if (payload === null || payload.chart_spec === undefined) {
+        continue
+      }
+      const specJson = payload.chart_spec.trim()
+      if (specJson === '') {
+        continue
+      }
+      payloads.push(new MessageVChartPayload(
+        toolCall.id,
+        specJson,
+        payload.summary ?? '',
+        payload.chartType ?? payload.chart_type ?? 'line'
+      ))
+    }
+    return payloads
   }
 
   private openLatexPreview(text: string, pixelMap: image.PixelMap): boolean {
@@ -1374,6 +1441,17 @@ export struct MessageBubble {
                     .margin({ bottom: 6 })
                 }
               }, (toolCall: ToolCall, index: number) => toolCall.id + '_' + index.toString())
+            }
+
+            if (this.getVChartPayloads().length > 0) {
+              ForEach(this.getVChartPayloads(), (payload: MessageVChartPayload) => {
+                VChartCard({
+                  specJson: payload.specJson,
+                  summary: payload.summary,
+                  chartType: payload.chartType
+                })
+                  .margin({ bottom: 6 })
+              }, (payload: MessageVChartPayload) => payload.id)
             }
 
             // ========== 搜索引用区域 ==========

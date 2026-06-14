@@ -349,7 +349,10 @@ export class ToolExecutionService {
       let isError = false
       try {
         const parsed = JSON.parse(result) as Record<string, Object>
-        isError = parsed.isError === true || parsed.error !== undefined
+        // 仅当 error 字段为非空字符串才视为错误；空字符串（如 Pyodide 成功结果带 error:''）不算
+        const errorField = parsed.error
+        const hasError = errorField !== undefined && errorField !== null && errorField !== ''
+        isError = parsed.isError === true || hasError
       } catch (_error) {}
 
       return new ToolResult(

@@ -80,6 +80,16 @@ interface SearchResultData {
   summary: string
 }
 
+interface AskUserApprovalAnswer {
+  answer?: string
+  selected_options?: string[]
+  skipped?: boolean
+}
+
+interface AskUserApprovalPayload {
+  answers?: Record<string, AskUserApprovalAnswer>
+}
+
 // 待持久化 AI 消息信息（每请求独立）
 interface PendingAIMessageInfo {
   message: ChatMessage
@@ -135,7 +145,9 @@ export class ChatViewModel {
   // 最大重试次数
   private readonly MAX_TITLE_RETRY = 3
   // 最大工具调用轮次
-  private readonly MAX_TOOL_ITERATIONS = 6
+  private readonly MAX_TOOL_ITERATIONS = 14
+  private readonly DEFAULT_WEB_SEARCH_LIMIT = 5
+  private readonly EXTRA_WEB_SEARCH_LIMIT = 5
   // 取消令牌：用于停止”尚未开始发送的请求”（例如退出页面时）
   private cancelToken: number = 0
   // 历史附件懒加载配置
@@ -1770,7 +1782,8 @@ ${limitedSearchContext}
 - 编程、写作、翻译、数学、创意等纯生成任务，若不依赖外部状态，绝对不要调用任何工具。`
     if (hasWebSearchTool) {
       toolUsageSystemPrompt += `
-- 针对同一个用户问题，最多调用 web_search 5 次;超过 5 次后不再调用，根据已获取的内容整理并返回结果。
+- 针对同一个用户问题，默认最多调用 web_search ${this.DEFAULT_WEB_SEARCH_LIMIT} 次。达到上限后，如果已有信息足够，请直接整理最终回答；不要把搜索摘要或工具结果原样返回给用户。
+- 如果达到 ${this.DEFAULT_WEB_SEARCH_LIMIT} 次后仍确实需要继续搜索，并且 ask_user 可用，必须先调用 ask_user 询问用户是否允许额外最多 ${this.EXTRA_WEB_SEARCH_LIMIT} 次联网搜索；用户同意后才继续搜索。用户不同意、跳过或 ask_user 不可用时，必须基于已有信息直接回答并说明不确定性。
 - 生成 web_search.query 时优先保留用户原始关键词，不要擅自改写实体、地点和时间。
 - 如果需要继续搜索，必须主动更换搜索词角度，优先换关键词而不是只增加 page；不要连续提交完全相同或只差空格/标点的 query。
 - 多次搜索同一问题时，每次 query 应尽量覆盖不同信息源或不同角度，例如: 精确短语、官方/作品页、歌词/资料站、作者/制作人、排除百科字典类结果、site: 限定站点。
@@ -1886,19 +1899,62 @@ ${limitedSearchContext}
       return
     }
 
+    const entries: SearchResultItem[] = []
+    const seenUrls: string[] = []
+    for (let i = 0; i < aiMessage.toolResults.length; i++) {
+      try {
+        const data = JSON.parse(aiMessage.toolResults[i].content) as Record<string, Object>
+        const results = data.results
+        if (Array.isArray(results as Array<Object>)) {
+          const resultItems = results as Array<SearchResultItem>
+          for (let j = 0; j < resultItems.length; j++) {
+            const item = resultItems[j]
+            const url = `${item.url ?? ''}`.trim()
+            if (url === '' || seenUrls.includes(url)) {
+              continue
+            }
+            seenUrls.push(url)
+            entries.push(item)
+            if (entries.length >= 5) {
+              break
+            }
+          }
+        }
+        if (entries.length >= 5) {
+          break
+        }
+      } catch (_error) {
+        // ignore
+      }
+    }
+
+    if (entries.length > 0) {
+      const lines: string[] = []
+      for (let i = 0; i < entries.length; i++) {
+        const item = entries[i]
+        const title = `${item.title ?? ''}`.trim()
+        const snippet = `${item.snippet ?? ''}`.trim()
+        const url = `${item.url ?? ''}`.trim()
+        const brief = snippet.length > 120 ? `${snippet.substring(0, 120).trimEnd()}...` : snippet
+        lines.push(`${i + 1}. ${title !== '' ? title : '未命名来源'}${brief !== '' ? `：${brief}` : ''}${url !== '' ? `\n   ${url}` : ''}`)
+      }
+      aiMessage.content = `我查到了一些线索，但还不足以形成非常确定的结论。先把可用信息整理如下：\n\n${lines.join('\n\n')}\n\n基于这些结果，我建议换更具体的关键词或指定你想确认的点，我再继续缩小范围。`
+      return
+    }
+
     for (let i = aiMessage.toolResults.length - 1; i >= 0; i--) {
       try {
         const data = JSON.parse(aiMessage.toolResults[i].content) as Record<string, Object>
-        if (data !== undefined && data.summary !== undefined && `${data.summary}`.trim() !== '') {
-          let preview = `${data.summary}`.trim()
-          const maxLen = 1200
-          if (preview.length > maxLen) {
-            preview = preview.substring(0, maxLen) + '...'
+        const summary = `${data.summary ?? ''}`.trim()
+        if (summary !== '') {
+          let preview = summary.replace(/^以下是搜索结果[:：]?\s*/g, '').trim()
+          if (preview.length > 900) {
+            preview = `${preview.substring(0, 900).trimEnd()}...`
           }
-          aiMessage.content = `已完成联网搜索，但模型未返回最终回答。以下为搜索结果摘要（可用于人工查看/再次提问）：\n\n${preview}`
+          aiMessage.content = `我查到的信息还不够完整，暂时只能给出这份整理：\n\n${preview}\n\n如果你愿意，可以补充更具体的对象、时间或来源范围，我再继续查。`
           return
         }
-      } catch (e) {
+      } catch (_error) {
         // ignore
       }
     }
@@ -1931,6 +1987,164 @@ ${limitedSearchContext}
     }
     this.unregisterActiveRequest(requestId)
     onComplete()
+  }
+
+  private async executeToolCallsWithWebSearchBudget(
+    toolCalls: ToolCall[],
+    aiMessage: ChatMessage
+  ): Promise<ToolResult[]> {
+    const results: ToolResult[] = []
+    let executedSearchesInBatch = 0
+    for (let i = 0; i < toolCalls.length; i++) {
+      const toolCall = toolCalls[i]
+      if (this.isWebSearchFunction(toolCall.functionName)) {
+        const usedSearchCount = this.countCompletedWebSearchCalls(aiMessage) + executedSearchesInBatch
+        const limit = this.getCurrentWebSearchLimit(aiMessage)
+        if (usedSearchCount >= limit) {
+          results.push(this.buildWebSearchBudgetResult(toolCall, usedSearchCount, limit, aiMessage))
+          continue
+        }
+        const result = await this.toolExecutionService.executeToolCall(toolCall)
+        results.push(result)
+        if (!this.isWebSearchBudgetResult(result)) {
+          executedSearchesInBatch += 1
+        }
+      } else {
+        results.push(await this.toolExecutionService.executeToolCall(toolCall))
+      }
+    }
+    return results
+  }
+
+  private countCompletedWebSearchCalls(aiMessage: ChatMessage): number {
+    let count = 0
+    for (let i = 0; i < aiMessage.toolCalls.length; i++) {
+      const toolCall = aiMessage.toolCalls[i]
+      if (!this.isWebSearchFunction(toolCall.functionName)) {
+        continue
+      }
+      const result = this.findToolResult(aiMessage, toolCall.id)
+      if (result !== null && !this.isWebSearchBudgetResult(result)) {
+        count += 1
+      }
+    }
+    return count
+  }
+
+  private getCurrentWebSearchLimit(aiMessage: ChatMessage): number {
+    if (this.hasApprovedExtraWebSearch(aiMessage)) {
+      return this.DEFAULT_WEB_SEARCH_LIMIT + this.EXTRA_WEB_SEARCH_LIMIT
+    }
+    return this.DEFAULT_WEB_SEARCH_LIMIT
+  }
+
+  private buildWebSearchBudgetResult(
+    toolCall: ToolCall,
+    usedSearchCount: number,
+    limit: number,
+    aiMessage: ChatMessage
+  ): ToolResult {
+    const extraApproved = this.hasApprovedExtraWebSearch(aiMessage)
+    toolCall.toolId = 'web_search'
+    toolCall.displayName = '联网搜索'
+    toolCall.sourceLabel = '内置工具'
+    toolCall.permissionLevel = 'read'
+    return new ToolResult(
+      toolCall.id,
+      JSON.stringify({
+        error: 'web_search_budget_exhausted',
+        code: 'WEB_SEARCH_BUDGET_EXHAUSTED',
+        webSearchCount: usedSearchCount,
+        limit: limit,
+        defaultLimit: this.DEFAULT_WEB_SEARCH_LIMIT,
+        extraLimit: this.EXTRA_WEB_SEARCH_LIMIT,
+        canRequestMore: !extraApproved,
+        message: extraApproved
+          ? '额外联网搜索次数也已用完。请不要继续调用 web_search，必须根据已有搜索结果直接回答用户，并说明必要的不确定性。'
+          : `默认联网搜索次数已用完。如确有必要继续搜索，请先调用 ask_user 询问用户是否允许额外最多 ${this.EXTRA_WEB_SEARCH_LIMIT} 次联网搜索；否则必须根据已有搜索结果直接回答用户。不要把搜索摘要或工具 JSON 原样返回。`,
+        suggestedAskUserJson: `{"questions":[{"id":"allow_extra_web_search","question":"当前已完成 ${this.DEFAULT_WEB_SEARCH_LIMIT} 次联网搜索。是否允许我额外最多再搜索 ${this.EXTRA_WEB_SEARCH_LIMIT} 次来提高把握？","selection_type":"single","options":["同意追加搜索","不追加，直接回答"]}]}`
+      }),
+      true,
+      toolCall.displayName,
+      toolCall.sourceLabel
+    )
+  }
+
+  private findToolResult(aiMessage: ChatMessage, toolCallId: string): ToolResult | null {
+    for (let i = 0; i < aiMessage.toolResults.length; i++) {
+      if (aiMessage.toolResults[i].toolCallId === toolCallId) {
+        return aiMessage.toolResults[i]
+      }
+    }
+    return null
+  }
+
+  private isWebSearchBudgetResult(result: ToolResult): boolean {
+    try {
+      const data = JSON.parse(result.content) as Record<string, Object>
+      return `${data.code ?? ''}` === 'WEB_SEARCH_BUDGET_EXHAUSTED' ||
+        `${data.error ?? ''}` === 'web_search_budget_exhausted'
+    } catch (_error) {
+      return false
+    }
+  }
+
+  private hasApprovedExtraWebSearch(aiMessage: ChatMessage): boolean {
+    for (let i = 0; i < aiMessage.toolResults.length; i++) {
+      const result = aiMessage.toolResults[i]
+      if (this.isWebSearchBudgetResult(result)) {
+        continue
+      }
+      if (this.isExtraSearchApprovalResult(result.content)) {
+        return true
+      }
+    }
+    return false
+  }
+
+  private isExtraSearchApprovalResult(content: string): boolean {
+    try {
+      const payload = JSON.parse(content) as AskUserApprovalPayload
+      if (payload.answers === undefined) {
+        return false
+      }
+      const answer = payload.answers['allow_extra_web_search']
+      if (answer === undefined || answer.skipped === true) {
+        return false
+      }
+      const textParts: string[] = []
+      if (answer.answer !== undefined) {
+        textParts.push(answer.answer)
+      }
+      if (answer.selected_options !== undefined) {
+        for (let i = 0; i < answer.selected_options.length; i++) {
+          textParts.push(answer.selected_options[i])
+        }
+      }
+      return this.isExtraSearchApprovalText(textParts.join(' '))
+    } catch (_error) {
+      return this.isExtraSearchApprovalText(content)
+    }
+  }
+
+  private isExtraSearchApprovalText(text: string): boolean {
+    const normalized = text.toLowerCase().trim()
+    if (normalized === '') {
+      return false
+    }
+    const rejectWords: string[] = ['不追加', '直接回答', '不同意', '拒绝', 'no', 'skip', '跳过']
+    for (let i = 0; i < rejectWords.length; i++) {
+      if (normalized.includes(rejectWords[i])) {
+        return false
+      }
+    }
+    const approveWords: string[] = ['同意', '允许', '可以', '继续', '追加搜索', 'approve', 'yes', 'allow']
+    for (let i = 0; i < approveWords.length; i++) {
+      if (normalized.includes(approveWords[i])) {
+        return true
+      }
+    }
+    return false
   }
 
   // 工具调用循环
@@ -1972,7 +2186,7 @@ ${limitedSearchContext}
     const requestMessagesForRound = toolsEnabledInThisRound ? requestMessages : requestMessages.concat([
       new RequestMessage(
         'system',
-        '工具调用次数已达上限。不要再调用任何工具，也不要输出工具调用标记；请仅根据前文已有工具结果，直接用自然语言回答用户。'
+        '工具调用次数已达上限。不要再调用任何工具，也不要输出工具调用标记；请仅根据前文已有工具结果，直接用自然语言回答用户。不要说“模型未返回最终回答”，不要把搜索摘要或工具 JSON 原样返回；如果证据不足，请给出谨慎结论和下一步建议。'
       )
     ])
 
@@ -2161,7 +2375,7 @@ ${limitedSearchContext}
           }
 
           // 执行工具调用
-          const toolResults = await this.toolExecutionService.executeToolCalls(toolCalls)
+          const toolResults = await this.executeToolCallsWithWebSearchBudget(toolCalls, aiMessage)
           if (isCancelledFn()) {
             return
           }
@@ -2180,7 +2394,6 @@ ${limitedSearchContext}
           for (let i = 0; i < toolResults.length; i++) {
             aiMessage.toolResults.push(toolResults[i])
           }
-
           // 持久化工具事件到数据库（使用快照 sessionId）
           if (snapshotSession !== null) {
             for (let i = 0; i < toolCalls.length; i++) {
@@ -2397,7 +2610,8 @@ ${limitedSearchContext}
       'image/png': '.png',
       'image/gif': '.gif',
       'image/webp': '.webp',
-      'image/bmp': '.bmp'
+      'image/bmp': '.bmp',
+      'image/svg+xml': '.svg'
     }
     return mimeToExt[mimeType] || '.png'
   }

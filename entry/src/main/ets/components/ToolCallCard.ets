@@ -144,7 +144,7 @@ export struct ToolCallCard {
               .scale({ x: this.dot3Scale, y: this.dot3Scale })
           }
           .margin({ left: 8 })
-        } else if (this.toolResult !== null) {
+        } else if (this.toolResult !== null && !this.shouldHideStatusIcon()) {
           // 已完成：根据结果显示成功/失败状态
           SymbolGlyph(this.getResultStatusSymbol())
             .fontSize(14)
@@ -299,10 +299,17 @@ export struct ToolCallCard {
     }
     try {
       const parsed = JSON.parse(this.toolResult.content) as Record<string, Object>
-      return parsed.isError === true || parsed.error !== undefined
+      const errorField = parsed.error
+      const hasError = errorField !== undefined && errorField !== null && errorField !== ''
+      return parsed.isError === true || hasError
     } catch (_error) {
       return false
     }
+  }
+
+  // Python 工具不展示成功/失败状态图标（按产品要求）
+  private shouldHideStatusIcon(): boolean {
+    return this.toolCall.functionName === 'python_sandbox'
   }
 
   private getResultStatusSymbol(): Resource {
