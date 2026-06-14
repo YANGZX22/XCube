@@ -2089,6 +2089,18 @@ ${limitedSearchContext}
     }
   }
 
+  private hasCancelledToolResult(results: ToolResult[]): boolean {
+    for (let i = 0; i < results.length; i++) {
+      try {
+        const data = JSON.parse(results[i].content) as Record<string, Object>
+        if (data.cancelled === true) {
+          return true
+        }
+      } catch (_error) {}
+    }
+    return false
+  }
+
   private hasApprovedExtraWebSearch(aiMessage: ChatMessage): boolean {
     for (let i = 0; i < aiMessage.toolResults.length; i++) {
       const result = aiMessage.toolResults[i]
@@ -2381,7 +2393,7 @@ ${limitedSearchContext}
           }
 
           // 检查工具执行是否被取消
-          if (toolResults.length > 0 && toolResults[0].content.includes('"cancelled":true')) {
+          if (this.hasCancelledToolResult(toolResults)) {
             console.info('ChatViewModel', 'Tool execution was cancelled')
             aiMessage.isGenerating = false
             onAIMessageUpdated(aiMessage)

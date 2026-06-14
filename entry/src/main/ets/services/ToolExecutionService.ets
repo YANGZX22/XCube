@@ -4,7 +4,40 @@ import { getToolRegistry, RegisteredTool, ToolRegistry } from './ToolRegistry'
 
 // 取消检查回调类型
 type CancelCheckCallback = () => boolean
-type ToolApprovalCallback = (toolCall: ToolCall, tool: RegisteredTool) => Promise<boolean>
+type ToolApprovalCallback = (toolCall: ToolCall, tool: RegisteredTool) => Promise<ToolApprovalResult>
+
+export enum ToolApprovalStatus {
+  APPROVED = 'approved',
+  REJECTED = 'rejected',
+  CANCELLED = 'cancelled',
+  UNAVAILABLE = 'unavailable'
+}
+
+export class ToolApprovalResult {
+  status: string = ToolApprovalStatus.CANCELLED
+  message: string = ''
+
+  constructor(status: string = ToolApprovalStatus.CANCELLED, message: string = '') {
+    this.status = status
+    this.message = message
+  }
+
+  static approve(): ToolApprovalResult {
+    return new ToolApprovalResult(ToolApprovalStatus.APPROVED)
+  }
+
+  static reject(message: string = ''): ToolApprovalResult {
+    return new ToolApprovalResult(ToolApprovalStatus.REJECTED, message)
+  }
+
+  static cancel(message: string = ''): ToolApprovalResult {
+    return new ToolApprovalResult(ToolApprovalStatus.CANCELLED, message)
+  }
+
+  static unavailable(message: string = ''): ToolApprovalResult {
+    return new ToolApprovalResult(ToolApprovalStatus.UNAVAILABLE, message)
+  }
+}
 
 interface WebSearchPaginationArgs {
   query?: string
@@ -189,19 +222,63 @@ export class ToolExecutionService {
     )
   }
 
-  private async requestApprovalIfNeeded(toolCall: ToolCall, tool: RegisteredTool): Promise<boolean> {
+  private async requestApprovalIfNeeded(toolCall: ToolCall, tool: RegisteredTool): Promise<ToolApprovalResult> {
     if (tool.config.permissionLevel !== 'write') {
-      return true
+      return ToolApprovalResult.approve()
     }
     if (this.approvalCallback === null) {
-      return false
+      return ToolApprovalResult.unavailable('工具审批界面不可用')
     }
     try {
       return await this.approvalCallback(toolCall, tool)
     } catch (error) {
       console.error('ToolExecutionService', `Approval callback failed: ${JSON.stringify(error)}`)
-      return false
+      return ToolApprovalResult.unavailable(`工具审批失败: ${JSON.stringify(error)}`)
     }
+  }
+
+  private buildApprovalDeniedResult(toolCall: ToolCall, tool: RegisteredTool, approval: ToolApprovalResult): ToolResult {
+    if (approval.status === ToolApprovalStatus.REJECTED) {
+      return new ToolResult(
+        toolCall.id,
+        JSON.stringify({
+          error: '用户拒绝了工具调用',
+          rejected: true,
+          message: approval.message !== ''
+            ? approval.message
+            : '用户未授权执行该工具调用。请不要继续调用同一工具，直接向用户说明已取消或询问是否需要修改后重试。'
+        }),
+        true,
+        tool.config.name,
+        tool.config.sourceLabel
+      )
+    }
+
+    if (approval.status === ToolApprovalStatus.UNAVAILABLE) {
+      return new ToolResult(
+        toolCall.id,
+        JSON.stringify({
+          error: '工具审批不可用',
+          approvalUnavailable: true,
+          message: approval.message !== '' ? approval.message : '未能展示或连接工具审批界面，请稍后重试。'
+        }),
+        true,
+        tool.config.name,
+        tool.config.sourceLabel
+      )
+    }
+
+    return new ToolResult(
+      toolCall.id,
+      JSON.stringify({
+        error: '工具审批已取消',
+        cancelled: true,
+        message: approval.message !== '' ? approval.message : '工具审批面板已关闭，本次工具调用未执行。'
+      }),
+      true,
+      tool.config.name,
+      tool.config.sourceLabel
+    )
   }
 
   private async handleAskUser(toolCall: ToolCall): Promise<ToolResult> {
@@ -304,19 +381,9 @@ export class ToolExecutionService {
       this.applyWebSearchPagination(toolCall)
     }
 
-    const approved = await this.requestApprovalIfNeeded(toolCall, registeredTool)
-    if (!approved) {
-      return new ToolResult(
-        toolCall.id,
-        JSON.stringify({
-          error: '用户拒绝了工具调用',
-          rejected: true,
-          message: '用户未授权执行该工具调用。请不要继续调用同一工具，直接向用户说明已取消或询问是否需要修改后重试。'
-        }),
-        true,
-        registeredTool.config.name,
-        registeredTool.config.sourceLabel
-      )
+    const approval = await this.requestApprovalIfNeeded(toolCall, registeredTool)
+    if (approval.status !== ToolApprovalStatus.APPROVED) {
+      return this.buildApprovalDeniedResult(toolCall, registeredTool, approval)
     }
 
     // 获取工具执行器

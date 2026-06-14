@@ -36,6 +36,7 @@ import { TTSService } from '../services/TTSService'
 import { McpService } from '../services/McpService'
 import { ToolRegistry } from '../services/ToolRegistry'
 import { ServiceRegistry } from '../services/ServiceRegistry'
+import { ToolApprovalResult } from '../services/ToolExecutionService'
 import {
   ASK_USER_TOOL_ID,
   MATH_CHART_TOOL_ID,
@@ -223,8 +224,8 @@ export struct ChatPage {
   private isNewEmptySession: boolean = false
   // 搜索取消标志（用于取消正在进行的联网查询）
   private isSearchCancelled: boolean = false
-  private pendingToolExecutionApprovalResolver: ((approved: boolean) => void) | null = null
-  private pendingToolExecutionApprovalDecision: boolean | null = null
+  private pendingToolExecutionApprovalResolver: ((result: ToolApprovalResult) => void) | null = null
+  private pendingToolExecutionApprovalDecision: ToolApprovalResult | null = null
   private pendingToolExecutionApprovalToolCall: ToolCall | null = null
   private pendingToolExecutionApprovalToolId: string = ''
   // 联网查询全局可用状态（工具中心控制）
@@ -526,6 +527,7 @@ export struct ChatPage {
 
   aboutToDisappear(): void {
     this.isPageVisible = false
+    this.cancelPendingToolExecutionApproval('页面已关闭，工具调用未执行。')
     ServiceRegistry.toolExecution().setApprovalCallback(null)
     // 释放TTS资源
     this.ttsService.destroy()
@@ -3814,6 +3816,8 @@ export struct ChatPage {
         this.buildReadScheduleApprovalArguments(this.pendingToolExecutionApprovalToolCall.arguments)
     }
     this.pendingToolExecutionApprovalDecision = approved
+      ? ToolApprovalResult.approve()
+      : ToolApprovalResult.reject('用户未授权执行该工具调用。请不要继续调用同一工具，直接向用户说明已取消或询问是否需要修改后重试。')
     this.showToolExecutionApprovalSheet = false
   }
 
@@ -3827,8 +3831,24 @@ export struct ChatPage {
     this.pendingToolExecutionApprovalToolId = ''
     this.resetToolExecutionApprovalState()
     if (resolver !== null) {
-      resolver(decision === null ? false : decision)
+      resolver(decision === null
+        ? ToolApprovalResult.cancel('工具审批面板已关闭，本次工具调用未执行。')
+        : decision)
     }
+  }
+
+  private cancelPendingToolExecutionApproval(message: string): void {
+    const resolver = this.pendingToolExecutionApprovalResolver
+    if (resolver === null) {
+      return
+    }
+    this.pendingToolExecutionApprovalResolver = null
+    this.pendingToolExecutionApprovalDecision = null
+    this.pendingToolExecutionApprovalToolCall = null
+    this.pendingToolExecutionApprovalToolId = ''
+    this.showToolExecutionApprovalSheet = false
+    this.resetToolExecutionApprovalState()
+    resolver(ToolApprovalResult.cancel(message))
   }
 
   private async requestToolExecutionApproval(
@@ -3836,17 +3856,17 @@ export struct ChatPage {
     toolId: string,
     toolName: string,
     sourceLabel: string
-  ): Promise<boolean> {
+  ): Promise<ToolApprovalResult> {
     const argumentsJson = toolCall.arguments
     const preview = buildToolArgumentsPreview(argumentsJson, 4, 800)
-    return await new Promise<boolean>((resolve) => {
+    return await new Promise<ToolApprovalResult>((resolve) => {
       if (this.pendingToolExecutionApprovalResolver !== null) {
         const previousResolver = this.pendingToolExecutionApprovalResolver
         this.pendingToolExecutionApprovalResolver = null
         this.pendingToolExecutionApprovalDecision = null
         this.pendingToolExecutionApprovalToolCall = null
         this.pendingToolExecutionApprovalToolId = ''
-        previousResolver(false)
+        previousResolver(ToolApprovalResult.cancel('新的工具审批请求已替换当前审批，本次工具调用未执行。'))
       }
       this.toolExecutionApprovalSourceLabel = sourceLabel.trim()
       this.toolExecutionApprovalName = toolName.trim() !== ''
