@@ -36,7 +36,12 @@ import { TTSService } from '../services/TTSService'
 import { McpService } from '../services/McpService'
 import { ToolRegistry } from '../services/ToolRegistry'
 import { ServiceRegistry } from '../services/ServiceRegistry'
-import { ASK_USER_TOOL_ID, registerBuiltinTools } from '../config/BuiltinTools'
+import {
+  ASK_USER_TOOL_ID,
+  READ_SCHEDULE_TOOL_ID,
+  WRITE_SCHEDULE_TOOL_ID,
+  registerBuiltinTools
+} from '../config/BuiltinTools'
 import { AppStorageKeys } from '../config/AppStorageKeys'
 import { inputMethod } from '@kit.IMEKit'
 import { webview } from '@kit.ArkWeb'
@@ -110,6 +115,22 @@ class ProviderModelSelection {
 class EditedMessageToolContext {
   webSearchEnabled: boolean = false
   selectedToolIds: string[] = []
+}
+
+interface ReadScheduleApprovalArgs {
+  days_before?: number | string
+  daysAfter?: number | string
+  days_after?: number | string
+  daysBefore?: number | string
+  limit?: number | string
+  include_description?: boolean
+  includeDescription?: boolean
+  include_location?: boolean
+  includeLocation?: boolean
+  start_time?: string
+  startTime?: string
+  end_time?: string
+  endTime?: string
 }
 
 const HDS_NAV_DESTINATION_MINI_TITLE_BAR_HEIGHT: number = 56
@@ -200,6 +221,9 @@ export struct ChatPage {
   // 搜索取消标志（用于取消正在进行的联网查询）
   private isSearchCancelled: boolean = false
   private pendingToolExecutionApprovalResolver: ((approved: boolean) => void) | null = null
+  private pendingToolExecutionApprovalDecision: boolean | null = null
+  private pendingToolExecutionApprovalToolCall: ToolCall | null = null
+  private pendingToolExecutionApprovalToolId: string = ''
   // 联网查询全局可用状态（工具中心控制）
   @Local webSearchAvailable: boolean = false
   @Local webSearchConversationEnabled: boolean = false
@@ -215,6 +239,14 @@ export struct ChatPage {
   @Local toolExecutionApprovalArgumentsPreview: string = '{}'
   @Local toolExecutionApprovalArgumentsTruncated: boolean = false
   @Local showRawToolExecutionApprovalArguments: boolean = false
+  @Local showToolExecutionApprovalSafetyUi: boolean = true
+  @Local toolExecutionApprovalTitle: string = ''
+  @Local showReadScheduleRangeUi: boolean = false
+  @Local readScheduleDaysBeforeText: string = '0'
+  @Local readScheduleDaysAfterText: string = '7'
+  @Local readScheduleLimitText: string = '80'
+  @Local readScheduleIncludeDescription: boolean = false
+  @Local readScheduleIncludeLocation: boolean = true
   // 推理级别状态
   @Local reasoningLevel: ReasoningLevel = ReasoningLevel.OFF
   // 最近截图检测状态（由 ChatInputBar 回调设置，ScreenshotBanner 独立渲染）
@@ -369,7 +401,12 @@ export struct ChatPage {
     // 注册内置工具
     registerBuiltinTools()
     ServiceRegistry.toolExecution().setApprovalCallback(async (toolCall, tool) => {
-      return await this.requestToolExecutionApproval(tool.config.name, tool.config.sourceLabel, toolCall.arguments)
+      return await this.requestToolExecutionApproval(
+        toolCall,
+        tool.id,
+        tool.config.name,
+        tool.config.sourceLabel
+      )
     })
 
     // 设置标题生成回调
@@ -1041,7 +1078,9 @@ export struct ChatPage {
   }
 
   private ensureBuiltinChatToolsAvailable(): void {
-    if (!this.toolRegistry.isToolRegistered('web_search') || !this.toolRegistry.isToolRegistered(ASK_USER_TOOL_ID)) {
+    if (!this.toolRegistry.isToolRegistered('web_search') || !this.toolRegistry.isToolRegistered(ASK_USER_TOOL_ID) ||
+      !this.toolRegistry.isToolRegistered(READ_SCHEDULE_TOOL_ID) ||
+      !this.toolRegistry.isToolRegistered(WRITE_SCHEDULE_TOOL_ID)) {
       registerBuiltinTools()
     }
     const askUserTool = this.toolRegistry.getTool(ASK_USER_TOOL_ID)
@@ -2783,15 +2822,38 @@ export struct ChatPage {
     ChatToolExecutionApprovalSheetContent({
       sourceLabel: this.toolExecutionApprovalSourceLabel,
       toolName: this.toolExecutionApprovalName,
+      titleText: this.toolExecutionApprovalTitle,
       argumentSummary: this.toolExecutionApprovalArgumentSummary,
       argumentEntries: this.toolExecutionApprovalArgumentEntries,
       argumentsPreview: this.toolExecutionApprovalArgumentsPreview,
       argumentsTruncated: this.toolExecutionApprovalArgumentsTruncated,
       showRawArguments: this.showRawToolExecutionApprovalArguments,
+      showWriteSafetyUi: this.showToolExecutionApprovalSafetyUi,
+      showReadScheduleRangeUi: this.showReadScheduleRangeUi,
+      readScheduleDaysBeforeText: this.readScheduleDaysBeforeText,
+      readScheduleDaysAfterText: this.readScheduleDaysAfterText,
+      readScheduleLimitText: this.readScheduleLimitText,
+      readScheduleIncludeDescription: this.readScheduleIncludeDescription,
+      readScheduleIncludeLocation: this.readScheduleIncludeLocation,
       themePrimary: this.themePrimary,
       isDarkMode: this.isDarkMode,
       onToggleShowRaw: (): void => {
         this.showRawToolExecutionApprovalArguments = !this.showRawToolExecutionApprovalArguments
+      },
+      onReadScheduleDaysBeforeChange: (value: string): void => {
+        this.readScheduleDaysBeforeText = this.normalizeNonNegativeIntegerInput(value, 365)
+      },
+      onReadScheduleDaysAfterChange: (value: string): void => {
+        this.readScheduleDaysAfterText = this.normalizeNonNegativeIntegerInput(value, 365)
+      },
+      onReadScheduleLimitChange: (value: string): void => {
+        this.readScheduleLimitText = this.normalizeNonNegativeIntegerInput(value, 300)
+      },
+      onReadScheduleIncludeDescriptionChange: (value: boolean): void => {
+        this.readScheduleIncludeDescription = value
+      },
+      onReadScheduleIncludeLocationChange: (value: boolean): void => {
+        this.readScheduleIncludeLocation = value
       },
       onCancel: (): void => {
         this.resolveToolExecutionApproval(false)
@@ -3721,38 +3783,61 @@ export struct ChatPage {
     this.toolExecutionApprovalArgumentsPreview = '{}'
     this.toolExecutionApprovalArgumentsTruncated = false
     this.showRawToolExecutionApprovalArguments = false
+    this.showToolExecutionApprovalSafetyUi = true
+    this.toolExecutionApprovalTitle = ''
+    this.showReadScheduleRangeUi = false
+    this.readScheduleDaysBeforeText = '0'
+    this.readScheduleDaysAfterText = '7'
+    this.readScheduleLimitText = '80'
+    this.readScheduleIncludeDescription = false
+    this.readScheduleIncludeLocation = true
   }
 
   private resolveToolExecutionApproval(approved: boolean): void {
-    const resolver = this.pendingToolExecutionApprovalResolver
-    this.pendingToolExecutionApprovalResolver = null
-    this.showToolExecutionApprovalSheet = false
-    this.resetToolExecutionApprovalState()
-    if (resolver !== null) {
-      resolver(approved)
+    if (this.pendingToolExecutionApprovalResolver === null) {
+      return
     }
+    if (this.pendingToolExecutionApprovalDecision !== null) {
+      return
+    }
+    if (approved && this.pendingToolExecutionApprovalToolId === READ_SCHEDULE_TOOL_ID &&
+      this.pendingToolExecutionApprovalToolCall !== null) {
+      this.pendingToolExecutionApprovalToolCall.arguments =
+        this.buildReadScheduleApprovalArguments(this.pendingToolExecutionApprovalToolCall.arguments)
+    }
+    this.pendingToolExecutionApprovalDecision = approved
+    this.showToolExecutionApprovalSheet = false
   }
 
   private handleToolExecutionApprovalSheetDisappear(): void {
     this.showToolExecutionApprovalSheet = false
     const resolver = this.pendingToolExecutionApprovalResolver
+    const decision = this.pendingToolExecutionApprovalDecision
     this.pendingToolExecutionApprovalResolver = null
+    this.pendingToolExecutionApprovalDecision = null
+    this.pendingToolExecutionApprovalToolCall = null
+    this.pendingToolExecutionApprovalToolId = ''
     this.resetToolExecutionApprovalState()
     if (resolver !== null) {
-      resolver(false)
+      resolver(decision === null ? false : decision)
     }
   }
 
   private async requestToolExecutionApproval(
+    toolCall: ToolCall,
+    toolId: string,
     toolName: string,
-    sourceLabel: string,
-    argumentsJson: string
+    sourceLabel: string
   ): Promise<boolean> {
+    const argumentsJson = toolCall.arguments
     const preview = buildToolArgumentsPreview(argumentsJson, 4, 800)
     return await new Promise<boolean>((resolve) => {
       if (this.pendingToolExecutionApprovalResolver !== null) {
         const previousResolver = this.pendingToolExecutionApprovalResolver
         this.pendingToolExecutionApprovalResolver = null
+        this.pendingToolExecutionApprovalDecision = null
+        this.pendingToolExecutionApprovalToolCall = null
+        this.pendingToolExecutionApprovalToolId = ''
         previousResolver(false)
       }
       this.toolExecutionApprovalSourceLabel = sourceLabel.trim()
@@ -3764,9 +3849,100 @@ export struct ChatPage {
       this.toolExecutionApprovalArgumentsPreview = preview.rawPreview
       this.toolExecutionApprovalArgumentsTruncated = preview.rawTruncated
       this.showRawToolExecutionApprovalArguments = false
+      this.showToolExecutionApprovalSafetyUi = toolId !== WRITE_SCHEDULE_TOOL_ID && toolId !== READ_SCHEDULE_TOOL_ID
+      this.showReadScheduleRangeUi = toolId === READ_SCHEDULE_TOOL_ID
+      if (this.showReadScheduleRangeUi) {
+        this.configureReadScheduleRangeState(argumentsJson)
+      }
+      this.toolExecutionApprovalTitle = this.resolveToolExecutionApprovalTitle(toolId)
+      this.pendingToolExecutionApprovalToolCall = toolCall
+      this.pendingToolExecutionApprovalToolId = toolId
       this.pendingToolExecutionApprovalResolver = resolve
       this.showToolExecutionApprovalSheet = true
     })
+  }
+
+  private configureReadScheduleRangeState(argumentsJson: string): void {
+    const args = this.parseReadScheduleApprovalArgs(argumentsJson)
+    this.readScheduleDaysBeforeText = this.resolveReadScheduleNumberText(args.days_before, args.daysBefore, 0, 0, 365)
+    this.readScheduleDaysAfterText = this.resolveReadScheduleNumberText(args.days_after, args.daysAfter, 7, 0, 365)
+    this.readScheduleLimitText = this.resolveReadScheduleNumberText(args.limit, undefined, 80, 1, 300)
+    this.readScheduleIncludeDescription = args.include_description === true || args.includeDescription === true
+    this.readScheduleIncludeLocation = args.include_location !== false && args.includeLocation !== false
+  }
+
+  private buildReadScheduleApprovalArguments(argumentsJson: string): string {
+    const args = this.parseReadScheduleApprovalArgs(argumentsJson)
+    args.start_time = undefined
+    args.startTime = undefined
+    args.end_time = undefined
+    args.endTime = undefined
+    args.days_before = this.readIntegerInput(this.readScheduleDaysBeforeText, 0, 0, 365)
+    args.daysBefore = undefined
+    args.days_after = this.readIntegerInput(this.readScheduleDaysAfterText, 7, 0, 365)
+    args.daysAfter = undefined
+    args.limit = this.readIntegerInput(this.readScheduleLimitText, 80, 1, 300)
+    args.include_description = this.readScheduleIncludeDescription
+    args.includeDescription = undefined
+    args.include_location = this.readScheduleIncludeLocation
+    args.includeLocation = undefined
+    return JSON.stringify(args)
+  }
+
+  private parseReadScheduleApprovalArgs(argumentsJson: string): ReadScheduleApprovalArgs {
+    try {
+      return JSON.parse(argumentsJson) as ReadScheduleApprovalArgs
+    } catch (_error) {
+      return {}
+    }
+  }
+
+  private normalizeNonNegativeIntegerInput(value: string, max: number): string {
+    const digits = value.replace(/[^0-9]/g, '')
+    if (digits === '') {
+      return ''
+    }
+    const parsed = Number(digits)
+    if (Number.isNaN(parsed)) {
+      return ''
+    }
+    return `${Math.min(Math.floor(parsed), max)}`
+  }
+
+  private resolveReadScheduleNumberText(
+    primary: number | string | undefined,
+    fallback: number | string | undefined,
+    defaultValue: number,
+    min: number,
+    max: number
+  ): string {
+    const value = primary !== undefined ? primary : fallback
+    if (value === undefined) {
+      return `${defaultValue}`
+    }
+    const parsed = typeof value === 'number' ? value : Number(value)
+    if (Number.isNaN(parsed)) {
+      return `${defaultValue}`
+    }
+    return `${Math.min(Math.max(Math.floor(parsed), min), max)}`
+  }
+
+  private readIntegerInput(value: string, fallback: number, min: number, max: number): number {
+    const parsed = Number(value)
+    if (Number.isNaN(parsed)) {
+      return fallback
+    }
+    return Math.min(Math.max(Math.floor(parsed), min), max)
+  }
+
+  private resolveToolExecutionApprovalTitle(toolId: string): string {
+    if (toolId === WRITE_SCHEDULE_TOOL_ID) {
+      return pickLocalizedText('确认写入日程？', 'Approve Schedule Write')
+    }
+    if (toolId === READ_SCHEDULE_TOOL_ID) {
+      return pickLocalizedText('确认读取日程？', 'Approve Schedule Read')
+    }
+    return pickLocalizedText('确认工具调用', 'Approve Tool Call')
   }
 
   private handleAskUserAnswer(toolCallId: string, answerJson: string): void {

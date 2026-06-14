@@ -10,8 +10,11 @@ import {
 import { ToolExecutor, RegisteredTool, getToolRegistry } from '../services/ToolRegistry'
 import { getWebSearchService, SearchResult, WebSearchResult } from '../services/WebSearchService'
 import { cleanSearchQuery } from '../utils/SearchQueryUtils'
+import { getCalendarWriteService, ReadScheduleRequest, WriteScheduleRequest } from '../services/CalendarWriteService'
 
 export const ASK_USER_TOOL_ID: string = 'ask_user'
+export const READ_SCHEDULE_TOOL_ID: string = 'read_schedule'
+export const WRITE_SCHEDULE_TOOL_ID: string = 'write_schedule'
 
 // web_search 工具参数接口
 interface WebSearchArgs {
@@ -20,6 +23,37 @@ interface WebSearchArgs {
   keywords?: string
   url?: string
   page?: number | string
+}
+
+interface WriteScheduleArgs {
+  target?: string
+  title?: string
+  start_time?: string
+  startTime?: string
+  end_time?: string
+  endTime?: string
+  all_day?: boolean
+  allDay?: boolean
+  description?: string
+  location?: string
+  reminder_minutes_before?: number | string
+  reminderMinutesBefore?: number | string
+}
+
+interface ReadScheduleArgs {
+  start_time?: string
+  startTime?: string
+  end_time?: string
+  endTime?: string
+  days_before?: number | string
+  daysBefore?: number | string
+  days_after?: number | string
+  daysAfter?: number | string
+  limit?: number | string
+  include_description?: boolean
+  includeDescription?: boolean
+  include_location?: boolean
+  includeLocation?: boolean
 }
 
 // 搜索结果项接口（用于格式化输出）
@@ -67,6 +101,131 @@ class ErrorOutput {
 class AskUserExecutor implements ToolExecutor {
   async execute(_args: string): Promise<string> {
     return JSON.stringify(new ErrorOutput('ask_user should be resolved by the user, not executed directly'))
+  }
+}
+
+class ReadScheduleExecutor implements ToolExecutor {
+  async execute(args: string): Promise<string> {
+    try {
+      const params = JSON.parse(args) as ReadScheduleArgs
+      const request = this.buildRequest(params)
+      const result = await getCalendarWriteService().readSchedule(request)
+      return JSON.stringify(result)
+    } catch (error) {
+      return JSON.stringify(new ErrorOutput(`读取日程失败: ${this.stringifyError(error)}`))
+    }
+  }
+
+  private buildRequest(params: ReadScheduleArgs): ReadScheduleRequest {
+    return {
+      startTime: this.resolveOptionalString(params.start_time, params.startTime),
+      endTime: this.resolveOptionalString(params.end_time, params.endTime),
+      daysBefore: this.resolveOptionalNumber(params.days_before, params.daysBefore),
+      daysAfter: this.resolveOptionalNumber(params.days_after, params.daysAfter),
+      limit: this.resolveOptionalNumber(params.limit),
+      includeDescription: params.include_description === true || params.includeDescription === true,
+      includeLocation: params.include_location !== false && params.includeLocation !== false
+    }
+  }
+
+  private resolveOptionalString(primary: string | undefined, fallback?: string): string | undefined {
+    if (primary !== undefined) {
+      return primary
+    }
+    return fallback
+  }
+
+  private resolveOptionalNumber(
+    primary: number | string | undefined,
+    fallback?: number | string
+  ): number | undefined {
+    const value = primary !== undefined ? primary : fallback
+    if (value === undefined) {
+      return undefined
+    }
+    if (typeof value === 'number') {
+      return value
+    }
+    const parsed = Number(value)
+    if (Number.isNaN(parsed)) {
+      return undefined
+    }
+    return parsed
+  }
+
+  private stringifyError(error: Object): string {
+    if (error instanceof Error) {
+      return error.message
+    }
+    return JSON.stringify(error)
+  }
+}
+
+class WriteScheduleExecutor implements ToolExecutor {
+  async execute(args: string): Promise<string> {
+    try {
+      const params = JSON.parse(args) as WriteScheduleArgs
+      const request = this.buildRequest(params)
+      const result = await getCalendarWriteService().writeSchedule(request)
+      return JSON.stringify(result)
+    } catch (error) {
+      return JSON.stringify(new ErrorOutput(`写入日程失败: ${this.stringifyError(error)}`))
+    }
+  }
+
+  private buildRequest(params: WriteScheduleArgs): WriteScheduleRequest {
+    return {
+      target: this.resolveString(params.target, 'calendar'),
+      title: this.resolveString(params.title),
+      startTime: this.resolveString(params.start_time, this.resolveString(params.startTime)),
+      endTime: this.resolveOptionalString(params.end_time, params.endTime),
+      allDay: params.all_day === true || params.allDay === true,
+      description: this.resolveOptionalString(params.description),
+      location: this.resolveOptionalString(params.location),
+      reminderMinutesBefore: this.resolveOptionalNumber(
+        params.reminder_minutes_before,
+        params.reminderMinutesBefore
+      )
+    }
+  }
+
+  private resolveString(value: string | undefined, fallback: string = ''): string {
+    if (value === undefined) {
+      return fallback
+    }
+    return value
+  }
+
+  private resolveOptionalString(primary: string | undefined, fallback?: string): string | undefined {
+    if (primary !== undefined) {
+      return primary
+    }
+    return fallback
+  }
+
+  private resolveOptionalNumber(
+    primary: number | string | undefined,
+    fallback?: number | string
+  ): number | undefined {
+    const value = primary !== undefined ? primary : fallback
+    if (value === undefined) {
+      return undefined
+    }
+    if (typeof value === 'number') {
+      return value
+    }
+    const parsed = Number(value)
+    if (Number.isNaN(parsed)) {
+      return undefined
+    }
+    return parsed
+  }
+
+  private stringifyError(error: Object): string {
+    if (error instanceof Error) {
+      return error.message
+    }
+    return JSON.stringify(error)
   }
 }
 
@@ -320,6 +479,136 @@ function createAskUserToolConfig(): ToolConfig {
   )
 }
 
+function createReadScheduleToolDefinition(): ToolDefinition {
+  const parameters = new ToolParameters()
+  const rawSchemaJson: string = `{
+    "type": "object",
+    "properties": {
+      "days_before": {
+        "type": "number",
+        "description": "从今天往前读取多少天，可按用户请求或保守默认填写；执行前客户端会让用户通过专用 UI 确认或修改。"
+      },
+      "days_after": {
+        "type": "number",
+        "description": "从今天往后读取多少天，可按用户请求或保守默认填写；执行前客户端会让用户通过专用 UI 确认或修改。"
+      },
+      "start_time": {
+        "type": "string",
+        "description": "可选。读取范围开始时间，使用带时区 ISO-8601 字符串；若提供则必须同时提供 end_time。"
+      },
+      "end_time": {
+        "type": "string",
+        "description": "可选。读取范围结束时间，使用带时区 ISO-8601 字符串；若提供则必须同时提供 start_time。"
+      },
+      "limit": {
+        "type": "number",
+        "description": "最多返回多少条日程，默认 80，最大 300；执行前用户可在确认 UI 中修改。"
+      },
+      "include_description": {
+        "type": "boolean",
+        "description": "是否包含日程备注。备注可能含隐私，默认 false；执行前用户可在确认 UI 中修改。"
+      },
+      "include_location": {
+        "type": "boolean",
+        "description": "是否包含地点。默认 true；执行前用户可在确认 UI 中修改。"
+      }
+    }
+  }`
+  parameters.setRawSchema(JSON.parse(rawSchemaJson) as object)
+
+  const func = new ToolFunction(
+    READ_SCHEDULE_TOOL_ID,
+    '读取系统日历事件并提供给模型分析。读取日程涉及隐私，执行前客户端会弹出专用 UI，让用户确认或修改向前天数、向后天数、返回数量上限、是否包含备注/地点；最终以用户在 UI 中确认的范围为准。若用户没有明确读取范围，可传空对象或保守默认值，不要再使用 ask_user 询问读取范围。',
+    parameters
+  )
+
+  return new ToolDefinition(func)
+}
+
+function createReadScheduleToolConfig(): ToolConfig {
+  return new ToolConfig(
+    READ_SCHEDULE_TOOL_ID,
+    '读取日程',
+    '经你确认后按指定范围读取系统日历事件供模型分析',
+    null,
+    true,
+    false,
+    ToolSourceType.BUILTIN,
+    'builtin',
+    READ_SCHEDULE_TOOL_ID,
+    '内置工具',
+    ToolPermissionLevel.WRITE
+  )
+}
+
+function createWriteScheduleToolDefinition(): ToolDefinition {
+  const parameters = new ToolParameters()
+  const rawSchemaJson: string = `{
+    "type": "object",
+    "properties": {
+      "target": {
+        "type": "string",
+        "enum": ["calendar"],
+        "description": "固定传 calendar。本工具只写入系统日历事件。"
+      },
+      "title": {
+        "type": "string",
+        "description": "日程标题，必填，简短明确。"
+      },
+      "start_time": {
+        "type": "string",
+        "description": "开始时间，必填。使用带时区的 ISO-8601 字符串，例如 2026-06-14T15:30:00+08:00；不要传相对时间。"
+      },
+      "end_time": {
+        "type": "string",
+        "description": "结束时间，可选。使用带时区的 ISO-8601 字符串；省略时非全天默认 1 小时，全天默认 1 天。"
+      },
+      "all_day": {
+        "type": "boolean",
+        "description": "是否全天事件。"
+      },
+      "description": {
+        "type": "string",
+        "description": "日程备注，可选。"
+      },
+      "location": {
+        "type": "string",
+        "description": "地点，可选，仅写入日历事件。"
+      },
+      "reminder_minutes_before": {
+        "type": "number",
+        "description": "日历事件提前多少分钟提醒，默认 15。"
+      }
+    },
+    "required": ["title", "start_time"]
+  }`
+  parameters.setRawSchema(JSON.parse(rawSchemaJson) as object)
+
+  const func = new ToolFunction(
+    WRITE_SCHEDULE_TOOL_ID,
+    '只写入系统日历事件。仅当用户明确要求创建/写入日程、日历事件、日历提醒、安排事项、记到日历时使用；如果用户说“闹钟”“叫醒我”“设个闹钟”，不要调用工具，应直接说明当前不支持创建闹钟。如果日期、时间、标题或是否写入仍不明确，先使用 ask_user 向用户确认。时间必须转成带时区的具体 ISO 字符串。本工具会修改系统日历，执行前应用会要求用户审批。',
+    parameters
+  )
+
+  return new ToolDefinition(func)
+}
+
+function createWriteScheduleToolConfig(): ToolConfig {
+  return new ToolConfig(
+    WRITE_SCHEDULE_TOOL_ID,
+    '写入日程',
+    '模型可经用户确认后写入系统日历事件',
+    null,
+    true,
+    false,
+    ToolSourceType.BUILTIN,
+    'builtin',
+    WRITE_SCHEDULE_TOOL_ID,
+    '内置工具',
+    ToolPermissionLevel.WRITE
+  )
+}
+
 // 注册所有内置工具
 export function registerBuiltinTools(): void {
   const registry = getToolRegistry()
@@ -347,6 +636,28 @@ export function registerBuiltinTools(): void {
     registeredNow += 1
   }
 
+  if (!registry.isToolRegistered(READ_SCHEDULE_TOOL_ID)) {
+    const readScheduleTool = new RegisteredTool(
+      READ_SCHEDULE_TOOL_ID,
+      createReadScheduleToolConfig(),
+      createReadScheduleToolDefinition(),
+      new ReadScheduleExecutor()
+    )
+    registry.registerTool(readScheduleTool)
+    registeredNow += 1
+  }
+
+  if (!registry.isToolRegistered(WRITE_SCHEDULE_TOOL_ID)) {
+    const writeScheduleTool = new RegisteredTool(
+      WRITE_SCHEDULE_TOOL_ID,
+      createWriteScheduleToolConfig(),
+      createWriteScheduleToolDefinition(),
+      new WriteScheduleExecutor()
+    )
+    registry.registerTool(writeScheduleTool)
+    registeredNow += 1
+  }
+
   console.info(
     'BuiltinTools',
     `Builtin tools ready: total=${registry.getToolCount()}, newlyRegistered=${registeredNow}`
@@ -355,5 +666,5 @@ export function registerBuiltinTools(): void {
 
 // 获取所有内置工具 ID
 export function getBuiltinToolIds(): string[] {
-  return ['web_search', ASK_USER_TOOL_ID]
+  return ['web_search', ASK_USER_TOOL_ID, READ_SCHEDULE_TOOL_ID, WRITE_SCHEDULE_TOOL_ID]
 }

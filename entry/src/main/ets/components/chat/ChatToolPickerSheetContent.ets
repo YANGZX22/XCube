@@ -238,16 +238,6 @@ export struct ChatToolPickerSheetContent {
                           .maxLines(1)
                           .textOverflow({ overflow: TextOverflow.Ellipsis })
 
-                        if (this.isToolSelected(tool.id)) {
-                          Text(pickLocalizedText('已启用', 'Enabled'))
-                            .fontSize(10)
-                            .fontWeight(FontWeight.Medium)
-                            .fontColor(Color.White)
-                            .padding({ left: 8, right: 8, top: 4, bottom: 4 })
-                            .borderRadius(999)
-                            .backgroundColor(this.themePrimary)
-                        }
-
                         if (tool.permissionLevel === ToolPermissionLevel.WRITE) {
                           Text(pickLocalizedText('需确认', 'Approval'))
                             .fontSize(10)
@@ -280,7 +270,7 @@ export struct ChatToolPickerSheetContent {
                   .borderRadius(18)
                   .backgroundColor(this.getCardBackground(this.isToolSelected(tool.id)))
                   .border({
-                    width: this.isToolSelected(tool.id) ? 1.2 : 0.5,
+                    width: 0.8,
                     color: this.getCardBorderColor(this.isToolSelected(tool.id))
                   })
                   .shadow({
@@ -326,16 +316,6 @@ export struct ChatToolPickerSheetContent {
                           .maxLines(1)
                           .textOverflow({ overflow: TextOverflow.Ellipsis })
 
-                        if (this.isMcpToolGroupSelected(group)) {
-                          Text(pickLocalizedText('已启用', 'Enabled'))
-                            .fontSize(10)
-                            .fontWeight(FontWeight.Medium)
-                            .fontColor(Color.White)
-                            .padding({ left: 8, right: 8, top: 4, bottom: 4 })
-                            .borderRadius(999)
-                            .backgroundColor(this.themePrimary)
-                        }
-
                         if (group.hasWriteTool) {
                           Text(pickLocalizedText('需确认', 'Approval'))
                             .fontSize(10)
@@ -361,7 +341,7 @@ export struct ChatToolPickerSheetContent {
                   .borderRadius(18)
                   .backgroundColor(this.getCardBackground(this.isMcpToolGroupSelected(group)))
                   .border({
-                    width: this.isMcpToolGroupSelected(group) ? 1.2 : 0.5,
+                    width: 0.8,
                     color: this.getCardBorderColor(this.isMcpToolGroupSelected(group))
                   })
                   .shadow({

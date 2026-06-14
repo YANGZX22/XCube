@@ -15,8 +15,19 @@ export struct ChatFloatingImmersiveButton {
   @Param iconSize: number = 20
   @Param iconColor: ResourceColor[] = [Color.Gray]
   @Param iconOffsetY: number = -4
+  @Param responsePadding: number = 8
   @Event onButtonClick: () => void = () => {}
   @Local private pressed: boolean = false
+  private lastClickAt: number = 0
+
+  private emitButtonClick(): void {
+    const now = Date.now()
+    if (now - this.lastClickAt < 120) {
+      return
+    }
+    this.lastClickAt = now
+    this.onButtonClick()
+  }
 
   @Builder
   DefaultContentBuilder() {
@@ -33,7 +44,7 @@ export struct ChatFloatingImmersiveButton {
   @BuilderParam contentBuilder: () => void = this.DefaultContentBuilder
 
   build() {
-    Row() {
+    Stack({ alignContent: Alignment.Center }) {
       HdsMiniBarButton({
         barWidth: this.barWidth,
         barHeight: this.barHeight,
@@ -50,12 +61,29 @@ export struct ChatFloatingImmersiveButton {
         barBackgroundColor: Color.Transparent,
         clipToBarShape: false,
         onButtonClick: (): void => {
-          this.onButtonClick()
+          this.emitButtonClick()
         }
       }) {
         this.contentBuilder()
       }
+
+      Row()
+        .width(this.barWidth)
+        .height(this.barHeight)
+        .backgroundColor(Color.Transparent)
+        .hitTestBehavior(HitTestMode.Transparent)
+        .onClick(() => {
+          this.emitButtonClick()
+        })
     }
+    .width(this.barWidth)
+    .height(this.barHeight)
+    .responseRegion({
+      x: -this.responsePadding,
+      y: -this.responsePadding,
+      width: this.barWidth + this.responsePadding * 2,
+      height: this.barHeight + this.responsePadding * 2
+    })
     .scale(getButtonScale(this.pressed))
     .animation(getButtonAnimation())
     .onTouch(createButtonTouchHandler((pressed: boolean): void => {

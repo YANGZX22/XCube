@@ -69,6 +69,10 @@
       "value": "此应用需要麦克风权限，用于将您的语音转写为文字进行输入。"
     },
     {
+      "name": "permission_calendar_reason",
+      "value": "此应用需要日历权限，用于在您明确确认后写入日程。"
+    },
+    {
       "name": "voice_input",
       "value": "语音输入"
     },

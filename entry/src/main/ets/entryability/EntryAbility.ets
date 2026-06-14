@@ -150,6 +150,7 @@ export default class EntryAbility extends UIAbility {
       // 初始化后台任务守护与通知服务
       ServiceRegistry.backgroundGuard().initialize(this.context)
       ServiceRegistry.backgroundGuard().onAppBackgroundChanged(false)
+      ServiceRegistry.calendarWrite().initialize(this.context)
     } catch (error) {
       if (error instanceof AppError) {
         hilog.error(

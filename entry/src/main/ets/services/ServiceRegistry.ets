@@ -18,6 +18,7 @@ import { getInAppAlertService, InAppAlertService } from './InAppAlertService'
 import { getAssistantService, AssistantService } from './AssistantService'
 import { getWebDAVService, WebDAVService } from './WebDAVService'
 import { getWebDAVSyncService, WebDAVSyncService } from './WebDAVSyncService'
+import { getCalendarWriteService, CalendarWriteService } from './CalendarWriteService'
 import { getSettingsManager, SettingsManager } from '../viewmodels/SettingsManager'
 import { getAppStateManager, AppStateManager } from '../viewmodels/AppStateManager'
 import { getProviderViewModel, ProviderViewModel } from '../viewmodels/ProviderViewModel'
@@ -115,6 +116,10 @@ export class ServiceRegistry {
 
   static webdavSync(): WebDAVSyncService {
     return getWebDAVSyncService()
+  }
+
+  static calendarWrite(): CalendarWriteService {
+    return getCalendarWriteService()
   }
 
   static chat(): ChatViewModel {

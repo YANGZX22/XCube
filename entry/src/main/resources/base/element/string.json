@@ -69,6 +69,10 @@
       "value": "This app needs microphone access to convert your speech to text for voice input."
     },
     {
+      "name": "permission_calendar_reason",
+      "value": "This app needs calendar access to add schedules that you explicitly approve."
+    },
+    {
       "name": "voice_input",
       "value": "Voice Input"
     },

@@ -308,7 +308,11 @@ export class ToolExecutionService {
     if (!approved) {
       return new ToolResult(
         toolCall.id,
-        JSON.stringify({ error: '用户拒绝了工具调用', cancelled: true }),
+        JSON.stringify({
+          error: '用户拒绝了工具调用',
+          rejected: true,
+          message: '用户未授权执行该工具调用。请不要继续调用同一工具，直接向用户说明已取消或询问是否需要修改后重试。'
+        }),
         true,
         registeredTool.config.name,
         registeredTool.config.sourceLabel

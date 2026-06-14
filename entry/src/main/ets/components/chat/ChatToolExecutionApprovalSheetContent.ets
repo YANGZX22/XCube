@@ -6,14 +6,27 @@ import { pickLocalizedText } from '../../utils/LocalizedTextUtils'
 export struct ChatToolExecutionApprovalSheetContent {
   @Param sourceLabel: string = ''
   @Param toolName: string = ''
+  @Param titleText: string = ''
   @Param argumentSummary: string = ''
   @Param argumentEntries: ToolPreviewEntry[] = []
   @Param argumentsPreview: string = '{}'
   @Param argumentsTruncated: boolean = false
   @Param showRawArguments: boolean = false
+  @Param showWriteSafetyUi: boolean = true
+  @Param showReadScheduleRangeUi: boolean = false
+  @Param readScheduleDaysBeforeText: string = '0'
+  @Param readScheduleDaysAfterText: string = '7'
+  @Param readScheduleLimitText: string = '80'
+  @Param readScheduleIncludeDescription: boolean = false
+  @Param readScheduleIncludeLocation: boolean = true
   @Param themePrimary: ResourceColor = ''
   @Param isDarkMode: boolean = false
   @Event onToggleShowRaw: () => void = (): void => {}
+  @Event onReadScheduleDaysBeforeChange: (value: string) => void = (_value: string): void => {}
+  @Event onReadScheduleDaysAfterChange: (value: string) => void = (_value: string): void => {}
+  @Event onReadScheduleLimitChange: (value: string) => void = (_value: string): void => {}
+  @Event onReadScheduleIncludeDescriptionChange: (value: boolean) => void = (_value: boolean): void => {}
+  @Event onReadScheduleIncludeLocationChange: (value: boolean) => void = (_value: boolean): void => {}
   @Event onCancel: () => void = (): void => {}
   @Event onApprove: () => void = (): void => {}
 
@@ -29,81 +42,166 @@ export struct ChatToolExecutionApprovalSheetContent {
     Column({ space: 16 }) {
       Row() {
         Column({ space: 4 }) {
-          Text(pickLocalizedText('确认工具调用', 'Approve Tool Call'))
+          Text(this.titleText.trim() !== ''
+            ? this.titleText
+            : pickLocalizedText('确认工具调用', 'Approve Tool Call'))
             .fontSize(20)
             .fontWeight(FontWeight.Bold)
             .fontColor($r('app.color.text_primary'))
 
-          Text(pickLocalizedText(
-            '该工具可能修改外部状态，请确认后再继续。',
-            'This tool may change external state. Confirm before continuing.'
-          ))
-            .fontSize(12)
-            .fontColor($r('app.color.text_secondary'))
+          if (this.showWriteSafetyUi) {
+            Text(pickLocalizedText(
+              '该工具可能修改外部状态，请确认后再继续。',
+              'This tool may change external state. Confirm before continuing.'
+            ))
+              .fontSize(12)
+              .fontColor($r('app.color.text_secondary'))
+          }
         }
         .layoutWeight(1)
         .alignItems(HorizontalAlign.Start)
 
-        Text(pickLocalizedText('写操作', 'Write'))
-          .fontSize(11)
-          .fontWeight(FontWeight.Medium)
-          .fontColor(Color.White)
-          .padding({ left: 10, right: 10, top: 5, bottom: 5 })
-          .borderRadius(999)
-          .backgroundColor('#D9485F')
+        if (this.showWriteSafetyUi) {
+          Text(pickLocalizedText('写操作', 'Write'))
+            .fontSize(11)
+            .fontWeight(FontWeight.Medium)
+            .fontColor(Color.White)
+            .padding({ left: 10, right: 10, top: 5, bottom: 5 })
+            .borderRadius(999)
+            .backgroundColor('#D9485F')
+        }
       }
       .width('100%')
       .alignItems(VerticalAlign.Top)
 
-      Column({ space: 10 }) {
-        Column({ space: 4 }) {
-          Text(pickLocalizedText('来源', 'Source'))
-            .fontSize(11)
-            .fontColor($r('app.color.text_tertiary'))
-          Text(this.sourceLabel.trim() !== '' ? this.sourceLabel : pickLocalizedText('未知来源', 'Unknown source'))
-            .fontSize(15)
-            .fontWeight(FontWeight.Medium)
-            .fontColor($r('app.color.text_primary'))
-        }
-        .width('100%')
-        .alignItems(HorizontalAlign.Start)
-
-        Column({ space: 4 }) {
-          Text(pickLocalizedText('工具', 'Tool'))
-            .fontSize(11)
-            .fontColor($r('app.color.text_tertiary'))
-          Text(this.toolName.trim() !== '' ? this.toolName : pickLocalizedText('未知工具', 'Unknown tool'))
-            .fontSize(15)
-            .fontWeight(FontWeight.Medium)
-            .fontColor($r('app.color.text_primary'))
-        }
-        .width('100%')
-        .alignItems(HorizontalAlign.Start)
-      }
-      .width('100%')
-      .padding(14)
-      .borderRadius(16)
-      .backgroundColor(this.themeSurface)
-
-      Column({ space: 6 }) {
-        Text(pickLocalizedText('风险提醒', 'Risk Notice'))
-          .fontSize(11)
-          .fontWeight(FontWeight.Medium)
-          .fontColor('#B85A00')
-
-        Text(pickLocalizedText(
-          '这是写操作工具。模型只是提出调用，真正执行前仍需要你明确批准。',
-          'This is a write tool. The model only proposes the call, and you still have to explicitly approve it.'
-        ))
-          .fontSize(12)
-          .lineHeight(18)
-          .fontColor(this.isDarkMode ? '#FFD6A6' : '#8A4B08')
+      if (this.showWriteSafetyUi) {
+        Column({ space: 10 }) {
+          Column({ space: 4 }) {
+            Text(pickLocalizedText('来源', 'Source'))
+              .fontSize(11)
+              .fontColor($r('app.color.text_tertiary'))
+            Text(this.sourceLabel.trim() !== '' ? this.sourceLabel : pickLocalizedText('未知来源', 'Unknown source'))
+              .fontSize(15)
+              .fontWeight(FontWeight.Medium)
+              .fontColor($r('app.color.text_primary'))
+          }
           .width('100%')
+          .alignItems(HorizontalAlign.Start)
+
+          Column({ space: 4 }) {
+            Text(pickLocalizedText('工具', 'Tool'))
+              .fontSize(11)
+              .fontColor($r('app.color.text_tertiary'))
+            Text(this.toolName.trim() !== '' ? this.toolName : pickLocalizedText('未知工具', 'Unknown tool'))
+              .fontSize(15)
+              .fontWeight(FontWeight.Medium)
+              .fontColor($r('app.color.text_primary'))
+          }
+          .width('100%')
+          .alignItems(HorizontalAlign.Start)
+        }
+        .width('100%')
+        .padding(14)
+        .borderRadius(16)
+        .backgroundColor(this.themeSurface)
       }
-      .width('100%')
-      .padding(14)
-      .borderRadius(16)
-      .backgroundColor(this.isDarkMode ? '#3B2413' : '#FFF3E8')
+
+      if (this.showWriteSafetyUi) {
+        Column({ space: 6 }) {
+          Text(pickLocalizedText('风险提醒', 'Risk Notice'))
+            .fontSize(11)
+            .fontWeight(FontWeight.Medium)
+            .fontColor('#B85A00')
+
+          Text(pickLocalizedText(
+            '这是写操作工具。模型只是提出调用，真正执行前仍需要你明确批准。',
+            'This is a write tool. The model only proposes the call, and you still have to explicitly approve it.'
+          ))
+            .fontSize(12)
+            .lineHeight(18)
+            .fontColor(this.isDarkMode ? '#FFD6A6' : '#8A4B08')
+            .width('100%')
+        }
+        .width('100%')
+        .padding(14)
+        .borderRadius(16)
+        .backgroundColor(this.isDarkMode ? '#3B2413' : '#FFF3E8')
+      }
+
+      if (this.showReadScheduleRangeUi) {
+        Column({ space: 12 }) {
+          Column({ space: 4 }) {
+            Text(pickLocalizedText('读取范围', 'Read Range'))
+              .fontSize(13)
+              .fontWeight(FontWeight.Medium)
+              .fontColor($r('app.color.text_primary'))
+
+            Text(pickLocalizedText(
+              '只会把这个范围内的日程提供给模型。',
+              'Only events in this range will be provided to the model.'
+            ))
+              .fontSize(12)
+              .lineHeight(18)
+              .fontColor($r('app.color.text_secondary'))
+              .width('100%')
+          }
+          .width('100%')
+          .alignItems(HorizontalAlign.Start)
+
+          Row({ space: 8 }) {
+            this.ReadScheduleNumberField(
+              pickLocalizedText('向前天数', 'Days Back'),
+              this.readScheduleDaysBeforeText,
+              pickLocalizedText('0', '0'),
+              (value: string): void => {
+                this.onReadScheduleDaysBeforeChange(value)
+              }
+            )
+
+            this.ReadScheduleNumberField(
+              pickLocalizedText('向后天数', 'Days Ahead'),
+              this.readScheduleDaysAfterText,
+              pickLocalizedText('7', '7'),
+              (value: string): void => {
+                this.onReadScheduleDaysAfterChange(value)
+              }
+            )
+
+            this.ReadScheduleNumberField(
+              pickLocalizedText('数量上限', 'Limit'),
+              this.readScheduleLimitText,
+              pickLocalizedText('80', '80'),
+              (value: string): void => {
+                this.onReadScheduleLimitChange(value)
+              }
+            )
+          }
+          .width('100%')
+
+          Column({ space: 8 }) {
+            this.ReadScheduleToggleRow(
+              pickLocalizedText('包含地点', 'Include Location'),
+              this.readScheduleIncludeLocation,
+              (value: boolean): void => {
+                this.onReadScheduleIncludeLocationChange(value)
+              }
+            )
+
+            this.ReadScheduleToggleRow(
+              pickLocalizedText('包含备注', 'Include Notes'),
+              this.readScheduleIncludeDescription,
+              (value: boolean): void => {
+                this.onReadScheduleIncludeDescriptionChange(value)
+              }
+            )
+          }
+          .width('100%')
+        }
+        .width('100%')
+        .padding(14)
+        .borderRadius(16)
+        .backgroundColor(this.themeSurface)
+      }
 
       Column({ space: 8 }) {
         Row() {
@@ -127,10 +225,22 @@ export struct ChatToolExecutionApprovalSheetContent {
           Column({ space: 8 }) {
             ForEach(this.argumentEntries, (entry: ToolPreviewEntry) => {
               Row() {
-                Text(entry.label)
-                  .fontSize(11)
-                  .fontColor($r('app.color.text_tertiary'))
-                  .width(72)
+                Column({ space: 2 }) {
+                  Text(this.resolveArgumentDisplayLabel(entry.label))
+                    .fontSize(12)
+                    .fontWeight(FontWeight.Medium)
+                    .fontColor($r('app.color.text_primary'))
+                    .maxLines(1)
+                    .textOverflow({ overflow: TextOverflow.Ellipsis })
+
+                  Text(entry.label)
+                    .fontSize(10)
+                    .fontColor($r('app.color.text_tertiary'))
+                    .maxLines(1)
+                    .textOverflow({ overflow: TextOverflow.Ellipsis })
+                }
+                .width(104)
+                .alignItems(HorizontalAlign.Start)
 
                 Text(entry.value)
                   .layoutWeight(1)
@@ -218,5 +328,110 @@ export struct ChatToolExecutionApprovalSheetContent {
     .width('100%')
     .padding({ left: 20, right: 20, top: 12, bottom: 24 })
     .backgroundColor(this.themeBackground)
+  }
+
+  @Builder
+  private ReadScheduleNumberField(
+    label: string,
+    value: string,
+    placeholder: string,
+    onChange: (value: string) => void
+  ) {
+    Column({ space: 6 }) {
+      Text(label)
+        .fontSize(11)
+        .fontColor($r('app.color.text_tertiary'))
+        .maxLines(1)
+        .textOverflow({ overflow: TextOverflow.Ellipsis })
+
+      TextInput({ text: value, placeholder: placeholder })
+        .width('100%')
+        .height(38)
+        .fontSize(14)
+        .fontColor($r('app.color.text_primary'))
+        .placeholderColor($r('app.color.text_tertiary'))
+        .backgroundColor(this.themeBackground)
+        .borderRadius(10)
+        .textAlign(TextAlign.Center)
+        .onChange((input: string) => {
+          onChange(input)
+        })
+    }
+    .layoutWeight(1)
+    .constraintSize({ minWidth: 0 })
+    .alignItems(HorizontalAlign.Start)
+  }
+
+  @Builder
+  private ReadScheduleToggleRow(label: string, checked: boolean, onChange: (value: boolean) => void) {
+    Row() {
+      Text(label)
+        .fontSize(13)
+        .fontColor($r('app.color.text_primary'))
+        .layoutWeight(1)
+        .maxLines(1)
+        .textOverflow({ overflow: TextOverflow.Ellipsis })
+
+      Toggle({ type: ToggleType.Switch, isOn: checked })
+        .width(56)
+        .height(30)
+        .selectedColor(this.themePrimary)
+        .onChange((isOn: boolean) => {
+          onChange(isOn)
+        })
+    }
+    .width('100%')
+    .height(44)
+    .padding({ left: 12, right: 10 })
+    .borderRadius(12)
+    .backgroundColor(this.themeBackground)
+    .alignItems(VerticalAlign.Center)
+  }
+
+  private resolveArgumentDisplayLabel(label: string): string {
+    switch (label) {
+      case 'days_before':
+      case 'daysBefore':
+        return pickLocalizedText('向前天数', 'Days Back')
+      case 'days_after':
+      case 'daysAfter':
+        return pickLocalizedText('向后天数', 'Days Ahead')
+      case 'limit':
+        return pickLocalizedText('数量上限', 'Result Limit')
+      case 'include_description':
+      case 'includeDescription':
+        return pickLocalizedText('包含备注', 'Include Notes')
+      case 'include_location':
+      case 'includeLocation':
+        return pickLocalizedText('包含地点', 'Include Location')
+      case 'title':
+        return pickLocalizedText('标题', 'Title')
+      case 'start_time':
+      case 'startTime':
+        return pickLocalizedText('开始时间', 'Start Time')
+      case 'end_time':
+      case 'endTime':
+        return pickLocalizedText('结束时间', 'End Time')
+      case 'all_day':
+      case 'allDay':
+        return pickLocalizedText('全天事件', 'All Day')
+      case 'description':
+        return pickLocalizedText('备注', 'Notes')
+      case 'location':
+        return pickLocalizedText('地点', 'Location')
+      case 'reminder_minutes_before':
+      case 'reminderMinutesBefore':
+        return pickLocalizedText('提前提醒', 'Reminder')
+      case 'query':
+      case 'q':
+      case 'keywords':
+        return pickLocalizedText('搜索内容', 'Search Query')
+      case 'url':
+        return pickLocalizedText('链接', 'URL')
+      case 'page':
+        return pickLocalizedText('页码', 'Page')
+      default:
+        return pickLocalizedText('参数', 'Argument')
+    }
   }
 }
