@@ -1843,6 +1843,9 @@ export class DatabaseService {
     message.searchQuery = this.safeGetString(resultSet, 'search_query')
     message.searchEngine = this.safeGetString(resultSet, 'search_engine')
     message.searchSource = this.safeGetString(resultSet, 'search_source')
+    if (message.searchSource === 'document_tool_hint') {
+      message.documentToolHint = message.searchQuery
+    }
 
     try {
       const searchReferencesJson = this.safeGetString(resultSet, 'search_references')

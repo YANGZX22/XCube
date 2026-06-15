@@ -288,6 +288,33 @@ export class ChatViewModel {
     return clonedAttachments
   }
 
+  private filterNativeUnsupportedDocumentAttachments(attachments: MessageAttachment[]): MessageAttachment[] {
+    const filtered: MessageAttachment[] = []
+    for (let i = 0; i < attachments.length; i++) {
+      const attachment = attachments[i]
+      if (this.isPdfAttachment(attachment)) {
+        continue
+      }
+      filtered.push(attachment)
+    }
+    return filtered
+  }
+
+  private filterNativeUnsupportedDocumentAttachmentsInMessages(messages: RequestMessage[]): void {
+    for (let i = 0; i < messages.length; i++) {
+      if (messages[i].attachments.length === 0) {
+        continue
+      }
+      messages[i].attachments = this.filterNativeUnsupportedDocumentAttachments(messages[i].attachments)
+    }
+  }
+
+  private isPdfAttachment(attachment: MessageAttachment): boolean {
+    const mimeType = attachment.mimeType.toLowerCase()
+    const name = attachment.name.toLowerCase()
+    return mimeType === 'application/pdf' || name.endsWith('.pdf')
+  }
+
   private buildDraftTitle(content: string): string {
     const normalized = content.replace(/\s+/g, ' ').trim()
     if (normalized.length === 0) {
@@ -724,6 +751,9 @@ export class ChatViewModel {
     attachments: MessageAttachment[] = [],
     contextStartIndex: number = 0,
     reasoningLevel: ReasoningLevel = ReasoningLevel.OFF,
+    modelSupportsDocuments: boolean = true,
+    requestContent: string = '',
+    userDocumentToolHint: string = '',
     apiPath?: string,  // 可选的自定义 API 路径
     customHeadersJson?: string
   ): Promise<void> {
@@ -755,6 +785,7 @@ export class ChatViewModel {
     const historySource = this.buildForkAwareHistorySource(messages, parentage.forkContext)
     const historyMessages = this.buildConversationRequestHistory(historySource, contextStartIndex)
     const requestAttachments = await this.prepareOutgoingAttachments(attachments)
+    const effectiveRequestContent = requestContent !== '' ? requestContent : content
     if (this.isCancelled(cancelSnapshot)) {
       return
     }
@@ -774,6 +805,11 @@ export class ChatViewModel {
         for (let i = 0; i < attachments.length; i++) {
           userMessage.attachments.push(attachments[i])
         }
+      }
+      userMessage.documentToolHint = userDocumentToolHint
+      if (userDocumentToolHint !== '') {
+        userMessage.searchSource = 'document_tool_hint'
+        userMessage.searchQuery = userDocumentToolHint
       }
       // 通知 UI 添加用户消息（优先渲染，避免”返回再进来只剩用户消息/无模型信息”）
       onUserMessageAdded(userMessage)
@@ -818,10 +854,13 @@ export class ChatViewModel {
     for (let i = 0; i < historyMessages.length; i++) {
       requestMessages.push(historyMessages[i])
     }
-    requestMessages.push(new RequestMessage('user', content, requestAttachments))
+    requestMessages.push(new RequestMessage('user', effectiveRequestContent, requestAttachments))
 
     // 懒加载历史附件
     await this.prepareHistoryAttachments(requestMessages)
+    if (!modelSupportsDocuments) {
+      this.filterNativeUnsupportedDocumentAttachmentsInMessages(requestMessages)
+    }
     if (this.isCancelled(cancelSnapshot)) {
       return
     }
@@ -1670,6 +1709,9 @@ ${limitedSearchContext}
     reasoningLevel: ReasoningLevel = ReasoningLevel.OFF,
     tools: ToolDefinition[] = [],
     toolCallbacks?: ToolCallCallbacks,
+    modelSupportsDocuments: boolean = true,
+    requestContent: string = '',
+    userDocumentToolHint: string = '',
     apiPath?: string,
     customHeadersJson?: string
   ): Promise<void> {
@@ -1699,6 +1741,7 @@ ${limitedSearchContext}
     const historySource = this.buildForkAwareHistorySource(messages, parentage.forkContext)
     const historyMessages = this.buildConversationRequestHistory(historySource, contextStartIndex)
     const requestAttachments = await this.prepareOutgoingAttachments(attachments)
+    const effectiveRequestContent = requestContent !== '' ? requestContent : content
     if (this.isCancelled(cancelSnapshot)) {
       return
     }
@@ -1718,6 +1761,11 @@ ${limitedSearchContext}
         for (let i = 0; i < attachments.length; i++) {
           userMessage.attachments.push(attachments[i])
         }
+      }
+      userMessage.documentToolHint = userDocumentToolHint
+      if (userDocumentToolHint !== '') {
+        userMessage.searchSource = 'document_tool_hint'
+        userMessage.searchQuery = userDocumentToolHint
       }
       // 通知 UI 添加用户消息（优先渲染）
       onUserMessageAdded(userMessage)
@@ -1804,10 +1852,13 @@ ${limitedSearchContext}
     for (let i = 0; i < historyMessages.length; i++) {
       requestMessages.push(historyMessages[i])
     }
-    requestMessages.push(new RequestMessage('user', content, requestAttachments))
+    requestMessages.push(new RequestMessage('user', effectiveRequestContent, requestAttachments))
 
     // 懒加载历史附件
     await this.prepareHistoryAttachments(requestMessages)
+    if (!modelSupportsDocuments) {
+      this.filterNativeUnsupportedDocumentAttachmentsInMessages(requestMessages)
+    }
     if (this.isCancelled(cancelSnapshot)) {
       return
     }

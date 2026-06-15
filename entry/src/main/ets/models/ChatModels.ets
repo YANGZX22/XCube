@@ -306,6 +306,7 @@ export class ModelCapabilities {
   @Trace supportsReasoning: boolean  // 支持推理/思维链（如 o1, DeepSeek R1）
   @Trace supportsWebSearch: boolean  // 支持联网搜索
   @Trace supportsVision: boolean     // 支持图片输入
+  @Trace supportsDocuments: boolean  // 支持原生文档/PDF 输入
   @Trace supportsStreaming: boolean  // 支持流式输出
 
   constructor(
@@ -313,12 +314,14 @@ export class ModelCapabilities {
     supportsReasoning: boolean = false,
     supportsWebSearch: boolean = false,
     supportsVision: boolean = false,
+    supportsDocuments: boolean = false,
     supportsStreaming: boolean = true
   ) {
     this.supportsTools = supportsTools
     this.supportsReasoning = supportsReasoning
     this.supportsWebSearch = supportsWebSearch
     this.supportsVision = supportsVision
+    this.supportsDocuments = supportsDocuments
     this.supportsStreaming = supportsStreaming
   }
 
@@ -329,6 +332,7 @@ export class ModelCapabilities {
       json.supportsReasoning,
       json.supportsWebSearch,
       json.supportsVision,
+      json.supportsDocuments === true,
       json.supportsStreaming
     )
   }
@@ -340,6 +344,7 @@ export class ModelCapabilities {
       supportsReasoning: this.supportsReasoning,
       supportsWebSearch: this.supportsWebSearch,
       supportsVision: this.supportsVision,
+      supportsDocuments: this.supportsDocuments,
       supportsStreaming: this.supportsStreaming
     }
     return json
@@ -352,6 +357,7 @@ export interface ModelCapabilitiesJson {
   supportsReasoning: boolean
   supportsWebSearch: boolean
   supportsVision: boolean
+  supportsDocuments?: boolean
   supportsStreaming: boolean
 }
 
@@ -536,6 +542,7 @@ export class ChatMessage {
   @Trace toolCalls: ToolCall[]      // AI 请求的工具调用
   @Trace toolResults: ToolResult[]  // 工具执行结果
   @Trace toolCallId: string         // 用于 tool 角色消息，关联到对应的 tool_call
+  @Trace documentToolHint: string   // 用户消息上的文档工具提示（不作为正文发送）
 
   constructor(id: string, role: MessageRole, content: string, modelName: string = '', modelId: string = '') {
     this.id = id
@@ -558,6 +565,7 @@ export class ChatMessage {
     this.toolCalls = []
     this.toolResults = []
     this.toolCallId = ''
+    this.documentToolHint = ''
   }
 
   // 检查是否有推理内容

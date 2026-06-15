@@ -1,6 +1,7 @@
 import { ToolConfig, ToolPermissionLevel, ToolSourceType } from '../../models/ChatModels'
 import { getAppUiState } from '../../state/AppUiState'
 import { pickLocalizedText } from '../../utils/LocalizedTextUtils'
+import { ChatFloatingImmersiveButton } from '../ChatFloatingImmersiveButton'
 
 class McpToolGroup {
   sourceId: string = ''
@@ -98,8 +99,8 @@ export struct ChatToolPickerSheetContent {
     return selected ? this.themePrimaryLight : this.themeSurface
   }
 
-  private getCardBorderColor(selected: boolean): ResourceColor {
-    return selected ? this.themePrimary : $r('app.color.divider')
+  private getCardBorderColor(): ResourceColor {
+    return $r('app.color.divider')
   }
 
   private getCardShadowColor(selected: boolean): string {
@@ -112,6 +113,116 @@ export struct ChatToolPickerSheetContent {
       '应用内原生能力，可在当前聊天中按需调用。',
       'Built-in app capability that can be exposed to the model in this chat.'
     )
+  }
+
+  private getToolSymbolResource(toolId: string): Resource {
+    if (toolId === 'web_search') {
+      return $r('sys.symbol.worldclock_fill_2')
+    }
+    if (toolId === 'ask_user') {
+      return $r('sys.symbol.ellipsis_message')
+    }
+    if (toolId === 'python_sandbox') {
+      return $r('sys.symbol.doc_text')
+    }
+    if (toolId === 'canvas_document') {
+      return $r('sys.symbol.paintbrush_pointed_waveform')
+    }
+    if (toolId === 'pdf_to_text') {
+      return $r('sys.symbol.pdf_doc')
+    }
+    if (toolId === 'math_chart') {
+      return $r('sys.symbol.histogram')
+    }
+    if (toolId === 'read_schedule') {
+      return $r('sys.symbol.calendar')
+    }
+    if (toolId === 'write_schedule') {
+      return $r('sys.symbol.calendar_badge_plus')
+    }
+    return $r('sys.symbol.wrench_and_screwdriver')
+  }
+
+  @Builder
+  private BuiltinToolGridCard(tool: ToolConfig) {
+    Column({ space: 10 }) {
+      Row({ space: 8 }) {
+        ChatFloatingImmersiveButton({
+          barWidth: 36,
+          barHeight: 36,
+          iconResource: this.getToolSymbolResource(tool.id),
+          iconSize: 17,
+          iconColor: [this.themePrimary],
+          iconOffsetY: -3,
+          responsePadding: 0
+        }) {
+          Stack({ alignContent: Alignment.Center }) {
+            SymbolGlyph(this.getToolSymbolResource(tool.id))
+              .fontSize(17)
+              .fontColor([this.themePrimary])
+          }
+          .width(36)
+          .height(36)
+          .translate({ y: -3 })
+        }
+
+        Toggle({ type: ToggleType.Switch, isOn: this.isToolSelected(tool.id) })
+          .selectedColor(this.themePrimary)
+          .onChange((value: boolean) => {
+            this.onToggleTool(tool.id, value)
+          })
+      }
+      .width('100%')
+      .justifyContent(FlexAlign.SpaceBetween)
+      .alignItems(VerticalAlign.Center)
+
+      Column({ space: 6 }) {
+        Row({ space: 6 }) {
+          Text(tool.name)
+            .fontSize(14)
+            .fontWeight(FontWeight.Medium)
+            .fontColor($r('app.color.text_primary'))
+            .layoutWeight(1)
+            .maxLines(1)
+            .textOverflow({ overflow: TextOverflow.Ellipsis })
+
+          if (tool.permissionLevel === ToolPermissionLevel.WRITE) {
+            Text(pickLocalizedText('需确认', 'Approval'))
+              .fontSize(10)
+              .fontColor(this.isDarkMode ? '#FFD6A6' : '#8A4B08')
+              .padding({ left: 6, right: 6, top: 3, bottom: 3 })
+              .borderRadius(999)
+              .backgroundColor(this.isDarkMode ? '#3B2413' : '#FFF3E8')
+          }
+        }
+        .width('100%')
+        .alignItems(VerticalAlign.Center)
+
+        Text(this.getBuiltinDescription(tool))
+          .fontSize(11)
+          .lineHeight(16)
+          .fontColor($r('app.color.text_secondary'))
+          .maxLines(3)
+          .textOverflow({ overflow: TextOverflow.Ellipsis })
+      }
+      .width('100%')
+      .alignItems(HorizontalAlign.Start)
+    }
+    .width('100%')
+    .height(138)
+    .padding(12)
+    .borderRadius(18)
+    .backgroundColor(this.getCardBackground(this.isToolSelected(tool.id)))
+    .border({
+      width: 0.8,
+      color: this.getCardBorderColor()
+    })
+    .shadow({
+      radius: this.isToolSelected(tool.id) ? 14 : 10,
+      color: this.getCardShadowColor(this.isToolSelected(tool.id)),
+      offsetX: 0,
+      offsetY: this.isToolSelected(tool.id) ? 6 : 4
+    })
   }
 
   build() {
@@ -214,72 +325,17 @@ export struct ChatToolPickerSheetContent {
                 .width('100%')
                 .alignItems(HorizontalAlign.Start)
 
-                ForEach(this.getBuiltinChatTools(), (tool: ToolConfig) => {
-                  Row({ space: 12 }) {
-                    Column() {
-                      SymbolGlyph($r('sys.symbol.gearshape'))
-                        .fontSize(20)
-                        .fontColor([this.isToolSelected(tool.id) ? Color.White : this.themePrimary])
+                Grid() {
+                  ForEach(this.getBuiltinChatTools(), (tool: ToolConfig) => {
+                    GridItem() {
+                      this.BuiltinToolGridCard(tool)
                     }
-                    .width(40)
-                    .height(40)
-                    .borderRadius(12)
-                    .backgroundColor(this.isToolSelected(tool.id) ? this.themePrimary : this.themePrimaryLight)
-                    .justifyContent(FlexAlign.Center)
-                    .alignItems(HorizontalAlign.Center)
-
-                    Column({ space: 8 }) {
-                      Row({ space: 8 }) {
-                        Text(tool.name)
-                          .fontSize(15)
-                          .fontWeight(FontWeight.Medium)
-                          .fontColor($r('app.color.text_primary'))
-                          .layoutWeight(1)
-                          .maxLines(1)
-                          .textOverflow({ overflow: TextOverflow.Ellipsis })
-
-                        if (tool.permissionLevel === ToolPermissionLevel.WRITE) {
-                          Text(pickLocalizedText('需确认', 'Approval'))
-                            .fontSize(10)
-                            .fontColor(this.isDarkMode ? '#FFD6A6' : '#8A4B08')
-                            .padding({ left: 8, right: 8, top: 4, bottom: 4 })
-                            .borderRadius(999)
-                            .backgroundColor(this.isDarkMode ? '#3B2413' : '#FFF3E8')
-                        }
-                      }
-                      .width('100%')
-                      .alignItems(VerticalAlign.Center)
-
-                      Text(this.getBuiltinDescription(tool))
-                        .fontSize(12)
-                        .lineHeight(18)
-                        .fontColor($r('app.color.text_secondary'))
-                        .maxLines(2)
-                        .textOverflow({ overflow: TextOverflow.Ellipsis })
-                    }
-                    .layoutWeight(1)
-                    .alignItems(HorizontalAlign.Start)
-
-                    Toggle({ type: ToggleType.Switch, isOn: this.isToolSelected(tool.id) })
-                      .onChange((value: boolean) => {
-                        this.onToggleTool(tool.id, value)
-                      })
-                  }
-                  .width('100%')
-                  .padding(14)
-                  .borderRadius(18)
-                  .backgroundColor(this.getCardBackground(this.isToolSelected(tool.id)))
-                  .border({
-                    width: 0.8,
-                    color: this.getCardBorderColor(this.isToolSelected(tool.id))
-                  })
-                  .shadow({
-                    radius: this.isToolSelected(tool.id) ? 14 : 10,
-                    color: this.getCardShadowColor(this.isToolSelected(tool.id)),
-                    offsetX: 0,
-                    offsetY: this.isToolSelected(tool.id) ? 6 : 4
-                  })
-                }, (tool: ToolConfig) => tool.id)
+                  }, (tool: ToolConfig) => tool.id)
+                }
+                .columnsTemplate('1fr 1fr')
+                .columnsGap(10)
+                .rowsGap(10)
+                .width('100%')
               }
               .width('100%')
             }
@@ -294,17 +350,24 @@ export struct ChatToolPickerSheetContent {
 
                 ForEach(this.getMcpToolGroups(), (group: McpToolGroup) => {
                   Row({ space: 12 }) {
-                    Column() {
-                      SymbolGlyph($r('sys.symbol.link'))
-                        .fontSize(20)
-                        .fontColor([this.isMcpToolGroupSelected(group) ? Color.White : this.themePrimary])
+                    ChatFloatingImmersiveButton({
+                      barWidth: 40,
+                      barHeight: 40,
+                      iconResource: $r('sys.symbol.link'),
+                      iconSize: 19,
+                      iconColor: [this.themePrimary],
+                      iconOffsetY: -4,
+                      responsePadding: 0
+                    }) {
+                      Stack({ alignContent: Alignment.Center }) {
+                        SymbolGlyph($r('sys.symbol.link'))
+                          .fontSize(19)
+                          .fontColor([this.themePrimary])
+                      }
+                      .width(40)
+                      .height(40)
+                      .translate({ y: -4 })
                     }
-                    .width(40)
-                    .height(40)
-                    .borderRadius(12)
-                    .backgroundColor(this.isMcpToolGroupSelected(group) ? this.themePrimary : this.themePrimaryLight)
-                    .justifyContent(FlexAlign.Center)
-                    .alignItems(HorizontalAlign.Center)
 
                     Column({ space: 8 }) {
                       Row({ space: 8 }) {
@@ -332,6 +395,7 @@ export struct ChatToolPickerSheetContent {
                     .alignItems(HorizontalAlign.Start)
 
                     Toggle({ type: ToggleType.Switch, isOn: this.isMcpToolGroupSelected(group) })
+                      .selectedColor(this.themePrimary)
                       .onChange((value: boolean) => {
                         this.onToggleMcpGroup(group.toolIds, value)
                       })
@@ -342,7 +406,7 @@ export struct ChatToolPickerSheetContent {
                   .backgroundColor(this.getCardBackground(this.isMcpToolGroupSelected(group)))
                   .border({
                     width: 0.8,
-                    color: this.getCardBorderColor(this.isMcpToolGroupSelected(group))
+                    color: this.getCardBorderColor()
                   })
                   .shadow({
                     radius: this.isMcpToolGroupSelected(group) ? 14 : 10,

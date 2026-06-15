@@ -9,6 +9,7 @@ export class AppStorageKeys {
   static readonly TASK_EVENT_TICK: string = 'task_event_tick'
   static readonly IN_APP_TASK_ALERT_PAYLOAD: string = 'in_app_task_alert_payload'
   static readonly RUNNING_CHAT_TASK_COUNT: string = 'running_chat_task_count'
+  static readonly CANVAS_DOCUMENT_REFRESH_AT: string = 'canvas_document_refresh_at'
 
   // 系统状态键
   static readonly APP_IN_BACKGROUND: string = 'appInBackground'

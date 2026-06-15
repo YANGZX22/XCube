@@ -14,6 +14,7 @@ export class AppUiState {
   @Trace assistantAvatarRefreshAt: number = 0
   @Trace taskEventTick: number = 0
   @Trace inAppTaskAlertPayload: string = ''
+  @Trace canvasDocumentRefreshAt: number = 0
   @Trace appInBackground: boolean = false
   @Trace activeChatSessionId: string = ''
   @Trace isDarkMode: boolean = false
@@ -82,6 +83,9 @@ function applyAppUiStateValue<T extends string | number | boolean>(state: AppUiS
       return
     case AppStorageKeys.IN_APP_TASK_ALERT_PAYLOAD:
       state.inAppTaskAlertPayload = value as string
+      return
+    case AppStorageKeys.CANVAS_DOCUMENT_REFRESH_AT:
+      state.canvasDocumentRefreshAt = value as number
       return
     case AppStorageKeys.APP_IN_BACKGROUND:
       state.appInBackground = value as boolean
@@ -217,6 +221,8 @@ function createAppUiStateFromStorage(): AppUiState {
   applyAppUiStateValue(state, AppStorageKeys.TASK_EVENT_TICK, readStorageValue<number>(AppStorageKeys.TASK_EVENT_TICK, 0))
   applyAppUiStateValue(state, AppStorageKeys.IN_APP_TASK_ALERT_PAYLOAD,
     readStorageValue<string>(AppStorageKeys.IN_APP_TASK_ALERT_PAYLOAD, ''))
+  applyAppUiStateValue(state, AppStorageKeys.CANVAS_DOCUMENT_REFRESH_AT,
+    readStorageValue<number>(AppStorageKeys.CANVAS_DOCUMENT_REFRESH_AT, 0))
   applyAppUiStateValue(state, AppStorageKeys.APP_IN_BACKGROUND,
     readStorageValue<boolean>(AppStorageKeys.APP_IN_BACKGROUND, false))
   applyAppUiStateValue(state, AppStorageKeys.ACTIVE_CHAT_SESSION_ID,
@@ -311,6 +317,7 @@ export function syncAppUiStateFromStorage(): void {
   state.assistantAvatarRefreshAt = freshState.assistantAvatarRefreshAt
   state.taskEventTick = freshState.taskEventTick
   state.inAppTaskAlertPayload = freshState.inAppTaskAlertPayload
+  state.canvasDocumentRefreshAt = freshState.canvasDocumentRefreshAt
   state.appInBackground = freshState.appInBackground
   state.activeChatSessionId = freshState.activeChatSessionId
   state.isDarkMode = freshState.isDarkMode
@@ -392,6 +399,8 @@ function resolveAppUiStatePath(path: string): string {
       return 'taskEventTick'
     case AppStorageKeys.IN_APP_TASK_ALERT_PAYLOAD:
       return 'inAppTaskAlertPayload'
+    case AppStorageKeys.CANVAS_DOCUMENT_REFRESH_AT:
+      return 'canvasDocumentRefreshAt'
     case AppStorageKeys.APP_IN_BACKGROUND:
       return 'appInBackground'
     case AppStorageKeys.ACTIVE_CHAT_SESSION_ID:

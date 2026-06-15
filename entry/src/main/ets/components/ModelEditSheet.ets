@@ -21,6 +21,7 @@ export struct ModelEditSheet {
   @Local capSupportsReasoning: boolean = false
   @Local capSupportsWebSearch: boolean = false
   @Local capSupportsVision: boolean = false
+  @Local capSupportsDocuments: boolean = false
   @Local capSupportsStreaming: boolean = false
   @Local capOutputImage: boolean = false
   @Local reasoningStrategyOverride: string = ''
@@ -47,6 +48,7 @@ export struct ModelEditSheet {
     this.capSupportsReasoning = this.model.capabilities.supportsReasoning
     this.capSupportsWebSearch = this.model.capabilities.supportsWebSearch
     this.capSupportsVision = this.model.capabilities.supportsVision
+    this.capSupportsDocuments = this.model.capabilities.supportsDocuments
     this.capSupportsStreaming = this.model.capabilities.supportsStreaming
     this.capOutputImage = this.model.outputMode === OutputMode.IMAGE
     this.reasoningStrategyOverride = this.model.reasoningStrategyOverride
@@ -71,6 +73,7 @@ export struct ModelEditSheet {
         supportsReasoning: this.capSupportsReasoning,
         supportsWebSearch: this.capSupportsWebSearch,
         supportsVision: this.capSupportsVision,
+        supportsDocuments: this.capSupportsDocuments,
         supportsStreaming: this.capSupportsStreaming
       },
       reasoningStrategyOverride: this.reasoningStrategyOverride,
@@ -274,6 +277,24 @@ export struct ModelEditSheet {
         .borderRadius(18)
         .onClick(() => {
           this.capSupportsWebSearch = !this.capSupportsWebSearch
+        })
+
+        // 文档阅读
+        Row() {
+          SymbolGlyph($r('sys.symbol.pdf_doc'))
+            .fontSize(16)
+            .fontColor([this.capSupportsDocuments ? this.themePrimary : $r('app.color.text_tertiary')])
+          Text('文档阅读')
+            .fontSize(13)
+            .fontColor(this.capSupportsDocuments ? this.themePrimary : $r('app.color.text_secondary'))
+            .margin({ left: 6 })
+        }
+        .height(36)
+        .padding({ left: 12, right: 14 })
+        .backgroundColor(this.capSupportsDocuments ? this.themePrimaryLight : $r('app.color.divider'))
+        .borderRadius(18)
+        .onClick(() => {
+          this.capSupportsDocuments = !this.capSupportsDocuments
         })
 
         // 视觉理解
@@ -552,4 +573,3 @@ export struct ModelEditSheet {
     .borderRadius(16)
   }
 }
-

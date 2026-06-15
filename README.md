@@ -6,7 +6,7 @@
 
 <p align="center">
   一个面向鸿蒙 6（API 23）的原生 AI 聊天客户端。<br/>
-  一个应用，15+ 服务商，联网搜索、内置工具、MCP 与 ArkTS 原生体验。
+  一个应用，15+ 服务商，联网搜索、Canvas 文档、PDF2TXT、内置工具、MCP 与 ArkTS 原生体验。
 </p>
 
 <p align="center">
@@ -27,7 +27,8 @@
 - 界面精致，动态模糊、8 种配色主题、高级材质与玻璃质感都安排上了
 - 适配手机、平板和大屏设备，布局更合理
 - 服务商高度自定义，几秒添加任何 OpenAI / Anthropic / Gemini 兼容服务
-- 内置联网搜索、Python 沙箱、数学绘图、读写日程等工具，支持模型按需调用
+- 内置联网搜索、Canvas 文档、PDF 转文本、Python 沙箱、数学绘图、读写日程等工具，支持模型按需调用
+- 为模型提供工具、联网、视觉与文档阅读能力标签，按模型能力决定是否启用原生文档输入或本地 PDF2TXT fallback
 - 工具中心支持远端 streamable MCP Server 接入，工具能力可继续扩展
 - 简单易上手，填个 API Key 就能开聊
 - 桌面小组件，快速发起对话
@@ -60,6 +61,8 @@
 ChatCube 提供一组可由模型调用的本地工具，常见任务不必离开对话：
 
 - **联网搜索**：按需获取实时信息，支持搜索次数预算与用户确认追加搜索。
+- **Canvas 文档**：在对话右侧维护一份用户和 AI 都能修改的共享文档，支持隐藏到浮层、Markdown 预览和版本提示。
+- **PDF 转文本**：当当前模型未开启原生文档阅读能力时，用户上传的 PDF 会暂存到本地沙箱，模型可调用 `pdf_to_text` 获取文本内容；若模型支持原生文档输入，应用不额外干预。
 - **Python 沙箱**：在沙箱化环境中执行必要的 Python 代码，用于计算、数据处理和中间推导。
 - **数学绘图**：基于 [VChart](https://ohpm.openharmony.cn/#/cn/detail/@visactor%2Fharmony-vchart) 生成结构化图表，支持折线图、柱状图、面积图、散点/气泡图、饼图、环形图、玫瑰图、漏斗图、词云图、桑基图、双轴/柱线组合图等。
 - **读写日程**：经用户确认后读取指定范围内的日程，或写入新的日程事件；读取范围、数量、地点和备注等隐私字段可由用户确认和调整。
@@ -123,8 +126,8 @@ ChatCube 提供一组可由模型调用的本地工具，常见任务不必离�
 ### 构建运行
 
 ```bash
-git clone https://github.com/LongLiveY96/ChatCube.git
-cd ChatCube
+git clone https://github.com/YANGZX22/chatcube.git
+cd chatcube
 cp build-profile.json5.example build-profile.json5
 # 编辑 build-profile.json5 填入你的签名配置
 ```

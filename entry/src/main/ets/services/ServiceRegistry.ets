@@ -19,6 +19,11 @@ import { getAssistantService, AssistantService } from './AssistantService'
 import { getWebDAVService, WebDAVService } from './WebDAVService'
 import { getWebDAVSyncService, WebDAVSyncService } from './WebDAVSyncService'
 import { getCalendarWriteService, CalendarWriteService } from './CalendarWriteService'
+import { getCanvasDocumentService, CanvasDocumentService } from './CanvasDocumentService'
+import {
+  getDocumentAttachmentRegistryService,
+  DocumentAttachmentRegistryService
+} from './DocumentAttachmentRegistryService'
 import { getSettingsManager, SettingsManager } from '../viewmodels/SettingsManager'
 import { getAppStateManager, AppStateManager } from '../viewmodels/AppStateManager'
 import { getProviderViewModel, ProviderViewModel } from '../viewmodels/ProviderViewModel'
@@ -120,6 +125,14 @@ export class ServiceRegistry {
 
   static calendarWrite(): CalendarWriteService {
     return getCalendarWriteService()
+  }
+
+  static canvasDocument(): CanvasDocumentService {
+    return getCanvasDocumentService()
+  }
+
+  static documentAttachmentRegistry(): DocumentAttachmentRegistryService {
+    return getDocumentAttachmentRegistryService()
   }
 
   static chat(): ChatViewModel {

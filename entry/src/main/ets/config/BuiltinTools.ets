@@ -14,12 +14,16 @@ import { cleanSearchQuery } from '../utils/SearchQueryUtils'
 import { getCalendarWriteService, ReadScheduleRequest, WriteScheduleRequest } from '../services/CalendarWriteService'
 import { getPythonSandboxService, PythonSandboxRequest } from '../services/PythonSandboxService'
 import { getPyodideRuntimeService } from '../services/PyodideRuntimeService'
+import { CanvasDocumentMutationResult, CanvasDocumentState, getCanvasDocumentService } from '../services/CanvasDocumentService'
+import { getPdfTextExtractionService, PdfTextExtractionRequest } from '../services/PdfTextExtractionService'
 
 export const ASK_USER_TOOL_ID: string = 'ask_user'
 export const READ_SCHEDULE_TOOL_ID: string = 'read_schedule'
 export const WRITE_SCHEDULE_TOOL_ID: string = 'write_schedule'
 export const MATH_CHART_TOOL_ID: string = 'math_chart'
 export const PYTHON_SANDBOX_TOOL_ID: string = 'python_sandbox'
+export const CANVAS_DOCUMENT_TOOL_ID: string = 'canvas_document'
+export const PDF_TO_TEXT_TOOL_ID: string = 'pdf_to_text'
 
 // web_search 工具参数接口
 interface WebSearchArgs {
@@ -92,6 +96,29 @@ interface MathChartArgs {
   width?: number
   height?: number
   show_points?: boolean
+}
+
+interface CanvasDocumentArgs {
+  operation?: string
+  content?: string
+  text?: string
+  document?: string
+  value?: string
+  title?: string
+  target?: string
+  old_text?: string
+  oldText?: string
+  replacement?: string
+  new_text?: string
+  newText?: string
+}
+
+interface PdfToTextArgs {
+  attachmentId?: string
+  attachment_id?: string
+  id?: string
+  maxChars?: number | string
+  max_chars?: number | string
 }
 
 // 搜索结果项接口（用于格式化输出）
@@ -192,6 +219,203 @@ class MathChartOutput {
 class AskUserExecutor implements ToolExecutor {
   async execute(_args: string): Promise<string> {
     return JSON.stringify(new ErrorOutput('ask_user should be resolved by the user, not executed directly'))
+  }
+}
+
+class CanvasDocumentOutput {
+  ok: boolean = true
+  operation: string = ''
+  message: string = ''
+  title: string = ''
+  content: string = ''
+  revision: number = 0
+  updatedAt: number = 0
+  updatedBy: string = ''
+  activated: boolean = false
+
+  constructor(ok: boolean, operation: string, message: string, document: CanvasDocumentState) {
+    this.ok = ok
+    this.operation = operation
+    this.message = message
+    this.title = document.title
+    this.content = document.content
+    this.revision = document.revision
+    this.updatedAt = document.updatedAt
+    this.updatedBy = document.updatedBy
+    this.activated = document.activated
+  }
+}
+
+class CanvasDocumentExecutor implements ToolExecutor {
+  async execute(args: string): Promise<string> {
+    try {
+      const params = JSON.parse(args) as CanvasDocumentArgs
+      const operation = this.normalizeOperation(params)
+      const service = getCanvasDocumentService()
+      const activatedDocument = await service.activateDocument('assistant')
+      if (operation === 'read') {
+        return JSON.stringify(new CanvasDocumentOutput(true, operation, '已读取 canvas 文档', activatedDocument))
+      }
+      if (operation === 'replace') {
+        const content = this.resolveContent(params)
+        const document = await service.saveDocument(content, this.resolveString(params.title), 'assistant')
+        return JSON.stringify(new CanvasDocumentOutput(true, operation, '已替换 canvas 文档全文', document))
+      }
+      if (operation === 'append') {
+        const content = this.resolveRequiredContent(this.resolveContent(params))
+        const document = await service.appendContent(content, 'assistant')
+        return JSON.stringify(new CanvasDocumentOutput(true, operation, '已追加到 canvas 文档末尾', document))
+      }
+      if (operation === 'prepend') {
+        const content = this.resolveRequiredContent(this.resolveContent(params))
+        const document = await service.prependContent(content, 'assistant')
+        return JSON.stringify(new CanvasDocumentOutput(true, operation, '已追加到 canvas 文档开头', document))
+      }
+      if (operation === 'patch') {
+        const result = await service.replaceFirst(
+          this.resolvePatchTarget(params),
+          this.resolvePatchReplacement(params),
+          'assistant'
+        )
+        return JSON.stringify(this.fromMutationResult(operation, result))
+      }
+      if (operation === 'clear') {
+        const document = await service.clearDocument('assistant')
+        return JSON.stringify(new CanvasDocumentOutput(true, operation, '已清空 canvas 文档', document))
+      }
+      return JSON.stringify(new CanvasDocumentOutput(false, operation, '不支持的 operation', activatedDocument))
+    } catch (error) {
+      return JSON.stringify(new ErrorOutput(`Canvas 文档操作失败: ${this.stringifyError(error)}`))
+    }
+  }
+
+  private fromMutationResult(operation: string, result: CanvasDocumentMutationResult): CanvasDocumentOutput {
+    return new CanvasDocumentOutput(result.ok, operation, result.message, result.document)
+  }
+
+  private normalizeOperation(params: CanvasDocumentArgs): string {
+    const normalized = this.resolveString(params.operation).trim().toLowerCase().replace(/[\s\-]+/g, '_')
+    if (normalized === '' && this.resolveContent(params).trim() !== '') {
+      return 'replace'
+    }
+    if (normalized === '') {
+      return 'read'
+    }
+    if (normalized === 'write' || normalized === 'update' || normalized === 'set' || normalized === 'rewrite' ||
+      normalized === 'overwrite') {
+      return 'replace'
+    }
+    if (normalized === 'add' || normalized === 'insert' || normalized === 'insert_after') {
+      return 'append'
+    }
+    if (normalized === 'insert_before') {
+      return 'prepend'
+    }
+    if (normalized === 'edit' || normalized === 'modify' || normalized === 'replace_first') {
+      if (this.resolvePatchTarget(params) !== '') {
+        return 'patch'
+      }
+      return 'replace'
+    }
+    if (normalized === 'delete' || normalized === 'remove' || normalized === 'reset') {
+      return 'clear'
+    }
+    return normalized
+  }
+
+  private resolveContent(params: CanvasDocumentArgs): string {
+    if (params.content !== undefined) {
+      return this.resolveString(params.content)
+    }
+    if (params.text !== undefined) {
+      return this.resolveString(params.text)
+    }
+    if (params.document !== undefined) {
+      return this.resolveString(params.document)
+    }
+    if (params.value !== undefined) {
+      return this.resolveString(params.value)
+    }
+    return ''
+  }
+
+  private resolvePatchTarget(params: CanvasDocumentArgs): string {
+    return this.resolveString(params.target, this.resolveString(params.old_text, this.resolveString(params.oldText)))
+  }
+
+  private resolvePatchReplacement(params: CanvasDocumentArgs): string {
+    return this.resolveString(params.replacement, this.resolveString(params.new_text, this.resolveString(params.newText)))
+  }
+
+  private resolveRequiredContent(value: string): string {
+    const content = value
+    if (content.trim() === '') {
+      throw new Error('content 不能为空')
+    }
+    return content
+  }
+
+  private resolveString(value: string | undefined, fallback: string = ''): string {
+    if (value === undefined || value === null) {
+      return fallback
+    }
+    return `${value}`
+  }
+
+  private stringifyError(error: Object): string {
+    if (error instanceof Error) {
+      return error.message
+    }
+    return JSON.stringify(error)
+  }
+}
+
+class PdfToTextExecutor implements ToolExecutor {
+  async execute(args: string): Promise<string> {
+    try {
+      const params = JSON.parse(args) as PdfToTextArgs
+      const request = new PdfTextExtractionRequest()
+      request.attachmentId = this.resolveAttachmentId(params)
+      request.maxChars = this.resolveNumber(params.maxChars, this.resolveNumber(params.max_chars, 12000))
+      if (request.attachmentId === '') {
+        return JSON.stringify(new ErrorOutput('attachmentId 不能为空。请使用用户上传 PDF 附件的 id。'))
+      }
+      const result = await getPdfTextExtractionService().extractForCurrentSession(request)
+      return JSON.stringify(result)
+    } catch (error) {
+      return JSON.stringify(new ErrorOutput(`PDF 转文本失败: ${this.stringifyError(error)}`))
+    }
+  }
+
+  private resolveAttachmentId(params: PdfToTextArgs): string {
+    if (params.attachmentId !== undefined) {
+      return `${params.attachmentId}`.trim()
+    }
+    if (params.attachment_id !== undefined) {
+      return `${params.attachment_id}`.trim()
+    }
+    if (params.id !== undefined) {
+      return `${params.id}`.trim()
+    }
+    return ''
+  }
+
+  private resolveNumber(value: number | string | undefined, fallback: number): number {
+    if (value === undefined || value === null) {
+      return fallback
+    }
+    if (typeof value === 'number') {
+      return Number.isFinite(value) ? value : fallback
+    }
+    const parsed = Number.parseInt(value, 10)
+    return Number.isNaN(parsed) ? fallback : parsed
+  }
+
+  private stringifyError(error: Object): string {
+    if (error instanceof Error) {
+      return error.message
+    }
+    return JSON.stringify(error)
   }
 }
 
@@ -1286,7 +1510,7 @@ function createWebSearchToolConfig(): ToolConfig {
   return new ToolConfig(
     'web_search',
     '联网搜索',
-    '搜索互联网获取最新信息',
+    '模型可搜索互联网获取最新信息',
     null,
     false,
     false,
@@ -1351,13 +1575,144 @@ function createAskUserToolConfig(): ToolConfig {
   return new ToolConfig(
     ASK_USER_TOOL_ID,
     '向用户提问',
-    '模型需要澄清时向你发起提问，答复会作为工具结果回给模型继续生成',
+    '模型可在需要澄清时向用户发起提问，答复会作为工具结果回给模型继续生成',
     null,
     true,
     false,
     ToolSourceType.BUILTIN,
     'builtin',
     ASK_USER_TOOL_ID,
+    '内置工具',
+    ToolPermissionLevel.READ
+  )
+}
+
+function createCanvasDocumentToolDefinition(): ToolDefinition {
+  const parameters = new ToolParameters()
+  const rawSchemaJson: string = `{
+    "type": "object",
+    "properties": {
+      "operation": {
+        "type": "string",
+        "enum": ["read", "replace", "append", "prepend", "patch", "clear", "write", "update", "set"],
+        "description": "操作类型。read 读取当前文档；replace/write/update 用 content 替换全文；append/prepend 追加内容；patch 用 target/replacement 精确替换首个匹配片段；clear 清空文档。如果用户要求写入新文档，优先使用 replace。"
+      },
+      "content": {
+        "type": "string",
+        "description": "replace/write/update/append/prepend 使用的文本内容。可以是 Markdown。"
+      },
+      "text": {
+        "type": "string",
+        "description": "content 的别名。"
+      },
+      "document": {
+        "type": "string",
+        "description": "content 的别名。"
+      },
+      "value": {
+        "type": "string",
+        "description": "content 的别名。"
+      },
+      "title": {
+        "type": "string",
+        "description": "replace 时可选更新文档标题。"
+      },
+      "target": {
+        "type": "string",
+        "description": "patch 时必填，要被替换的精确原文片段。"
+      },
+      "old_text": {
+        "type": "string",
+        "description": "target 的别名。"
+      },
+      "replacement": {
+        "type": "string",
+        "description": "patch 时必填，用来替换 target 的新文本。"
+      },
+      "new_text": {
+        "type": "string",
+        "description": "replacement 的别名。"
+      }
+    },
+    "required": []
+  }`
+  parameters.setRawSchema(JSON.parse(rawSchemaJson) as object)
+
+  const func = new ToolFunction(
+    CANVAS_DOCUMENT_TOOL_ID,
+    '读写右侧 Canvas 文档。适合和用户共同起草、改写、整理同一份 Markdown/纯文本文档。要把内容写入 Canvas 时，直接调用 operation="replace" 并传 content；小改动优先 patch，新增段落用 append/prepend。若省略 operation 但提供 content/text，会按 replace 写入。该工具只修改应用内当前 Canvas 文档，不写入系统日历、文件或外部服务。',
+    parameters
+  )
+
+  return new ToolDefinition(func)
+}
+
+function createCanvasDocumentToolConfig(): ToolConfig {
+  return new ToolConfig(
+    CANVAS_DOCUMENT_TOOL_ID,
+    'Canvas 文档',
+    '模型可读取或修改一个和用户共享的文档',
+    null,
+    true,
+    false,
+    ToolSourceType.BUILTIN,
+    'builtin',
+    CANVAS_DOCUMENT_TOOL_ID,
+    '内置工具',
+    ToolPermissionLevel.READ
+  )
+}
+
+function createPdfToTextToolDefinition(): ToolDefinition {
+  const parameters = new ToolParameters()
+  const rawSchemaJson: string = `{
+    "type": "object",
+    "properties": {
+      "attachmentId": {
+        "type": "string",
+        "description": "要读取的 PDF 附件 ID。用户上传 PDF 后，系统会在提示中列出可用 attachmentId。"
+      },
+      "attachment_id": {
+        "type": "string",
+        "description": "attachmentId 的别名。"
+      },
+      "id": {
+        "type": "string",
+        "description": "attachmentId 的别名。"
+      },
+      "maxChars": {
+        "type": "number",
+        "description": "最多返回多少字符，默认 12000。"
+      },
+      "max_chars": {
+        "type": "number",
+        "description": "maxChars 的别名。"
+      }
+    },
+    "required": ["attachmentId"]
+  }`
+  parameters.setRawSchema(JSON.parse(rawSchemaJson) as object)
+
+  const func = new ToolFunction(
+    PDF_TO_TEXT_TOOL_ID,
+    '将用户上传的 PDF 附件转换为文本。仅能读取当前会话已登记的 PDF 附件；调用时传 attachmentId。适合当前模型不支持原生文档输入时读取 PDF 内容。',
+    parameters
+  )
+
+  return new ToolDefinition(func)
+}
+
+function createPdfToTextToolConfig(): ToolConfig {
+  return new ToolConfig(
+    PDF_TO_TEXT_TOOL_ID,
+    'PDF 转文本',
+    '模型可读取用户上传 PDF 的文本内容',
+    null,
+    true,
+    false,
+    ToolSourceType.BUILTIN,
+    'builtin',
+    PDF_TO_TEXT_TOOL_ID,
     '内置工具',
     ToolPermissionLevel.READ
   )
@@ -1716,6 +2071,30 @@ export function registerBuiltinTools(): void {
     registeredNow += 1
   }
 
+  const pdfToTextWasRegistered = registry.isToolRegistered(PDF_TO_TEXT_TOOL_ID)
+  const pdfToTextTool = new RegisteredTool(
+    PDF_TO_TEXT_TOOL_ID,
+    createPdfToTextToolConfig(),
+    createPdfToTextToolDefinition(),
+    new PdfToTextExecutor()
+  )
+  registry.registerTool(pdfToTextTool)
+  if (!pdfToTextWasRegistered) {
+    registeredNow += 1
+  }
+
+  const canvasDocumentWasRegistered = registry.isToolRegistered(CANVAS_DOCUMENT_TOOL_ID)
+  const canvasDocumentTool = new RegisteredTool(
+    CANVAS_DOCUMENT_TOOL_ID,
+    createCanvasDocumentToolConfig(),
+    createCanvasDocumentToolDefinition(),
+    new CanvasDocumentExecutor()
+  )
+  registry.registerTool(canvasDocumentTool)
+  if (!canvasDocumentWasRegistered) {
+    registeredNow += 1
+  }
+
   if (!registry.isToolRegistered(MATH_CHART_TOOL_ID)) {
     const mathChartTool = new RegisteredTool(
       MATH_CHART_TOOL_ID,
@@ -1757,5 +2136,14 @@ export function registerBuiltinTools(): void {
 
 // 获取所有内置工具 ID
 export function getBuiltinToolIds(): string[] {
-  return ['web_search', ASK_USER_TOOL_ID, PYTHON_SANDBOX_TOOL_ID, MATH_CHART_TOOL_ID, READ_SCHEDULE_TOOL_ID, WRITE_SCHEDULE_TOOL_ID]
+  return [
+    'web_search',
+    ASK_USER_TOOL_ID,
+    PYTHON_SANDBOX_TOOL_ID,
+    PDF_TO_TEXT_TOOL_ID,
+    CANVAS_DOCUMENT_TOOL_ID,
+    MATH_CHART_TOOL_ID,
+    READ_SCHEDULE_TOOL_ID,
+    WRITE_SCHEDULE_TOOL_ID
+  ]
 }

@@ -81,6 +81,7 @@ export class PreferenceKeys {
 
   // 聊天输入设置
   static readonly CHAT_INPUT_ENTER_KEY_SEND: string = 'chat_input_enter_key_send'
+  static readonly CANVAS_DOCUMENT_JSON: string = 'canvas_document_json'
 
   // 材质效果
   static readonly MATERIAL_TYPE: string = 'material_type'

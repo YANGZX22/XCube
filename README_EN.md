@@ -6,7 +6,7 @@
 
 <p align="center">
   A native AI chat client for HarmonyOS 6 (API 23).<br/>
-  One app, 15+ providers, web search, built-in tools, MCP, and ArkTS-native UX.
+  One app, 15+ providers, web search, Canvas docs, PDF2TXT, built-in tools, MCP, and ArkTS-native UX.
 </p>
 
 <p align="center">
@@ -27,7 +27,8 @@
 - Polished UI with dynamic blur, 8 color themes, advanced materials, and glass-like surfaces
 - Adaptive layouts for phones, tablets, and large screens
 - Highly customizable providers — add any OpenAI / Anthropic / Gemini compatible service in seconds
-- Built-in tools for web search, Python sandboxing, chart generation, and calendar workflows
+- Built-in tools for web search, shared Canvas docs, PDF-to-text, Python sandboxing, chart generation, and calendar workflows
+- Model capability tags for tools, web search, vision, and document reading, so the app can use native document input or a local PDF2TXT fallback as appropriate
 - The tools center can connect to remote streamable MCP servers for expandable tool capability
 - Simple and intuitive — configure your API key and start chatting
 - Home screen widget for quick access
@@ -60,6 +61,8 @@ Built-in web search supports Bocha, Bing(local), Tavily, and Exa. When a model s
 ChatCube includes local tools that capable models can call directly from a conversation:
 
 - **Web search**: fetch real-time information with a search budget and user-approved extra searches.
+- **Canvas document**: maintain a shared document beside the conversation that both the user and AI can edit, with a collapsible floating entry, Markdown preview, and version hints.
+- **PDF to text**: when the current model does not have native document reading enabled, uploaded PDFs are temporarily registered in the local sandbox and the model can call `pdf_to_text` to read extracted text; if native document input is enabled, the app leaves the upload path untouched.
 - **Python sandbox**: run necessary Python code in a sandboxed environment for calculation, data processing, and intermediate reasoning.
 - **Math charts**: generate VChart specs for line, bar, area, scatter/bubble, pie, donut, rose, funnel, word cloud, Sankey, and dual-axis/combo charts.
 - **Calendar read/write**: read a user-confirmed date range or create new schedule events; users can adjust range, limits, location, and note visibility to protect privacy.
@@ -123,8 +126,8 @@ Switch to another app while waiting for a long response. ChatCube keeps working 
 ### Build & Run
 
 ```bash
-git clone https://github.com/LongLiveY96/ChatCube.git
-cd ChatCube
+git clone https://github.com/YANGZX22/chatcube.git
+cd chatcube
 cp build-profile.json5.example build-profile.json5
 # Edit build-profile.json5 with your signing config
 ```

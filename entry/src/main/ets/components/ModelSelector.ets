@@ -388,6 +388,9 @@ export struct ModelSelectorContent {
               if (row.model.capabilities.supportsVision) {
                 this.CapabilityIcon('sys.symbol.ohos_photo')
               }
+              if (row.model.capabilities.supportsDocuments) {
+                this.CapabilityIcon('sys.symbol.pdf_doc')
+              }
               if (row.model.capabilities.supportsTools) {
                 this.CapabilityIcon('sys.symbol.wrench_and_screwdriver')
               }
@@ -542,4 +545,3 @@ export struct ModelSelectorContent {
       .margin({ right: 6 })
   }
 }
-

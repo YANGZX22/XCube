@@ -3011,6 +3011,9 @@ export struct ModelItemCard {
             if (this.model.capabilities.supportsVision) {
               this.CapabilityIcon('sys.symbol.ohos_photo')
             }
+            if (this.model.capabilities.supportsDocuments) {
+              this.CapabilityIcon('sys.symbol.pdf_doc')
+            }
             if (this.model.capabilities.supportsTools) {
               this.CapabilityIcon('sys.symbol.wrench_and_screwdriver')
             }

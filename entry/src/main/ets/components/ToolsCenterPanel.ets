@@ -6,10 +6,10 @@ import { ServiceRegistry } from '../services/ServiceRegistry'
 import { registerBuiltinTools } from '../config/BuiltinTools'
 import { getPreferencesService, PreferencesService, PreferenceKeys } from '../services/PreferencesService'
 import { showSnackBar, SnackBarDisplayOptions, SnackBarTone } from '../utils/ToastUtil'
-import { HdsListItemCard } from '@kit.UIDesignKit'
 import { getAppUiState } from '../state/AppUiState'
 import { formatLocalizedCount, pickLocalizedText } from '../utils/LocalizedTextUtils'
 import { withColorAlpha } from '../utils/ColorAlphaUtils'
+import { ChatFloatingImmersiveButton } from './ChatFloatingImmersiveButton'
 import {
   buildCustomHeadersJson,
   isSensitiveCustomHeaderName,
@@ -73,10 +73,6 @@ export struct ToolsCenterPanel {
 
   private get isDarkMode(): boolean {
     return getAppUiState().isDarkMode
-  }
-
-  private get secondaryTextHex(): string {
-    return this.isDarkMode ? '#999999' : '#666666'
   }
 
   private get backgroundHex(): string {
@@ -1267,6 +1263,7 @@ export struct ToolsCenterPanel {
                 .layoutWeight(1)
 
                 Toggle({ type: ToggleType.Switch, isOn: this.searchQueryOptimizationEnabled })
+                  .selectedColor(this.themePrimary)
                   .onChange((value: boolean) => {
                     this.searchQueryOptimizationEnabled = value
                   })
@@ -1784,6 +1781,7 @@ export struct ToolsCenterPanel {
             .alignItems(HorizontalAlign.Start)
 
             Toggle({ type: ToggleType.Switch, isOn: this.mcpFormEnabled })
+              .selectedColor(this.themePrimary)
               .onChange((value: boolean) => {
                 this.mcpFormEnabled = value
               })
@@ -1929,18 +1927,28 @@ export struct ToolsCenterPanel {
 
               if (this.mcpServers.length === 0) {
                 Row({ space: 12 }) {
-                  Column() {
-                    SymbolGlyph($r('sys.symbol.puzzle'))
-                      .renderingStrategy(SymbolRenderingStrategy.SINGLE)
-                      .fontSize(22)
-                      .fontColor([this.themePrimary])
+                  ChatFloatingImmersiveButton({
+                    barWidth: 42,
+                    barHeight: 42,
+                    iconResource: $r('sys.symbol.puzzle'),
+                    iconSize: 22,
+                    iconColor: [this.themePrimary],
+                    iconOffsetY: -4,
+                    responsePadding: 0,
+                    onButtonClick: (): void => {
+                      this.openCreateMcpServer()
+                    }
+                  }) {
+                    Stack({ alignContent: Alignment.Center }) {
+                      SymbolGlyph($r('sys.symbol.puzzle'))
+                        .renderingStrategy(SymbolRenderingStrategy.SINGLE)
+                        .fontSize(22)
+                        .fontColor([this.themePrimary])
+                    }
+                    .width(42)
+                    .height(42)
+                    .translate({ y: -4 })
                   }
-                  .width(42)
-                  .height(42)
-                  .borderRadius(16)
-                  .backgroundColor(this.backgroundHex)
-                  .border({ width: 1, color: this.themePrimary })
-                  .justifyContent(FlexAlign.Center)
 
                   Column({ space: 4 }) {
                     Text(pickLocalizedText('还没有 MCP Server', 'No MCP server yet'))
@@ -2062,10 +2070,6 @@ struct SearchServiceCardItem {
     return getAppUiState().isDarkMode
   }
 
-  private get backgroundHex(): string {
-    return getAppUiState().themeBackground
-  }
-
   private get dividerHex(): string {
     return getAppUiState().themeDivider
   }
@@ -2081,18 +2085,28 @@ struct SearchServiceCardItem {
   build() {
     Column({ space: 12 }) {
       Row({ space: 12 }) {
-        Column() {
-          SymbolGlyph($r('sys.symbol.magnifyingglass'))
-            .renderingStrategy(SymbolRenderingStrategy.SINGLE)
-            .fontSize(20)
-            .fontColor([this.searchEnabled ? this.themePrimary : $r('app.color.text_secondary')])
+        ChatFloatingImmersiveButton({
+          barWidth: 44,
+          barHeight: 44,
+          iconResource: $r('sys.symbol.worldclock_fill_2'),
+          iconSize: 20,
+          iconColor: [this.themePrimary],
+          iconOffsetY: -4,
+          responsePadding: 0,
+          onButtonClick: (): void => {
+            this.onOpenConfig()
+          }
+        }) {
+          Stack({ alignContent: Alignment.Center }) {
+            SymbolGlyph($r('sys.symbol.worldclock_fill_2'))
+              .renderingStrategy(SymbolRenderingStrategy.SINGLE)
+              .fontSize(20)
+              .fontColor([this.themePrimary])
+          }
+          .width(44)
+          .height(44)
+          .translate({ y: -4 })
         }
-        .width(44)
-        .height(44)
-        .borderRadius(16)
-        .backgroundColor(this.backgroundHex)
-        .border({ width: 1, color: this.searchEnabled ? this.themePrimary : this.dividerHex })
-        .justifyContent(FlexAlign.Center)
 
         Column({ space: 6 }) {
           Text($r('app.string.search_service_card_title'))
@@ -2110,6 +2124,7 @@ struct SearchServiceCardItem {
         .alignItems(HorizontalAlign.Start)
 
         Toggle({ type: ToggleType.Switch, isOn: this.searchEnabled })
+          .selectedColor(this.themePrimary)
           .onChange((value: boolean) => {
             this.onToggle(value)
           })
@@ -2139,7 +2154,7 @@ struct SearchServiceCardItem {
     .margin({ bottom: 8 })
     .borderRadius(20)
     .backgroundColor(getAppUiState().themeSurface)
-    .border({ width: 1, color: this.searchEnabled ? this.themePrimary : this.dividerHex })
+    .border({ width: 1, color: this.dividerHex })
     .shadow({
       radius: 16,
       color: this.isDarkMode ? 'rgba(0, 0, 0, 0.20)' : 'rgba(15, 23, 42, 0.05)',
@@ -2156,45 +2171,169 @@ struct SearchServiceCardItem {
 struct BuiltinToolCardItem {
   @Param tool: ToolConfig = new ToolConfig()
 
-  @Builder
-  ToolCardText() {
-    Column() {
-      Text(this.tool.name)
-        .fontSize(14)
-        .fontWeight(FontWeight.Medium)
-        .fontColor($r('app.color.text_primary'))
+  private get themePrimary(): string {
+    return getAppUiState().themePrimary
+  }
 
-      Text(this.tool.description)
-        .fontSize(12)
-        .fontColor($r('app.color.text_secondary'))
-        .maxLines(2)
-        .textOverflow({ overflow: TextOverflow.Ellipsis })
-        .margin({ top: 2 })
+  private get isDarkMode(): boolean {
+    return getAppUiState().isDarkMode
+  }
 
-      Text(this.tool.id)
-        .fontSize(11)
-        .fontColor($r('app.color.text_tertiary'))
-        .margin({ top: 6 })
+  private get backgroundHex(): string {
+    return getAppUiState().themeBackground
+  }
+
+  private get dividerHex(): string {
+    return getAppUiState().themeDivider
+  }
+
+  private getStatusText(): string {
+    return this.tool.enabled ? pickLocalizedText('已启用', 'Enabled') : pickLocalizedText('已停用', 'Disabled')
+  }
+
+  private getStatusBackgroundColor(): string {
+    return this.tool.enabled ? (this.isDarkMode ? '#183722' : '#EAF7EE') : (this.isDarkMode ? '#2D3138' : '#EEF1F5')
+  }
+
+  private getStatusFontColor(): string {
+    return this.tool.enabled ? '#2E8B57' : '#667085'
+  }
+
+  private isWriteTool(): boolean {
+    return this.tool.permissionLevel === 'write'
+  }
+
+  private getPermissionText(): string {
+    return this.isWriteTool() ? pickLocalizedText('需确认', 'Approval') : pickLocalizedText('只读', 'Read only')
+  }
+
+  private getPermissionTextColor(): string {
+    return this.isWriteTool() ? '#D9485F' : this.themePrimary
+  }
+
+  private getPermissionBackgroundColor(): string {
+    if (this.isWriteTool()) {
+      return this.isDarkMode ? '#4B1D24' : '#FDECEF'
     }
-    .alignItems(HorizontalAlign.Start)
+    return this.backgroundHex
+  }
+
+  private getToolSymbolResource(toolId: string): Resource {
+    if (toolId === 'web_search') {
+      return $r('sys.symbol.worldclock_fill_2')
+    }
+    if (toolId === 'ask_user') {
+      return $r('sys.symbol.ellipsis_message')
+    }
+    if (toolId === 'python_sandbox') {
+      return $r('sys.symbol.doc_text')
+    }
+    if (toolId === 'canvas_document') {
+      return $r('sys.symbol.paintbrush_pointed_waveform')
+    }
+    if (toolId === 'pdf_to_text') {
+      return $r('sys.symbol.pdf_doc')
+    }
+    if (toolId === 'math_chart') {
+      return $r('sys.symbol.histogram')
+    }
+    if (toolId === 'read_schedule') {
+      return $r('sys.symbol.calendar')
+    }
+    if (toolId === 'write_schedule') {
+      return $r('sys.symbol.calendar_badge_plus')
+    }
+    return $r('sys.symbol.wrench_and_screwdriver')
   }
 
   build() {
-    HdsListItemCard({
-      textItem: {
-        customBuilder: (): void => { this.ToolCardText() }
-      },
-      cardBackgroundColor: getAppUiState().themeSurface,
-      cardBorderRadius: 12,
-      accessibilityOptions: {
-        accessibilityText: this.tool.name,
-        accessibilityDescription: this.tool.description,
-        accessibilityGroup: {
-          isGroup: true
+    Column({ space: 12 }) {
+      Row({ space: 12 }) {
+        ChatFloatingImmersiveButton({
+          barWidth: 44,
+          barHeight: 44,
+          iconResource: this.getToolSymbolResource(this.tool.id),
+          iconSize: 20,
+          iconColor: [this.themePrimary],
+          iconOffsetY: -4,
+          responsePadding: 0
+        }) {
+          Stack({ alignContent: Alignment.Center }) {
+            SymbolGlyph(this.getToolSymbolResource(this.tool.id))
+              .renderingStrategy(SymbolRenderingStrategy.SINGLE)
+              .fontSize(20)
+              .fontColor([this.themePrimary])
+          }
+          .width(44)
+          .height(44)
+          .translate({ y: -4 })
         }
+
+        Column({ space: 6 }) {
+          Text(this.tool.name)
+            .fontSize(17)
+            .fontWeight(FontWeight.Bold)
+            .fontColor($r('app.color.text_primary'))
+            .width('100%')
+            .maxLines(1)
+            .textOverflow({ overflow: TextOverflow.Ellipsis })
+
+          Text(this.tool.description)
+            .fontSize(12)
+            .lineHeight(18)
+            .fontColor($r('app.color.text_secondary'))
+            .width('100%')
+            .maxLines(2)
+            .textOverflow({ overflow: TextOverflow.Ellipsis })
+        }
+        .layoutWeight(1)
+        .alignItems(HorizontalAlign.Start)
+
+        Text(this.getStatusText())
+          .fontSize(10)
+          .fontWeight(FontWeight.Medium)
+          .fontColor(this.getStatusFontColor())
+          .padding({ left: 8, right: 8, top: 4, bottom: 4 })
+          .borderRadius(999)
+          .backgroundColor(this.getStatusBackgroundColor())
       }
-    })
+      .width('100%')
+      .alignItems(VerticalAlign.Center)
+
+      Row({ space: 8 }) {
+        Text(this.tool.id)
+          .fontSize(11)
+          .fontWeight(FontWeight.Medium)
+          .fontColor($r('app.color.text_secondary'))
+          .padding({ left: 10, right: 10, top: 6, bottom: 6 })
+          .borderRadius(999)
+          .backgroundColor(this.backgroundHex)
+
+        Text(this.getPermissionText())
+          .fontSize(11)
+          .fontWeight(FontWeight.Medium)
+          .fontColor(this.getPermissionTextColor())
+          .padding({ left: 10, right: 10, top: 6, bottom: 6 })
+          .borderRadius(999)
+          .backgroundColor(this.getPermissionBackgroundColor())
+          .border({ width: this.isWriteTool() ? 0 : 1, color: this.themePrimary })
+
+        Blank()
+      }
+      .width('100%')
+    }
+    .width('100%')
+    .padding(16)
     .margin({ bottom: 8 })
+    .borderRadius(20)
+    .backgroundColor(getAppUiState().themeSurface)
+    .border({ width: 1, color: this.dividerHex })
+    .shadow({
+      radius: 16,
+      color: this.isDarkMode ? 'rgba(0, 0, 0, 0.20)' : 'rgba(15, 23, 42, 0.05)',
+      offsetX: 0,
+      offsetY: 6
+    })
   }
 }
 
@@ -2218,10 +2357,6 @@ struct McpServerCardItem {
 
   private get isDarkMode(): boolean {
     return getAppUiState().isDarkMode
-  }
-
-  private get secondaryTextHex(): string {
-    return this.isDarkMode ? '#999999' : '#666666'
   }
 
   private get backgroundHex(): string {
@@ -2290,18 +2425,28 @@ struct McpServerCardItem {
   build() {
     Column({ space: 14 }) {
       Row({ space: 12 }) {
-        Column() {
-          SymbolGlyph($r('sys.symbol.cloud'))
-            .renderingStrategy(SymbolRenderingStrategy.SINGLE)
-            .fontSize(22)
-            .fontColor([this.serverEnabled ? this.themePrimary : this.secondaryTextHex])
+        ChatFloatingImmersiveButton({
+          barWidth: 46,
+          barHeight: 46,
+          iconResource: $r('sys.symbol.cloud'),
+          iconSize: 22,
+          iconColor: [this.themePrimary],
+          iconOffsetY: -4,
+          responsePadding: 0,
+          onButtonClick: (): void => {
+            this.onEdit()
+          }
+        }) {
+          Stack({ alignContent: Alignment.Center }) {
+            SymbolGlyph($r('sys.symbol.cloud'))
+              .renderingStrategy(SymbolRenderingStrategy.SINGLE)
+              .fontSize(22)
+              .fontColor([this.themePrimary])
+          }
+          .width(46)
+          .height(46)
+          .translate({ y: -4 })
         }
-        .width(46)
-        .height(46)
-        .borderRadius(16)
-        .backgroundColor(this.backgroundHex)
-        .border({ width: 1, color: this.serverEnabled ? this.themePrimary : this.dividerHex })
-        .justifyContent(FlexAlign.Center)
 
         Column({ space: 6 }) {
           Row() {
@@ -2335,6 +2480,7 @@ struct McpServerCardItem {
         .alignItems(HorizontalAlign.Start)
 
         Toggle({ type: ToggleType.Switch, isOn: this.serverEnabled })
+          .selectedColor(this.themePrimary)
           .onChange((value: boolean) => {
             this.onToggleEnabled(value)
           })
@@ -2462,7 +2608,7 @@ struct McpServerCardItem {
       .padding(14)
       .borderRadius(18)
       .backgroundColor(this.backgroundHex)
-      .border({ width: 1, color: this.serverEnabled ? this.themePrimary : this.dividerHex })
+      .border({ width: 1, color: this.dividerHex })
 
       Row({ space: 8 }) {
         Button(pickLocalizedText('刷新', 'Refresh'))
@@ -2510,7 +2656,7 @@ struct McpServerCardItem {
     .margin({ bottom: 10 })
     .borderRadius(20)
     .backgroundColor(getAppUiState().themeSurface)
-    .border({ width: 1, color: this.serverEnabled ? this.themePrimary : this.dividerHex })
+    .border({ width: 1, color: this.dividerHex })
     .shadow({
       radius: 16,
       color: this.isDarkMode ? 'rgba(0, 0, 0, 0.20)' : 'rgba(15, 23, 42, 0.05)',

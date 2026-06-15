@@ -163,6 +163,7 @@ export function buildChatMessageContentRenderSignature(
     encodeValue(message.searchQuery),
     encodeValue(message.searchEngine),
     encodeValue(message.searchSource),
+    encodeValue(message.documentToolHint),
     buildAttachmentSignature(message.attachments),
     buildSearchReferenceListSignature(message.searchReferences),
     buildToolCallListSignature(message.toolCalls),

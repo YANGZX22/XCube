@@ -145,7 +145,10 @@ export class ChatSendFlow {
     webSearchConversationEnabled: boolean,
     selectedToolIds: string[],
     forcedToolIds: string[],
-    currentModelId: string
+    currentModelId: string,
+    modelSupportsDocuments: boolean = true,
+    requestContent: string = '',
+    userDocumentToolHint: string = ''
   ): Promise<void> {
     const plan = this.buildExecutionPlan(
       messageContent,
@@ -171,7 +174,10 @@ export class ChatSendFlow {
         currentProvider,
         effectiveApiKey,
         attachmentsToSend,
-        plan.enabledToolIds
+        plan.enabledToolIds,
+        modelSupportsDocuments,
+        requestContent,
+        userDocumentToolHint
       )
       return
     }
@@ -187,7 +193,10 @@ export class ChatSendFlow {
       messageContent,
       currentProvider,
       effectiveApiKey,
-      attachmentsToSend
+      attachmentsToSend,
+      modelSupportsDocuments,
+      requestContent,
+      userDocumentToolHint
     )
   }
 
@@ -376,7 +385,10 @@ export class ChatSendFlow {
     messageContent: string,
     currentProvider: ModelProvider,
     effectiveApiKey: string,
-    attachmentsToSend: MessageAttachment[] = []
+    attachmentsToSend: MessageAttachment[] = [],
+    modelSupportsDocuments: boolean = true,
+    requestContent: string = '',
+    userDocumentToolHint: string = ''
   ): Promise<void> {
     const taskId = this.startTaskOrFail(messageContent)
     if (taskId === '') {
@@ -415,6 +427,9 @@ export class ChatSendFlow {
         attachmentsToSend,
         0,
         this.deps.getReasoningLevel(),
+        modelSupportsDocuments,
+        requestContent,
+        userDocumentToolHint,
         currentProvider.apiPath || undefined,
         currentProvider.customHeadersJson || undefined
       )
@@ -429,7 +444,10 @@ export class ChatSendFlow {
     currentProvider: ModelProvider,
     effectiveApiKey: string,
     attachmentsToSend: MessageAttachment[] = [],
-    enabledToolIds: string[] = []
+    enabledToolIds: string[] = [],
+    modelSupportsDocuments: boolean = true,
+    requestContent: string = '',
+    userDocumentToolHint: string = ''
   ): Promise<void> {
     const taskId = this.startTaskOrFail(messageContent)
     if (taskId === '') {
@@ -488,6 +506,9 @@ export class ChatSendFlow {
         this.deps.getReasoningLevel(),
         tools,
         toolCallbacks,
+        modelSupportsDocuments,
+        requestContent,
+        userDocumentToolHint,
         currentProvider.apiPath || undefined,
         currentProvider.customHeadersJson || undefined
       )

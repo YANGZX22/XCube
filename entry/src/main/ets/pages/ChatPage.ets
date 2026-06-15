@@ -39,7 +39,9 @@ import { ServiceRegistry } from '../services/ServiceRegistry'
 import { ToolApprovalResult } from '../services/ToolExecutionService'
 import {
   ASK_USER_TOOL_ID,
+  CANVAS_DOCUMENT_TOOL_ID,
   MATH_CHART_TOOL_ID,
+  PDF_TO_TEXT_TOOL_ID,
   PYTHON_SANDBOX_TOOL_ID,
   READ_SCHEDULE_TOOL_ID,
   WRITE_SCHEDULE_TOOL_ID,
@@ -58,6 +60,7 @@ import { ChatToolPickerSheetContent } from '../components/chat/ChatToolPickerShe
 import { ChatToolExecutionApprovalSheetContent } from '../components/chat/ChatToolExecutionApprovalSheetContent'
 import { VoiceInputSheet } from '../components/VoiceInputSheet'
 import { PyodideWebHost } from '../components/PyodideWebHost'
+import { ChatMarkdownHybridRenderer } from '../components/ChatMarkdownHybridRenderer'
 import {
   ChatNavigationTitleContent,
   CHAT_NAVIGATION_TITLE_STACK_BUILDER_HEIGHT
@@ -102,6 +105,9 @@ import { ToolPreviewEntry, buildToolArgumentsPreview } from '../utils/ToolPayloa
 import { DEFAULT_PRIMARY_COLOR } from '../config/ThemeDefaults'
 import { pickLocalizedText } from '../utils/LocalizedTextUtils'
 import { normalizeAssistantAvatarValue } from '../components/AssistantAvatar'
+import { CanvasDocumentService } from '../services/CanvasDocumentService'
+import { DocumentAttachmentRegistryService } from '../services/DocumentAttachmentRegistryService'
+import { getPdfTextExtractionService } from '../services/PdfTextExtractionService'
 
 const DOMAIN = 0x0003
 const TAG = 'ChatPage'
@@ -119,6 +125,16 @@ class ProviderModelSelection {
 class EditedMessageToolContext {
   webSearchEnabled: boolean = false
   selectedToolIds: string[] = []
+}
+
+class DocumentFallbackSendResult {
+  requestContent: string = ''
+  userHintText: string = ''
+
+  constructor(requestContent: string = '', userHintText: string = '') {
+    this.requestContent = requestContent
+    this.userHintText = userHintText
+  }
 }
 
 interface ReadScheduleApprovalArgs {
@@ -251,6 +267,16 @@ export struct ChatPage {
   @Local readScheduleLimitText: string = '80'
   @Local readScheduleIncludeDescription: boolean = false
   @Local readScheduleIncludeLocation: boolean = true
+  @Local isCanvasPanelOpen: boolean = false
+  @Local canvasDocumentTitle: string = 'Canvas'
+  @Local canvasDocumentContent: string = ''
+  @Local canvasDocumentRevision: number = 0
+  @Local canvasDocumentUpdatedAt: number = 0
+  @Local canvasDocumentUpdatedBy: string = ''
+  @Local canvasDocumentActivated: boolean = false
+  @Local isSavingCanvasDocument: boolean = false
+  @Local isCanvasMarkdownPreview: boolean = false
+  @Local canvasMarkdownSwitchRotation: number = 0
   // 推理级别状态
   @Local reasoningLevel: ReasoningLevel = ReasoningLevel.OFF
   // 最近截图检测状态（由 ChatInputBar 回调设置，ScreenshotBanner 独立渲染）
@@ -343,6 +369,8 @@ export struct ChatPage {
   private aiTaskService: AITaskService = ServiceRegistry.aiTask()
   private toolRegistry: ToolRegistry = ServiceRegistry.toolRegistry()
   private mcpService: McpService = ServiceRegistry.mcp()
+  private canvasDocumentService: CanvasDocumentService = ServiceRegistry.canvasDocument()
+  private documentAttachmentRegistry: DocumentAttachmentRegistryService = ServiceRegistry.documentAttachmentRegistry()
   private chatTaskOrchestrator = ServiceRegistry.chatTaskOrchestrator()
   private ttsService: TTSService = new TTSService()
   // 当前服务商配置
@@ -372,6 +400,12 @@ export struct ChatPage {
   private draftAutosaveTimerId: number = -1
   private readonly draftAutosaveDelayMs: number = 400
   private historyPreviewCollapseTimerId: number = -1
+  private canvasAutosaveTimerId: number = -1
+  private readonly canvasAutosaveDelayMs: number = 500
+  private canvasDocumentDirty: boolean = false
+  private canvasPersistedTitle: string = 'Canvas'
+  private canvasPersistedContent: string = ''
+  private suppressCanvasChangeUntil: number = 0
   private appUiStateDisposers: Array<() => void> = []
   private initialBottomAlignmentRetryTimerIds: number[] = []
   private initialBottomAlignmentCompletionTimerId: number = -1
@@ -534,6 +568,10 @@ export struct ChatPage {
     this.clearInitialBottomAlignmentRetries()
     this.clearRuntimeStateWatchdog()
     this.clearHistoryPreviewCollapseTimer()
+    this.clearCanvasAutosaveTimer()
+    this.flushCanvasAutosave(true).catch((error: Error): void => {
+      console.error('ChatPage', `Failed to flush canvas on disappear: ${JSON.stringify(error)}`)
+    })
     this.flushDraftAutosave(true).catch((error: Error): void => {
       console.error('ChatPage', `Failed to flush draft on disappear: ${JSON.stringify(error)}`)
     })
@@ -579,6 +617,7 @@ export struct ChatPage {
     )
 
     this.applyLoadedSessionData(loadResult)
+    await this.loadCanvasDocumentState()
     await this.applyLoadedProviders(loadResult.providers)
 
     this.isLoading = false
@@ -668,6 +707,452 @@ export struct ChatPage {
     this.bumpAssistantAvatarRenderTick()
   }
 
+  private async loadCanvasDocumentState(loadPanelPreference: boolean = true): Promise<void> {
+    const document = await this.canvasDocumentService.loadDocument(this.sessionId)
+    if (this.shouldKeepLocalCanvasDraft(document.revision, document.updatedBy)) {
+      return
+    }
+    this.applyCanvasDocumentState(document.title, document.content, document.revision, document.updatedAt,
+      document.updatedBy, document.activated)
+    if (loadPanelPreference && !this.shouldCanvasExistForCurrentChat()) {
+      this.isCanvasPanelOpen = false
+    }
+  }
+
+  private shouldKeepLocalCanvasDraft(remoteRevision: number, remoteUpdatedBy: string): boolean {
+    if (!this.canvasDocumentDirty) {
+      return false
+    }
+    return !(remoteUpdatedBy === 'assistant' && remoteRevision > this.canvasDocumentRevision)
+  }
+
+  private applyCanvasDocumentState(
+    title: string,
+    content: string,
+    revision: number,
+    updatedAt: number,
+    updatedBy: string,
+    activated: boolean
+  ): void {
+    if (this.canvasDocumentDirty && updatedBy === 'assistant' && revision > this.canvasDocumentRevision) {
+      this.clearCanvasAutosaveTimer()
+    }
+    this.canvasDocumentTitle = title
+    this.canvasDocumentContent = content
+    this.canvasDocumentRevision = revision
+    this.canvasDocumentUpdatedAt = updatedAt
+    this.canvasDocumentUpdatedBy = updatedBy
+    this.canvasDocumentActivated = activated
+    this.canvasDocumentDirty = false
+    this.canvasPersistedTitle = title
+    this.canvasPersistedContent = content
+    this.suppressCanvasChangeUntil = Date.now() + 250
+  }
+
+  private shouldShowCanvasWorkspace(): boolean {
+    return !this.showImagePreview && !this.isMultiSelectMode && this.shouldCanvasExistForCurrentChat()
+  }
+
+  private shouldCanvasExistForCurrentChat(): boolean {
+    return this.canvasDocumentActivated || this.hasCanvasDocumentPayload()
+  }
+
+  private hasCanvasDocumentPayload(): boolean {
+    if (this.canvasDocumentContent.trim() !== '') {
+      return true
+    }
+    const normalizedTitle = this.canvasDocumentTitle.trim()
+    return normalizedTitle !== '' && normalizedTitle !== 'Canvas'
+  }
+
+  private setCanvasPanelOpen(open: boolean): void {
+    if (open && !this.shouldCanvasExistForCurrentChat()) {
+      return
+    }
+    if (this.isCanvasPanelOpen === open) {
+      return
+    }
+    this.getUIContext().animateTo({
+      duration: 260,
+      curve: Curve.FastOutSlowIn
+    }, () => {
+      this.isCanvasPanelOpen = open
+    })
+    if (!open) {
+      this.flushCanvasAutosave(true).catch((error: Error): void => {
+        console.error('ChatPage', `Failed to flush canvas on close: ${JSON.stringify(error)}`)
+      })
+      return
+    }
+    this.safeStopInputSession()
+    this.loadCanvasDocumentState(false).catch((error: Error): void => {
+      console.error('ChatPage', `Failed to reload canvas document: ${JSON.stringify(error)}`)
+    })
+  }
+
+  private handleCanvasContentChanged(value: string): void {
+    if (value === this.canvasDocumentContent) {
+      return
+    }
+    if (Date.now() < this.suppressCanvasChangeUntil) {
+      return
+    }
+    this.canvasDocumentContent = value
+    this.canvasDocumentDirty = true
+    this.scheduleCanvasAutosave()
+  }
+
+  private handleCanvasTitleChanged(value: string): void {
+    if (value === this.canvasDocumentTitle) {
+      return
+    }
+    if (Date.now() < this.suppressCanvasChangeUntil) {
+      return
+    }
+    this.canvasDocumentTitle = value
+    this.canvasDocumentDirty = true
+    this.scheduleCanvasAutosave()
+  }
+
+  private clearCanvasAutosaveTimer(): void {
+    if (this.canvasAutosaveTimerId < 0) {
+      return
+    }
+    clearTimeout(this.canvasAutosaveTimerId)
+    this.canvasAutosaveTimerId = -1
+  }
+
+  private scheduleCanvasAutosave(): void {
+    this.clearCanvasAutosaveTimer()
+    this.canvasAutosaveTimerId = setTimeout(() => {
+      this.canvasAutosaveTimerId = -1
+      this.persistCanvasDocument().catch((error: Error): void => {
+        console.error('ChatPage', `Failed to autosave canvas: ${JSON.stringify(error)}`)
+      })
+    }, this.canvasAutosaveDelayMs)
+  }
+
+  private async flushCanvasAutosave(immediate: boolean): Promise<void> {
+    this.clearCanvasAutosaveTimer()
+    if (!immediate) {
+      return
+    }
+    await this.persistCanvasDocument()
+  }
+
+  private async persistCanvasDocument(): Promise<void> {
+    if (!this.canvasDocumentDirty) {
+      return
+    }
+    if (this.canvasDocumentTitle === this.canvasPersistedTitle &&
+      this.canvasDocumentContent === this.canvasPersistedContent) {
+      this.canvasDocumentDirty = false
+      return
+    }
+    this.isSavingCanvasDocument = true
+    try {
+      const document = await this.canvasDocumentService.saveDocument(
+        this.canvasDocumentContent,
+        this.canvasDocumentTitle,
+        'user',
+        this.sessionId
+      )
+      this.canvasDocumentTitle = document.title
+      this.canvasDocumentContent = document.content
+      this.canvasDocumentRevision = document.revision
+      this.canvasDocumentUpdatedAt = document.updatedAt
+      this.canvasDocumentUpdatedBy = document.updatedBy
+      this.canvasDocumentActivated = document.activated
+      this.canvasDocumentDirty = false
+      this.canvasPersistedTitle = document.title
+      this.canvasPersistedContent = document.content
+    } finally {
+      this.isSavingCanvasDocument = false
+    }
+  }
+
+  private handleCanvasClear(): void {
+    this.clearCanvasAutosaveTimer()
+    this.canvasDocumentContent = ''
+    this.canvasDocumentDirty = false
+    this.canvasDocumentService.clearDocument('user', this.sessionId).then((document) => {
+      this.canvasDocumentTitle = document.title
+      this.canvasDocumentContent = document.content
+      this.canvasDocumentRevision = document.revision
+      this.canvasDocumentUpdatedAt = document.updatedAt
+      this.canvasDocumentUpdatedBy = document.updatedBy
+      this.canvasDocumentActivated = document.activated
+      this.canvasPersistedTitle = document.title
+      this.canvasPersistedContent = document.content
+    }).catch((error: Error): void => {
+      console.error('ChatPage', `Failed to clear canvas document: ${JSON.stringify(error)}`)
+      this.showError(pickLocalizedText('Canvas 清空失败', 'Failed to clear Canvas'))
+    })
+  }
+
+  private setCanvasMarkdownPreview(enabled: boolean): void {
+    if (this.isCanvasMarkdownPreview === enabled) {
+      return
+    }
+    this.getUIContext().animateTo({
+      duration: 360,
+      curve: Curve.EaseInOut
+    }, () => {
+      this.canvasMarkdownSwitchRotation = this.canvasMarkdownSwitchRotation + 360
+      this.isCanvasMarkdownPreview = enabled
+    })
+    if (!enabled) {
+      return
+    }
+    this.safeStopInputSession()
+    this.flushCanvasAutosave(true).catch((error: Error): void => {
+      console.error('ChatPage', `Failed to flush canvas before markdown preview: ${JSON.stringify(error)}`)
+    })
+  }
+
+  private getCanvasUpdatedText(): string {
+    if (this.isSavingCanvasDocument) {
+      return pickLocalizedText('保存中...', 'Saving...')
+    }
+    if (this.canvasDocumentRevision <= 0) {
+      return pickLocalizedText('尚未保存', 'Not saved yet')
+    }
+    const actor = this.canvasDocumentUpdatedBy === 'assistant'
+      ? pickLocalizedText('AI', 'AI')
+      : pickLocalizedText('你', 'You')
+    return pickLocalizedText(`v${this.canvasDocumentRevision} · ${actor} 更新`,
+      `v${this.canvasDocumentRevision} · ${actor}`)
+  }
+
+  private getCanvasPanelWidthVp(): number {
+    if (this.windowWidthVp <= 380) {
+      return Math.max(284, this.windowWidthVp - 24)
+    }
+    if (this.layoutSizeClass === LayoutSizeClass.EXPANDED) {
+      return 380
+    }
+    return 330
+  }
+
+  private getCanvasPanelHeightVp(): number {
+    const top = this.getMessageListTopSpacerHeight()
+    const bottom = this.getFloatingOverlayBottomAvoidHeightVp() + 24
+    return Math.max(260, this.windowHeightVp - top - bottom)
+  }
+
+  private getCanvasButtonTranslateY(): number {
+    return -(this.floatingScrollButtonBottomOffsetVp + this.getFloatingOverlayBottomAvoidHeightVp()) +
+      this.getHistoryPreviewButtonExtraOffsetY() - 48
+  }
+
+  @Builder
+  private CanvasFloatingButtonContentBuilder() {
+    Stack({ alignContent: Alignment.Center }) {
+      SymbolGlyph($r('sys.symbol.paintbrush_pointed_waveform'))
+        .fontSize(18)
+        .fontColor([this.themePrimary])
+    }
+    .width('100%')
+    .height('100%')
+  }
+
+  @Builder
+  private CanvasPanelBuilder() {
+    Column({ space: 10 }) {
+      Row({ space: 8 }) {
+        Column({ space: 2 }) {
+          Text(pickLocalizedText('Canvas', 'Canvas'))
+            .fontSize(15)
+            .fontWeight(FontWeight.Bold)
+            .fontColor($r('app.color.text_primary'))
+            .maxLines(1)
+
+          Text(this.getCanvasUpdatedText())
+            .fontSize(11)
+            .fontColor($r('app.color.text_secondary'))
+            .maxLines(1)
+        }
+        .layoutWeight(1)
+        .alignItems(HorizontalAlign.Start)
+
+        Button({ type: ButtonType.Circle }) {
+          SymbolGlyph($r('sys.symbol.arrow_2_circlepath'))
+            .fontSize(14)
+            .fontColor([this.themePrimary])
+            .rotate({ angle: this.canvasMarkdownSwitchRotation, centerX: '50%', centerY: '50%' })
+        }
+        .width(32)
+        .height(32)
+        .backgroundColor(this.isCanvasMarkdownPreview ?
+          (this.isDarkMode ? 'rgba(78, 111, 158, 0.22)' : 'rgba(78, 111, 158, 0.14)') :
+          (this.isDarkMode ? 'rgba(255, 255, 255, 0.08)' : 'rgba(0, 0, 0, 0.05)'))
+        .onClick(() => {
+          this.setCanvasMarkdownPreview(!this.isCanvasMarkdownPreview)
+        })
+
+        Button({ type: ButtonType.Circle }) {
+          SymbolGlyph($r('sys.symbol.trash'))
+            .fontSize(14)
+            .fontColor([$r('app.color.status_error')])
+        }
+        .width(32)
+        .height(32)
+        .backgroundColor(this.isDarkMode ? 'rgba(255, 255, 255, 0.08)' : 'rgba(0, 0, 0, 0.05)')
+        .onClick(() => {
+          this.handleCanvasClear()
+        })
+
+        Button({ type: ButtonType.Circle }) {
+          SymbolGlyph($r('sys.symbol.xmark'))
+            .fontSize(13)
+            .fontColor([$r('app.color.text_secondary')])
+        }
+        .width(32)
+        .height(32)
+        .backgroundColor(this.isDarkMode ? 'rgba(255, 255, 255, 0.08)' : 'rgba(0, 0, 0, 0.05)')
+        .onClick(() => {
+          this.setCanvasPanelOpen(false)
+        })
+      }
+      .width('100%')
+      .height(38)
+      .alignItems(VerticalAlign.Center)
+
+      TextInput({ text: this.canvasDocumentTitle, placeholder: pickLocalizedText('文档标题', 'Document title') })
+        .height(36)
+        .width('100%')
+        .fontSize(14)
+        .fontColor($r('app.color.text_primary'))
+        .placeholderColor($r('app.color.text_tertiary'))
+        .backgroundColor(this.themeBackground)
+        .borderRadius(12)
+        .border({ width: 0.6, color: $r('app.color.divider') })
+        .padding({ left: 12, right: 12 })
+        .onChange((value: string) => {
+          this.handleCanvasTitleChanged(value)
+        })
+
+      if (this.isCanvasMarkdownPreview) {
+        Scroll() {
+          Column() {
+            if (this.canvasDocumentContent.trim() === '') {
+              Text(pickLocalizedText('暂无内容', 'No content yet'))
+                .fontSize(14)
+                .fontColor($r('app.color.text_tertiary'))
+                .width('100%')
+            } else {
+              ChatMarkdownHybridRenderer({
+                content: this.canvasDocumentContent,
+                isInputEnded: true,
+                incrementalAnalysis: false,
+                useCangjieComponent: true,
+                chatFontSize: 14,
+                compact: false,
+                themeRenderKey: `canvas-${this.canvasDocumentRevision}-${this.canvasDocumentUpdatedAt}`
+              })
+            }
+          }
+          .width('100%')
+          .padding(12)
+        }
+        .layoutWeight(1)
+        .width('100%')
+        .backgroundColor(this.themeBackground)
+        .borderRadius(14)
+        .border({ width: 0.6, color: $r('app.color.divider') })
+      } else {
+        TextArea({
+          text: this.canvasDocumentContent,
+          placeholder: pickLocalizedText('在这里写文档，AI 也可以通过 Canvas 工具修改它。', 'Write here; AI can edit this document through the Canvas tool.')
+        })
+          .layoutWeight(1)
+          .width('100%')
+          .fontSize(14)
+          .fontColor($r('app.color.text_primary'))
+          .placeholderColor($r('app.color.text_tertiary'))
+          .backgroundColor(this.themeBackground)
+          .borderRadius(14)
+          .border({ width: 0.6, color: $r('app.color.divider') })
+          .padding(12)
+          .onChange((value: string) => {
+            this.handleCanvasContentChanged(value)
+          })
+      }
+    }
+    .width('100%')
+    .height('100%')
+    .padding({ left: 12, right: 12, top: 12, bottom: 12 })
+  }
+
+  @Builder
+  private CanvasWorkspaceBuilder() {
+    if (this.shouldShowCanvasWorkspace()) {
+      if (this.isCanvasPanelOpen) {
+        Row() {
+          Stack({ alignContent: Alignment.TopStart }) {
+            this.CanvasPanelBuilder()
+          }
+          .width(this.getCanvasPanelWidthVp())
+          .height(this.getCanvasPanelHeightVp())
+          .backgroundColor(this.isDarkMode ? 'rgba(30, 30, 30, 0.84)' : 'rgba(255, 255, 255, 0.90)')
+          .backgroundBlurStyle(BlurStyle.COMPONENT_REGULAR)
+          .border({
+            width: 0.6,
+            color: this.isDarkMode ? 'rgba(255, 255, 255, 0.10)' : 'rgba(0, 0, 0, 0.08)'
+          })
+          .borderRadius(18)
+          .clip(true)
+          .shadow({
+            radius: 18,
+            color: this.isDarkMode ? 'rgba(0, 0, 0, 0.44)' : 'rgba(15, 23, 42, 0.16)',
+            offsetX: 0,
+            offsetY: 6
+          })
+          .transition(
+            TransitionEffect.OPACITY.combine(
+              TransitionEffect.translate({ x: 18 })
+            ).animation({ duration: 220, curve: Curve.FastOutSlowIn })
+          )
+        }
+        .width('100%')
+        .height(this.getCanvasPanelHeightVp())
+        .padding({ left: 12, right: 16 })
+        .justifyContent(FlexAlign.End)
+        .position({ x: 0, y: this.getMessageListTopSpacerHeight() + 8 })
+        .zIndex(16)
+      } else {
+        Row() {
+          ChatFloatingImmersiveButton({
+            barWidth: 40,
+            barHeight: 40,
+            iconResource: $r('sys.symbol.paintbrush_pointed_waveform'),
+            iconSize: 18,
+            iconColor: [this.themePrimary],
+            onButtonClick: (): void => {
+              this.setCanvasPanelOpen(true)
+            }
+          }) {
+            this.CanvasFloatingButtonContentBuilder()
+          }
+        }
+        .width('100%')
+        .padding({ right: 16 })
+        .justifyContent(FlexAlign.End)
+        .position({ x: 0, y: '100%' })
+        .translate({
+          x: 0,
+          y: this.getCanvasButtonTranslateY()
+        })
+        .zIndex(12)
+        .transition(
+          TransitionEffect.OPACITY.combine(
+            TransitionEffect.translate({ x: 12 })
+          ).animation({ duration: 180, curve: Curve.EaseOut })
+        )
+      }
+    }
+  }
+
   private bumpAssistantAvatarRenderTick(): void {
     this.assistantAvatarRenderTick += 1
   }
@@ -731,6 +1216,15 @@ export struct ChatPage {
     this.updateRuntimeStateWatchdog()
   }
 
+  onCanvasDocumentRefreshChanged(): void {
+    if (!this.isPageVisible) {
+      return
+    }
+    this.loadCanvasDocumentState(false).catch((error: Error): void => {
+      console.error('ChatPage', `Failed to refresh canvas document: ${JSON.stringify(error)}`)
+    })
+  }
+
   private registerAppUiStateObservers(): void {
     if (this.appUiStateDisposers.length > 0) {
       return
@@ -739,6 +1233,7 @@ export struct ChatPage {
       observeAppUiState(AppStorageKeys.IN_APP_TASK_ALERT_PAYLOAD, (): void => this.onInAppTaskAlertPayloadChanged()),
       observeAppUiState(AppStorageKeys.OPEN_SESSION_PAYLOAD, (): void => this.onOpenSessionPayloadChanged()),
       observeAppUiState(AppStorageKeys.TASK_EVENT_TICK, (): void => this.onTaskEventTickChanged()),
+      observeAppUiState(AppStorageKeys.CANVAS_DOCUMENT_REFRESH_AT, (): void => this.onCanvasDocumentRefreshChanged()),
       observeAppUiState(AppStorageKeys.ASSISTANT_AVATAR_REFRESH_AT, (): void => this.onAssistantAvatarRefreshChanged()),
       observeAppUiState(AppStorageKeys.APP_IN_BACKGROUND, (): void => this.onAppBackgroundChanged())
     ]
@@ -954,6 +1449,103 @@ export struct ChatPage {
     return null
   }
 
+  private currentModelSupportsDocuments(): boolean {
+    const model = this.getCurrentModelInfo()
+    return model !== null && model.capabilities.supportsDocuments
+  }
+
+  private collectPdfAttachments(attachments: MessageAttachment[]): MessageAttachment[] {
+    const pdfAttachments: MessageAttachment[] = []
+    for (let i = 0; i < attachments.length; i++) {
+      if (this.isPdfAttachment(attachments[i])) {
+        pdfAttachments.push(attachments[i])
+      }
+    }
+    return pdfAttachments
+  }
+
+  private isPdfAttachment(attachment: MessageAttachment): boolean {
+    const mimeType = attachment.mimeType.toLowerCase()
+    const name = attachment.name.toLowerCase()
+    return mimeType === 'application/pdf' || name.endsWith('.pdf')
+  }
+
+  private async prepareDocumentFallbackForSend(
+    messageContent: string,
+    currentProvider: ModelProvider,
+    attachments: MessageAttachment[],
+    selectedToolIds: string[],
+    forcedToolIds: string[]
+  ): Promise<DocumentFallbackSendResult> {
+    const pdfAttachments = this.collectPdfAttachments(attachments)
+    if (pdfAttachments.length === 0) {
+      return new DocumentFallbackSendResult(messageContent, '')
+    }
+
+    this.documentAttachmentRegistry.registerAttachments(this.sessionId, pdfAttachments)
+    if (this.getSendFlow().isCurrentModelSupportsTools(currentProvider, this.currentModelId)) {
+      if (!selectedToolIds.includes(PDF_TO_TEXT_TOOL_ID) && !forcedToolIds.includes(PDF_TO_TEXT_TOOL_ID)) {
+        forcedToolIds.push(PDF_TO_TEXT_TOOL_ID)
+      }
+      return new DocumentFallbackSendResult(
+        this.appendDocumentContext(messageContent, this.buildPdfToTextToolInstruction(pdfAttachments)),
+        '已提醒模型通过 PDF 转文本工具读取文档'
+      )
+    }
+
+    const inlineContext = await this.buildInlinePdfTextContext(pdfAttachments)
+    if (inlineContext !== '') {
+      return new DocumentFallbackSendResult(
+        this.appendDocumentContext(messageContent, inlineContext),
+        '已提取 PDF 文本并作为隐藏上下文发送'
+      )
+    }
+    return new DocumentFallbackSendResult(
+      this.appendDocumentContext(messageContent,
+        '当前模型未开启原生文档阅读，且当前接口不支持工具调用。用户上传的 PDF 已暂存到本地，但本轮未能提取出可用文本。'),
+      'PDF 已暂存，未提取到可用文本'
+    )
+  }
+
+  private buildPdfToTextToolInstruction(pdfAttachments: MessageAttachment[]): string {
+    const lines: string[] = [
+      '当前模型未开启原生文档阅读。用户上传的 PDF 已暂存到本地沙箱，不能直接读取原始 PDF；需要阅读 PDF 内容时请调用 pdf_to_text 工具。可用 PDF 附件：'
+    ]
+    for (let i = 0; i < pdfAttachments.length; i++) {
+      lines.push(`- attachmentId: ${pdfAttachments[i].id}, 文件名: ${pdfAttachments[i].name}`)
+    }
+    return lines.join('\n')
+  }
+
+  private async buildInlinePdfTextContext(pdfAttachments: MessageAttachment[]): Promise<string> {
+    const sections: string[] = [
+      '当前模型未开启原生文档阅读，且当前接口不支持工具调用。以下是 APP 自动从用户上传 PDF 中提取的文本：'
+    ]
+    for (let i = 0; i < pdfAttachments.length; i++) {
+      const registered = this.documentAttachmentRegistry.getAttachment(this.sessionId, pdfAttachments[i].id)
+      if (registered === null) {
+        continue
+      }
+      const result = await getPdfTextExtractionService().extractAttachment(registered, 12000)
+      if (!result.ok) {
+        sections.push(`\n[${pdfAttachments[i].name}]\n${result.message}`)
+        continue
+      }
+      sections.push(`\n[${result.fileName} / attachmentId: ${result.attachmentId}]\n${result.text}`)
+      if (result.truncated) {
+        sections.push('\n[文本已截断，可后续开启文档能力或工具调用以读取更多内容]')
+      }
+    }
+    return sections.length > 1 ? sections.join('\n') : ''
+  }
+
+  private appendDocumentContext(messageContent: string, documentContext: string): string {
+    if (messageContent.trim() === '') {
+      return documentContext
+    }
+    return `${messageContent}\n\n${documentContext}`
+  }
+
   private supportsReasoningForCurrentModel(): boolean {
     return this.getReasoningControlModeForCurrentModel() !== ReasoningControlMode.NONE
   }
@@ -1069,6 +1661,9 @@ export struct ChatPage {
   private applySelectedToolIdsInMemory(toolIds: string[], enabledMcpServerIds?: Set<string>): void {
     this.selectedToolIds = [...this.normalizeSelectedToolIdsForPicker(toolIds, enabledMcpServerIds)]
     this.webSearchConversationEnabled = this.selectedToolIds.includes('web_search')
+    if (!this.shouldCanvasExistForCurrentChat()) {
+      this.isCanvasPanelOpen = false
+    }
   }
 
   private async setSelectedToolIds(toolIds: string[]): Promise<void> {
@@ -1085,6 +1680,8 @@ export struct ChatPage {
   private ensureBuiltinChatToolsAvailable(): void {
     if (!this.toolRegistry.isToolRegistered('web_search') || !this.toolRegistry.isToolRegistered(ASK_USER_TOOL_ID) ||
       !this.toolRegistry.isToolRegistered(PYTHON_SANDBOX_TOOL_ID) ||
+      !this.toolRegistry.isToolRegistered(CANVAS_DOCUMENT_TOOL_ID) ||
+      !this.toolRegistry.isToolRegistered(PDF_TO_TEXT_TOOL_ID) ||
       !this.toolRegistry.isToolRegistered(MATH_CHART_TOOL_ID) ||
       !this.toolRegistry.isToolRegistered(READ_SCHEDULE_TOOL_ID) ||
       !this.toolRegistry.isToolRegistered(WRITE_SCHEDULE_TOOL_ID)) {
@@ -2329,6 +2926,8 @@ export struct ChatPage {
 
         this.HistoryPreviewFloatingBarBuilder()
 
+        this.CanvasWorkspaceBuilder()
+
         // 底部输入栏容器（非多选模式时显示）
         if (!this.isMultiSelectMode) {
           Column() {
@@ -2637,6 +3236,10 @@ export struct ChatPage {
       }
       if (this.showAttachmentPicker) {
         this.closeAttachmentPanel()
+        return true
+      }
+      if (this.isCanvasPanelOpen) {
+        this.setCanvasPanelOpen(false)
         return true
       }
       if (dismissActiveSnackBarOnBack()) {
@@ -3329,7 +3932,7 @@ export struct ChatPage {
           .height('100%')
           .backgroundColor(Color.Transparent)
           .position({ x: 0, y: 0 })
-          .zIndex(12)
+          .zIndex(14)
           .onClick(() => {
             this.setHistoryPreviewExpanded(false)
           })
@@ -3382,7 +3985,7 @@ export struct ChatPage {
         y: this.getHistoryPreviewSurfaceTranslateY()
       })
       .animation({ duration: 260, curve: Curve.FastOutSlowIn })
-      .zIndex(13)
+      .zIndex(15)
       .transition(
         TransitionEffect.OPACITY.combine(
           TransitionEffect.translate({ x: 12 })
@@ -3620,6 +4223,11 @@ export struct ChatPage {
 
   private async prepareCurrentSessionForTransition(): Promise<void> {
     try {
+      await this.flushCanvasAutosave(true)
+    } catch (error) {
+      console.error('ChatPage', `Failed to flush canvas before session transition: ${JSON.stringify(error)}`)
+    }
+    try {
       await this.flushDraftAutosave(true)
     } catch (error) {
       console.error('ChatPage', `Failed to flush draft before session transition: ${JSON.stringify(error)}`)
@@ -3716,6 +4324,8 @@ export struct ChatPage {
         return
       }
       const messageContent = prepareResult.messageContent
+      let requestMessageContent = messageContent
+      let userDocumentToolHint = ''
       const currentProvider = prepareResult.currentProvider
       const effectiveApiKey = prepareResult.effectiveApiKey
 
@@ -3732,8 +4342,21 @@ export struct ChatPage {
       const attachmentsToSend = [...sourceAttachments]
       const selectedToolIds = [...this.selectedToolIds]
       const forcedToolIds = [...this.forcedToolIdsOnce]
+      const modelSupportsDocuments = this.currentModelSupportsDocuments()
+      if (!modelSupportsDocuments) {
+        const documentFallback = await this.prepareDocumentFallbackForSend(
+          messageContent,
+          currentProvider,
+          attachmentsToSend,
+          selectedToolIds,
+          forcedToolIds
+        )
+        requestMessageContent = documentFallback.requestContent
+        userDocumentToolHint = documentFallback.userHintText
+      }
       const searchEnabled = this.webSearchAvailable &&
         (selectedToolIds.includes('web_search') || forcedToolIds.includes('web_search'))
+      this.syncActiveSessionBinding()
       await this.getSendFlow().executeSend(
         messageContent,
         currentProvider,
@@ -3742,7 +4365,10 @@ export struct ChatPage {
         searchEnabled,
         selectedToolIds,
         forcedToolIds,
-        this.currentModelId
+        this.currentModelId,
+        modelSupportsDocuments,
+        requestMessageContent,
+        userDocumentToolHint
       )
       this.forcedToolIdsOnce = []
     } catch (error) {

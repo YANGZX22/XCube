@@ -363,6 +363,7 @@ export struct MessageBubble {
       this.isEditing ? '1' : '0',
       this.previewContent,
       this.translatedText,
+      this.message.documentToolHint,
       this.buildAttachmentSignature(this.previewAttachments),
       this.buildAttachmentSignature(this.message.attachments)
     ].join('\u0001')
@@ -777,6 +778,10 @@ export struct MessageBubble {
     return !this.isMultiSelectMode && !this.isEditing && this.hasToolbarPayload()
   }
 
+  private shouldShowDocumentToolHint(): boolean {
+    return !this.isEditing && this.message.role === MessageRole.USER && this.message.documentToolHint.trim() !== ''
+  }
+
   private shouldShowAssistantToolbar(): boolean {
     return shouldShowAssistantMessageToolbar(this.message, this.isMultiSelectMode)
   }
@@ -986,6 +991,10 @@ export struct MessageBubble {
               }
             }
 
+            if (this.shouldShowDocumentToolHint()) {
+              this.DocumentToolHintBlock()
+            }
+
             // 文本内容
             if (this.getDisplayContent().length > 0) {
               Text(this.getDisplayContent())
@@ -1080,6 +1089,25 @@ export struct MessageBubble {
     .onTouch((event: TouchEvent) => {
       this.handleMultiSelectTouch(event)
     })
+  }
+
+  @Builder
+  DocumentToolHintBlock() {
+    Row({ space: 6 }) {
+      SymbolGlyph($r('sys.symbol.pdf_doc'))
+        .fontSize(13)
+        .fontColor(['rgba(255,255,255,0.86)'])
+
+      Text(this.message.documentToolHint)
+        .fontSize(12)
+        .fontColor('rgba(255,255,255,0.92)')
+        .maxLines(2)
+        .textOverflow({ overflow: TextOverflow.Ellipsis })
+    }
+    .padding({ left: 8, right: 9, top: 6, bottom: 6 })
+    .backgroundColor('rgba(255,255,255,0.16)')
+    .borderRadius(8)
+    .margin({ bottom: this.getDisplayContent().length > 0 ? 6 : 0 })
   }
 
   // 编辑模式下的简化附件预览（无手势交互）
