@@ -194,7 +194,9 @@ export class CanvasDocumentService {
     if (stored !== serialized) {
       console.warn('CanvasDocumentService', 'Canvas document preference write did not verify; using in-memory cache')
     }
-    setAppUiStateValue(AppStorageKeys.CANVAS_DOCUMENT_REFRESH_AT, Date.now())
+    const currentRefreshAt = getAppUiState().canvasDocumentRefreshAt
+    const now = Date.now()
+    setAppUiStateValue(AppStorageKeys.CANVAS_DOCUMENT_REFRESH_AT, now > currentRefreshAt ? now : currentRefreshAt + 1)
   }
 
   private resolveDocumentId(documentId: string): string {

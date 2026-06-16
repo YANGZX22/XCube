@@ -13,7 +13,7 @@ import { ToolRegistry } from '../../services/ToolRegistry'
 import { appendUniqueToolId } from './ChatToolIdHelper'
 import { syncChatMessageFromSource } from './ChatMessageActionHelper'
 import { validateProviderConfig } from '../../utils/ProviderValidationUtils'
-import { ASK_USER_TOOL_ID } from '../../config/BuiltinTools'
+import { ASK_USER_TOOL_ID, CANVAS_DOCUMENT_TOOL_ID } from '../../config/BuiltinTools'
 
 export class ChatSendPrepareResult {
   shouldSend: boolean = false
@@ -59,11 +59,13 @@ export interface ChatSendFlowDependencies {
   onSyncMessages: () => void
   onScrollBottom: () => void
   onSetNewEmptySession: (value: boolean) => void
+  onSessionResolved: () => void
   onDraftCommitted: () => void
   onMarkAutoTaskCompleted: () => void
   onMarkAutoTaskFailed: (message: string) => void
   onShowError: (message: string | Resource) => void
   onShowToast: (message: string | Resource) => void
+  onCanvasDocumentUpdated?: () => void
 }
 
 export class ChatSendFlow {
@@ -253,6 +255,13 @@ export class ChatSendFlow {
     return ids
   }
 
+  private isCanvasDocumentToolCall(toolCall: ToolCall): boolean {
+    if (toolCall.toolId.trim() === CANVAS_DOCUMENT_TOOL_ID) {
+      return true
+    }
+    return toolCall.functionName.trim().toLowerCase().replace(/[\s\-]+/g, '_') === CANVAS_DOCUMENT_TOOL_ID
+  }
+
   private buildExecutionPlan(
     messageContent: string,
     currentProvider: ModelProvider,
@@ -336,6 +345,7 @@ export class ChatSendFlow {
   }
 
   private handleUserMessageAdded(userMessage: ChatMessage): void {
+    this.deps.onSessionResolved()
     this.deps.onClearComposer()
     this.deps.messages.push(userMessage)
     this.deps.onSyncMessages()
@@ -345,6 +355,7 @@ export class ChatSendFlow {
   }
 
   private handleAIMessageAdded(aiMessage: ChatMessage): void {
+    this.deps.onSessionResolved()
     this.deps.messages.push(aiMessage)
     this.deps.onSyncMessages()
     this.deps.onScrollBottom()
@@ -459,16 +470,24 @@ export class ChatSendFlow {
     const tools = this.deps.toolRegistry.getEnabledToolDefinitions(enabledToolIds)
 
     console.info('ChatSendFlow', `[Function Calling] 启用工具: ${enabledToolIds.join(', ')}`)
+    let shouldRefreshCanvasDocument = false
 
     const toolCallbacks: ToolCallCallbacks = {
       onToolCallStarted: (toolCalls: ToolCall[]): void => {
         console.info('ChatSendFlow', `[Function Calling] 工具调用开始: ${toolCalls.length} 个`)
         for (let i = 0; i < toolCalls.length; i++) {
           console.info('ChatSendFlow', `  - ${toolCalls[i].functionName}: ${toolCalls[i].arguments}`)
+          if (this.isCanvasDocumentToolCall(toolCalls[i])) {
+            shouldRefreshCanvasDocument = true
+          }
         }
       },
       onToolCallCompleted: (results: ToolResult[]): void => {
         console.info('ChatSendFlow', `[Function Calling] 工具调用完成: ${results.length} 个结果`)
+        if (shouldRefreshCanvasDocument && this.deps.onCanvasDocumentUpdated !== undefined) {
+          shouldRefreshCanvasDocument = false
+          this.deps.onCanvasDocumentUpdated()
+        }
       },
       onSearching: (query: string): void => {
         console.info('ChatSendFlow', `[Function Calling] 正在搜索: ${query}`)

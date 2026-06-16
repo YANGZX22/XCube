@@ -50,6 +50,7 @@ import {
 import { AppStorageKeys } from '../config/AppStorageKeys'
 import { inputMethod } from '@kit.IMEKit'
 import { webview } from '@kit.ArkWeb'
+import { pdfService, pdfViewManager, PdfView } from '@kit.PDFKit'
 import { dismissActiveSnackBarOnBack, showSnackBar, SnackBarDisplayOptions, SnackBarTone } from '../utils/ToastUtil'
 import { hilog } from '@kit.PerformanceAnalysisKit'
 import { ChatModelSelectorSheetContent } from '../components/chat/ChatModelSelectorSheetContent'
@@ -231,6 +232,12 @@ export struct ChatPage {
   @Local messageWebSheetUrl: string = ''
   @Local messageWebSheetTitle: string = ''
   private messageSheetWebController: webview.WebviewController = new webview.WebviewController()
+  @Local showPdfPreviewSheet: boolean = false
+  @Local pdfPreviewTitle: string = ''
+  @Local pdfPreviewPath: string = ''
+  @Local pdfPreviewLoading: boolean = false
+  @Local pdfPreviewError: string = ''
+  private pdfPreviewController: pdfViewManager.PdfController = new pdfViewManager.PdfController()
   private hasInitializedRoute: boolean = false
   // 当前正在朗读的消息ID
   private get speakingMessageId(): string {
@@ -1257,6 +1264,26 @@ export struct ChatPage {
     setAppUiStateValue(AppStorageKeys.ACTIVE_CHAT_SESSION_ID, activeSessionId)
   }
 
+  private syncCurrentSessionFromViewModel(): void {
+    const session = this.chatViewModel.getCurrentSession()
+    if (session === null || session.id === '') {
+      this.syncActiveSessionBinding()
+      return
+    }
+    const sessionChanged = this.sessionId !== session.id
+    this.sessionId = session.id
+    this.sessionTitle = session.title
+    this.branchIndex = session.branchIndex
+    this.branchCount = session.branchCount
+    this.branchPointIndex = session.branchPointIndex
+    this.syncActiveSessionBinding()
+    if (sessionChanged) {
+      this.loadCanvasDocumentState(false).catch((error: Error): void => {
+        console.error('ChatPage', `Failed to sync canvas after session resolve: ${JSON.stringify(error)}`)
+      })
+    }
+  }
+
   private onAppBackgroundChanged(): void {
     if (this.appInBackground) {
       if (this.isMultiSelectMode) {
@@ -1341,6 +1368,48 @@ export struct ChatPage {
     this.showMessageWebSheet = true
   }
 
+  private async handlePdfAttachmentPreview(attachment: MessageAttachment): Promise<void> {
+    if (!this.isPdfAttachment(attachment) || attachment.filePath.trim() === '') {
+      this.showError(pickLocalizedText('无法预览该 PDF 文件', 'Unable to preview this PDF file'))
+      return
+    }
+
+    this.pdfPreviewTitle = attachment.name !== '' ? attachment.name : pickLocalizedText('PDF 预览', 'PDF Preview')
+    this.pdfPreviewPath = attachment.filePath
+    this.pdfPreviewError = ''
+    this.pdfPreviewLoading = true
+    this.showPdfPreviewSheet = true
+
+    try {
+      this.pdfPreviewController.releaseDocument()
+    } catch (_error) {
+    }
+
+    try {
+      const result = await this.pdfPreviewController.loadDocument(attachment.filePath)
+      if (result !== pdfService.ParseResult.PARSE_SUCCESS) {
+        this.pdfPreviewError = pickLocalizedText(`PDF 加载失败 (${result})`, `Failed to load PDF (${result})`)
+      }
+    } catch (error) {
+      console.error('ChatPage', `Failed to preview PDF: ${JSON.stringify(error)}`)
+      this.pdfPreviewError = pickLocalizedText('PDF 预览失败', 'Failed to preview PDF')
+    } finally {
+      this.pdfPreviewLoading = false
+    }
+  }
+
+  private closePdfPreview(): void {
+    try {
+      this.pdfPreviewController.releaseDocument()
+    } catch (_error) {
+    }
+    this.showPdfPreviewSheet = false
+    this.pdfPreviewTitle = ''
+    this.pdfPreviewPath = ''
+    this.pdfPreviewError = ''
+    this.pdfPreviewLoading = false
+  }
+
   @Builder
   private MessageWebSheetBuilder() {
     Column() {
@@ -1357,6 +1426,57 @@ export struct ChatPage {
         .width('100%')
         .layoutWeight(1)
         .justifyContent(FlexAlign.Center)
+      }
+    }
+    .width('100%')
+    .height('100%')
+    .backgroundColor(this.themeBackground)
+  }
+
+  @Builder
+  private PdfPreviewSheetBuilder() {
+    Column() {
+      if (this.pdfPreviewError !== '') {
+        Column({ space: 8 }) {
+          SymbolGlyph($r('sys.symbol.exclamationmark_triangle'))
+            .fontSize(28)
+            .fontColor([$r('app.color.status_error')])
+
+          Text(this.pdfPreviewError)
+            .fontSize(14)
+            .fontColor($r('app.color.text_secondary'))
+            .textAlign(TextAlign.Center)
+        }
+        .width('100%')
+        .layoutWeight(1)
+        .justifyContent(FlexAlign.Center)
+        .alignItems(HorizontalAlign.Center)
+        .padding(24)
+      } else if (this.pdfPreviewLoading) {
+        Column({ space: 10 }) {
+          LoadingProgress()
+            .width(28)
+            .height(28)
+            .color(this.themePrimary)
+
+          Text(pickLocalizedText('正在加载 PDF...', 'Loading PDF...'))
+            .fontSize(14)
+            .fontColor($r('app.color.text_secondary'))
+        }
+        .width('100%')
+        .layoutWeight(1)
+        .justifyContent(FlexAlign.Center)
+        .alignItems(HorizontalAlign.Center)
+      } else if (this.pdfPreviewPath !== '') {
+        PdfView({
+          controller: this.pdfPreviewController,
+          pageLayout: pdfService.PageLayout.LAYOUT_SINGLE,
+          isContinuous: true,
+          showScroll: true,
+          pageFit: pdfService.PageFit.FIT_WIDTH
+        })
+          .width('100%')
+          .layoutWeight(1)
       }
     }
     .width('100%')
@@ -1451,7 +1571,7 @@ export struct ChatPage {
 
   private currentModelSupportsDocuments(): boolean {
     const model = this.getCurrentModelInfo()
-    return model !== null && model.capabilities.supportsDocuments
+    return model !== null && (model.capabilities.supportsDocuments || model.capabilities.supportsVision)
   }
 
   private collectPdfAttachments(attachments: MessageAttachment[]): MessageAttachment[] {
@@ -1470,6 +1590,13 @@ export struct ChatPage {
     return mimeType === 'application/pdf' || name.endsWith('.pdf')
   }
 
+  private filterPdfFallbackToolIdsForCurrentModel(toolIds: string[]): string[] {
+    if (!this.currentModelSupportsDocuments()) {
+      return toolIds
+    }
+    return toolIds.filter((toolId: string): boolean => toolId !== PDF_TO_TEXT_TOOL_ID)
+  }
+
   private async prepareDocumentFallbackForSend(
     messageContent: string,
     currentProvider: ModelProvider,
@@ -1477,6 +1604,9 @@ export struct ChatPage {
     selectedToolIds: string[],
     forcedToolIds: string[]
   ): Promise<DocumentFallbackSendResult> {
+    if (this.currentModelSupportsDocuments()) {
+      return new DocumentFallbackSendResult(messageContent, '')
+    }
     const pdfAttachments = this.collectPdfAttachments(attachments)
     if (pdfAttachments.length === 0) {
       return new DocumentFallbackSendResult(messageContent, '')
@@ -2110,6 +2240,9 @@ export struct ChatPage {
       onSetNewEmptySession: (value: boolean): void => {
         this.isNewEmptySession = value
       },
+      onSessionResolved: (): void => {
+        this.syncCurrentSessionFromViewModel()
+      },
       onDraftCommitted: (): void => {
         this.persistCurrentDraftState('', []).catch((error: Error): void => {
           console.error('ChatPage', `Failed to clear draft after send: ${JSON.stringify(error)}`)
@@ -2126,6 +2259,11 @@ export struct ChatPage {
       },
       onShowToast: (message: string | Resource): void => {
         this.showChatSnack(message)
+      },
+      onCanvasDocumentUpdated: (): void => {
+        this.loadCanvasDocumentState(false).catch((error: Error): void => {
+          console.error('ChatPage', `Failed to refresh canvas document after tool call: ${JSON.stringify(error)}`)
+        })
       }
     }
     this.sendFlow = new ChatSendFlow(deps)
@@ -2830,6 +2968,12 @@ export struct ChatPage {
           onImageClick: (images: Array<string>, imageIndex: number): void => {
             this.handleImagePreview(images, imageIndex)
           },
+          onFileAttachmentClick: (attachment: MessageAttachment): void => {
+            this.handlePdfAttachmentPreview(attachment).catch((error: Error): void => {
+              console.error('ChatPage', `Failed to open PDF preview: ${JSON.stringify(error)}`)
+              this.showError(pickLocalizedText('PDF 预览失败', 'Failed to preview PDF'))
+            })
+          },
           onOpenLink: (title: string, url: string): void => {
             this.handleMessageLinkOpen(title, url)
           },
@@ -3076,6 +3220,19 @@ export struct ChatPage {
             this.messageWebSheetUrl = ''
             this.messageWebSheetTitle = ''
             this.showMessageWebSheet = false
+          }
+        })
+      Column()
+        .width(0)
+        .height(0)
+        .bindSheet($$this.showPdfPreviewSheet, this.PdfPreviewSheetBuilder(), {
+          height: SheetSize.LARGE,
+          detents: [SheetSize.LARGE],
+          dragBar: true,
+          showClose: true,
+          title: { title: this.pdfPreviewTitle !== '' ? this.pdfPreviewTitle : pickLocalizedText('PDF 预览', 'PDF Preview') },
+          onDisappear: () => {
+            this.closePdfPreview()
           }
         })
       Column()
@@ -4340,9 +4497,13 @@ export struct ChatPage {
       }
 
       const attachmentsToSend = [...sourceAttachments]
-      const selectedToolIds = [...this.selectedToolIds]
-      const forcedToolIds = [...this.forcedToolIdsOnce]
       const modelSupportsDocuments = this.currentModelSupportsDocuments()
+      const selectedToolIds = modelSupportsDocuments ?
+        this.filterPdfFallbackToolIdsForCurrentModel(this.selectedToolIds) :
+        [...this.selectedToolIds]
+      const forcedToolIds = modelSupportsDocuments ?
+        this.filterPdfFallbackToolIdsForCurrentModel(this.forcedToolIdsOnce) :
+        [...this.forcedToolIdsOnce]
       if (!modelSupportsDocuments) {
         const documentFallback = await this.prepareDocumentFallbackForSend(
           messageContent,

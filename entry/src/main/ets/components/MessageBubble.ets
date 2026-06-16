@@ -155,6 +155,7 @@ export struct MessageBubble {
   @Event onTranslate: (content: string, targetLang: string, callback: (result: string, errorMessage: string) => void) => void = () => {}
   // 图片点击预览回调
   @Event onImageClick: (images: Array<string>, index: number) => void = () => {}
+  @Event onFileAttachmentClick: (attachment: MessageAttachment) => void = (_attachment: MessageAttachment): void => {}
   @Event onOpenLink: (title: string, url: string) => void = () => {}
   // TTS朗读回调
   @Event onTTS: (messageId: string, content: string) => void = () => {}
@@ -704,6 +705,16 @@ export struct MessageBubble {
     return fileAttachments
   }
 
+  private isPdfAttachment(attachment: MessageAttachment): boolean {
+    const mimeType = attachment.mimeType.toLowerCase()
+    const name = attachment.name.toLowerCase()
+    return mimeType === 'application/pdf' || name.endsWith('.pdf')
+  }
+
+  private getFileAttachmentSymbol(attachment: MessageAttachment): Resource {
+    return this.isPdfAttachment(attachment) ? $r('sys.symbol.pdf_doc') : $r('sys.symbol.doc')
+  }
+
   private getPreviewImageEntries(): ImageAttachmentEntry[] {
     this.ensureDerivedRenderCaches()
     return this.cachedPreviewImageEntries
@@ -1001,8 +1012,11 @@ export struct MessageBubble {
                 .fontSize(this.chatFontSize)
                 .fontColor(this.themeUserBubbleText)
                 .lineHeight(Math.round(this.chatFontSize * 1.4))
+                .textAlign(TextAlign.Start)
+                .alignSelf(ItemAlign.Start)
             }
           }
+          .alignItems(HorizontalAlign.Start)
           .padding(this.hasDisplayAttachments() ? { left: 8, right: 8, top: 8, bottom: 8 } : { left: 14, right: 14, top: 10, bottom: 10 })
           .backgroundColor(this.isMultiSelectMode && this.isSelected
             ? this.lightenColor(this.themeUserBubble, 0.15)
@@ -1094,7 +1108,7 @@ export struct MessageBubble {
   @Builder
   DocumentToolHintBlock() {
     Row({ space: 6 }) {
-      SymbolGlyph($r('sys.symbol.pdf_doc'))
+      SymbolGlyph($r('sys.symbol.gearshape'))
         .fontSize(13)
         .fontColor(['rgba(255,255,255,0.86)'])
 
@@ -1236,7 +1250,7 @@ export struct MessageBubble {
 
       ForEach(this.getMessageFileAttachments(), (attachment: MessageAttachment, index: number) => {
         Row() {
-          SymbolGlyph($r('sys.symbol.doc'))
+          SymbolGlyph(this.getFileAttachmentSymbol(attachment))
             .fontSize(18)
             .fontColor(['rgba(255,255,255,0.8)'])
 
@@ -1252,6 +1266,11 @@ export struct MessageBubble {
         .backgroundColor('rgba(255,255,255,0.15)')
         .borderRadius(8)
         .margin({ bottom: this.hasMessageTextContent() ? 6 : 0 })
+        .onClick(() => {
+          if (this.isPdfAttachment(attachment)) {
+            this.onFileAttachmentClick(attachment)
+          }
+        })
       }, (attachment: MessageAttachment, index: number) => attachment.id || attachment.filePath || index.toString())
     }
     .alignItems(HorizontalAlign.End)
@@ -1293,7 +1312,7 @@ export struct MessageBubble {
 
       ForEach(this.getMessageFileAttachments(), (attachment: MessageAttachment, index: number) => {
         Row() {
-          SymbolGlyph($r('sys.symbol.doc'))
+          SymbolGlyph(this.getFileAttachmentSymbol(attachment))
             .fontSize(18)
             .fontColor([$r('app.color.text_tertiary')])
 
@@ -1309,6 +1328,11 @@ export struct MessageBubble {
         .backgroundColor($r('app.color.divider'))
         .borderRadius(8)
         .margin({ bottom: 8 })
+        .onClick(() => {
+          if (this.isPdfAttachment(attachment)) {
+            this.onFileAttachmentClick(attachment)
+          }
+        })
       }, (attachment: MessageAttachment, index: number) => attachment.id || attachment.filePath || index.toString())
     }
     .width('100%')
