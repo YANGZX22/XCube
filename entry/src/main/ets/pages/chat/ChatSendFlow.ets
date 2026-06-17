@@ -149,6 +149,7 @@ export class ChatSendFlow {
     forcedToolIds: string[],
     currentModelId: string,
     modelSupportsDocuments: boolean = true,
+    modelSupportsVision: boolean = true,
     requestContent: string = '',
     userDocumentToolHint: string = ''
   ): Promise<void> {
@@ -178,6 +179,7 @@ export class ChatSendFlow {
         attachmentsToSend,
         plan.enabledToolIds,
         modelSupportsDocuments,
+        modelSupportsVision,
         requestContent,
         userDocumentToolHint
       )
@@ -197,6 +199,7 @@ export class ChatSendFlow {
       effectiveApiKey,
       attachmentsToSend,
       modelSupportsDocuments,
+      modelSupportsVision,
       requestContent,
       userDocumentToolHint
     )
@@ -398,6 +401,7 @@ export class ChatSendFlow {
     effectiveApiKey: string,
     attachmentsToSend: MessageAttachment[] = [],
     modelSupportsDocuments: boolean = true,
+    modelSupportsVision: boolean = true,
     requestContent: string = '',
     userDocumentToolHint: string = ''
   ): Promise<void> {
@@ -439,6 +443,7 @@ export class ChatSendFlow {
         0,
         this.deps.getReasoningLevel(),
         modelSupportsDocuments,
+        modelSupportsVision,
         requestContent,
         userDocumentToolHint,
         currentProvider.apiPath || undefined,
@@ -457,6 +462,7 @@ export class ChatSendFlow {
     attachmentsToSend: MessageAttachment[] = [],
     enabledToolIds: string[] = [],
     modelSupportsDocuments: boolean = true,
+    modelSupportsVision: boolean = true,
     requestContent: string = '',
     userDocumentToolHint: string = ''
   ): Promise<void> {
@@ -526,6 +532,7 @@ export class ChatSendFlow {
         tools,
         toolCallbacks,
         modelSupportsDocuments,
+        modelSupportsVision,
         requestContent,
         userDocumentToolHint,
         currentProvider.apiPath || undefined,

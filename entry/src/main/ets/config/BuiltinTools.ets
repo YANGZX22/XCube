@@ -16,6 +16,7 @@ import { getPythonSandboxService, PythonSandboxRequest } from '../services/Pytho
 import { getPyodideRuntimeService } from '../services/PyodideRuntimeService'
 import { CanvasDocumentMutationResult, CanvasDocumentState, getCanvasDocumentService } from '../services/CanvasDocumentService'
 import { getPdfTextExtractionService, PdfTextExtractionRequest } from '../services/PdfTextExtractionService'
+import { getImageTextRecognitionService, ImageTextRecognitionRequest } from '../services/ImageTextRecognitionService'
 
 export const ASK_USER_TOOL_ID: string = 'ask_user'
 export const READ_SCHEDULE_TOOL_ID: string = 'read_schedule'
@@ -24,6 +25,7 @@ export const MATH_CHART_TOOL_ID: string = 'math_chart'
 export const PYTHON_SANDBOX_TOOL_ID: string = 'python_sandbox'
 export const CANVAS_DOCUMENT_TOOL_ID: string = 'canvas_document'
 export const PDF_TO_TEXT_TOOL_ID: string = 'pdf_to_text'
+export const IMAGE_TO_TEXT_TOOL_ID: string = 'image_to_text'
 
 // web_search 工具参数接口
 interface WebSearchArgs {
@@ -114,6 +116,14 @@ interface CanvasDocumentArgs {
 }
 
 interface PdfToTextArgs {
+  attachmentId?: string
+  attachment_id?: string
+  id?: string
+  maxChars?: number | string
+  max_chars?: number | string
+}
+
+interface ImageToTextArgs {
   attachmentId?: string
   attachment_id?: string
   id?: string
@@ -388,6 +398,55 @@ class PdfToTextExecutor implements ToolExecutor {
   }
 
   private resolveAttachmentId(params: PdfToTextArgs): string {
+    if (params.attachmentId !== undefined) {
+      return `${params.attachmentId}`.trim()
+    }
+    if (params.attachment_id !== undefined) {
+      return `${params.attachment_id}`.trim()
+    }
+    if (params.id !== undefined) {
+      return `${params.id}`.trim()
+    }
+    return ''
+  }
+
+  private resolveNumber(value: number | string | undefined, fallback: number): number {
+    if (value === undefined || value === null) {
+      return fallback
+    }
+    if (typeof value === 'number') {
+      return Number.isFinite(value) ? value : fallback
+    }
+    const parsed = Number.parseInt(value, 10)
+    return Number.isNaN(parsed) ? fallback : parsed
+  }
+
+  private stringifyError(error: Object): string {
+    if (error instanceof Error) {
+      return error.message
+    }
+    return JSON.stringify(error)
+  }
+}
+
+class ImageToTextExecutor implements ToolExecutor {
+  async execute(args: string): Promise<string> {
+    try {
+      const params = JSON.parse(args) as ImageToTextArgs
+      const request = new ImageTextRecognitionRequest()
+      request.attachmentId = this.resolveAttachmentId(params)
+      request.maxChars = this.resolveNumber(params.maxChars, this.resolveNumber(params.max_chars, 12000))
+      if (request.attachmentId === '') {
+        return JSON.stringify(new ErrorOutput('attachmentId 不能为空。请使用用户上传图片附件的 id。'))
+      }
+      const result = await getImageTextRecognitionService().recognizeForCurrentSession(request)
+      return JSON.stringify(result)
+    } catch (error) {
+      return JSON.stringify(new ErrorOutput(`图片转文本失败: ${this.stringifyError(error)}`))
+    }
+  }
+
+  private resolveAttachmentId(params: ImageToTextArgs): string {
     if (params.attachmentId !== undefined) {
       return `${params.attachmentId}`.trim()
     }
@@ -1718,6 +1777,61 @@ function createPdfToTextToolConfig(): ToolConfig {
   )
 }
 
+function createImageToTextToolDefinition(): ToolDefinition {
+  const parameters = new ToolParameters()
+  const rawSchemaJson: string = `{
+    "type": "object",
+    "properties": {
+      "attachmentId": {
+        "type": "string",
+        "description": "要读取的图片附件 ID。用户上传图片后，系统会在提示中列出可用 attachmentId。"
+      },
+      "attachment_id": {
+        "type": "string",
+        "description": "attachmentId 的别名。"
+      },
+      "id": {
+        "type": "string",
+        "description": "attachmentId 的别名。"
+      },
+      "maxChars": {
+        "type": "number",
+        "description": "最多返回多少字符，默认 12000。"
+      },
+      "max_chars": {
+        "type": "number",
+        "description": "maxChars 的别名。"
+      }
+    },
+    "required": ["attachmentId"]
+  }`
+  parameters.setRawSchema(JSON.parse(rawSchemaJson) as object)
+
+  const func = new ToolFunction(
+    IMAGE_TO_TEXT_TOOL_ID,
+    '将用户上传的图片附件通过本地 CoreVisionKit OCR 转换为文本。仅能读取当前会话已登记的图片附件；调用时传 attachmentId。适合当前模型未开启视觉理解时读取图片中的文字。',
+    parameters
+  )
+
+  return new ToolDefinition(func)
+}
+
+function createImageToTextToolConfig(): ToolConfig {
+  return new ToolConfig(
+    IMAGE_TO_TEXT_TOOL_ID,
+    '图片转文本',
+    '当模型不可直接读取图片时，可使用此工具读取将用户上传的图片转换为文本内容',
+    null,
+    true,
+    false,
+    ToolSourceType.BUILTIN,
+    'builtin',
+    IMAGE_TO_TEXT_TOOL_ID,
+    '内置工具',
+    ToolPermissionLevel.READ
+  )
+}
+
 function createPythonSandboxToolDefinition(): ToolDefinition {
   const parameters = new ToolParameters()
   const rawSchemaJson: string = `{
@@ -2083,6 +2197,18 @@ export function registerBuiltinTools(): void {
     registeredNow += 1
   }
 
+  const imageToTextWasRegistered = registry.isToolRegistered(IMAGE_TO_TEXT_TOOL_ID)
+  const imageToTextTool = new RegisteredTool(
+    IMAGE_TO_TEXT_TOOL_ID,
+    createImageToTextToolConfig(),
+    createImageToTextToolDefinition(),
+    new ImageToTextExecutor()
+  )
+  registry.registerTool(imageToTextTool)
+  if (!imageToTextWasRegistered) {
+    registeredNow += 1
+  }
+
   const canvasDocumentWasRegistered = registry.isToolRegistered(CANVAS_DOCUMENT_TOOL_ID)
   const canvasDocumentTool = new RegisteredTool(
     CANVAS_DOCUMENT_TOOL_ID,
@@ -2141,6 +2267,7 @@ export function getBuiltinToolIds(): string[] {
     ASK_USER_TOOL_ID,
     PYTHON_SANDBOX_TOOL_ID,
     PDF_TO_TEXT_TOOL_ID,
+    IMAGE_TO_TEXT_TOOL_ID,
     CANVAS_DOCUMENT_TOOL_ID,
     MATH_CHART_TOOL_ID,
     READ_SCHEDULE_TOOL_ID,

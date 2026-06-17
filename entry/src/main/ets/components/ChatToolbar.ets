@@ -218,7 +218,13 @@ export struct ChatToolbar {
         enableArrow: false,
         popupColor: Color.Transparent,
         backgroundBlurStyle: BlurStyle.NONE,
-        radius: this.getReasoningPanelHeight() / 2,
+        radius: 0,
+        shadow: {
+          radius: 0,
+          color: Color.Transparent,
+          offsetX: 0,
+          offsetY: 0
+        },
         onStateChange: (event: PopupStateChangeParam) => {
           if (!event.isVisible) {
             this.showReasoningPanel = false
@@ -338,37 +344,58 @@ export struct ChatToolbar {
     return 96
   }
 
+  private getReasoningPanelHaloPadding(): number {
+    return 8
+  }
+
+  private getReasoningPanelHostWidth(): number {
+    return this.getReasoningPanelWidth() + this.getReasoningPanelHaloPadding() * 2
+  }
+
+  private getReasoningPanelHostHeight(): number {
+    return this.getReasoningPanelHeight() + this.getReasoningPanelHaloPadding() * 2
+  }
+
   // 用 HdsTabs 沉浸浮动条把滑块面板包成与 chip 一致的光感材质
-  // 容器宽高与浮动胶囊(barWidth/barHeight)完全一致，避免胶囊被裁切
   @Builder
   private ReasoningSliderPanel() {
-    HdsTabs() {
-      TabContent() {
+    Stack({ alignContent: Alignment.Center }) {
+      HdsTabs() {
+        TabContent() {
+        }
+        .tabBar(this.ReasoningSliderContent())
       }
-      .tabBar(this.ReasoningSliderContent())
+      .barOverlap(true)
+      .barPosition(BarPosition.End)
+      .vertical(false)
+      .barWidth(this.getReasoningPanelWidth())
+      .barHeight(this.getReasoningPanelHeight())
+      .width(this.getReasoningPanelWidth())
+      .height(this.getReasoningPanelHeight())
+      .barBackgroundColor(Color.Transparent)
+      .backgroundColor(Color.Transparent)
+      .borderRadius(this.getReasoningPanelHeight() / 2)
+      .clip(false)
+      .divider({ mode: DividerMode.NONE })
+      .barFloatingStyle({
+        barBottomMargin: 0,
+        barSideMargin: 0,
+        barWidth: {
+          smallWidth: this.getReasoningPanelWidth(),
+          mediumWidth: this.getReasoningPanelWidth(),
+          largeWidth: this.getReasoningPanelWidth()
+        },
+        gradientMask: { maskColor: Color.Transparent },
+        systemMaterialEffect: {
+          materialType: hdsMaterial.MaterialType.IMMERSIVE,
+          materialLevel: hdsMaterial.MaterialLevel.ADAPTIVE
+        }
+      })
     }
-    .barOverlap(true)
-    .barPosition(BarPosition.End)
-    .vertical(false)
-    .barWidth(this.getReasoningPanelWidth())
-    .barHeight(this.getReasoningPanelHeight())
-    .width(this.getReasoningPanelWidth())
-    .height(this.getReasoningPanelHeight())
-    .barBackgroundColor(Color.Transparent)
+    .width(this.getReasoningPanelHostWidth())
+    .height(this.getReasoningPanelHostHeight())
     .backgroundColor(Color.Transparent)
     .clip(false)
-    .divider({ mode: DividerMode.NONE })
-    .barFloatingStyle({
-      barBottomMargin: 0,
-      barSideMargin: 0,
-      barWidth: { smallWidth: this.getReasoningPanelWidth(), mediumWidth: this.getReasoningPanelWidth(),
-        largeWidth: this.getReasoningPanelWidth() },
-      gradientMask: { maskColor: '#00000000', maskHeight: 1 },
-      systemMaterialEffect: {
-        materialType: hdsMaterial.MaterialType.IMMERSIVE,
-        materialLevel: hdsMaterial.MaterialLevel.ADAPTIVE
-      }
-    })
   }
 
   @Builder

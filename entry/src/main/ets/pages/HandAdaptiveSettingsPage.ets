@@ -1,5 +1,7 @@
 import { motion } from '@kit.MultimodalAwarenessKit'
 import { BusinessError } from '@kit.BasicServicesKit'
+import { common } from '@kit.AbilityKit'
+import abilityAccessCtrl, { Permissions, PermissionRequestResult } from '@ohos.abilityAccessCtrl'
 import { AppStorageKeys } from '../config/AppStorageKeys'
 import { setAppUiStateValue } from '../state/AppUiState'
 import { LayoutSizeClass } from '../config/LayoutProfile'
@@ -125,10 +127,37 @@ struct HandAdaptiveSettingsPage {
     setAppUiStateValue(AppStorageKeys.SETTINGS_HAND_ADAPTIVE_CHANGED_AT, Date.now())
   }
 
+  private requestDetectGesturePermission(): Promise<boolean> {
+    return new Promise<boolean>((resolve) => {
+      const hostContext = this.getUIContext().getHostContext()
+      if (hostContext === undefined) {
+        resolve(false)
+        return
+      }
+      const atManager: abilityAccessCtrl.AtManager = abilityAccessCtrl.createAtManager()
+      const permissions: Permissions[] = ['ohos.permission.DETECT_GESTURE']
+      atManager.requestPermissionsFromUser(
+        hostContext as common.UIAbilityContext,
+        permissions,
+        (err: BusinessError, data: PermissionRequestResult): void => {
+          if (err) {
+            console.error('HandAdaptiveSettingsPage',
+              `Failed to request DETECT_GESTURE permission: ${JSON.stringify(err)}`)
+            resolve(false)
+            return
+          }
+          resolve(data.authResults.length > 0 && data.authResults[0] === 0)
+        }
+      )
+    })
+  }
+
   private buildCallbacks(): IndexSettingsSheetActionCallbacks {
     const callbacks = new IndexSettingsSheetActionCallbacks()
     callbacks.onToggleHandAdaptiveEnabled = (value: boolean): void => {
-      this.applyMasterSetting(value)
+      this.applyMasterSetting(value).catch((error: Error): void => {
+        console.error('HandAdaptiveSettingsPage', `Failed to apply master setting: ${JSON.stringify(error)}`)
+      })
     }
     callbacks.onToggleHandAdaptiveNewChat = (value: boolean): void => {
       this.applyNewChatSetting(value)
@@ -136,7 +165,14 @@ struct HandAdaptiveSettingsPage {
     return callbacks
   }
 
-  private applyMasterSetting(value: boolean): void {
+  private async applyMasterSetting(value: boolean): Promise<void> {
+    if (value && !await this.requestDetectGesturePermission()) {
+      this.handAdaptiveEnabled = false
+      this.handAdaptiveNewChat = false
+      this.handAdaptiveUnsupported = true
+      await this.persistSettings()
+      return
+    }
     this.handAdaptiveEnabled = value
     if (value) {
       this.handAdaptiveNewChat = true
@@ -145,9 +181,7 @@ struct HandAdaptiveSettingsPage {
       this.handAdaptiveNewChat = false
       this.handAdaptiveUnsupported = false
     }
-    this.persistSettings().catch((error: Error): void => {
-      console.error('HandAdaptiveSettingsPage', `Failed to persist master setting: ${JSON.stringify(error)}`)
-    })
+    await this.persistSettings()
   }
 
   private applyNewChatSetting(value: boolean): void {

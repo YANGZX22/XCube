@@ -5,11 +5,8 @@ export const INDEX_NEW_CHAT_FAB_STACK_WIDTH = 58
 export const INDEX_NEW_CHAT_FAB_STACK_HEIGHT = 58
 export const INDEX_NEW_CHAT_FAB_BOTTOM_SPACING = 20
 
-export function isHandAdaptiveActiveForIndex(enabled: boolean, newChatEnabled: boolean): boolean {
-  if (!enabled) {
-    return false
-  }
-  return newChatEnabled
+export function isHandAdaptiveActiveForIndex(enabled: boolean, _newChatEnabled: boolean): boolean {
+  return enabled
 }
 
 export function shouldPlaceFabOnLeftForIndex(handAdaptiveEnabled: boolean, handAdaptiveNewChat: boolean,

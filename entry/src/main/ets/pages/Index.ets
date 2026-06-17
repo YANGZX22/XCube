@@ -3,6 +3,7 @@ import { ConfigurationConstant, common } from '@kit.AbilityKit'
 import { notificationManager } from '@kit.NotificationKit'
 import { motion } from '@kit.MultimodalAwarenessKit'
 import { BusinessError } from '@kit.BasicServicesKit'
+import abilityAccessCtrl, { Permissions, PermissionRequestResult } from '@ohos.abilityAccessCtrl'
 import {
   DividerMode,
   HdsNavigation,
@@ -10,13 +11,8 @@ import {
   HdsNavigationTitleBarOptions,
   HdsNavigationTitleMode,
   HdsTabs,
-  HdsTabsFloatingStyle,
   hdsMaterial
 } from '@kit.UIDesignKit'
-import {
-  buildCompactTabsFloatingStyle,
-  CompactTabsFloatingStyleOptions
-} from '../utils/HdsTabsFloatingStyleHelper'
 import { ChatSession, ChatMessage, ModelProvider } from '../models/ChatModels'
 import { Assistant, DEFAULT_ASSISTANT_ID } from '../models/AssistantModels'
 import { ChatViewModel } from '../viewmodels/ChatViewModel'
@@ -131,6 +127,7 @@ struct Index {
   @Local handAdaptiveEnabled: boolean = false
   @Local handAdaptiveNewChat: boolean = false
   @Local handAdaptiveUnsupported: boolean = false
+  @Local compactBottomBarsWidthVp: number = 0
   private get handAdaptiveSettingsChangedAt(): number {
     return getAppUiState().settingsHandAdaptiveChangedAt
   }
@@ -1031,6 +1028,7 @@ struct Index {
       console.error('Index', `Failed to subscribe holdingHandChanged, code: ${error.code}`)
       this.holdingHandSubscribed = false
       this.currentHoldingHand = motion.HoldingHandStatus.UNKNOWN_STATUS
+      this.syncSettingsSummaryToStorage()
     }
   }
 
@@ -1046,6 +1044,30 @@ struct Index {
     }
     this.holdingHandSubscribed = false
     this.currentHoldingHand = motion.HoldingHandStatus.UNKNOWN_STATUS
+  }
+
+  private requestDetectGesturePermission(): Promise<boolean> {
+    return new Promise<boolean>((resolve) => {
+      const hostContext = this.getUIContext().getHostContext()
+      if (hostContext === undefined) {
+        resolve(false)
+        return
+      }
+      const atManager: abilityAccessCtrl.AtManager = abilityAccessCtrl.createAtManager()
+      const permissions: Permissions[] = ['ohos.permission.DETECT_GESTURE']
+      atManager.requestPermissionsFromUser(
+        hostContext as common.UIAbilityContext,
+        permissions,
+        (err: BusinessError, data: PermissionRequestResult): void => {
+          if (err) {
+            console.error('Index', `Failed to request DETECT_GESTURE permission: ${JSON.stringify(err)}`)
+            resolve(false)
+            return
+          }
+          resolve(data.authResults.length > 0 && data.authResults[0] === 0)
+        }
+      )
+    })
   }
 
   private shouldPlaceFabOnLeft(): boolean {
@@ -1143,6 +1165,16 @@ struct Index {
 
   private async handleHandAdaptiveEnabledChanged(value: boolean): Promise<void> {
     this.handAdaptiveLoadSeq = this.handAdaptiveLoadSeq + 1
+    if (value && !await this.requestDetectGesturePermission()) {
+      this.handAdaptiveEnabled = false
+      this.handAdaptiveNewChat = false
+      this.handAdaptiveUnsupported = true
+      this.currentHoldingHand = motion.HoldingHandStatus.UNKNOWN_STATUS
+      this.syncSettingsSummaryToStorage()
+      await this.persistHandAdaptiveSettings()
+      this.unsubscribeHoldingHand()
+      return
+    }
     this.handAdaptiveEnabled = value
     if (value) {
       this.handAdaptiveUnsupported = false
@@ -1565,38 +1597,45 @@ struct Index {
         .width('100%')
         .layoutWeight(1)
       } else {
-        HdsTabs({ barPosition: BarPosition.End, index: this.currentTabIndex }) {
-          TabContent() {
-            this.AssistantsTab()
-          }
-          .tabBar(this.TabBarAssistants())
+        Stack() {
+          HdsTabs({ barPosition: BarPosition.End, index: this.currentTabIndex }) {
+            TabContent() {
+              this.AssistantsTab()
+            }
+            .tabBar(this.TabBarAssistants())
 
-          TabContent() {
-            this.ChatTab()
-          }
-          .tabBar(this.TabBarChat())
+            TabContent() {
+              this.ChatTab()
+            }
+            .tabBar(this.TabBarChat())
 
-          TabContent() {
-            this.SettingsTab()
+            TabContent() {
+              this.SettingsTab()
+            }
+            .tabBar(this.TabBarSettings())
           }
-          .tabBar(this.TabBarSettings())
+          .width('100%')
+          .height('100%')
+          .barMode(BarMode.Fixed)
+          .barHeight(0)
+          .barOverlap(false)
+          .barPosition(BarPosition.End)
+          .vertical(false)
+          .barBackgroundColor(Color.Transparent)
+          .scrollable(false)
+          .cachedMaxCount(3, TabsCacheMode.CACHE_LATEST_SWITCHED)
+          .onChange((index: number) => {
+            if (this.currentTabIndex !== index) {
+              this.switchToTab(index)
+            }
+          })
+
+          if (!this.shouldHideCompactTabsBar()) {
+            this.CompactBottomBarsOverlay()
+          }
         }
         .width('100%')
         .layoutWeight(1)
-        .barMode(BarMode.Fixed)
-        .barHeight(this.getCompactTabsHostBarHeight())
-        .barOverlap(true)
-        .barPosition(BarPosition.End)
-        .vertical(false)
-        .barBackgroundColor(Color.Transparent)
-        .barFloatingStyle(this.buildBottomTabsFloatingStyle())
-        .scrollable(false)
-        .cachedMaxCount(3, TabsCacheMode.CACHE_LATEST_SWITCHED)
-        .onChange((index: number) => {
-          if (this.currentTabIndex !== index) {
-            this.switchToTab(index)
-          }
-        })
       }
     }
     .width('100%')
@@ -1879,36 +1918,55 @@ struct Index {
     return this.px2vp(this.bottomAvoidHeight) > 0 ? 24 : 12
   }
 
-  private buildBottomTabsFloatingStyle(): HdsTabsFloatingStyle {
-    const opts = new CompactTabsFloatingStyleOptions()
-    opts.materialType = this.materialType
-    opts.materialLevel = this.materialLevel
-    opts.lightColorMode = this.lightColorMode
-    opts.themePrimary = this.themePrimary
-    opts.barSideMargin = Index.COMPACT_TABS_FLOATING_SIDE_MARGIN
-    opts.barBottomMargin = this.getCompactTabsFloatingBottomMargin()
-    opts.barWidth = {
-      smallWidth: Index.COMPACT_TABS_WITH_ACTION_SMALL_WIDTH,
-      mediumWidth: Index.COMPACT_TABS_WITH_ACTION_MEDIUM_WIDTH,
-      largeWidth: Index.COMPACT_TABS_WITH_ACTION_LARGE_WIDTH
+  private shouldPlaceCompactMiniBarOnLeft(): boolean {
+    if (!this.handAdaptiveEnabled || this.handAdaptiveUnsupported) {
+      return false
     }
-    const style = buildCompactTabsFloatingStyle(opts)
-    style.systemMaterialEffect = {
-      materialType: hdsMaterial.MaterialType.IMMERSIVE,
-      materialLevel: hdsMaterial.MaterialLevel.ADAPTIVE
+    return this.currentHoldingHand === motion.HoldingHandStatus.LEFT_HAND_HELD
+  }
+
+  private getCompactBottomTabBarWidth(): number {
+    if (this.windowWidthVp >= 840) {
+      return Index.COMPACT_TABS_WITH_ACTION_LARGE_WIDTH
     }
-    style.miniBar = {
-      miniBarBuilder: (): void => {
-        this.CompactBottomMiniBarBuilder()
-      },
-      miniBarWidth: {
-        smallWidth: Index.COMPACT_MINI_BAR_WIDTH,
-        mediumWidth: Index.COMPACT_MINI_BAR_WIDTH,
-        largeWidth: Index.COMPACT_MINI_BAR_WIDTH
-      },
-      enableMiniBarBackground: true
+    if (this.windowWidthVp >= 440) {
+      return Index.COMPACT_TABS_WITH_ACTION_MEDIUM_WIDTH
     }
-    return style
+    return Index.COMPACT_TABS_WITH_ACTION_SMALL_WIDTH
+  }
+
+  private getCompactBottomBarsWidth(): number {
+    if (this.compactBottomBarsWidthVp > 0) {
+      return this.compactBottomBarsWidthVp
+    }
+    return this.windowWidthVp
+  }
+
+  private getCompactMiniBarX(): number {
+    if (this.shouldPlaceCompactMiniBarOnLeft()) {
+      return Index.COMPACT_TABS_FLOATING_SIDE_MARGIN
+    }
+    return Math.max(Index.COMPACT_TABS_FLOATING_SIDE_MARGIN,
+      this.getCompactBottomBarsWidth() - Index.COMPACT_TABS_FLOATING_SIDE_MARGIN - Index.COMPACT_MINI_BAR_WIDTH)
+  }
+
+  private getCompactTabBarX(): number {
+    if (this.shouldPlaceCompactMiniBarOnLeft()) {
+      return Math.max(Index.COMPACT_TABS_FLOATING_SIDE_MARGIN,
+        this.getCompactBottomBarsWidth() - Index.COMPACT_TABS_FLOATING_SIDE_MARGIN - this.getCompactBottomTabBarWidth())
+    }
+    return Index.COMPACT_TABS_FLOATING_SIDE_MARGIN
+  }
+
+  private handleCompactBottomBarsAreaChange(area: Area): void {
+    const width = Number(area.width)
+    if (!Number.isFinite(width) || width <= 0) {
+      return
+    }
+    if (Math.abs(width - this.compactBottomBarsWidthVp) < 0.5) {
+      return
+    }
+    this.compactBottomBarsWidthVp = width
   }
 
   private handleCompactBottomMiniBarClick(): void {
@@ -1923,25 +1981,130 @@ struct Index {
   }
 
   @Builder
+  private CompactBottomBarsOverlay() {
+    Stack() {
+      Row() {
+        this.CompactBottomTabBarBuilder()
+      }
+      .width(this.getCompactBottomTabBarWidth())
+      .height(Index.COMPACT_TABS_BAR_HEIGHT)
+      .position({ x: this.getCompactTabBarX(), y: 0 })
+      .animation({ duration: 420, curve: curves.springMotion(0.75, 0.86) })
+
+      Row() {
+        this.CompactBottomMiniBarBuilder()
+      }
+      .width(Index.COMPACT_MINI_BAR_WIDTH)
+      .height(Index.COMPACT_TABS_BAR_HEIGHT)
+      .position({ x: this.getCompactMiniBarX(), y: 0 })
+      .animation({ duration: 420, curve: curves.springMotion(0.75, 0.86) })
+    }
+    .width('100%')
+    .height(Index.COMPACT_TABS_BAR_HEIGHT)
+    .position({ x: 0, y: '100%' })
+    .translate({
+      x: 0,
+      y: -(Index.COMPACT_TABS_BAR_HEIGHT + this.getCompactTabsFloatingBottomMargin())
+    })
+    .hitTestBehavior(HitTestMode.Default)
+    .zIndex(10)
+    .onAreaChange((_oldArea: Area, newArea: Area) => {
+      this.handleCompactBottomBarsAreaChange(newArea)
+    })
+  }
+
+  @Builder
   private CompactBottomMiniBarBuilder() {
-    Row() {
-      Column() {
+    ChatFloatingImmersiveButton({
+      barWidth: Index.COMPACT_MINI_BAR_WIDTH,
+      barHeight: Index.COMPACT_TABS_BAR_HEIGHT,
+      iconResource: $r('sys.symbol.plus'),
+      iconSize: 28,
+      iconColor: [this.themePrimary],
+      iconOffsetY: 0,
+      responsePadding: 0,
+      onButtonClick: (): void => {
+        this.handleCompactBottomMiniBarClick()
+      }
+    }) {
+      Stack({ alignContent: Alignment.Center }) {
         SymbolGlyph($r('sys.symbol.plus'))
           .fontSize(28)
           .fontColor([this.themePrimary])
       }
       .width(Index.COMPACT_MINI_BAR_WIDTH)
       .height(Index.COMPACT_TABS_BAR_HEIGHT)
-      .justifyContent(FlexAlign.Center)
-      .alignItems(HorizontalAlign.Center)
+      .translate({ y: -4 })
     }
-    .width(Index.COMPACT_MINI_BAR_WIDTH)
+  }
+
+  @Builder
+  private CompactBottomTabBarBuilder() {
+    HdsTabs() {
+      TabContent()
+        .tabBar(this.CompactBottomTabBarContent())
+    }
+    .barHeight(Index.COMPACT_TABS_BAR_HEIGHT)
+    .barOverlap(true)
+    .barPosition(BarPosition.End)
+    .vertical(false)
+    .barBackgroundColor(Color.Transparent)
+    .width(this.getCompactBottomTabBarWidth())
     .height(Index.COMPACT_TABS_BAR_HEIGHT)
-    .justifyContent(FlexAlign.Center)
-    .alignItems(VerticalAlign.Center)
-    .onClick(() => {
-      this.handleCompactBottomMiniBarClick()
+    .backgroundColor(Color.Transparent)
+    .borderRadius(Index.COMPACT_TABS_BAR_HEIGHT / 2)
+    .clip(false)
+    .barFloatingStyle({
+      barBottomMargin: 0,
+      barSideMargin: 0,
+      barWidth: {
+        smallWidth: this.getCompactBottomTabBarWidth(),
+        mediumWidth: this.getCompactBottomTabBarWidth(),
+        largeWidth: this.getCompactBottomTabBarWidth()
+      },
+      gradientMask: { maskColor: Color.Transparent },
+      systemMaterialEffect: {
+        materialType: hdsMaterial.MaterialType.IMMERSIVE,
+        materialLevel: hdsMaterial.MaterialLevel.ADAPTIVE
+      }
     })
+  }
+
+  @Builder
+  private CompactBottomTabBarContent() {
+    Row() {
+      Row() {
+        this.TabBarAssistants()
+      }
+      .layoutWeight(1)
+      .height('100%')
+      .onClick(() => {
+        this.switchToTab(Index.TAB_ASSISTANTS)
+      })
+
+      Row() {
+        this.TabBarChat()
+      }
+      .layoutWeight(1)
+      .height('100%')
+      .onClick(() => {
+        this.switchToTab(Index.TAB_CHAT)
+      })
+
+      Row() {
+        this.TabBarSettings()
+      }
+      .layoutWeight(1)
+      .height('100%')
+      .onClick(() => {
+        this.switchToTab(Index.TAB_SETTINGS)
+      })
+    }
+    .width(this.getCompactBottomTabBarWidth())
+    .height(Index.COMPACT_TABS_BAR_HEIGHT)
+    .padding({ left: 6, right: 6 })
+    .backgroundColor(Color.Transparent)
+    .translate({ y: -3 })
   }
 
   @Builder
@@ -2182,7 +2345,11 @@ struct Index {
   }
 
   private getFloatingSearchPanelTop(): number {
-    return this.getCompactChatHeaderDefaultHeight() + 4
+    return this.getCompactChatHeaderDefaultHeight() + 10
+  }
+
+  private getFloatingSearchPanelHeight(): number {
+    return 52
   }
 
   private getFloatingSearchPanelWidth(): number {
@@ -3518,42 +3685,42 @@ struct Index {
 
   @Builder
   private FloatingSearchPanel() {
-    Column() {
-      Column() {
-        HdsTabs() {
-          TabContent() {
-          }
-          .tabBar(this.FloatingSearchBarBuilder())
+    Row() {
+      HdsTabs() {
+        TabContent() {
         }
-        .barOverlap(true)
-        .barPosition(BarPosition.End)
-        .vertical(false)
-        .width('100%')
-        .height(60)
-        .divider({ mode: DividerMode.NONE })
-        .barFloatingStyle({
-          barBottomMargin: 0,
-          barSideMargin: 0,
-          barWidth: {
-            smallWidth: this.getFloatingSearchPanelWidth(),
-            mediumWidth: this.getFloatingSearchPanelWidth(),
-            largeWidth: this.getFloatingSearchPanelWidth()
-          },
-          gradientMask: { maskColor: '#00000000', maskHeight: 1 },
-          systemMaterialEffect: {
-            materialType: hdsMaterial.MaterialType.IMMERSIVE,
-            materialLevel: hdsMaterial.MaterialLevel.EXQUISITE
-          }
-        })
+        .tabBar(this.FloatingSearchBarBuilder())
       }
+      .barHeight(this.getFloatingSearchPanelHeight())
+      .barOverlap(true)
+      .barPosition(BarPosition.End)
+      .vertical(false)
       .width(this.getFloatingSearchPanelWidth())
-      .height(60)
-      .borderRadius(30)
-      .clip(true)
+      .height(this.getFloatingSearchPanelHeight())
+      .backgroundColor(Color.Transparent)
+      .borderRadius(this.getFloatingSearchPanelHeight() / 2)
+      .clip(false)
+      .divider({ mode: DividerMode.NONE })
+      .barBackgroundColor(Color.Transparent)
+      .barFloatingStyle({
+        barBottomMargin: 0,
+        barSideMargin: 0,
+        barWidth: {
+          smallWidth: this.getFloatingSearchPanelWidth(),
+          mediumWidth: this.getFloatingSearchPanelWidth(),
+          largeWidth: this.getFloatingSearchPanelWidth()
+        },
+        gradientMask: { maskColor: Color.Transparent },
+        systemMaterialEffect: {
+          materialType: hdsMaterial.MaterialType.IMMERSIVE,
+          materialLevel: hdsMaterial.MaterialLevel.ADAPTIVE
+        }
+      })
     }
     .width('100%')
-    .height(60)
-    .alignItems(HorizontalAlign.Center)
+    .height(this.getFloatingSearchPanelHeight())
+    .justifyContent(FlexAlign.Center)
+    .alignItems(VerticalAlign.Center)
     .position({ x: 0, y: this.getFloatingSearchPanelTop() })
     .transition(TransitionEffect.asymmetric(
       TransitionEffect.OPACITY.combine(TransitionEffect.translate({ y: -12 }))
@@ -3572,6 +3739,7 @@ struct Index {
         .layoutWeight(1)
         .height('100%')
         .backgroundColor(Color.Transparent)
+        .searchIcon({ size: 0, color: Color.Transparent })
         .onChange((value: string) => {
           this.searchText = value
           this.refreshSessionListProjection()
@@ -3591,8 +3759,8 @@ struct Index {
           .fontSize(18)
           .fontColor([this.themePrimary])
       }
-      .width(40)
-      .height(40)
+      .width(36)
+      .height(36)
       .padding(0)
       .backgroundColor(Color.Transparent)
       .stateEffect(true)
@@ -3605,9 +3773,9 @@ struct Index {
     }
     .width('100%')
     .height('100%')
-    .borderRadius(30)
-    .clip(true)
-    .padding({ left: 12, right: 10, top: 6, bottom: 6 })
+    .borderRadius(this.getFloatingSearchPanelHeight() / 2)
+    .clip(false)
+    .padding({ left: 14, right: 10, top: 4, bottom: 4 })
     .justifyContent(FlexAlign.Center)
     .alignItems(VerticalAlign.Center)
   }

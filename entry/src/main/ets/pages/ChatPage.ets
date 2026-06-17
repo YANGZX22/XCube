@@ -40,6 +40,7 @@ import { ToolApprovalResult } from '../services/ToolExecutionService'
 import {
   ASK_USER_TOOL_ID,
   CANVAS_DOCUMENT_TOOL_ID,
+  IMAGE_TO_TEXT_TOOL_ID,
   MATH_CHART_TOOL_ID,
   PDF_TO_TEXT_TOOL_ID,
   PYTHON_SANDBOX_TOOL_ID,
@@ -109,6 +110,7 @@ import { normalizeAssistantAvatarValue } from '../components/AssistantAvatar'
 import { CanvasDocumentService } from '../services/CanvasDocumentService'
 import { DocumentAttachmentRegistryService } from '../services/DocumentAttachmentRegistryService'
 import { getPdfTextExtractionService } from '../services/PdfTextExtractionService'
+import { getImageTextRecognitionService } from '../services/ImageTextRecognitionService'
 
 const DOMAIN = 0x0003
 const TAG = 'ChatPage'
@@ -1571,7 +1573,12 @@ export struct ChatPage {
 
   private currentModelSupportsDocuments(): boolean {
     const model = this.getCurrentModelInfo()
-    return model !== null && (model.capabilities.supportsDocuments || model.capabilities.supportsVision)
+    return model !== null && model.capabilities.supportsDocuments
+  }
+
+  private currentModelSupportsVision(): boolean {
+    const model = this.getCurrentModelInfo()
+    return model !== null && model.capabilities.supportsVision
   }
 
   private collectPdfAttachments(attachments: MessageAttachment[]): MessageAttachment[] {
@@ -1590,11 +1597,35 @@ export struct ChatPage {
     return mimeType === 'application/pdf' || name.endsWith('.pdf')
   }
 
-  private filterPdfFallbackToolIdsForCurrentModel(toolIds: string[]): string[] {
-    if (!this.currentModelSupportsDocuments()) {
-      return toolIds
+  private collectImageAttachments(attachments: MessageAttachment[]): MessageAttachment[] {
+    const imageAttachments: MessageAttachment[] = []
+    for (let i = 0; i < attachments.length; i++) {
+      if (this.isImageAttachment(attachments[i])) {
+        imageAttachments.push(attachments[i])
+      }
     }
-    return toolIds.filter((toolId: string): boolean => toolId !== PDF_TO_TEXT_TOOL_ID)
+    return imageAttachments
+  }
+
+  private isImageAttachment(attachment: MessageAttachment): boolean {
+    const mimeType = attachment.mimeType.toLowerCase()
+    const name = attachment.name.toLowerCase()
+    return mimeType.startsWith('image/') || name.endsWith('.jpg') || name.endsWith('.jpeg') ||
+      name.endsWith('.png') || name.endsWith('.webp') || name.endsWith('.bmp') || name.endsWith('.gif')
+  }
+
+  private filterFallbackToolIdsForCurrentModel(toolIds: string[]): string[] {
+    const modelSupportsDocuments = this.currentModelSupportsDocuments()
+    const modelSupportsVision = this.currentModelSupportsVision()
+    return toolIds.filter((toolId: string): boolean => {
+      if (modelSupportsDocuments && toolId === PDF_TO_TEXT_TOOL_ID) {
+        return false
+      }
+      if (modelSupportsVision && toolId === IMAGE_TO_TEXT_TOOL_ID) {
+        return false
+      }
+      return true
+    })
   }
 
   private async prepareDocumentFallbackForSend(
@@ -1645,6 +1676,78 @@ export struct ChatPage {
       lines.push(`- attachmentId: ${pdfAttachments[i].id}, 文件名: ${pdfAttachments[i].name}`)
     }
     return lines.join('\n')
+  }
+
+  private async prepareImageFallbackForSend(
+    messageContent: string,
+    currentProvider: ModelProvider,
+    attachments: MessageAttachment[],
+    selectedToolIds: string[],
+    forcedToolIds: string[]
+  ): Promise<DocumentFallbackSendResult> {
+    if (this.currentModelSupportsVision()) {
+      return new DocumentFallbackSendResult(messageContent, '')
+    }
+    const imageAttachments = this.collectImageAttachments(attachments)
+    if (imageAttachments.length === 0) {
+      return new DocumentFallbackSendResult(messageContent, '')
+    }
+
+    this.documentAttachmentRegistry.registerAttachments(this.sessionId, imageAttachments)
+    if (this.getSendFlow().isCurrentModelSupportsTools(currentProvider, this.currentModelId)) {
+      if (!selectedToolIds.includes(IMAGE_TO_TEXT_TOOL_ID) && !forcedToolIds.includes(IMAGE_TO_TEXT_TOOL_ID)) {
+        forcedToolIds.push(IMAGE_TO_TEXT_TOOL_ID)
+      }
+      return new DocumentFallbackSendResult(
+        this.appendDocumentContext(messageContent, this.buildImageToTextToolInstruction(imageAttachments)),
+        '已提醒模型通过图片转文本工具读取图片'
+      )
+    }
+
+    const inlineContext = await this.buildInlineImageTextContext(imageAttachments)
+    if (inlineContext !== '') {
+      return new DocumentFallbackSendResult(
+        this.appendDocumentContext(messageContent, inlineContext),
+        '已识别图片文本并作为隐藏上下文发送'
+      )
+    }
+    return new DocumentFallbackSendResult(
+      this.appendDocumentContext(messageContent,
+        '当前模型未开启视觉理解，且当前接口不支持工具调用。用户上传的图片已暂存到本地，但本轮未能识别出可用文本。'),
+      '图片已暂存，未识别到可用文本'
+    )
+  }
+
+  private buildImageToTextToolInstruction(imageAttachments: MessageAttachment[]): string {
+    const lines: string[] = [
+      '当前模型未开启视觉理解。用户上传的图片已暂存到本地沙箱，不能直接读取原始图片；需要阅读图片中的文字时请调用 image_to_text 工具。可用图片附件：'
+    ]
+    for (let i = 0; i < imageAttachments.length; i++) {
+      lines.push(`- attachmentId: ${imageAttachments[i].id}, 文件名: ${imageAttachments[i].name}`)
+    }
+    return lines.join('\n')
+  }
+
+  private async buildInlineImageTextContext(imageAttachments: MessageAttachment[]): Promise<string> {
+    const sections: string[] = [
+      '当前模型未开启视觉理解，且当前接口不支持工具调用。以下是 APP 自动从用户上传图片中识别的文字：'
+    ]
+    for (let i = 0; i < imageAttachments.length; i++) {
+      const registered = this.documentAttachmentRegistry.getAttachment(this.sessionId, imageAttachments[i].id)
+      if (registered === null) {
+        continue
+      }
+      const result = await getImageTextRecognitionService().recognizeAttachment(registered, 12000)
+      if (!result.ok) {
+        sections.push(`\n[${imageAttachments[i].name}]\n${result.message}`)
+        continue
+      }
+      sections.push(`\n[${result.fileName} / attachmentId: ${result.attachmentId}]\n${result.text}`)
+      if (result.truncated) {
+        sections.push('\n[文本已截断，可后续开启视觉理解或工具调用以读取更多内容]')
+      }
+    }
+    return sections.length > 1 ? sections.join('\n') : ''
   }
 
   private async buildInlinePdfTextContext(pdfAttachments: MessageAttachment[]): Promise<string> {
@@ -1812,6 +1915,7 @@ export struct ChatPage {
       !this.toolRegistry.isToolRegistered(PYTHON_SANDBOX_TOOL_ID) ||
       !this.toolRegistry.isToolRegistered(CANVAS_DOCUMENT_TOOL_ID) ||
       !this.toolRegistry.isToolRegistered(PDF_TO_TEXT_TOOL_ID) ||
+      !this.toolRegistry.isToolRegistered(IMAGE_TO_TEXT_TOOL_ID) ||
       !this.toolRegistry.isToolRegistered(MATH_CHART_TOOL_ID) ||
       !this.toolRegistry.isToolRegistered(READ_SCHEDULE_TOOL_ID) ||
       !this.toolRegistry.isToolRegistered(WRITE_SCHEDULE_TOOL_ID)) {
@@ -4498,12 +4602,10 @@ export struct ChatPage {
 
       const attachmentsToSend = [...sourceAttachments]
       const modelSupportsDocuments = this.currentModelSupportsDocuments()
-      const selectedToolIds = modelSupportsDocuments ?
-        this.filterPdfFallbackToolIdsForCurrentModel(this.selectedToolIds) :
-        [...this.selectedToolIds]
-      const forcedToolIds = modelSupportsDocuments ?
-        this.filterPdfFallbackToolIdsForCurrentModel(this.forcedToolIdsOnce) :
-        [...this.forcedToolIdsOnce]
+      const modelSupportsVision = this.currentModelSupportsVision()
+      const selectedToolIds = this.filterFallbackToolIdsForCurrentModel(this.selectedToolIds)
+      const forcedToolIds = this.filterFallbackToolIdsForCurrentModel(this.forcedToolIdsOnce)
+      const fallbackHintTexts: string[] = []
       if (!modelSupportsDocuments) {
         const documentFallback = await this.prepareDocumentFallbackForSend(
           messageContent,
@@ -4513,8 +4615,24 @@ export struct ChatPage {
           forcedToolIds
         )
         requestMessageContent = documentFallback.requestContent
-        userDocumentToolHint = documentFallback.userHintText
+        if (documentFallback.userHintText !== '') {
+          fallbackHintTexts.push(documentFallback.userHintText)
+        }
       }
+      if (!modelSupportsVision) {
+        const imageFallback = await this.prepareImageFallbackForSend(
+          requestMessageContent,
+          currentProvider,
+          attachmentsToSend,
+          selectedToolIds,
+          forcedToolIds
+        )
+        requestMessageContent = imageFallback.requestContent
+        if (imageFallback.userHintText !== '') {
+          fallbackHintTexts.push(imageFallback.userHintText)
+        }
+      }
+      userDocumentToolHint = fallbackHintTexts.join('\n')
       const searchEnabled = this.webSearchAvailable &&
         (selectedToolIds.includes('web_search') || forcedToolIds.includes('web_search'))
       this.syncActiveSessionBinding()
@@ -4528,6 +4646,7 @@ export struct ChatPage {
         forcedToolIds,
         this.currentModelId,
         modelSupportsDocuments,
+        modelSupportsVision,
         requestMessageContent,
         userDocumentToolHint
       )

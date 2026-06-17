@@ -4,6 +4,9 @@ import { buffer } from '@kit.ArkTS'
 import { common } from '@kit.AbilityKit'
 import { showToast } from '../utils/ToastUtil'
 import { hilog } from '@kit.PerformanceAnalysisKit'
+import { hdsMaterial } from '@kit.UIDesignKit'
+import { HdsMiniBarButton } from 'hds_button'
+import { getAppUiState } from '../state/AppUiState'
 
 /**
  * 图片预览组件
@@ -58,9 +61,13 @@ export struct ImagePreview {
   private panDirection: string = 'none'
   private readonly overlayHorizontalMarginVp: number = 16
   private readonly overlayBottomMarginVp: number = 20
-  private readonly overlayTopMarginVp: number = 12
+  private readonly overlayTopMarginVp: number = 22
   private readonly saveButtonWidthVp: number = 104
   private readonly saveButtonHeightVp: number = 48
+
+  private get themePrimary(): string {
+    return getAppUiState().themePrimary
+  }
 
   aboutToAppear(): void {
     this.displayIndex = this.currentIndex
@@ -83,16 +90,8 @@ export struct ImagePreview {
     showToast(this.getUIContext(), message, duration)
   }
 
-  private getOverlayControlBackgroundColor(): string {
-    return 'rgba(12, 16, 24, 0.72)'
-  }
-
   private getOverlayControlBorderColor(): string {
     return 'rgba(255, 255, 255, 0.16)'
-  }
-
-  private getOverlayControlShadowColor(): string {
-    return 'rgba(0, 0, 0, 0.34)'
   }
 
   private getSaveButtonTranslateX(): number {
@@ -109,24 +108,35 @@ export struct ImagePreview {
 
   @Builder
   private SaveActionButtonBuilder() {
-    Button({ type: ButtonType.Capsule, stateEffect: false }) {
+    HdsMiniBarButton({
+      barWidth: this.saveButtonWidthVp,
+      barHeight: this.saveButtonHeightVp,
+      contentPadding: 0,
+      containerSize: { width: this.saveButtonWidthVp, height: this.saveButtonHeightVp },
+      maskColor: Color.Transparent,
+      enableGradientMask: true,
+      barBottomMargin: 0,
+      materialType: hdsMaterial.MaterialType.IMMERSIVE,
+      materialLevel: hdsMaterial.MaterialLevel.ADAPTIVE,
+      barBackgroundColor: Color.Transparent,
+      clipToBarShape: false,
+      onButtonClick: (): void => {
+        if (!this.isSaving) {
+          this.saveCurrentImage()
+        }
+      }
+    }) {
       Row({ space: 8 }) {
         if (this.isSaving) {
           LoadingProgress()
             .width(18)
             .height(18)
-            .color(Color.White)
+            .color(this.themePrimary)
         } else {
           Stack({ alignContent: Alignment.Center }) {
-            Column()
-              .width(28)
-              .height(28)
-              .borderRadius(14)
-              .backgroundColor('rgba(255, 255, 255, 0.10)')
-
             SymbolGlyph($r('sys.symbol.square_and_arrow_down'))
               .fontSize(16)
-              .fontColor([Color.White])
+              .fontColor([this.themePrimary])
           }
           .width(28)
           .height(28)
@@ -134,21 +144,45 @@ export struct ImagePreview {
 
         Text($r('app.string.save'))
           .fontSize(14)
-          .fontColor(Color.White)
+          .fontColor(this.themePrimary)
           .fontWeight(FontWeight.Medium)
       }
+      .width(this.saveButtonWidthVp)
+      .height(this.saveButtonHeightVp)
+      .padding({ left: 12, right: 14 })
+      .justifyContent(FlexAlign.Center)
+      .alignItems(VerticalAlign.Center)
+      .translate({ y: -3 })
     }
-    .width(this.saveButtonWidthVp)
-    .height(this.saveButtonHeightVp)
-    .padding({ left: 12, right: 14 })
-    .backgroundColor(this.getOverlayControlBackgroundColor())
-    .backgroundBlurStyle(BlurStyle.COMPONENT_REGULAR)
-    .border({ width: 0.8, color: this.getOverlayControlBorderColor() })
-    .shadow({ radius: 22, color: this.getOverlayControlShadowColor(), offsetX: 0, offsetY: 8 })
-    .enabled(!this.isSaving)
-    .onClick(() => {
-      this.saveCurrentImage()
-    })
+  }
+
+  @Builder
+  private CloseActionButtonBuilder() {
+    HdsMiniBarButton({
+      barWidth: 40,
+      barHeight: 40,
+      contentPadding: 0,
+      containerSize: { width: 40, height: 40 },
+      maskColor: Color.Transparent,
+      enableGradientMask: true,
+      barBottomMargin: 0,
+      materialType: hdsMaterial.MaterialType.IMMERSIVE,
+      materialLevel: hdsMaterial.MaterialLevel.ADAPTIVE,
+      barBackgroundColor: Color.Transparent,
+      clipToBarShape: false,
+      onButtonClick: (): void => {
+        this.dismiss()
+      }
+    }) {
+      Stack({ alignContent: Alignment.Center }) {
+        SymbolGlyph($r('sys.symbol.xmark'))
+          .fontSize(20)
+          .fontColor([this.themePrimary])
+          .translate({ y: -4 })
+      }
+      .width(40)
+      .height(40)
+    }
   }
 
   build() {
@@ -212,20 +246,7 @@ export struct ImagePreview {
 
       // 顶部关闭按钮 + 页码
       Row() {
-        Button({ type: ButtonType.Circle }) {
-          SymbolGlyph($r('sys.symbol.xmark'))
-            .fontSize(20)
-            .fontColor([Color.White])
-        }
-        .width(40)
-        .height(40)
-        .backgroundColor(this.getOverlayControlBackgroundColor())
-        .backgroundBlurStyle(BlurStyle.COMPONENT_REGULAR)
-        .border({ width: 0.8, color: this.getOverlayControlBorderColor() })
-        .shadow({ radius: 18, color: this.getOverlayControlShadowColor(), offsetX: 0, offsetY: 6 })
-        .onClick(() => {
-          this.dismiss()
-        })
+        this.CloseActionButtonBuilder()
 
         Blank()
 

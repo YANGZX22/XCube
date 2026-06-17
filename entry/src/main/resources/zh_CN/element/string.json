@@ -342,7 +342,7 @@
     },
     {
       "name": "hand_adaptive_master_desc",
-      "value": "识别握持手并调整新建对话按钮位置，提升单手操作可达性。"
+      "value": "识别握持手并调整底部栏与新建对话按钮位置，提升单手操作可达性。"
     },
     {
       "name": "hand_adaptive_new_chat_title",
@@ -358,7 +358,7 @@
     },
     {
       "name": "hand_adaptive_unsupported_tip",
-      "value": "当前设备可能不支持握持手感知（801），按钮将保持默认位置。"
+      "value": "当前设备可能不支持握持手感知（801），底部栏与按钮将保持默认位置。"
     },
     {
       "name": "settings_notifications",

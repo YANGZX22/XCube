@@ -2238,6 +2238,9 @@ struct BuiltinToolCardItem {
     if (toolId === 'pdf_to_text') {
       return $r('sys.symbol.pdf_doc')
     }
+    if (toolId === 'image_to_text') {
+      return $r('sys.symbol.picture')
+    }
     if (toolId === 'math_chart') {
       return $r('sys.symbol.histogram')
     }

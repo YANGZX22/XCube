@@ -288,11 +288,18 @@ export class ChatViewModel {
     return clonedAttachments
   }
 
-  private filterNativeUnsupportedDocumentAttachments(attachments: MessageAttachment[]): MessageAttachment[] {
+  private filterNativeUnsupportedAttachments(
+    attachments: MessageAttachment[],
+    modelSupportsDocuments: boolean,
+    modelSupportsVision: boolean
+  ): MessageAttachment[] {
     const filtered: MessageAttachment[] = []
     for (let i = 0; i < attachments.length; i++) {
       const attachment = attachments[i]
-      if (this.isPdfAttachment(attachment)) {
+      if (!modelSupportsDocuments && this.isPdfAttachment(attachment)) {
+        continue
+      }
+      if (!modelSupportsVision && this.isImageAttachment(attachment)) {
         continue
       }
       filtered.push(attachment)
@@ -300,12 +307,20 @@ export class ChatViewModel {
     return filtered
   }
 
-  private filterNativeUnsupportedDocumentAttachmentsInMessages(messages: RequestMessage[]): void {
+  private filterNativeUnsupportedAttachmentsInMessages(
+    messages: RequestMessage[],
+    modelSupportsDocuments: boolean,
+    modelSupportsVision: boolean
+  ): void {
     for (let i = 0; i < messages.length; i++) {
       if (messages[i].attachments.length === 0) {
         continue
       }
-      messages[i].attachments = this.filterNativeUnsupportedDocumentAttachments(messages[i].attachments)
+      messages[i].attachments = this.filterNativeUnsupportedAttachments(
+        messages[i].attachments,
+        modelSupportsDocuments,
+        modelSupportsVision
+      )
     }
   }
 
@@ -313,6 +328,14 @@ export class ChatViewModel {
     const mimeType = attachment.mimeType.toLowerCase()
     const name = attachment.name.toLowerCase()
     return mimeType === 'application/pdf' || name.endsWith('.pdf')
+  }
+
+  private isImageAttachment(attachment: MessageAttachment): boolean {
+    const mimeType = attachment.mimeType.toLowerCase()
+    const name = attachment.name.toLowerCase()
+    return attachment.type === AttachmentType.IMAGE || mimeType.startsWith('image/') ||
+      name.endsWith('.jpg') || name.endsWith('.jpeg') || name.endsWith('.png') ||
+      name.endsWith('.webp') || name.endsWith('.bmp') || name.endsWith('.gif')
   }
 
   private buildDraftTitle(content: string): string {
@@ -752,6 +775,7 @@ export class ChatViewModel {
     contextStartIndex: number = 0,
     reasoningLevel: ReasoningLevel = ReasoningLevel.OFF,
     modelSupportsDocuments: boolean = true,
+    modelSupportsVision: boolean = true,
     requestContent: string = '',
     userDocumentToolHint: string = '',
     apiPath?: string,  // 可选的自定义 API 路径
@@ -858,8 +882,8 @@ export class ChatViewModel {
 
     // 懒加载历史附件
     await this.prepareHistoryAttachments(requestMessages)
-    if (!modelSupportsDocuments) {
-      this.filterNativeUnsupportedDocumentAttachmentsInMessages(requestMessages)
+    if (!modelSupportsDocuments || !modelSupportsVision) {
+      this.filterNativeUnsupportedAttachmentsInMessages(requestMessages, modelSupportsDocuments, modelSupportsVision)
     }
     if (this.isCancelled(cancelSnapshot)) {
       return
@@ -1710,6 +1734,7 @@ ${limitedSearchContext}
     tools: ToolDefinition[] = [],
     toolCallbacks?: ToolCallCallbacks,
     modelSupportsDocuments: boolean = true,
+    modelSupportsVision: boolean = true,
     requestContent: string = '',
     userDocumentToolHint: string = '',
     apiPath?: string,
@@ -1856,8 +1881,8 @@ ${limitedSearchContext}
 
     // 懒加载历史附件
     await this.prepareHistoryAttachments(requestMessages)
-    if (!modelSupportsDocuments) {
-      this.filterNativeUnsupportedDocumentAttachmentsInMessages(requestMessages)
+    if (!modelSupportsDocuments || !modelSupportsVision) {
+      this.filterNativeUnsupportedAttachmentsInMessages(requestMessages, modelSupportsDocuments, modelSupportsVision)
     }
     if (this.isCancelled(cancelSnapshot)) {
       return

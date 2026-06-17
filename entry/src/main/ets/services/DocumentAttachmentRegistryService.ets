@@ -41,7 +41,7 @@ export class DocumentAttachmentRegistryService {
     }
     for (let i = 0; i < attachments.length; i++) {
       const attachment = attachments[i]
-      if (!this.isPdfAttachment(attachment) || attachment.filePath.trim() === '') {
+      if ((!this.isPdfAttachment(attachment) && !this.isImageAttachment(attachment)) || attachment.filePath.trim() === '') {
         continue
       }
       sessionDocuments.set(attachment.id, new RegisteredDocumentAttachment(normalizedSessionId, attachment))
@@ -72,6 +72,13 @@ export class DocumentAttachmentRegistryService {
     const mimeType = attachment.mimeType.toLowerCase()
     const name = attachment.name.toLowerCase()
     return mimeType === 'application/pdf' || name.endsWith('.pdf')
+  }
+
+  private isImageAttachment(attachment: MessageAttachment): boolean {
+    const mimeType = attachment.mimeType.toLowerCase()
+    const name = attachment.name.toLowerCase()
+    return mimeType.startsWith('image/') || name.endsWith('.jpg') || name.endsWith('.jpeg') ||
+      name.endsWith('.png') || name.endsWith('.webp') || name.endsWith('.bmp') || name.endsWith('.gif')
   }
 }
 

@@ -5,7 +5,7 @@
 <h1 align="center">ChatCube</h1>
 
 <p align="center">
-  A native AI chat client for HarmonyOS 6 (API 23).<br/>
+  A native AI chat client for HarmonyOS 6.1.1 (API 24).<br/>
   One app, 15+ providers, web search, Canvas docs, PDF2TXT, built-in tools, MCP, and ArkTS-native UX.
 </p>
 
@@ -54,7 +54,7 @@ ChatCube includes local tools that capable models can call directly from a conve
 
 - **Web search**: fetch real-time information with a search budget and user-approved extra searches.
 - **Canvas document**: maintain a shared document beside the conversation that both the user and AI can edit, with a collapsible floating entry, Markdown preview, and version hints.
-- **PDF to text**: when the current model does not have native document reading enabled, uploaded PDFs are temporarily registered in the local sandbox and the model can call `pdf_to_text` to read extracted text; if native document input is enabled, the app leaves the upload path untouched.
+- **PDF / image to text**: when the current model does not have native document reading enabled, uploaded PDFs are temporarily registered in the local sandbox and the model can call `pdf_to_text`; when vision understanding is disabled, uploaded images can be read through CoreVisionKit OCR via `image_to_text`. If the model supports the corresponding native input, the app leaves the upload path untouched.
 - **Python sandbox**: run necessary Python code in a sandboxed environment for calculation, data processing, and intermediate reasoning.
 - **Math charts**: generate VChart specs for line, bar, area, scatter/bubble, pie, donut, rose, funnel, word cloud, Sankey, and dual-axis/combo charts.
 - **Calendar read/write**: read a user-confirmed date range or create new schedule events; users can adjust range, limits, location, and note visibility to protect privacy.
