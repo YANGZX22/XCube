@@ -150,7 +150,7 @@ struct LanguageSettingsPage {
     }
     .width('100%')
     .backgroundColor(getAppUiState().themeBackground)
-    .border({ width: { bottom: 1 }, color: $r('app.color.divider') })
+    .border({ width: { bottom: 1 }, color: getAppUiState().themeDivider })
   }
 
   @Builder

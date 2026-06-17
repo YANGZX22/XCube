@@ -228,18 +228,27 @@ export struct ChatToolPickerSheetContent {
   build() {
     Column() {
       Row({ space: 12 }) {
-        Button() {
-          SymbolGlyph($r('sys.symbol.xmark'))
-            .fontSize(18)
-            .fontColor([$r('app.color.text_secondary')])
+        ChatFloatingImmersiveButton({
+          barWidth: 36,
+          barHeight: 36,
+          iconResource: $r('sys.symbol.xmark'),
+          iconSize: 18,
+          iconColor: [this.themePrimary],
+          iconOffsetY: -3,
+          responsePadding: 0,
+          onButtonClick: (): void => {
+            this.onClose()
+          }
+        }) {
+          Stack({ alignContent: Alignment.Center }) {
+            SymbolGlyph($r('sys.symbol.xmark'))
+              .fontSize(18)
+              .fontColor([this.themePrimary])
+          }
+          .width(36)
+          .height(36)
+          .translate({ y: -3 })
         }
-        .type(ButtonType.Circle)
-        .width(36)
-        .height(36)
-        .backgroundColor($r('app.color.divider'))
-        .onClick(() => {
-          this.onClose()
-        })
 
         Text(pickLocalizedText('选择工具', 'Choose Tools'))
           .fontSize(18)
@@ -248,18 +257,36 @@ export struct ChatToolPickerSheetContent {
           .layoutWeight(1)
           .textAlign(TextAlign.Start)
 
-        Button() {
-          SymbolGlyph($r('sys.symbol.arrow_clockwise'))
-            .fontSize(18)
-            .fontColor([Color.White])
+        ChatFloatingImmersiveButton({
+          barWidth: 36,
+          barHeight: 36,
+          iconResource: $r('sys.symbol.arrow_clockwise'),
+          iconSize: 18,
+          iconColor: [this.themePrimary],
+          iconOffsetY: -3,
+          responsePadding: 0,
+          onButtonClick: (): void => {
+            if (!this.isRefreshingMcpToolAvailability) {
+              this.onRefresh()
+            }
+          }
+        }) {
+          Stack({ alignContent: Alignment.Center }) {
+            if (this.isRefreshingMcpToolAvailability) {
+              LoadingProgress()
+                .width(18)
+                .height(18)
+                .color(this.themePrimary)
+            } else {
+              SymbolGlyph($r('sys.symbol.arrow_clockwise'))
+                .fontSize(18)
+                .fontColor([this.themePrimary])
+            }
+          }
+          .width(36)
+          .height(36)
+          .translate({ y: -3 })
         }
-        .type(ButtonType.Circle)
-        .width(36)
-        .height(36)
-        .backgroundColor(this.themePrimary)
-        .onClick(() => {
-          this.onRefresh()
-        })
       }
       .width('100%')
       .padding({ left: 16, right: 16, top: 12, bottom: 8 })

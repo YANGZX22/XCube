@@ -20,19 +20,11 @@
 > [!NOTE]
 > The original author has released their version on the app market, so the [upstream repository](https://github.com/LongLiveY96/ChatCube) is no longer being updated. This repository continues development based on the original project, aiming to preserve the native ArkTS experience while exploring different product ideas, interaction patterns, and capability extensions.
 
-## Why ChatCube?
+## About This ChatCube Fork
 
-- Built entirely with ArkTS — a true HarmonyOS native app, not a web wrapper
-- Continuously refined around HarmonyOS 6 (API 23), with better alignment to current system behavior
-- Polished UI with dynamic blur, 8 color themes, advanced materials, and glass-like surfaces
-- Adaptive layouts for phones, tablets, and large screens
-- Highly customizable providers — add any OpenAI / Anthropic / Gemini compatible service in seconds
-- Built-in tools for web search, shared Canvas docs, PDF-to-text, Python sandboxing, chart generation, and calendar workflows
-- Model capability tags for tools, web search, vision, and document reading, so the app can use native document input or a local PDF2TXT fallback as appropriate
-- The tools center can connect to remote streamable MCP servers for expandable tool capability
-- Simple and intuitive — configure your API key and start chatting
-- Home screen widget for quick access
-- Background task support — keep receiving replies while multitasking
+- This fork focuses more heavily on UI work. It is continuously refined around HarmonyOS 6 (API 23), with global immersive-light materials, immersive surfaces, and a stronger emphasis on native feel and visual polish.
+- It adds web search, Canvas documents, PDF-to-text, Python sandboxing, math charts, calendar read/write, and other tools. The goal is to combine AI with phone-native capabilities while keeping tool permissions, user confirmation flows, and privacy protection explicit.
+- This project will continue exploring more native HarmonyOS SDK capabilities, richer interaction patterns, and new use cases, with ongoing iteration on the user experience.
 
 ## Latest Screens
 

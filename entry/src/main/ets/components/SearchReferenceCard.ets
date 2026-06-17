@@ -1,6 +1,7 @@
 import { SearchReference } from '../models/ChatModels'
 import { webview } from '@kit.ArkWeb'
 import { getAppUiState } from '../state/AppUiState'
+import { withColorAlpha } from '../utils/ColorAlphaUtils'
 
 @ComponentV2
 export struct SearchReferenceCard {
@@ -15,6 +16,15 @@ export struct SearchReferenceCard {
   private sheetWebController: webview.WebviewController = new webview.WebviewController()
   private get isDarkMode(): boolean {
     return getAppUiState().isDarkMode
+  }
+  private get themePrimary(): string {
+    return getAppUiState().themePrimary
+  }
+  private get themePrimaryLight(): string {
+    return getAppUiState().themePrimaryLight
+  }
+  private get themeAiBubble(): string {
+    return getAppUiState().themeAiBubble
   }
 
   // 获取引用数量文本
@@ -31,9 +41,8 @@ export struct SearchReferenceCard {
     return trimmed.replace(/\s+/g, ' ')
   }
 
-  // 获取阴影颜色（根据深浅模式）
-  private getShadowColor(): ResourceColor {
-    return this.isDarkMode ? 'rgba(255, 255, 255, 0.08)' : 'rgba(0, 0, 0, 0.12)'
+  private getTimelineRailColor(): string {
+    return withColorAlpha(this.themePrimary, this.isDarkMode ? '88' : '55')
   }
 
   build() {
@@ -41,7 +50,7 @@ export struct SearchReferenceCard {
       // ========== 悬浮联网查询标签 ==========
       Row() {
         // 联网搜索图标
-        SymbolGlyph($r('sys.symbol.magnifyingglass'))
+        SymbolGlyph($r('sys.symbol.worldclock_fill_2'))
           .fontSize(13)
           .fontColor([$r('app.color.text_secondary')])
 
@@ -66,7 +75,7 @@ export struct SearchReferenceCard {
             .fontColor($r('app.color.text_secondary'))
             .padding({ left: 6, right: 6, top: 1, bottom: 1 })
             .borderRadius(8)
-            .backgroundColor($r('app.color.divider'))
+            .backgroundColor(this.themePrimaryLight)
             .margin({ left: 6 })
         }
 
@@ -104,22 +113,17 @@ export struct SearchReferenceCard {
           .width(12)
           .height(12)
       }
-      .height(28)
+      .height(36)
       .padding({ left: 10, right: 8 })
-      .borderRadius(14)
+      .borderRadius(12)
+      .border({ width: 0.5, color: this.getTimelineRailColor() })
       .clip(true)
-      .shadow({
-        radius: 8,
-        color: this.getShadowColor(),
-        offsetX: 0,
-        offsetY: 2
-      })
       .stateStyles({
         normal: {
-          .backgroundColor($r('app.color.surface'))
+          .backgroundColor(this.themeAiBubble)
         },
         pressed: {
-          .backgroundColor($r('app.color.divider'))
+          .backgroundColor(withColorAlpha(this.themePrimary, this.isDarkMode ? '1F' : '12'))
         }
       })
       .onClick(() => {
@@ -136,7 +140,11 @@ export struct SearchReferenceCard {
           }, (ref: SearchReference) => ref.id)
         }
         .width('100%')
-        .margin({ top: 36 })
+        .margin({ top: 42 })
+        .padding({ left: 10, right: 10, top: 4, bottom: 4 })
+        .backgroundColor(this.themeAiBubble)
+        .borderRadius(12)
+        .border({ width: 0.5, color: this.getTimelineRailColor() })
         .clip(true)
       }
     }
@@ -192,7 +200,7 @@ export struct SearchReferenceCard {
           .height(18)
           .textAlign(TextAlign.Center)
           .borderRadius(9)
-          .backgroundColor($r('app.color.divider'))
+          .backgroundColor(this.themePrimaryLight)
 
         // 标题
         Text(ref.title)
@@ -228,10 +236,10 @@ export struct SearchReferenceCard {
     .padding({ top: 10, bottom: 10, left: 4, right: 4 })
     .stateStyles({
       normal: {
-        .backgroundColor($r('app.color.surface'))
+        .backgroundColor(Color.Transparent)
       },
       pressed: {
-        .backgroundColor($r('app.color.divider'))
+        .backgroundColor(withColorAlpha(this.themePrimary, this.isDarkMode ? '1F' : '12'))
       }
     })
     .onClick(() => {
@@ -241,4 +249,3 @@ export struct SearchReferenceCard {
     })
   }
 }
-

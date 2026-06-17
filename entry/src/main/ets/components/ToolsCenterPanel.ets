@@ -2175,6 +2175,10 @@ struct BuiltinToolCardItem {
     return getAppUiState().themePrimary
   }
 
+  private get themePrimaryLight(): string {
+    return getAppUiState().themePrimaryLight
+  }
+
   private get isDarkMode(): boolean {
     return getAppUiState().isDarkMode
   }
@@ -2307,7 +2311,7 @@ struct BuiltinToolCardItem {
           .fontColor($r('app.color.text_secondary'))
           .padding({ left: 10, right: 10, top: 6, bottom: 6 })
           .borderRadius(999)
-          .backgroundColor(this.backgroundHex)
+          .backgroundColor(this.themePrimaryLight)
 
         Text(this.getPermissionText())
           .fontSize(11)

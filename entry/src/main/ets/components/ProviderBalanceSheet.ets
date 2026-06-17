@@ -4,6 +4,7 @@
  */
 import { getAppUiState } from '../state/AppUiState'
 import { BalanceResult } from '../services/ProviderBalanceService'
+import { ChatFloatingImmersiveButton } from './ChatFloatingImmersiveButton'
 
 @ComponentV2
 export struct ProviderBalanceSheet {
@@ -24,17 +25,27 @@ export struct ProviderBalanceSheet {
     Column() {
       // 顶部标题 + 刷新
       Row() {
-        Button({ type: ButtonType.Circle, stateEffect: false }) {
-          SymbolGlyph($r('sys.symbol.xmark'))
-            .fontSize(17)
-            .fontColor([$r('app.color.text_secondary')])
+        ChatFloatingImmersiveButton({
+          barWidth: 40,
+          barHeight: 40,
+          iconResource: $r('sys.symbol.xmark'),
+          iconSize: 17,
+          iconColor: [this.themePrimary],
+          iconOffsetY: -4,
+          responsePadding: 0,
+          onButtonClick: (): void => {
+            this.onClose()
+          }
+        }) {
+          Stack({ alignContent: Alignment.Center }) {
+            SymbolGlyph($r('sys.symbol.xmark'))
+              .fontSize(17)
+              .fontColor([this.themePrimary])
+          }
+          .width(40)
+          .height(40)
+          .translate({ y: -4 })
         }
-        .width(40)
-        .height(40)
-        .backgroundColor($r('app.color.divider'))
-        .onClick(() => {
-          this.onClose()
-        })
 
         Text($r('app.string.balance_query'))
           .fontSize(17)
@@ -43,25 +54,36 @@ export struct ProviderBalanceSheet {
           .layoutWeight(1)
           .textAlign(TextAlign.Center)
 
-        Button({ type: ButtonType.Circle, stateEffect: false }) {
-          if (this.loading) {
-            LoadingProgress()
-              .width(20)
-              .height(20)
-              .color(this.themePrimary)
-          } else {
-            SymbolGlyph($r('sys.symbol.arrow_clockwise'))
-              .fontSize(18)
-              .fontColor([this.themePrimary])
+        ChatFloatingImmersiveButton({
+          barWidth: 40,
+          barHeight: 40,
+          iconResource: $r('sys.symbol.arrow_clockwise'),
+          iconSize: 18,
+          iconColor: [this.themePrimary],
+          iconOffsetY: -4,
+          responsePadding: 0,
+          onButtonClick: (): void => {
+            if (!this.loading) {
+              this.onRefresh()
+            }
           }
+        }) {
+          Stack({ alignContent: Alignment.Center }) {
+            if (this.loading) {
+              LoadingProgress()
+                .width(20)
+                .height(20)
+                .color(this.themePrimary)
+            } else {
+              SymbolGlyph($r('sys.symbol.arrow_clockwise'))
+                .fontSize(18)
+                .fontColor([this.themePrimary])
+            }
+          }
+          .width(40)
+          .height(40)
+          .translate({ y: -4 })
         }
-        .width(40)
-        .height(40)
-        .backgroundColor(Color.Transparent)
-        .enabled(!this.loading)
-        .onClick(() => {
-          this.onRefresh()
-        })
       }
       .width('100%')
       .padding({ left: 20, right: 16, top: 8, bottom: 12 })

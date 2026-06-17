@@ -460,6 +460,10 @@ export struct ModelSelectorContent {
       .padding({ left: 12, right: 12, top: 10, bottom: 10 })
       .backgroundColor(this.isSelectedModel(row) ? this.themePrimaryLight : getAppUiState().themeSurface)
       .borderRadius(this.buildRowRadius(row.groupPosition))
+      .border({
+        width: this.isSelectedModel(row) ? 1 : 0,
+        color: this.isSelectedModel(row) ? this.themePrimaryLight : Color.Transparent
+      })
 
       if (row.groupPosition === ModelRowGroupPosition.FIRST || row.groupPosition === ModelRowGroupPosition.MIDDLE) {
         Divider()

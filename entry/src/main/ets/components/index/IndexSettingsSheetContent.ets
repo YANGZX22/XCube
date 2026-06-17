@@ -12,6 +12,9 @@ export struct IndexSettingsSheetContent {
   private get themePrimaryLight(): string {
     return getAppUiState().themePrimaryLight
   }
+  private get themeDivider(): string {
+    return getAppUiState().themeDivider
+  }
   @Param currentThemeMode: ThemeMode = ThemeMode.SYSTEM
   @Param currentLanguage: AppLanguage = AppLanguage.SYSTEM
   @Param notifyEnabled: boolean = true
@@ -106,7 +109,7 @@ export struct IndexSettingsSheetContent {
         })
 
       if (this.handAdaptiveEnabled) {
-        Divider().color($r('app.color.divider'))
+        Divider().color(this.themeDivider)
 
         this.HandAdaptiveToggleItem($r('app.string.hand_adaptive_new_chat_title'),
           $r('app.string.hand_adaptive_new_chat_desc'), this.handAdaptiveNewChat, this.handAdaptiveEnabled,
@@ -194,15 +197,15 @@ export struct IndexSettingsSheetContent {
     Column() {
       if (this.settingsSheetType === SettingsSheetType.THEME) {
         this.ThemeOptionItem(ThemeMode.SYSTEM, $r('app.string.theme_system'))
-        Divider().color($r('app.color.divider'))
+        Divider().color(this.themeDivider)
         this.ThemeOptionItem(ThemeMode.LIGHT, $r('app.string.theme_light'))
-        Divider().color($r('app.color.divider'))
+        Divider().color(this.themeDivider)
         this.ThemeOptionItem(ThemeMode.DARK, $r('app.string.theme_dark'))
       } else if (this.settingsSheetType === SettingsSheetType.LANGUAGE) {
         this.LanguageOptionItem(AppLanguage.SYSTEM, $r('app.string.language_system'))
-        Divider().color($r('app.color.divider'))
+        Divider().color(this.themeDivider)
         this.LanguageOptionItem(AppLanguage.ZH_CN, $r('app.string.language_zh_cn'))
-        Divider().color($r('app.color.divider'))
+        Divider().color(this.themeDivider)
         this.LanguageOptionItem(AppLanguage.EN_US, $r('app.string.language_en_us'))
       } else if (this.settingsSheetType === SettingsSheetType.HAND_ADAPTIVE) {
         this.HandAdaptiveSheetContent()
@@ -212,21 +215,21 @@ export struct IndexSettingsSheetContent {
             this.callbacks.onToggleNotifyEnabled(value)
           })
 
-        Divider().color($r('app.color.divider'))
+        Divider().color(this.themeDivider)
 
         this.NotificationToggleItem($r('app.string.notification_on_complete_title'),
           $r('app.string.notification_on_complete_desc'), this.notifyOnComplete, (value: boolean) => {
             this.callbacks.onToggleNotifyOnComplete(value)
           })
 
-        Divider().color($r('app.color.divider'))
+        Divider().color(this.themeDivider)
 
         this.NotificationToggleItem($r('app.string.notification_on_failed_title'),
           $r('app.string.notification_on_failed_desc'), this.notifyOnFailed, (value: boolean) => {
             this.callbacks.onToggleNotifyOnFailed(value)
           })
 
-        Divider().color($r('app.color.divider')).margin({ top: 6 })
+        Divider().color(this.themeDivider).margin({ top: 6 })
         this.OpenSystemNotificationSettingsEntry()
       } else if (this.settingsSheetType === SettingsSheetType.CHAT_INPUT) {
         this.ChatInputSheetContent()
@@ -244,4 +247,3 @@ export struct IndexSettingsSheetContent {
     })
   }
 }
-

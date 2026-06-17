@@ -243,6 +243,8 @@ export struct AssistantAvatarView {
   @Param modelProviderId: string = ''
   @Param modelId: string = ''
   @Param modelName: string = ''
+  @Param avatarBorderWidth: number = 0
+  @Param avatarBorderColor: ResourceColor = Color.Transparent
 
   @Computed
   get renderImageSource(): string {
@@ -271,6 +273,15 @@ export struct AssistantAvatarView {
 
   private getTextAvatarFontColor(): ResourceColor {
     return this.isTransparentTextAvatar() ? $r('app.color.text_primary') : Color.White
+  }
+
+  private getAvatarBorderWidth(): number {
+    return this.avatarBorderWidth > 0 ? this.avatarBorderWidth : (this.isTransparentTextAvatar() ? 1 : 0)
+  }
+
+  private getAvatarBorderColor(): ResourceColor {
+    return this.avatarBorderWidth > 0 ? this.avatarBorderColor :
+      (this.isTransparentTextAvatar() ? $r('app.color.divider') : Color.Transparent)
   }
 
   @Builder
@@ -316,6 +327,7 @@ export struct AssistantAvatarView {
     .height(this.avatarSize)
     .borderRadius(this.radius)
     .backgroundColor($r('app.color.model_icon_bg'))
+    .border({ width: this.avatarBorderWidth, color: this.avatarBorderColor })
     .justifyContent(FlexAlign.Center)
     .alignItems(HorizontalAlign.Center)
     .clip(true)
@@ -335,6 +347,7 @@ export struct AssistantAvatarView {
       .width(this.avatarSize)
       .height(this.avatarSize)
       .borderRadius(this.radius)
+      .border({ width: this.avatarBorderWidth, color: this.avatarBorderColor })
       .clip(true)
     } else {
       Stack() {
@@ -352,8 +365,8 @@ export struct AssistantAvatarView {
       .backgroundColor(this.getTextAvatarBackgroundColor())
       .borderRadius(this.radius)
       .border({
-        width: this.isTransparentTextAvatar() ? 1 : 0,
-        color: this.isTransparentTextAvatar() ? $r('app.color.divider') : Color.Transparent
+        width: this.getAvatarBorderWidth(),
+        color: this.getAvatarBorderColor()
       })
       .clip(true)
     }

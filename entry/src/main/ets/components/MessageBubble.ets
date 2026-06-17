@@ -982,7 +982,7 @@ export struct MessageBubble {
     .height(24)
     .padding({ left: 6, right: 6 })
     .borderRadius(12)
-    .backgroundColor($r('app.color.divider'))
+    .backgroundColor(this.themePrimaryLight)
   }
 
   @Builder
@@ -1447,7 +1447,9 @@ export struct MessageBubble {
                 avatarSize: 30,
                 radius: 8,
                 fontSize: 14,
-                cacheKey: this.assistantAvatarCacheKey
+                cacheKey: this.assistantAvatarCacheKey,
+                avatarBorderWidth: 1,
+                avatarBorderColor: this.themePrimaryLight
               })
             }
             .width(30)
@@ -1763,6 +1765,12 @@ export struct MessageBubble {
     return withColorAlpha(this.themePrimary, this.isDarkMode ? '88' : '55')
   }
 
+  private toggleReasoningExpansion(): void {
+    this.getUIContext().animateTo({ duration: 200, curve: Curve.EaseInOut }, () => {
+      this.isReasoningExpanded = !this.isReasoningExpanded
+    })
+  }
+
   // 推理内容区域（timeline 串珠样式：左竖线 + 圆形串珠图标 + 标题 + 可展开正文）
   @Builder
   ReasoningSection() {
@@ -1790,10 +1798,9 @@ export struct MessageBubble {
           }
           .width(22)
           .height(22)
-          .translate({ y: this.isReasoningExpanded ? -2 : 0 })
 
           Column() {
-            // 标题行（点击 toggle）
+            // 标题行
             Row({ space: 6 }) {
               Text(this.message.isGenerating ? $r('app.string.reasoning_thinking') : $r('app.string.reasoning_process'))
                 .fontSize(13)
@@ -1810,11 +1817,6 @@ export struct MessageBubble {
             .width('100%')
             .height(22)
             .alignItems(VerticalAlign.Center)
-            .onClick(() => {
-              this.getUIContext().animateTo({ duration: 200, curve: Curve.EaseInOut }, () => {
-                this.isReasoningExpanded = !this.isReasoningExpanded
-              })
-            })
 
             // 展开时显示推理正文
             if (this.isReasoningExpanded && this.message.reasoningContent.length > 0) {
@@ -1830,11 +1832,8 @@ export struct MessageBubble {
           .alignItems(HorizontalAlign.Start)
         }
         .width('100%')
-        .padding({
-          top: this.isReasoningExpanded ? 3 : 1,
-          bottom: this.isReasoningExpanded ? 3 : 1
-        })
-        .alignItems(this.isReasoningExpanded ? VerticalAlign.Top : VerticalAlign.Center)
+        .padding({ top: 1, bottom: 1 })
+        .alignItems(VerticalAlign.Top)
       }
       .width('100%')
     }
@@ -1844,6 +1843,9 @@ export struct MessageBubble {
     .borderRadius(12)
     .border({ width: 0.5, color: this.getTimelineRailColor() })
     .margin({ bottom: 8 })
+    .onClick(() => {
+      this.toggleReasoningExpansion()
+    })
   }
 
   /**

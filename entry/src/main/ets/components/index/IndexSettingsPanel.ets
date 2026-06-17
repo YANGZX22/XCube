@@ -31,6 +31,9 @@ export struct IndexSettingsPanel {
   private get themeSurface(): string {
     return getAppUiState().themeSurface
   }
+  private get themeDivider(): string {
+    return getAppUiState().themeDivider
+  }
   @Local versionName: string = ''
 
   @Param sidebarMode: boolean = false
@@ -303,7 +306,7 @@ export struct IndexSettingsPanel {
 
       if (!isLast) {
         Divider()
-          .color($r('app.color.divider'))
+          .color(this.themeDivider)
           .margin({ left: this.sidebarMode ? 62 : 58, right: 12 })
       }
     }
@@ -322,7 +325,7 @@ export struct IndexSettingsPanel {
     .clip(true)
     .border({
       width: 1,
-      color: $r('app.color.divider')
+      color: this.themeDivider
     })
     .visualEffect(buildPointLightBorderEffect())
   }

@@ -1,6 +1,7 @@
 import { ToolCall, ToolResult } from '../models/ChatModels'
 import { getAppUiState } from '../state/AppUiState'
 import { buildToolArgumentsPreview, buildToolResultPreview, ToolPayloadPreview } from '../utils/ToolPayloadSummaryUtils'
+import { withColorAlpha } from '../utils/ColorAlphaUtils'
 
 // 获取工具显示名称
 function getToolDisplayName(toolCall: ToolCall): string | Resource {
@@ -39,7 +40,14 @@ export struct ToolCallCard {
   private get isDarkMode(): boolean {
     return getAppUiState().isDarkMode
   }
+  private get themeAiBubble(): string {
+    return getAppUiState().themeAiBubble
+  }
   private dotAnimationTimer: number = -1
+
+  private getTimelineRailColor(): string {
+    return withColorAlpha(this.themePrimary, this.isDarkMode ? '88' : '55')
+  }
 
   aboutToAppear(): void {
     if (this.isExecuting) {
@@ -180,7 +188,7 @@ export struct ToolCallCard {
         }
       }
       .width('100%')
-      .height(32)
+      .height(36)
       .padding({ left: 10, right: 10 })
 
       // 展开的详情内容
@@ -223,8 +231,9 @@ export struct ToolCallCard {
             .width('100%')
             .constraintSize({ maxHeight: 160 })
             .padding(10)
-            .borderRadius(10)
-            .backgroundColor(this.isDarkMode ? '#14171F' : '#F6F8FC')
+            .borderRadius(8)
+            .backgroundColor(Color.Transparent)
+            .border({ width: 0.5, color: withColorAlpha(this.themePrimary, this.isDarkMode ? '55' : '33') })
           }
 
           Row() {
@@ -264,8 +273,9 @@ export struct ToolCallCard {
             .width('100%')
             .constraintSize({ maxHeight: 180 })
             .padding(10)
-            .borderRadius(10)
-            .backgroundColor(this.isDarkMode ? '#14171F' : '#F6F8FC')
+            .borderRadius(8)
+            .backgroundColor(Color.Transparent)
+            .border({ width: 0.5, color: withColorAlpha(this.themePrimary, this.isDarkMode ? '55' : '33') })
           }
         }
         .width('100%')
@@ -274,8 +284,9 @@ export struct ToolCallCard {
       }
     }
     .width('100%')
-    .backgroundColor($r('app.color.divider'))
-    .borderRadius(8)
+    .backgroundColor(this.themeAiBubble)
+    .borderRadius(12)
+    .border({ width: 0.5, color: this.getTimelineRailColor() })
     .clip(true)
   }
 
@@ -320,4 +331,3 @@ export struct ToolCallCard {
     return this.hasFailedResult() ? $r('app.color.status_error') : $r('app.color.status_success')
   }
 }
-

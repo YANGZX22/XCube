@@ -54,6 +54,7 @@ import { IndexSettingsPanel } from '../components/index/IndexSettingsPanel'
 import { IndexSettingsSheetContent } from '../components/index/IndexSettingsSheetContent'
 import { IndexSessionListSection } from '../components/index/IndexSessionListSection'
 import { ChatMultiSelectToolbar } from '../components/chat/ChatMultiSelectToolbar'
+import { ChatFloatingImmersiveButton } from '../components/ChatFloatingImmersiveButton'
 import { ModelSelectorContent } from '../components/ModelSelector'
 import {
   AssistantAvatarView,
@@ -3037,7 +3038,9 @@ struct Index {
 
       if (assistant.id !== DEFAULT_ASSISTANT_ID && !assistant.isDefault) {
         MenuItem({
-          startIcon: $r('sys.symbol.trash'),
+          symbolStartIcon: new SymbolGlyphModifier($r('sys.symbol.trash'))
+            .fontSize(16)
+            .fontColor([$r('app.color.status_error')]),
           content: $r('app.string.delete')
         })
           .contentFont({ size: 14 })
@@ -3186,7 +3189,7 @@ struct Index {
 
   @Builder
   private AssistantAvatarBadge(symbol: string, color: string, size: number, radius: number, fontSize: number,
-    modelProviderId: string = '', modelId: string = '', modelName: string = '') {
+    modelProviderId: string = '', modelId: string = '', modelName: string = '', themedBorder: boolean = false) {
     Stack() {
       ForEach([this.getAssistantAvatarRenderKey(symbol, color, size, radius, fontSize, modelProviderId, modelId,
         modelName)], (_renderKey: string) => {
@@ -3205,6 +3208,11 @@ struct Index {
     }
     .width(size)
     .height(size)
+    .borderRadius(radius)
+    .border({
+      width: themedBorder ? 1 : 0,
+      color: themedBorder ? this.themePrimaryLight : Color.Transparent
+    })
   }
 
   @Builder
@@ -3435,7 +3443,8 @@ struct Index {
     Stack() {
       ForEach([this.getCurrentAssistantSwitchRenderKey()], (_renderKey: string) => {
         Row({ space: 8 }) {
-          this.AssistantAvatarBadge(this.getCurrentAssistantSymbol(), this.getCurrentAssistantColor(), 36, 12, 20)
+          this.AssistantAvatarBadge(this.getCurrentAssistantSymbol(), this.getCurrentAssistantColor(), 36, 12, 20,
+            '', '', '', true)
 
           Text(this.getCurrentAssistantName())
             .fontSize(18)
@@ -3607,7 +3616,7 @@ struct Index {
   private AssistantSwitchSheetRow(assistant: Assistant) {
     Row({ space: 12 }) {
       this.AssistantAvatarBadge(assistant.avatarSymbol, this.getAssistantAvatarColor(assistant), 42, 14, 22,
-        assistant.defaultProviderId, assistant.defaultModelId, assistant.defaultModelName)
+        assistant.defaultProviderId, assistant.defaultModelId, assistant.defaultModelName, true)
 
       Column({ space: 5 }) {
         Row({ space: 6 }) {
@@ -3661,7 +3670,7 @@ struct Index {
     .padding({ left: 14, right: 14, top: 12, bottom: 12 })
     .backgroundColor(this.themeSurface)
     .borderRadius(16)
-    .border({ width: 1, color: $r('app.color.divider') })
+    .border({ width: 1, color: this.themePrimaryLight })
     .onClick(() => {
       this.showAssistantSwitchSheet = false
       if (assistant.id !== this.currentAssistantId) {
@@ -4179,18 +4188,27 @@ struct Index {
       Column() {
         // 自绘标题栏：唯一关闭入口，避免系统遮罩/拖拽关闭造成“点快了自己收缩/吞点击”。
         Row() {
-          Button() {
-            SymbolGlyph($r('sys.symbol.xmark'))
-              .fontSize(18)
-              .fontColor([$r('app.color.text_secondary')])
+          ChatFloatingImmersiveButton({
+            barWidth: 36,
+            barHeight: 36,
+            iconResource: $r('sys.symbol.xmark'),
+            iconSize: 18,
+            iconColor: [this.themePrimary],
+            iconOffsetY: -3,
+            responsePadding: 0,
+            onButtonClick: (): void => {
+              this.closeAllSettingsSheets()
+            }
+          }) {
+            Stack({ alignContent: Alignment.Center }) {
+              SymbolGlyph($r('sys.symbol.xmark'))
+                .fontSize(18)
+                .fontColor([this.themePrimary])
+            }
+            .width(36)
+            .height(36)
+            .translate({ y: -3 })
           }
-          .type(ButtonType.Circle)
-          .width(36)
-          .height(36)
-          .backgroundColor($r('app.color.divider'))
-          .onClick(() => {
-            this.closeAllSettingsSheets()
-          })
 
           Text(getSettingsSheetTitleText(this.activeSettingsSheetType))
             .fontSize(17)
