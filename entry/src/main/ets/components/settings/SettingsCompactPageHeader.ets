@@ -5,39 +5,21 @@ import { withColorAlpha } from '../../utils/ColorAlphaUtils'
 @ComponentV2
 export struct SettingsCompactTitleBarContent {
   @Param title: string | Resource = ''
+  @Param titleStartInset: number = 64
+  @Param titleEndInset: number = 16
   @Event onBack: () => void = () => {}
 
   build() {
-    Row({ space: 4 }) {
-      Button() {
-        SymbolGlyph($r('sys.symbol.chevron_left'))
-          .fontSize(20)
-          .fontColor([$r('app.color.text_primary')])
-      }
-      .type(ButtonType.Normal)
-      .stateEffect(false)
-      .width(40)
-      .height(40)
-      .borderRadius(20)
-      .backgroundColor(Color.Transparent)
-      .onClick(() => {
-        this.onBack()
-      })
-
+    Row() {
       Text(this.title)
         .fontSize(18)
         .fontWeight(FontWeight.Bold)
         .fontColor($r('app.color.text_primary'))
         .layoutWeight(1)
-        .margin({ left: 4 })
-
-      Column()
-        .width(40)
-        .height(40)
     }
     .width('100%')
     .height(56)
-    .padding({ left: 8, right: 8 })
+    .padding({ left: this.titleStartInset, right: this.titleEndInset })
     .alignItems(VerticalAlign.Center)
   }
 }

@@ -157,8 +157,11 @@ export function buildHdsTopNavigationTitleBarOptions(
 }
 
 export function buildHdsTopNavigationTitleBarOptionsForPage(materialType: number, materialLevel: number,
-  windowWidthVp: number, windowHeightVp: number, stackBuilder: () => void): HdsNavigationTitleBarOptions {
+  windowWidthVp: number, windowHeightVp: number, stackBuilder: () => void,
+  menuItems: Array<HdsNavigationMenuItemOptions> = []): HdsNavigationTitleBarOptions {
   const options = new HdsTopNavigationBlurOptions()
+  options.startPaddingVp = 16
+  options.endPaddingVp = 16
   options.materialType = materialType
   options.materialLevel = materialLevel
   options.windowWidthVp = windowWidthVp
@@ -166,5 +169,6 @@ export function buildHdsTopNavigationTitleBarOptionsForPage(materialType: number
   options.maskExtraHeightVp = getHdsTopNavigationMaskExtraHeight(windowWidthVp, windowHeightVp)
   options.blurEffectiveEndOffsetVp = getHdsTopNavigationBlurEffectiveEndOffset(windowWidthVp, windowHeightVp)
   options.stackBuilder = stackBuilder
+  options.menuItems = menuItems
   return buildHdsTopNavigationTitleBarOptions(options)
 }

@@ -259,7 +259,7 @@ struct SystemPromptSettingsPage {
           { statusBarContentColor: getHdsStatusBarContentColor() },
           { statusBarContentColor: getHdsStatusBarContentColor() }
         )
-        .hideBackButton(true)
+        .hideBackButton(false)
         .hideToolBar(true)
         .mode(NavigationMode.Stack)
         .ignoreLayoutSafeArea([LayoutSafeAreaType.SYSTEM], [LayoutSafeAreaEdge.TOP])
@@ -288,4 +288,3 @@ export function SystemPromptSettingsPageBuilder(name: string, param: Object) {
     return true
   })
 }
-

@@ -1,5 +1,10 @@
-import { KeyboardAvoidMode } from '@kit.ArkUI'
-import { HdsNavigation, HdsNavigationTitleBarOptions, HdsNavigationTitleMode } from '@kit.UIDesignKit'
+import { KeyboardAvoidMode, SymbolGlyphModifier } from '@kit.ArkUI'
+import {
+  HdsNavigation,
+  HdsNavigationMenuItemOptions,
+  HdsNavigationTitleBarOptions,
+  HdsNavigationTitleMode
+} from '@kit.UIDesignKit'
 import {
   ModelProvider,
   ModelInfo,
@@ -977,7 +982,39 @@ export struct ProviderDetailPanel {
 
   private getStandaloneTitleBarOptions(): HdsNavigationTitleBarOptions {
     return buildHdsTopNavigationTitleBarOptionsForPage(this.materialType, this.materialLevel, this.windowWidthVp,
-      this.windowHeightVp, (): void => this.StandaloneTitleStackBuilder())
+      this.windowHeightVp, (): void => this.StandaloneTitleStackBuilder(), this.getStandaloneTitleBarMenuItems())
+  }
+
+  private getStandaloneTitleBarMenuItems(): Array<HdsNavigationMenuItemOptions> {
+    const menus: Array<HdsNavigationMenuItemOptions> = []
+    if (!this.isCreateMode && this.provider !== null && !this.provider.isPreset) {
+      const deleteIcon = new SymbolGlyphModifier($r('sys.symbol.clean'))
+      deleteIcon.fontSize(20)
+      deleteIcon.fontColor([$r('app.color.status_error')])
+      menus.push({
+        content: {
+          label: $r('app.string.delete'),
+          icon: deleteIcon,
+          action: () => {
+            this.showDeleteConfirmDialog()
+          }
+        }
+      })
+    }
+
+    const saveIcon = new SymbolGlyphModifier(this.headerSaveSymbol())
+    saveIcon.fontSize(20)
+    saveIcon.fontColor([$r('app.color.text_primary')])
+    menus.push({
+      content: {
+        label: $r('app.string.save'),
+        icon: saveIcon,
+        action: () => {
+          this.saveConfigAndClose()
+        }
+      }
+    })
+    return menus
   }
 
   private getDetailPaneBottomBarHeight(): number {
@@ -1092,7 +1129,7 @@ export struct ProviderDetailPanel {
         { statusBarContentColor: getHdsStatusBarContentColor() },
         { statusBarContentColor: getHdsStatusBarContentColor() }
       )
-      .hideBackButton(true)
+      .hideBackButton(false)
       .hideToolBar(true)
       .mode(NavigationMode.Stack)
       .ignoreLayoutSafeArea([LayoutSafeAreaType.SYSTEM], [LayoutSafeAreaEdge.TOP])
@@ -1376,23 +1413,7 @@ export struct ProviderDetailPanel {
 
   @Builder
   StandaloneTitleStackBuilder() {
-    Row({ space: 8 }) {
-      Button() {
-        SymbolGlyph(this.headerLeadingSymbol())
-          .fontSize(18)
-          .fontColor([$r('app.color.text_primary')])
-      }
-      .type(ButtonType.Normal)
-      .stateEffect(false)
-      .width(40)
-      .height(40)
-      .padding(0)
-      .borderRadius(20)
-      .backgroundColor(Color.Transparent)
-      .onClick(() => {
-        this.onClose()
-      })
-
+    Row() {
       Column({ space: 2 }) {
         Text($r('app.string.provider_detail_title'))
           .fontSize(18)
@@ -1406,38 +1427,10 @@ export struct ProviderDetailPanel {
       }
       .alignItems(HorizontalAlign.Start)
       .layoutWeight(1)
-
-      if (!this.isCreateMode && this.provider !== null && !this.provider.isPreset) {
-        Button() {
-          SymbolGlyph($r('sys.symbol.clean'))
-            .fontSize(18)
-            .fontColor([$r('app.color.status_error')])
-        }
-        .type(ButtonType.Circle)
-        .width(36)
-        .height(36)
-        .backgroundColor($r('app.color.divider'))
-        .onClick(() => {
-          this.showDeleteConfirmDialog()
-        })
-      }
-
-      Button() {
-        SymbolGlyph(this.headerSaveSymbol())
-          .fontSize(18)
-          .fontColor([Color.White])
-      }
-      .type(ButtonType.Circle)
-      .width(36)
-      .height(36)
-      .backgroundColor(this.themePrimary)
-      .onClick(() => {
-        this.saveConfigAndClose()
-      })
     }
     .width('100%')
     .height(56)
-    .padding({ left: 8, right: 12 })
+    .padding({ left: 64, right: 84 })
     .alignItems(VerticalAlign.Center)
   }
 

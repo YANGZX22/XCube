@@ -154,7 +154,7 @@ struct ModelManagePage {
 
   private getCompactTitleBarOptions(): HdsNavigationTitleBarOptions {
     return buildHdsTopNavigationTitleBarOptionsForPage(this.materialType, this.materialLevel, this.windowWidthVp,
-      this.windowHeightVp, (): void => this.CompactTitleStackBuilder())
+      this.windowHeightVp, (): void => this.CompactTitleStackBuilder(), this.getManageMenus())
   }
 
   private hasExpandedDetailSelection(): boolean {
@@ -445,7 +445,7 @@ struct ModelManagePage {
           { statusBarContentColor: getHdsStatusBarContentColor() },
           { statusBarContentColor: getHdsStatusBarContentColor() }
         )
-        .hideBackButton(true)
+        .hideBackButton(false)
         .hideToolBar(true)
         .mode(NavigationMode.Stack)
         .ignoreLayoutSafeArea([LayoutSafeAreaType.SYSTEM], [LayoutSafeAreaEdge.TOP])
@@ -504,57 +504,16 @@ struct ModelManagePage {
 
   @Builder
   private CompactTitleStackBuilder() {
-    Row({ space: 6 }) {
-      Button() {
-        SymbolGlyph($r('sys.symbol.chevron_left'))
-          .fontSize(20)
-          .fontColor([$r('app.color.text_primary')])
-      }
-      .type(ButtonType.Normal)
-      .stateEffect(false)
-      .width(40)
-      .height(40)
-      .borderRadius(20)
-      .backgroundColor(Color.Transparent)
-      .onClick(() => {
-        this.handleBack()
-      })
-
+    Row() {
       Text($r('app.string.model_manage_title'))
         .fontSize(18)
         .fontWeight(FontWeight.Bold)
         .fontColor($r('app.color.text_primary'))
         .layoutWeight(1)
-
-      Button() {
-        SymbolGlyph($r('sys.symbol.wand_and_stars'))
-          .fontSize(18)
-          .fontColor([$r('app.color.text_primary')])
-      }
-      .type(ButtonType.Circle)
-      .width(36)
-      .height(36)
-      .backgroundColor($r('app.color.divider'))
-      .onClick(() => {
-        this.matchAllIcons()
-      })
-
-      Button() {
-        SymbolGlyph($r('sys.symbol.plus_circle'))
-          .fontSize(18)
-          .fontColor([$r('app.color.text_primary')])
-      }
-      .type(ButtonType.Circle)
-      .width(36)
-      .height(36)
-      .backgroundColor($r('app.color.divider'))
-      .onClick(() => {
-        this.openCreateProvider()
-      })
     }
     .width('100%')
     .height(56)
-    .padding({ left: 8, right: 12 })
+    .padding({ left: 64, right: 84 })
     .alignItems(VerticalAlign.Center)
   }
 
