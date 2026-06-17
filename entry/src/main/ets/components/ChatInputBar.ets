@@ -13,7 +13,7 @@ import { hdsMaterial, HdsTabs } from '@kit.UIDesignKit'
 import { getAttachmentStorageService } from '../services/AttachmentStorageService'
 import { getAppUiState } from '../state/AppUiState'
 import { withColorAlpha } from '../utils/ColorAlphaUtils'
-import { HdsMiniBarButton } from 'hds_button'
+import { HdsMiniBarButton } from './HdsMiniBarButton'
 
 @ComponentV2
 export struct ChatInputBar {

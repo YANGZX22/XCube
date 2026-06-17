@@ -1,7 +1,7 @@
 import { Want, common } from '@kit.AbilityKit'
 import { hilog } from '@kit.PerformanceAnalysisKit'
 import { HdsNavigation, HdsNavigationTitleBarOptions, HdsNavigationTitleMode, hdsMaterial } from '@kit.UIDesignKit'
-import { HdsMiniBarButton } from 'hds_button'
+import { HdsMiniBarButton } from '../components/HdsMiniBarButton'
 import { SettingsCompactTitleBarContent } from '../components/settings/SettingsCompactPageHeader'
 import { showToast } from '../utils/ToastUtil'
 import { SettingsPagePresentationMode } from '../config/SettingsDetailPresentation'

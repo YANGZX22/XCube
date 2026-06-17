@@ -1,5 +1,5 @@
 import { hdsMaterial } from '@kit.UIDesignKit'
-import { HdsMiniBarButton } from 'hds_button'
+import { HdsMiniBarButton } from './HdsMiniBarButton'
 import {
   createButtonTouchHandler,
   getButtonAnimation,

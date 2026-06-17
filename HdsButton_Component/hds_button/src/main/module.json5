@@ -1,9 +1,0 @@
-{
-  "module": {
-    "name": "hds_button",
-    "type": "har",
-    "deviceTypes": [
-      "default"
-    ]
-  }
-}

@@ -7,7 +7,6 @@
   "license": "",
   "dependencies": {
     "@cangjie-tpc/markdown_hybrid": "^1.3.6",
-    "hds_button": "file:../HdsButton_Component/hds_button",
     "sherpa_onnx": "1.12.20",
     "@visactor/harmony-vchart": "^1.13.5"
   },

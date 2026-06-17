@@ -5,7 +5,7 @@ import { common } from '@kit.AbilityKit'
 import { showToast } from '../utils/ToastUtil'
 import { hilog } from '@kit.PerformanceAnalysisKit'
 import { hdsMaterial } from '@kit.UIDesignKit'
-import { HdsMiniBarButton } from 'hds_button'
+import { HdsMiniBarButton } from './HdsMiniBarButton'
 import { getAppUiState } from '../state/AppUiState'
 
 /**
