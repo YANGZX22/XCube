@@ -1706,7 +1706,7 @@ function createPdfToTextToolConfig(): ToolConfig {
   return new ToolConfig(
     PDF_TO_TEXT_TOOL_ID,
     'PDF 转文本',
-    '模型可读取用户上传 PDF 的文本内容',
+    '当模型不可直接读取 PDF 时，可使用此工具读取将用户上传的 PDF 转换为文本内容',
     null,
     true,
     false,
