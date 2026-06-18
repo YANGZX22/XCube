@@ -2345,7 +2345,7 @@ struct Index {
   }
 
   private getFloatingSearchPanelTop(): number {
-    return this.getCompactChatHeaderDefaultHeight() + 10
+    return this.getCompactChatHeaderDefaultHeight() + 16
   }
 
   private getFloatingSearchPanelHeight(): number {
