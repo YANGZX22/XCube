@@ -58,6 +58,8 @@ export class PreferenceKeys {
   static readonly MCP_SERVER_CONFIGS_JSON: string = 'mcp_server_configs_json'
   static readonly CHAT_SELECTED_TOOL_IDS_JSON: string = 'chat_selected_tool_ids_json'
   static readonly CHAT_REASONING_LEVEL: string = 'chat_reasoning_level'
+  static readonly SKILL_TOOL_ENABLED: string = 'skill_tool_enabled'
+  static readonly SKILL_CONFIGS_JSON: string = 'skill_configs_json'
 
   // 主题配色
   static readonly COLOR_THEME: string = 'color_theme'

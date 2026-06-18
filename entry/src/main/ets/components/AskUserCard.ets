@@ -44,6 +44,10 @@ export struct AskUserCard {
     return getAppUiState().themePrimary
   }
 
+  private get themePrimaryLight(): string {
+    return getAppUiState().themePrimaryLight
+  }
+
   private get themeAiBubble(): string {
     return getAppUiState().themeAiBubble
   }
@@ -334,7 +338,7 @@ export struct AskUserCard {
     .padding(12)
     .backgroundColor(this.themeAiBubble)
     .borderRadius(12)
-    .border({ width: 1, color: $r('app.color.divider') })
+    .border({ width: 1, color: this.themePrimaryLight })
   }
 
   @Builder

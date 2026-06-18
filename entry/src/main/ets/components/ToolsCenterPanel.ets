@@ -2,8 +2,9 @@ import { ToolConfig, SearchEngine, ToolSourceType } from '../models/ChatModels'
 import { McpAuthType, McpServerConfig } from '../models/McpModels'
 import { ToolRegistry } from '../services/ToolRegistry'
 import { McpService } from '../services/McpService'
+import { SkillConfig, SkillService } from '../services/SkillService'
 import { ServiceRegistry } from '../services/ServiceRegistry'
-import { registerBuiltinTools } from '../config/BuiltinTools'
+import { registerBuiltinTools, USE_SKILL_TOOL_ID } from '../config/BuiltinTools'
 import { getPreferencesService, PreferencesService, PreferenceKeys } from '../services/PreferencesService'
 import { showSnackBar, SnackBarDisplayOptions, SnackBarTone } from '../utils/ToastUtil'
 import { getAppUiState } from '../state/AppUiState'
@@ -53,6 +54,16 @@ export struct ToolsCenterPanel {
   @Local isLoading: boolean = false
   @Local isRefreshingMcpServers: boolean = false
   @Local showSearchConfigSheet: boolean = false
+  @Local skillToolEnabled: boolean = false
+  @Local skills: SkillConfig[] = []
+  @Local showSkillConfigSheet: boolean = false
+  @Local skillFormId: string = ''
+  @Local skillFormName: string = ''
+  @Local skillFormDescription: string = ''
+  @Local skillFormContent: string = ''
+  @Local skillFormEnabled: boolean = true
+  @Local skillFormCreatedAt: number = 0
+  @Local isSavingSkill: boolean = false
   @Local mcpServers: McpServerConfig[] = []
   @Local showMcpServerSheet: boolean = false
   @Local editingMcpServerId: string = ''
@@ -85,6 +96,7 @@ export struct ToolsCenterPanel {
 
   private toolRegistry: ToolRegistry = ServiceRegistry.toolRegistry()
   private mcpService: McpService = ServiceRegistry.mcp()
+  private skillService: SkillService = ServiceRegistry.skill()
   private preferencesService: PreferencesService = getPreferencesService()
   private readonly searchToolId: string = 'web_search'
   private readonly searchEngineOptions: Array<SelectOption> = [
@@ -132,7 +144,8 @@ export struct ToolsCenterPanel {
     const allTools = this.toolRegistry.getAllToolConfigs()
     const builtin: ToolConfig[] = []
     for (let i = 0; i < allTools.length; i++) {
-      if (allTools[i].sourceType === ToolSourceType.BUILTIN && allTools[i].id !== this.searchToolId) {
+      if (allTools[i].sourceType === ToolSourceType.BUILTIN && allTools[i].id !== this.searchToolId &&
+        allTools[i].id !== USE_SKILL_TOOL_ID) {
         builtin.push(allTools[i])
       }
     }
@@ -147,6 +160,7 @@ export struct ToolsCenterPanel {
     try {
       await this.loadToolEnabledStates()
       await this.loadSearchSettings()
+      await this.loadSkills()
       await this.loadMcpServers()
       this.syncBuiltinToolsFromRegistry()
     } finally {
@@ -341,6 +355,8 @@ export struct ToolsCenterPanel {
   private async loadToolEnabledStates(): Promise<void> {
     const webSearchEnabled = await this.preferencesService.getBoolean(PreferenceKeys.SEARCH_SERVICE_ENABLED, false)
     this.applySearchServiceEnabledState(webSearchEnabled)
+    const skillEnabled = await this.skillService.isToolEnabled()
+    this.applySkillToolEnabledState(skillEnabled)
   }
 
   private handleSearchServiceEnabledChanged(enabled: boolean): void {
@@ -356,6 +372,227 @@ export struct ToolsCenterPanel {
           console.warn('ToolsCenterPanel', `Failed to remove web_search from selected tools: ${JSON.stringify(error)}`)
         })
     }
+  }
+
+  private applySkillToolEnabledState(enabled: boolean): void {
+    this.skillToolEnabled = enabled
+    const registeredTool = this.toolRegistry.getTool(USE_SKILL_TOOL_ID)
+    if (registeredTool !== undefined) {
+      registeredTool.config.enabled = enabled
+    }
+  }
+
+  private async loadSkills(): Promise<void> {
+    this.skills = [...await this.skillService.loadSkills()]
+  }
+
+  private getEnabledSkillCount(): number {
+    let count = 0
+    for (let i = 0; i < this.skills.length; i++) {
+      if (this.skills[i].enabled) {
+        count += 1
+      }
+    }
+    return count
+  }
+
+  private handleSkillToolEnabledChanged(enabled: boolean): void {
+    this.applySkillToolEnabledState(enabled)
+    this.skillService.setToolEnabled(enabled).catch((error: Object): void => {
+      console.error('ToolsCenterPanel', `Failed to save skill tool state: ${JSON.stringify(error)}`)
+      this.applySkillToolEnabledState(!enabled)
+      this.showToolsSnack(pickLocalizedText('保存 Skill 工具状态失败', 'Failed to save Skill tool state'),
+        2000, SnackBarTone.ERROR)
+    })
+    if (enabled) {
+      this.mcpService.loadSelectedToolIds()
+        .then((toolIds: string[]): Promise<string[]> => {
+          const nextToolIds = [...toolIds]
+          if (!nextToolIds.includes(USE_SKILL_TOOL_ID)) {
+            nextToolIds.push(USE_SKILL_TOOL_ID)
+          }
+          return this.mcpService.saveSelectedToolIds(nextToolIds)
+        })
+        .catch((error: Object): void => {
+          console.warn('ToolsCenterPanel', `Failed to add use_skill to selected tools: ${JSON.stringify(error)}`)
+        })
+    }
+    if (!enabled) {
+      this.mcpService.loadSelectedToolIds()
+        .then((toolIds: string[]): Promise<string[]> => {
+          return this.mcpService.saveSelectedToolIds(toolIds.filter((toolId: string) => toolId !== USE_SKILL_TOOL_ID))
+        })
+        .catch((error: Object): void => {
+          console.warn('ToolsCenterPanel', `Failed to remove use_skill from selected tools: ${JSON.stringify(error)}`)
+        })
+    }
+  }
+
+  private resetSkillForm(): void {
+    this.skillFormId = ''
+    this.skillFormName = ''
+    this.skillFormDescription = ''
+    this.skillFormContent = ''
+    this.skillFormEnabled = true
+    this.skillFormCreatedAt = 0
+    this.isSavingSkill = false
+  }
+
+  private openCreateSkill(): void {
+    this.resetSkillForm()
+    this.showSkillConfigSheet = true
+  }
+
+  private openEditSkill(skill: SkillConfig): void {
+    this.skillFormId = skill.id
+    this.skillFormName = skill.name
+    this.skillFormDescription = skill.description
+    this.skillFormContent = skill.content
+    this.skillFormEnabled = skill.enabled
+    this.skillFormCreatedAt = skill.createdAt
+    this.showSkillConfigSheet = true
+  }
+
+  private isEditingSkill(): boolean {
+    return this.skillFormId.trim() !== ''
+  }
+
+  private getSkillFormTitle(): string {
+    return this.isEditingSkill()
+      ? pickLocalizedText('编辑 Skill', 'Edit Skill')
+      : pickLocalizedText('新增 Skill', 'Add Skill')
+  }
+
+  private getSkillFormHeroTitle(): string {
+    const name = this.skillFormName.trim()
+    return name !== '' ? name : pickLocalizedText('未命名 Skill', 'Untitled Skill')
+  }
+
+  private getSkillFormStatusText(): string {
+    return this.skillFormEnabled ? pickLocalizedText('已启用', 'Enabled') : pickLocalizedText('已停用', 'Disabled')
+  }
+
+  private buildSkillIdFromName(name: string): string {
+    return this.skillService.buildNewSkillId(name)
+  }
+
+  private findSkillIndex(skills: SkillConfig[], skillId: string): number {
+    for (let i = 0; i < skills.length; i++) {
+      if (skills[i].id === skillId) {
+        return i
+      }
+    }
+    return -1
+  }
+
+  private async handleSaveSkill(): Promise<void> {
+    if (this.isSavingSkill) {
+      return
+    }
+    const name = this.skillFormName.trim()
+    const content = this.skillFormContent
+    if (name === '') {
+      this.showToolsSnack(pickLocalizedText('Skill 名称不能为空', 'Skill name is required'),
+        2000, SnackBarTone.ERROR)
+      return
+    }
+    if (content.trim() === '') {
+      this.showToolsSnack(pickLocalizedText('SKILL.md 正文不能为空', 'SKILL.md content is required'),
+        2000, SnackBarTone.ERROR)
+      return
+    }
+    this.isSavingSkill = true
+    try {
+      const now = Date.now()
+      const skills = await this.skillService.loadSkills()
+      const targetId = this.isEditingSkill() ? this.skillFormId : this.buildSkillIdFromName(name)
+      const index = this.findSkillIndex(skills, targetId)
+      const createdAt = this.skillFormCreatedAt > 0 ? this.skillFormCreatedAt : now
+      const nextSkill = new SkillConfig(
+        targetId,
+        name,
+        this.skillFormDescription.trim(),
+        content,
+        this.skillFormEnabled,
+        createdAt,
+        now
+      )
+      if (index >= 0) {
+        skills[index] = nextSkill
+      } else {
+        skills.push(nextSkill)
+      }
+      await this.skillService.saveSkills(skills)
+      this.skills = [...skills]
+      this.showSkillConfigSheet = false
+      this.showToolsSnack(pickLocalizedText('Skill 已保存', 'Skill saved'), 2000, SnackBarTone.SUCCESS)
+    } catch (error) {
+      console.error('ToolsCenterPanel', `Failed to save skill: ${JSON.stringify(error)}`)
+      this.showToolsSnack(pickLocalizedText('保存 Skill 失败', 'Failed to save Skill'),
+        2000, SnackBarTone.ERROR)
+    } finally {
+      this.isSavingSkill = false
+    }
+  }
+
+  private updateSkillEnabled(skillId: string, enabled: boolean): void {
+    this.performUpdateSkillEnabled(skillId, enabled).catch((error: Object): void => {
+      console.error('ToolsCenterPanel', `Failed to update skill state: ${JSON.stringify(error)}`)
+      this.showToolsSnack(pickLocalizedText('更新 Skill 状态失败', 'Failed to update Skill state'),
+        2000, SnackBarTone.ERROR)
+    })
+  }
+
+  private async performUpdateSkillEnabled(skillId: string, enabled: boolean): Promise<void> {
+    const skills = await this.skillService.loadSkills()
+    const index = this.findSkillIndex(skills, skillId)
+    if (index < 0) {
+      return
+    }
+    skills[index].enabled = enabled
+    skills[index].updatedAt = Date.now()
+    await this.skillService.saveSkills(skills)
+    this.skills = [...skills]
+  }
+
+  private handleDeleteSkill(skillId: string): void {
+    this.getUIContext().showAlertDialog({
+      title: pickLocalizedText('删除 Skill', 'Delete Skill'),
+      message: pickLocalizedText('删除后模型将无法再读取该 Skill。', 'The model will no longer be able to read it.'),
+      primaryButton: {
+        value: $r('app.string.cancel'),
+        action: () => {
+        }
+      },
+      secondaryButton: {
+        value: $r('app.string.delete'),
+        fontColor: Color.Red,
+        action: () => {
+          this.deleteSkill(skillId)
+        }
+      }
+    })
+  }
+
+  private deleteSkill(skillId: string): void {
+    this.performDeleteSkill(skillId).catch((error: Object): void => {
+      console.error('ToolsCenterPanel', `Failed to delete skill: ${JSON.stringify(error)}`)
+      this.showToolsSnack(pickLocalizedText('删除 Skill 失败', 'Failed to delete Skill'),
+        2000, SnackBarTone.ERROR)
+    })
+  }
+
+  private async performDeleteSkill(skillId: string): Promise<void> {
+    const skills = await this.skillService.loadSkills()
+    const nextSkills: SkillConfig[] = []
+    for (let i = 0; i < skills.length; i++) {
+      if (skills[i].id !== skillId) {
+        nextSkills.push(skills[i])
+      }
+    }
+    await this.skillService.saveSkills(nextSkills)
+    this.skills = [...nextSkills]
+    this.showToolsSnack(pickLocalizedText('Skill 已删除', 'Skill deleted'), 2000, SnackBarTone.SUCCESS)
   }
 
   private async loadSearchSettings(): Promise<void> {
@@ -1803,6 +2040,207 @@ export struct ToolsCenterPanel {
     .backgroundColor(getAppUiState().themeBackground)
   }
 
+  @Builder
+  SkillConfigSheetBuilder() {
+    Column() {
+      Row() {
+        Button() {
+          SymbolGlyph($r('sys.symbol.xmark'))
+            .renderingStrategy(SymbolRenderingStrategy.SINGLE)
+            .fontSize(18)
+            .fontColor([$r('app.color.text_secondary')])
+        }
+        .type(ButtonType.Circle)
+        .stateEffect(false)
+        .width(36)
+        .height(36)
+        .backgroundColor($r('app.color.divider'))
+        .onClick(() => {
+          this.showSkillConfigSheet = false
+        })
+
+        Text(this.getSkillFormTitle())
+          .fontSize(17)
+          .fontWeight(FontWeight.Bold)
+          .fontColor($r('app.color.text_primary'))
+          .layoutWeight(1)
+          .textAlign(TextAlign.Center)
+
+        Button() {
+          SymbolGlyph($r('sys.symbol.checkmark'))
+            .renderingStrategy(SymbolRenderingStrategy.SINGLE)
+            .fontSize(18)
+            .fontColor([Color.White])
+        }
+        .type(ButtonType.Circle)
+        .stateEffect(false)
+        .width(36)
+        .height(36)
+        .backgroundColor(this.isSavingSkill ? withColorAlpha(this.themePrimary, '99') : this.themePrimary)
+        .onClick(() => {
+          this.handleSaveSkill()
+        })
+      }
+      .width('100%')
+      .height(56)
+      .padding({ left: 16, right: 16 })
+
+      Scroll() {
+        Column({ space: 14 }) {
+          Column({ space: 12 }) {
+            Row({ space: 12 }) {
+              Column() {
+                SymbolGlyph($r('sys.symbol.doc_text_badge_magnifyingglass'))
+                  .renderingStrategy(SymbolRenderingStrategy.SINGLE)
+                  .fontSize(22)
+                  .fontColor([this.themePrimary])
+              }
+              .width(46)
+              .height(46)
+              .borderRadius(16)
+              .backgroundColor(withColorAlpha(this.themePrimary, this.isDarkMode ? '26' : '12'))
+              .justifyContent(FlexAlign.Center)
+
+              Column({ space: 4 }) {
+                Text(this.getSkillFormHeroTitle())
+                  .fontSize(18)
+                  .fontWeight(FontWeight.Bold)
+                  .fontColor($r('app.color.text_primary'))
+                  .maxLines(1)
+                  .textOverflow({ overflow: TextOverflow.Ellipsis })
+
+                Text(pickLocalizedText(
+                  '模型只会读取已启用 Skill 的 SKILL.md 正文。',
+                  'The model can only read enabled Skill content.'
+                ))
+                  .fontSize(12)
+                  .lineHeight(18)
+                  .fontColor($r('app.color.text_secondary'))
+                  .width('100%')
+              }
+              .layoutWeight(1)
+              .alignItems(HorizontalAlign.Start)
+            }
+            .width('100%')
+
+            Row({ space: 12 }) {
+              Text(this.getSkillFormStatusText())
+                .fontSize(11)
+                .fontWeight(FontWeight.Medium)
+                .fontColor(this.skillFormEnabled ? this.themePrimary : $r('app.color.text_secondary'))
+                .padding({ left: 10, right: 10, top: 6, bottom: 6 })
+                .borderRadius(999)
+                .backgroundColor(getAppUiState().themeBackground)
+
+              Blank()
+
+              Toggle({ type: ToggleType.Switch, isOn: this.skillFormEnabled })
+                .selectedColor(this.themePrimary)
+                .onChange((value: boolean) => {
+                  this.skillFormEnabled = value
+                })
+            }
+            .width('100%')
+          }
+          .width('100%')
+          .padding(16)
+          .borderRadius(20)
+          .backgroundColor(getAppUiState().themeSurface)
+          .border({ width: 1, color: withColorAlpha(this.themePrimary, this.isDarkMode ? '20' : '10') })
+
+          Column({ space: 12 }) {
+            Column({ space: 6 }) {
+              Text(pickLocalizedText('名称', 'Name'))
+                .fontSize(12)
+                .fontWeight(FontWeight.Medium)
+                .fontColor($r('app.color.text_secondary'))
+                .width('100%')
+
+              TextInput({ text: this.skillFormName, placeholder: 'app-help' })
+                .onChange((value: string) => {
+                  this.skillFormName = value
+                })
+                .fontSize(14)
+                .width('100%')
+                .height(46)
+                .borderRadius(14)
+                .backgroundColor(getAppUiState().themeBackground)
+                .border({ width: 1, color: $r('app.color.divider') })
+                .padding({ left: 14, right: 14 })
+            }
+            .width('100%')
+
+            Column({ space: 6 }) {
+              Text(pickLocalizedText('描述', 'Description'))
+                .fontSize(12)
+                .fontWeight(FontWeight.Medium)
+                .fontColor($r('app.color.text_secondary'))
+                .width('100%')
+
+              TextInput({ text: this.skillFormDescription, placeholder: pickLocalizedText(
+                '一句话说明这个 Skill 适合回答什么问题',
+                'Describe when this Skill should be used'
+              ) })
+                .onChange((value: string) => {
+                  this.skillFormDescription = value
+                })
+                .fontSize(14)
+                .width('100%')
+                .height(46)
+                .borderRadius(14)
+                .backgroundColor(getAppUiState().themeBackground)
+                .border({ width: 1, color: $r('app.color.divider') })
+                .padding({ left: 14, right: 14 })
+            }
+            .width('100%')
+          }
+          .width('100%')
+          .padding(16)
+          .borderRadius(20)
+          .backgroundColor(getAppUiState().themeSurface)
+
+          Column({ space: 8 }) {
+            Text('SKILL.md')
+              .fontSize(15)
+              .fontWeight(FontWeight.Bold)
+              .fontColor($r('app.color.text_primary'))
+              .width('100%')
+
+            TextArea({ text: this.skillFormContent, placeholder: pickLocalizedText(
+              '# 使用说明\\n\\n写下模型需要遵守的能力说明、入口和限制。',
+              '# Instructions\\n\\nWrite the capability guidance, entry points, and limits.'
+            ) })
+              .fontSize(14)
+              .lineHeight(20)
+              .fontColor($r('app.color.text_primary'))
+              .placeholderColor($r('app.color.text_tertiary'))
+              .backgroundColor(getAppUiState().themeBackground)
+              .borderRadius(14)
+              .border({ width: 1, color: $r('app.color.divider') })
+              .padding({ left: 14, right: 14, top: 12, bottom: 12 })
+              .width('100%')
+              .height(260)
+              .onChange((value: string) => {
+                this.skillFormContent = value
+              })
+          }
+          .width('100%')
+          .padding(16)
+          .borderRadius(20)
+          .backgroundColor(getAppUiState().themeSurface)
+        }
+        .width('100%')
+        .padding({ left: 16, right: 16, bottom: 24 })
+      }
+      .width('100%')
+      .layoutWeight(1)
+      .scrollBar(BarState.Off)
+    }
+    .width('100%')
+    .height('100%')
+    .backgroundColor(getAppUiState().themeBackground)
+  }
+
   build() {
     Column() {
       Column() {
@@ -1860,6 +2298,28 @@ export struct ToolsCenterPanel {
                 },
                 onOpenConfig: () => {
                   this.showSearchConfigSheet = true
+                }
+              })
+
+              SkillServiceCardItem({
+                skillEnabled: this.skillToolEnabled,
+                totalSkillCount: this.skills.length,
+                enabledSkillCount: this.getEnabledSkillCount(),
+                skills: this.skills,
+                onToggle: (enabled: boolean) => {
+                  this.handleSkillToolEnabledChanged(enabled)
+                },
+                onCreateSkill: () => {
+                  this.openCreateSkill()
+                },
+                onToggleSkillEnabled: (skillId: string, enabled: boolean) => {
+                  this.updateSkillEnabled(skillId, enabled)
+                },
+                onEditSkill: (skill: SkillConfig) => {
+                  this.openEditSkill(skill)
+                },
+                onDeleteSkill: (skillId: string) => {
+                  this.handleDeleteSkill(skillId)
                 }
               })
 
@@ -2038,6 +2498,21 @@ export struct ToolsCenterPanel {
       Column()
         .width(0)
         .height(0)
+        .bindSheet($$this.showSkillConfigSheet, this.SkillConfigSheetBuilder(), {
+          height: SheetSize.LARGE,
+          detents: [SheetSize.LARGE],
+          showClose: false,
+          dragBar: true,
+          blurStyle: BlurStyle.Regular,
+          onDisappear: () => {
+            this.showSkillConfigSheet = false
+            this.loadSkills()
+          }
+        })
+
+      Column()
+        .width(0)
+        .height(0)
         .bindSheet($$this.showMcpServerSheet, this.McpServerSheetBuilder(), {
           height: SheetSize.LARGE,
           detents: [SheetSize.LARGE],
@@ -2168,6 +2643,331 @@ struct SearchServiceCardItem {
 }
 
 @ComponentV2
+struct SkillServiceCardItem {
+  @Param skillEnabled: boolean = false
+  @Param totalSkillCount: number = 0
+  @Param enabledSkillCount: number = 0
+  @Param skills: SkillConfig[] = []
+  @Event onToggle: (enabled: boolean) => void = (_enabled: boolean) => {}
+  @Event onCreateSkill: () => void = () => {}
+  @Event onToggleSkillEnabled: (skillId: string, enabled: boolean) => void =
+    (_skillId: string, _enabled: boolean) => {}
+  @Event onEditSkill: (skill: SkillConfig) => void = (_skill: SkillConfig) => {}
+  @Event onDeleteSkill: (skillId: string) => void = (_skillId: string) => {}
+  @Local isSkillsExpanded: boolean = false
+
+  private get themePrimary(): string {
+    return getAppUiState().themePrimary
+  }
+
+  private get isDarkMode(): boolean {
+    return getAppUiState().isDarkMode
+  }
+
+  private get dividerHex(): string {
+    return getAppUiState().themeDivider
+  }
+
+  private getStatusText(): string {
+    if (!this.skillEnabled) {
+      return pickLocalizedText('未启用', 'Disabled')
+    }
+    return formatLocalizedCount(this.enabledSkillCount, '个启用 Skill', 'enabled Skill', 'enabled Skills')
+  }
+
+  private getManageText(): string {
+    return this.isSkillsExpanded ? pickLocalizedText('收起', 'Collapse') : pickLocalizedText('展开', 'Expand')
+  }
+
+  build() {
+    Column({ space: 12 }) {
+      Row({ space: 12 }) {
+        ChatFloatingImmersiveButton({
+          barWidth: 44,
+          barHeight: 44,
+          iconResource: $r('sys.symbol.more'),
+          iconSize: 20,
+          iconColor: [this.themePrimary],
+          iconOffsetY: -4,
+          responsePadding: 0,
+          onButtonClick: (): void => {
+            this.isSkillsExpanded = !this.isSkillsExpanded
+          }
+        }) {
+          Stack({ alignContent: Alignment.Center }) {
+            SymbolGlyph($r('sys.symbol.more'))
+              .renderingStrategy(SymbolRenderingStrategy.SINGLE)
+              .fontSize(20)
+              .fontColor([this.themePrimary])
+          }
+          .width(44)
+          .height(44)
+          .translate({ y: -4 })
+        }
+
+        Column({ space: 6 }) {
+          Text('Skill')
+            .fontSize(17)
+            .fontWeight(FontWeight.Bold)
+            .fontColor($r('app.color.text_primary'))
+            .width('100%')
+
+          Text(this.totalSkillCount > 0
+            ? this.getStatusText()
+            : pickLocalizedText('添加可被模型读取的技能说明', 'Add instructions the model can read'))
+            .fontSize(12)
+            .fontColor($r('app.color.text_secondary'))
+            .width('100%')
+        }
+        .layoutWeight(1)
+        .alignItems(HorizontalAlign.Start)
+
+        Toggle({ type: ToggleType.Switch, isOn: this.skillEnabled })
+          .selectedColor(this.themePrimary)
+          .onChange((value: boolean) => {
+            this.onToggle(value)
+          })
+      }
+      .width('100%')
+
+      Row({ space: 10 }) {
+        Button() {
+          Row({ space: 4 }) {
+            SymbolGlyph($r('sys.symbol.plus'))
+              .renderingStrategy(SymbolRenderingStrategy.SINGLE)
+              .fontSize(13)
+              .fontColor([Color.White])
+            Text(pickLocalizedText('新增 Skill', 'Add Skill'))
+              .fontSize(12)
+              .fontWeight(FontWeight.Medium)
+              .fontColor(Color.White)
+          }
+        }
+        .height(32)
+        .padding({ left: 14, right: 14 })
+        .type(ButtonType.Capsule)
+        .stateEffect(false)
+        .backgroundColor(this.themePrimary)
+        .onClick(() => {
+          this.onCreateSkill()
+        })
+
+        Blank()
+
+        Row({ space: 4 }) {
+          Text(this.getManageText())
+            .fontSize(11)
+            .fontWeight(FontWeight.Medium)
+            .fontColor(this.themePrimary)
+
+          SymbolGlyph($r('sys.symbol.chevron_down'))
+            .renderingStrategy(SymbolRenderingStrategy.SINGLE)
+            .fontSize(12)
+            .fontColor([this.themePrimary])
+            .rotate({ angle: this.isSkillsExpanded ? 180 : 0 })
+            .animation({ duration: 180, curve: Curve.EaseOut })
+        }
+        .padding({ left: 10, right: 10, top: 6, bottom: 6 })
+        .borderRadius(999)
+        .backgroundColor(getAppUiState().themeBackground)
+        .onClick(() => {
+          this.isSkillsExpanded = !this.isSkillsExpanded
+        })
+      }
+      .width('100%')
+
+      if (this.isSkillsExpanded) {
+        if (this.skills.length === 0) {
+          Row({ space: 10 }) {
+            Column() {
+              SymbolGlyph($r('sys.symbol.doc_text_badge_magnifyingglass'))
+                .renderingStrategy(SymbolRenderingStrategy.SINGLE)
+                .fontSize(16)
+                .fontColor([this.themePrimary])
+            }
+            .width(32)
+            .height(32)
+            .borderRadius(12)
+            .backgroundColor(withColorAlpha(this.themePrimary, this.isDarkMode ? '24' : '12'))
+            .justifyContent(FlexAlign.Center)
+
+            Text(pickLocalizedText('还没有 Skill，点击新增创建。', 'No Skill yet. Tap Add to create one.'))
+              .fontSize(12)
+              .lineHeight(18)
+              .fontColor($r('app.color.text_secondary'))
+              .layoutWeight(1)
+          }
+          .width('100%')
+          .padding(12)
+          .borderRadius(16)
+          .backgroundColor(getAppUiState().themeBackground)
+          .transition(TransitionEffect.asymmetric(
+            TransitionEffect.OPACITY.combine(TransitionEffect.translate({ y: -8 }))
+              .animation({ duration: 180, curve: Curve.EaseOut }),
+            TransitionEffect.OPACITY.combine(TransitionEffect.translate({ y: -6 }))
+              .animation({ duration: 120, curve: Curve.EaseIn })
+          ))
+        } else {
+          Column({ space: 10 }) {
+            ForEach(this.skills, (skill: SkillConfig) => {
+              SkillListCardItem({
+                skill: skill,
+                onToggleEnabled: (enabled: boolean) => {
+                  this.onToggleSkillEnabled(skill.id, enabled)
+                },
+                onEdit: () => {
+                  this.onEditSkill(skill)
+                },
+                onDelete: () => {
+                  this.onDeleteSkill(skill.id)
+                }
+              })
+            }, (skill: SkillConfig) => `${skill.id}_${skill.name}_${skill.description}_${skill.enabled ? '1' : '0'}_${skill.updatedAt}`)
+          }
+          .width('100%')
+          .transition(TransitionEffect.asymmetric(
+            TransitionEffect.OPACITY.combine(TransitionEffect.translate({ y: -8 }))
+              .animation({ duration: 180, curve: Curve.EaseOut }),
+            TransitionEffect.OPACITY.combine(TransitionEffect.translate({ y: -6 }))
+              .animation({ duration: 120, curve: Curve.EaseIn })
+          ))
+        }
+      }
+    }
+    .width('100%')
+    .padding(16)
+    .margin({ bottom: 8 })
+    .borderRadius(20)
+    .backgroundColor(getAppUiState().themeSurface)
+    .border({ width: 1, color: this.dividerHex })
+    .shadow({
+      radius: 16,
+      color: this.isDarkMode ? 'rgba(0, 0, 0, 0.20)' : 'rgba(15, 23, 42, 0.05)',
+      offsetX: 0,
+      offsetY: 6
+    })
+    .animation({ duration: 220, curve: Curve.EaseInOut })
+  }
+}
+
+@ComponentV2
+struct SkillListCardItem {
+  @Param skill: SkillConfig = new SkillConfig()
+  @Event onToggleEnabled: (enabled: boolean) => void = (_enabled: boolean) => {}
+  @Event onEdit: () => void = () => {}
+  @Event onDelete: () => void = () => {}
+
+  private get themePrimary(): string {
+    return getAppUiState().themePrimary
+  }
+
+  private get isDarkMode(): boolean {
+    return getAppUiState().isDarkMode
+  }
+
+  private get dividerHex(): string {
+    return getAppUiState().themeDivider
+  }
+
+  private getDescription(): string {
+    const description = this.skill.description.trim()
+    if (description !== '') {
+      return description
+    }
+    return pickLocalizedText('无描述', 'No description')
+  }
+
+  private getStatusText(): string {
+    return this.skill.enabled ? pickLocalizedText('已启用', 'Enabled') : pickLocalizedText('已停用', 'Disabled')
+  }
+
+  build() {
+    Column({ space: 12 }) {
+      Row({ space: 12 }) {
+        Column() {
+          SymbolGlyph($r('sys.symbol.doc_text_badge_magnifyingglass'))
+            .renderingStrategy(SymbolRenderingStrategy.SINGLE)
+            .fontSize(18)
+            .fontColor([this.themePrimary])
+        }
+        .width(38)
+        .height(38)
+        .borderRadius(14)
+        .backgroundColor(withColorAlpha(this.themePrimary, this.isDarkMode ? '24' : '12'))
+        .justifyContent(FlexAlign.Center)
+
+        Column({ space: 5 }) {
+          Text(this.skill.name)
+            .fontSize(15)
+            .fontWeight(FontWeight.Bold)
+            .fontColor($r('app.color.text_primary'))
+            .width('100%')
+            .maxLines(1)
+            .textOverflow({ overflow: TextOverflow.Ellipsis })
+
+          Text(this.getDescription())
+            .fontSize(12)
+            .lineHeight(18)
+            .fontColor($r('app.color.text_secondary'))
+            .width('100%')
+            .maxLines(2)
+            .textOverflow({ overflow: TextOverflow.Ellipsis })
+        }
+        .layoutWeight(1)
+        .alignItems(HorizontalAlign.Start)
+
+        Toggle({ type: ToggleType.Switch, isOn: this.skill.enabled })
+          .selectedColor(this.themePrimary)
+          .onChange((value: boolean) => {
+            this.onToggleEnabled(value)
+          })
+      }
+      .width('100%')
+
+      Row({ space: 8 }) {
+        Text(this.getStatusText())
+          .fontSize(11)
+          .fontWeight(FontWeight.Medium)
+          .fontColor(this.skill.enabled ? this.themePrimary : $r('app.color.text_secondary'))
+          .padding({ left: 10, right: 10, top: 6, bottom: 6 })
+          .borderRadius(999)
+          .backgroundColor(getAppUiState().themeBackground)
+
+        Blank()
+
+        Button(pickLocalizedText('编辑', 'Edit'))
+          .height(30)
+          .fontSize(11)
+          .type(ButtonType.Capsule)
+          .stateEffect(false)
+          .fontColor(this.themePrimary)
+          .backgroundColor(getAppUiState().themeBackground)
+          .onClick(() => {
+            this.onEdit()
+          })
+
+        Button($r('app.string.delete'))
+          .height(30)
+          .fontSize(11)
+          .type(ButtonType.Capsule)
+          .stateEffect(false)
+          .fontColor('#D9485F')
+          .backgroundColor(getAppUiState().themeBackground)
+          .onClick(() => {
+            this.onDelete()
+          })
+      }
+      .width('100%')
+    }
+    .width('100%')
+    .padding(14)
+    .borderRadius(18)
+    .backgroundColor(getAppUiState().themeSurface)
+    .border({ width: 1, color: this.dividerHex })
+  }
+}
+
+@ComponentV2
 struct BuiltinToolCardItem {
   @Param tool: ToolConfig = new ToolConfig()
 
@@ -2240,6 +3040,9 @@ struct BuiltinToolCardItem {
     }
     if (toolId === 'image_to_text') {
       return $r('sys.symbol.picture')
+    }
+    if (toolId === 'use_skill') {
+      return $r('sys.symbol.more')
     }
     if (toolId === 'math_chart') {
       return $r('sys.symbol.histogram')

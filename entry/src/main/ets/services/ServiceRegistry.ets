@@ -10,6 +10,7 @@ import { getWebSearchService, WebSearchService } from './WebSearchService'
 import { getShareService, ShareService } from './ShareService'
 import { getToolRegistry, ToolRegistry } from './ToolRegistry'
 import { getMcpService, McpService } from './McpService'
+import { getSkillService, SkillService } from './SkillService'
 import { getLanguageService, LanguageService } from './LanguageService'
 import { getChatTaskOrchestratorService, ChatTaskOrchestratorService } from './ChatTaskOrchestratorService'
 import { getBackgroundRunGuardService, BackgroundRunGuardService } from './BackgroundRunGuardService'
@@ -77,6 +78,10 @@ export class ServiceRegistry {
 
   static mcp(): McpService {
     return getMcpService()
+  }
+
+  static skill(): SkillService {
+    return getSkillService()
   }
 
   static language(): LanguageService {

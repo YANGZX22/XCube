@@ -134,6 +134,9 @@ export struct ChatToolPickerSheetContent {
     if (toolId === 'image_to_text') {
       return $r('sys.symbol.picture')
     }
+    if (toolId === 'use_skill') {
+      return $r('sys.symbol.more')
+    }
     if (toolId === 'math_chart') {
       return $r('sys.symbol.histogram')
     }

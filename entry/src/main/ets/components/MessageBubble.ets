@@ -797,6 +797,15 @@ export struct MessageBubble {
     return shouldShowAssistantMessageToolbar(this.message, this.isMultiSelectMode)
   }
 
+  private hasAskUserToolCall(): boolean {
+    for (let i = 0; i < this.message.toolCalls.length; i++) {
+      if (this.isAskUserToolCall(this.message.toolCalls[i])) {
+        return true
+      }
+    }
+    return false
+  }
+
   private canCopyMessageContent(): boolean {
     return this.hasMessageTextContent()
   }
@@ -1642,8 +1651,9 @@ export struct MessageBubble {
             : this.themeAiBubble)
           .borderRadius(16)
           .border({
-            width: this.isMultiSelectMode && this.isSelected ? 1.2 : 0.5,
-            color: this.isMultiSelectMode && this.isSelected ? this.themePrimary : $r('app.color.bubble_border')
+            width: this.isMultiSelectMode && this.isSelected ? 1.2 : (this.hasAskUserToolCall() ? 1 : 0.5),
+            color: this.isMultiSelectMode && this.isSelected ? this.themePrimary :
+              (this.hasAskUserToolCall() ? this.themePrimaryLight : $r('app.color.bubble_border'))
           })
           .clip(true)
       }

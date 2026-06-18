@@ -17,6 +17,7 @@ import { getPyodideRuntimeService } from '../services/PyodideRuntimeService'
 import { CanvasDocumentMutationResult, CanvasDocumentState, getCanvasDocumentService } from '../services/CanvasDocumentService'
 import { getPdfTextExtractionService, PdfTextExtractionRequest } from '../services/PdfTextExtractionService'
 import { getImageTextRecognitionService, ImageTextRecognitionRequest } from '../services/ImageTextRecognitionService'
+import { getSkillService } from '../services/SkillService'
 
 export const ASK_USER_TOOL_ID: string = 'ask_user'
 export const READ_SCHEDULE_TOOL_ID: string = 'read_schedule'
@@ -26,6 +27,7 @@ export const PYTHON_SANDBOX_TOOL_ID: string = 'python_sandbox'
 export const CANVAS_DOCUMENT_TOOL_ID: string = 'canvas_document'
 export const PDF_TO_TEXT_TOOL_ID: string = 'pdf_to_text'
 export const IMAGE_TO_TEXT_TOOL_ID: string = 'image_to_text'
+export const USE_SKILL_TOOL_ID: string = 'use_skill'
 
 // web_search 工具参数接口
 interface WebSearchArgs {
@@ -121,6 +123,9 @@ interface PdfToTextArgs {
   id?: string
   maxChars?: number | string
   max_chars?: number | string
+  useOcr?: boolean | string
+  use_ocr?: boolean | string
+  ocr?: boolean | string
 }
 
 interface ImageToTextArgs {
@@ -229,6 +234,12 @@ class MathChartOutput {
 class AskUserExecutor implements ToolExecutor {
   async execute(_args: string): Promise<string> {
     return JSON.stringify(new ErrorOutput('ask_user should be resolved by the user, not executed directly'))
+  }
+}
+
+class SkillExecutor implements ToolExecutor {
+  async execute(args: string): Promise<string> {
+    return await getSkillService().readForTool(args)
   }
 }
 
@@ -387,6 +398,8 @@ class PdfToTextExecutor implements ToolExecutor {
       const request = new PdfTextExtractionRequest()
       request.attachmentId = this.resolveAttachmentId(params)
       request.maxChars = this.resolveNumber(params.maxChars, this.resolveNumber(params.max_chars, 12000))
+      request.useOcr = this.resolveBoolean(params.useOcr, this.resolveBoolean(params.use_ocr,
+        this.resolveBoolean(params.ocr, false)))
       if (request.attachmentId === '') {
         return JSON.stringify(new ErrorOutput('attachmentId 不能为空。请使用用户上传 PDF 附件的 id。'))
       }
@@ -419,6 +432,23 @@ class PdfToTextExecutor implements ToolExecutor {
     }
     const parsed = Number.parseInt(value, 10)
     return Number.isNaN(parsed) ? fallback : parsed
+  }
+
+  private resolveBoolean(value: boolean | string | undefined, fallback: boolean): boolean {
+    if (value === undefined || value === null) {
+      return fallback
+    }
+    if (typeof value === 'boolean') {
+      return value
+    }
+    const normalized = value.trim().toLowerCase()
+    if (normalized === 'true' || normalized === '1' || normalized === 'yes' || normalized === 'y') {
+      return true
+    }
+    if (normalized === 'false' || normalized === '0' || normalized === 'no' || normalized === 'n') {
+      return false
+    }
+    return fallback
   }
 
   private stringifyError(error: Object): string {
@@ -1746,6 +1776,18 @@ function createPdfToTextToolDefinition(): ToolDefinition {
       "max_chars": {
         "type": "number",
         "description": "maxChars 的别名。"
+      },
+      "useOcr": {
+        "type": "boolean",
+        "description": "是否直接将 PDF 页面转为图片并使用本地 CoreVisionKit OCR 识别扫描件。默认 false；仅在判断 PDF 可能是扫描件、拍照件，或上一次返回未提取到文本时启用。"
+      },
+      "use_ocr": {
+        "type": "boolean",
+        "description": "useOcr 的别名。"
+      },
+      "ocr": {
+        "type": "boolean",
+        "description": "useOcr 的别名。"
       }
     },
     "required": ["attachmentId"]
@@ -1754,7 +1796,7 @@ function createPdfToTextToolDefinition(): ToolDefinition {
 
   const func = new ToolFunction(
     PDF_TO_TEXT_TOOL_ID,
-    '将用户上传的 PDF 附件转换为文本。仅能读取当前会话已登记的 PDF 附件；调用时传 attachmentId。适合当前模型不支持原生文档输入时读取 PDF 内容。',
+    '将用户上传的 PDF 附件转换为文本。仅能读取当前会话已登记的 PDF 附件；调用时传 attachmentId。默认读取 PDF 文本层；当模型判断 PDF 可能是扫描件，或普通提取返回未提取到文本时，可设置 useOcr=true 直接将页面转图片并通过本地 CoreVisionKit OCR 识别。',
     parameters
   )
 
@@ -1765,7 +1807,7 @@ function createPdfToTextToolConfig(): ToolConfig {
   return new ToolConfig(
     PDF_TO_TEXT_TOOL_ID,
     'PDF 转文本',
-    '当模型不可直接读取 PDF 时，可使用此工具读取将用户上传的 PDF 转换为文本内容',
+    '当模型不可直接读取 PDF 时，可使用此工具读取 PDF 文本；扫描件 OCR 由模型按需启用',
     null,
     true,
     false,
@@ -1827,6 +1869,69 @@ function createImageToTextToolConfig(): ToolConfig {
     ToolSourceType.BUILTIN,
     'builtin',
     IMAGE_TO_TEXT_TOOL_ID,
+    '内置工具',
+    ToolPermissionLevel.READ
+  )
+}
+
+function createUseSkillToolDefinition(): ToolDefinition {
+  const parameters = new ToolParameters()
+  const rawSchemaJson: string = `{
+    "type": "object",
+    "properties": {
+      "skill_id": {
+        "type": "string",
+        "description": "要读取的 skill id。先空参调用可列出当前已启用的 skill。"
+      },
+      "skillId": {
+        "type": "string",
+        "description": "skill_id 的别名。"
+      },
+      "id": {
+        "type": "string",
+        "description": "skill_id 的别名。"
+      },
+      "name": {
+        "type": "string",
+        "description": "按 skill 名称读取。优先使用 skill_id；只有不知道 id 时再用 name。"
+      },
+      "path": {
+        "type": "string",
+        "description": "虚拟路径，如 app_help/SKILL.md。"
+      },
+      "maxChars": {
+        "type": "number",
+        "description": "最多返回多少字符，默认 16000。"
+      },
+      "max_chars": {
+        "type": "number",
+        "description": "maxChars 的别名。"
+      }
+    },
+    "required": []
+  }`
+  parameters.setRawSchema(JSON.parse(rawSchemaJson) as object)
+
+  const func = new ToolFunction(
+    USE_SKILL_TOOL_ID,
+    '读取用户在应用设置中维护且已启用的 skill。空参调用会返回可用 skill 列表；回答需要某个技能说明时，使用 skill_id/name/path 读取对应 SKILL.md 正文，并严格以读取到的内容为准。只能读取已启用 skill，不要臆造未返回的能力、入口或限制。',
+    parameters
+  )
+
+  return new ToolDefinition(func)
+}
+
+function createUseSkillToolConfig(): ToolConfig {
+  return new ToolConfig(
+    USE_SKILL_TOOL_ID,
+    'Skill',
+    '模型可读取用户启用的技能说明',
+    null,
+    false,
+    false,
+    ToolSourceType.BUILTIN,
+    'builtin',
+    USE_SKILL_TOOL_ID,
     '内置工具',
     ToolPermissionLevel.READ
   )
@@ -2209,6 +2314,28 @@ export function registerBuiltinTools(): void {
     registeredNow += 1
   }
 
+  const useSkillWasRegistered = registry.isToolRegistered(USE_SKILL_TOOL_ID)
+  const useSkillTool = new RegisteredTool(
+    USE_SKILL_TOOL_ID,
+    createUseSkillToolConfig(),
+    createUseSkillToolDefinition(),
+    new SkillExecutor()
+  )
+  registry.registerTool(useSkillTool)
+  getSkillService().isToolEnabled()
+    .then((enabled: boolean): void => {
+      const registeredTool = registry.getTool(USE_SKILL_TOOL_ID)
+      if (registeredTool !== undefined) {
+        registeredTool.config.enabled = enabled
+      }
+    })
+    .catch((error: Object): void => {
+      console.warn('BuiltinTools', `Failed to load skill tool state: ${JSON.stringify(error)}`)
+    })
+  if (!useSkillWasRegistered) {
+    registeredNow += 1
+  }
+
   const canvasDocumentWasRegistered = registry.isToolRegistered(CANVAS_DOCUMENT_TOOL_ID)
   const canvasDocumentTool = new RegisteredTool(
     CANVAS_DOCUMENT_TOOL_ID,
@@ -2268,6 +2395,7 @@ export function getBuiltinToolIds(): string[] {
     PYTHON_SANDBOX_TOOL_ID,
     PDF_TO_TEXT_TOOL_ID,
     IMAGE_TO_TEXT_TOOL_ID,
+    USE_SKILL_TOOL_ID,
     CANVAS_DOCUMENT_TOOL_ID,
     MATH_CHART_TOOL_ID,
     READ_SCHEDULE_TOOL_ID,

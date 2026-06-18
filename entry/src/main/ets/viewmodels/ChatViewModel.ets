@@ -13,6 +13,7 @@ import { getAttachmentStorageService, AttachmentStorageService } from '../servic
 import { getToolExecutionService, ToolExecutionService } from '../services/ToolExecutionService'
 import { getProviderViewModel, ProviderViewModel } from './ProviderViewModel'
 import { getAssistantService, AssistantService, AssistantRuntimeConfig } from '../services/AssistantService'
+import { getSkillService, SkillConfig } from '../services/SkillService'
 import { ChatMessage, ChatSession, MessageRole, ProviderType, ApiStyle, MessageAttachment, AttachmentType, ReasoningLevel, ToolDefinition, ToolCall, ToolResult, SearchReference, ModelParameters } from '../models/ChatModels'
 import { WebSearchResult, SearchResult, getWebSearchService } from '../services/WebSearchService'
 import { http } from '@kit.NetworkKit'
@@ -1810,6 +1811,7 @@ ${limitedSearchContext}
     // 检测启用了哪些工具（用于构建 system prompt）
     let hasWebSearchTool = false
     let hasAskUserTool = false
+    let hasSkillTool = false
     for (let i = 0; i < tools.length; i++) {
       if (tools[i].function.name === 'web_search') {
         hasWebSearchTool = true
@@ -1817,7 +1819,10 @@ ${limitedSearchContext}
       if (tools[i].function.name === 'ask_user') {
         hasAskUserTool = true
       }
-      if (hasWebSearchTool && hasAskUserTool) {
+      if (tools[i].function.name === 'use_skill') {
+        hasSkillTool = true
+      }
+      if (hasWebSearchTool && hasAskUserTool && hasSkillTool) {
         break
       }
     }
@@ -1868,6 +1873,12 @@ ${limitedSearchContext}
       toolUsageSystemPrompt += `
 - 当用户需求存在关键歧义，且自行假设会导致明显返工时，可以调用 ask_user 一次性向用户提出 1-3 个澄清问题。
 - 不要为了无关紧要的偏好或可以合理默认的细节调用 ask_user；能继续完成时优先继续完成。`
+    }
+    if (hasSkillTool) {
+      const skillContext = await this.buildEnabledSkillSystemContext()
+      if (skillContext !== '') {
+        toolUsageSystemPrompt += skillContext
+      }
     }
     toolUsageSystemPrompt += `
 - 若用户提到“今天/昨天/明天/现在/最新”等相对时间，请以当前时间为基准理解，不要编造不一致的绝对日期。
@@ -1968,6 +1979,45 @@ ${limitedSearchContext}
       localContentThrottle,
       localReasoningThrottle
     )
+  }
+
+  private async buildEnabledSkillSystemContext(): Promise<string> {
+    try {
+      const skills = await getSkillService().getEnabledSkills()
+      if (skills.length === 0) {
+        return ''
+      }
+      let result = `
+
+已启用 Skill（非常重要）:
+- use_skill 可读取用户在设置中维护的 Skill。若用户问题与某个 Skill 的名称、简介或正文预览相关，优先调用 use_skill 读取完整 SKILL.md 后再回答。
+- 下面是当前已启用 Skill 的清单和正文预览，设置修改后会随请求实时更新。`
+      const maxSkillCount = Math.min(skills.length, 8)
+      for (let i = 0; i < maxSkillCount; i++) {
+        result += this.buildSingleSkillSystemContext(skills[i])
+      }
+      if (skills.length > maxSkillCount) {
+        result += `
+- 其余 ${skills.length - maxSkillCount} 个 Skill 未在提示中展开；需要时先空参调用 use_skill 查看完整清单。`
+      }
+      return result
+    } catch (error) {
+      console.warn('ChatViewModel', `Failed to build skill context: ${JSON.stringify(error)}`)
+      return ''
+    }
+  }
+
+  private buildSingleSkillSystemContext(skill: SkillConfig): string {
+    const maxPreviewChars = 1400
+    const content = skill.content.trim()
+    const preview = content.length > maxPreviewChars
+      ? `${content.substring(0, maxPreviewChars)}...`
+      : content
+    return `
+- ${skill.name} (${skill.id}/SKILL.md)
+  简介: ${skill.description.trim() !== '' ? skill.description.trim() : '无'}
+  正文预览:
+${preview}`
   }
 
   private fillFallbackFromSearchSummaryIfNeeded(aiMessage: ChatMessage): void {

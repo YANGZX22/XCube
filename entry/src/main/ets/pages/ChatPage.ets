@@ -34,6 +34,7 @@ import { DefaultModelService } from '../services/DefaultModelService'
 import { PreferenceKeys, PreferencesService } from '../services/PreferencesService'
 import { TTSService } from '../services/TTSService'
 import { McpService } from '../services/McpService'
+import { SkillService } from '../services/SkillService'
 import { ToolRegistry } from '../services/ToolRegistry'
 import { ServiceRegistry } from '../services/ServiceRegistry'
 import { ToolApprovalResult } from '../services/ToolExecutionService'
@@ -45,6 +46,7 @@ import {
   PDF_TO_TEXT_TOOL_ID,
   PYTHON_SANDBOX_TOOL_ID,
   READ_SCHEDULE_TOOL_ID,
+  USE_SKILL_TOOL_ID,
   WRITE_SCHEDULE_TOOL_ID,
   registerBuiltinTools
 } from '../config/BuiltinTools'
@@ -378,6 +380,7 @@ export struct ChatPage {
   private aiTaskService: AITaskService = ServiceRegistry.aiTask()
   private toolRegistry: ToolRegistry = ServiceRegistry.toolRegistry()
   private mcpService: McpService = ServiceRegistry.mcp()
+  private skillService: SkillService = ServiceRegistry.skill()
   private canvasDocumentService: CanvasDocumentService = ServiceRegistry.canvasDocument()
   private documentAttachmentRegistry: DocumentAttachmentRegistryService = ServiceRegistry.documentAttachmentRegistry()
   private chatTaskOrchestrator = ServiceRegistry.chatTaskOrchestrator()
@@ -1670,7 +1673,7 @@ export struct ChatPage {
 
   private buildPdfToTextToolInstruction(pdfAttachments: MessageAttachment[]): string {
     const lines: string[] = [
-      '当前模型未开启原生文档阅读。用户上传的 PDF 已暂存到本地沙箱，不能直接读取原始 PDF；需要阅读 PDF 内容时请调用 pdf_to_text 工具。可用 PDF 附件：'
+      '当前模型未开启原生文档阅读。用户上传的 PDF 已暂存到本地沙箱，不能直接读取原始 PDF；需要阅读 PDF 内容时请调用 pdf_to_text 工具。默认先读取 PDF 文本层；如果判断 PDF 是扫描件、拍照件，或工具返回未提取到文本，可再次调用并设置 useOcr=true。可用 PDF 附件：'
     ]
     for (let i = 0; i < pdfAttachments.length; i++) {
       lines.push(`- attachmentId: ${pdfAttachments[i].id}, 文件名: ${pdfAttachments[i].name}`)
@@ -1916,6 +1919,7 @@ export struct ChatPage {
       !this.toolRegistry.isToolRegistered(CANVAS_DOCUMENT_TOOL_ID) ||
       !this.toolRegistry.isToolRegistered(PDF_TO_TEXT_TOOL_ID) ||
       !this.toolRegistry.isToolRegistered(IMAGE_TO_TEXT_TOOL_ID) ||
+      !this.toolRegistry.isToolRegistered(USE_SKILL_TOOL_ID) ||
       !this.toolRegistry.isToolRegistered(MATH_CHART_TOOL_ID) ||
       !this.toolRegistry.isToolRegistered(READ_SCHEDULE_TOOL_ID) ||
       !this.toolRegistry.isToolRegistered(WRITE_SCHEDULE_TOOL_ID)) {
@@ -1928,6 +1932,16 @@ export struct ChatPage {
     const webSearchTool = this.toolRegistry.getTool('web_search')
     if (webSearchTool !== undefined) {
       webSearchTool.config.enabled = this.webSearchAvailable
+    }
+    const skillTool = this.toolRegistry.getTool(USE_SKILL_TOOL_ID)
+    if (skillTool !== undefined) {
+      this.skillService.isToolEnabled()
+        .then((enabled: boolean): void => {
+          skillTool.config.enabled = enabled
+        })
+        .catch((error: Object): void => {
+          console.warn('ChatPage', `Failed to load skill tool state: ${JSON.stringify(error)}`)
+        })
     }
   }
 
@@ -1988,6 +2002,10 @@ export struct ChatPage {
       webSearchAvailable
     )
     this.ensureBuiltinChatToolsAvailable()
+    const skillTool = this.toolRegistry.getTool(USE_SKILL_TOOL_ID)
+    if (skillTool !== undefined) {
+      skillTool.config.enabled = await this.skillService.isToolEnabled()
+    }
     this.rebuildAvailableChatTools()
     const enabledMcpServerIds = await this.loadEnabledMcpServerIds()
     const selectedToolIds = await this.mcpService.loadSelectedToolIds()
@@ -3638,6 +3656,20 @@ export struct ChatPage {
       console.error('ChatPage', `Failed to update selected tools: ${JSON.stringify(error)}`)
       this.showError(pickLocalizedText('工具选择保存失败', 'Failed to save tool selection'))
     })
+    if (toolId === USE_SKILL_TOOL_ID) {
+      const skillTool = this.toolRegistry.getTool(USE_SKILL_TOOL_ID)
+      if (skillTool !== undefined) {
+        skillTool.config.enabled = enabled
+      }
+      this.skillService.setToolEnabled(enabled).catch((error: Object) => {
+        console.error('ChatPage', `Failed to sync skill tool state: ${JSON.stringify(error)}`)
+      })
+      if (!enabled) {
+        this.availableChatTools = this.availableChatTools.filter((tool: ToolConfig) => tool.id !== USE_SKILL_TOOL_ID)
+      } else {
+        this.rebuildAvailableChatTools()
+      }
+    }
   }
 
   @Builder
