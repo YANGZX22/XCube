@@ -108,6 +108,21 @@ export struct MessageBubble {
   private get themePrimaryLight(): string {
     return getAppUiState().themePrimaryLight
   }
+  private get translationLightSurface(): string {
+    return '#FFFFFF'
+  }
+  private get translationLightBorder(): string {
+    return '#E5E7EB'
+  }
+  private get translationLightTextPrimary(): string {
+    return '#111827'
+  }
+  private get translationLightTextSecondary(): string {
+    return '#6B7280'
+  }
+  private get translationLightTextTertiary(): string {
+    return '#9CA3AF'
+  }
 
   // 聊天字体大小
   @Param chatFontSize: number = 15
@@ -153,6 +168,8 @@ export struct MessageBubble {
   @Event onCancelEdit: () => void = () => {}  // 取消编辑回调
   @Event onShareMessage: () => void = () => {}
   @Event onTranslate: (content: string, targetLang: string, callback: (result: string, errorMessage: string) => void) => void = () => {}
+  @Event onTranslationUpdated: (messageId: string, translatedText: string, translatedLang: string) => void =
+    (_messageId: string, _translatedText: string, _translatedLang: string): void => {}
   // 图片点击预览回调
   @Event onImageClick: (images: Array<string>, index: number) => void = () => {}
   @Event onFileAttachmentClick: (attachment: MessageAttachment) => void = (_attachment: MessageAttachment): void => {}
@@ -317,11 +334,11 @@ export struct MessageBubble {
   private resetMessageScopedState(): void {
     this.translationRequestToken++
     this.isReasoningExpanded = false
-    this.translatedText = ''
+    this.translatedText = this.message.translatedText
     this.isTranslating = false
-    this.showTranslation = false
+    this.showTranslation = this.message.translatedText !== ''
     this.isTranslationExpanded = true
-    this.currentTranslateLang = ''
+    this.currentTranslateLang = this.message.translatedLang
     this.showLatexPreview = false
     this.latexPreviewText = ''
     this.latexPreviewPixelMap = undefined
@@ -467,7 +484,7 @@ export struct MessageBubble {
 
   // 静态内容渲染（翻译结果 / HTML 分段正文）：仅在非流式时出现，传参不涉及响应式断链问题。
   @Builder
-  StaticMarkdown(content: string, compact: boolean) {
+  StaticMarkdown(content: string, compact: boolean, textColorOverride: string = '', titleColorOverride: string = '') {
     ChatMarkdownHybridRenderer({
       content: content,
       isInputEnded: true,
@@ -476,6 +493,8 @@ export struct MessageBubble {
       chatFontSize: this.chatFontSize,
       compact: compact,
       latexFontSize: this.chatFontSize,
+      textColorOverride: textColorOverride,
+      titleColorOverride: titleColorOverride,
       themeRenderKey: this.themeRenderKey,
       onOpenLink: (title: string, url: string): void => {
         this.openWebSheetForLink(title, url)
@@ -601,7 +620,15 @@ export struct MessageBubble {
       }
       this.translatedText = result
       this.isTranslating = false
+      if (result !== '') {
+        this.message.translatedText = result
+        this.message.translatedLang = targetLang
+        this.onTranslationUpdated(this.message.id, this.message.translatedText, this.message.translatedLang)
+      }
       if (result === '' && errorMessage !== '') {
+        this.translatedText = this.message.translatedText
+        this.currentTranslateLang = this.message.translatedLang
+        this.showTranslation = this.message.translatedText !== ''
         showToast(this.getUIContext(), errorMessage, 3000)
       }
     })
@@ -926,6 +953,9 @@ export struct MessageBubble {
     this.isTranslating = false
     this.isTranslationExpanded = true
     this.currentTranslateLang = ''
+    this.message.translatedText = ''
+    this.message.translatedLang = ''
+    this.onTranslationUpdated(this.message.id, '', '')
   }
 
   // 将 hex 颜色向白色方向混合（用于多选选中态）
@@ -1386,9 +1416,14 @@ export struct MessageBubble {
     Menu() {
       ForEach(this.translateLanguages, (lang: TranslateLanguage) => {
         MenuItem({ content: lang.nativeName })
+          .contentFont({ size: 14 })
+          .contentFontColor(this.translationLightTextPrimary)
+          .backgroundColor(this.translationLightSurface)
           .onClick(() => { this.handleTranslate(lang.name) })
       }, (lang: TranslateLanguage) => lang.code)
     }
+    .backgroundColor(this.translationLightSurface)
+    .borderRadius(12)
   }
 
   // AI 消息更多菜单（分享/多选/删除）
@@ -1708,12 +1743,12 @@ export struct MessageBubble {
       Row() {
         SymbolGlyph($r('sys.symbol.translate'))
           .fontSize(14)
-          .fontColor([$r('app.color.text_secondary')])
+          .fontColor([this.translationLightTextSecondary])
 
         Text($r('app.string.translation_label'))
           .fontSize(12)
           .fontWeight(FontWeight.Medium)
-          .fontColor($r('app.color.text_secondary'))
+          .fontColor(this.translationLightTextSecondary)
           .margin({ left: 6 })
 
         Blank()
@@ -1721,13 +1756,14 @@ export struct MessageBubble {
         // 展开/折叠箭头
         SymbolGlyph($r('sys.symbol.chevron_down'))
           .fontSize(14)
-          .fontColor([$r('app.color.text_tertiary')])
+          .fontColor([this.translationLightTextTertiary])
           .rotate({ angle: this.isTranslationExpanded ? 0 : -90 })
           .animation({ duration: 200, curve: Curve.EaseOut })
       }
       .width('100%')
       .height(36)
       .padding({ left: 12, right: 12 })
+      .backgroundColor(Color.Transparent)
       .onClick(() => {
         this.getUIContext().animateTo({ duration: 200, curve: Curve.EaseOut }, () => {
           this.isTranslationExpanded = !this.isTranslationExpanded
@@ -1745,24 +1781,32 @@ export struct MessageBubble {
                 .color(this.themePrimary)
               Text($r('app.string.translation_loading'))
                 .fontSize(13)
-                .fontColor($r('app.color.text_secondary'))
+                .fontColor(this.translationLightTextSecondary)
                 .margin({ left: 8 })
             }
             .padding({ left: 12, right: 12, bottom: 12 })
           } else if (this.translatedText !== '') {
             Column() {
-              this.StaticMarkdown(this.getReadonlyTranslatedText(), true)
+              this.StaticMarkdown(
+                this.getReadonlyTranslatedText(),
+                true,
+                this.translationLightTextPrimary,
+                this.translationLightTextPrimary
+              )
             }
             .width('100%')
             .padding({ left: 12, right: 12, bottom: 12 })
           }
         }
+        .width('100%')
+        .backgroundColor(Color.Transparent)
         .transition(TransitionEffect.OPACITY.animation({ duration: 200 }))
       }
     }
     .width('100%')
     .margin({ top: 8 })
-    .backgroundColor($r('app.color.divider'))
+    .backgroundColor(Color.Transparent)
+    .border({ width: 0.6, color: this.translationLightBorder })
     .borderRadius(12)
     .clip(true)
   }

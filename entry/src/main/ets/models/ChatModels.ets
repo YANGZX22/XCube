@@ -543,6 +543,8 @@ export class ChatMessage {
   @Trace toolResults: ToolResult[]  // 工具执行结果
   @Trace toolCallId: string         // 用于 tool 角色消息，关联到对应的 tool_call
   @Trace documentToolHint: string   // 用户消息上的文档工具提示（不作为正文发送）
+  @Trace translatedText: string     // 翻译结果
+  @Trace translatedLang: string     // 翻译目标语言
 
   constructor(id: string, role: MessageRole, content: string, modelName: string = '', modelId: string = '') {
     this.id = id
@@ -566,6 +568,8 @@ export class ChatMessage {
     this.toolResults = []
     this.toolCallId = ''
     this.documentToolHint = ''
+    this.translatedText = ''
+    this.translatedLang = ''
   }
 
   // 检查是否有推理内容

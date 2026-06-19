@@ -160,6 +160,8 @@ export function buildChatMessageContentRenderSignature(
     encodeNumber(message.versionCount),
     encodeValue(message.content),
     encodeValue(message.reasoningContent),
+    encodeValue(message.translatedText),
+    encodeValue(message.translatedLang),
     encodeValue(message.searchQuery),
     encodeValue(message.searchEngine),
     encodeValue(message.searchSource),

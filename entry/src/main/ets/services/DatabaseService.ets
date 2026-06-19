@@ -229,6 +229,8 @@ export class DatabaseService {
         model_name TEXT,
         timestamp INTEGER,
         reasoning_content TEXT,
+        translated_text TEXT DEFAULT '',
+        translated_lang TEXT DEFAULT '',
         FOREIGN KEY (session_id) REFERENCES ${TableNames.SESSIONS}(id)
       )
     `
@@ -327,6 +329,8 @@ export class DatabaseService {
       await this.addMessageModelIdColumnIfNeeded()
       // 尝试添加消息 parent_id 字段（用于消息级对话树版本）
       await this.addMessageParentIdColumnIfNeeded()
+      // 尝试添加消息翻译字段（用于保存翻译结果）
+      await this.addMessageTranslationColumnsIfNeeded()
 	      // 迁移现有供应商数据
 	      await this.migrateExistingProviders()
 	      await this.ensureDefaultAssistant()
@@ -364,6 +368,23 @@ export class DatabaseService {
     } catch (error) {
       // 如果字段已存在，会抛出错误，忽略即可
       console.info('DatabaseService', 'reasoning_content column may already exist')
+    }
+  }
+
+  // 添加消息翻译字段（用于保存翻译结果）
+  private async addMessageTranslationColumnsIfNeeded(): Promise<void> {
+    if (this.rdbStore === null) {
+      return
+    }
+    try {
+      await this.rdbStore.executeSql(`ALTER TABLE ${TableNames.MESSAGES} ADD COLUMN translated_text TEXT DEFAULT ''`)
+    } catch (error) {
+      console.info('DatabaseService', 'translated_text column may already exist')
+    }
+    try {
+      await this.rdbStore.executeSql(`ALTER TABLE ${TableNames.MESSAGES} ADD COLUMN translated_lang TEXT DEFAULT ''`)
+    } catch (error) {
+      console.info('DatabaseService', 'translated_lang column may already exist')
     }
   }
 
@@ -1697,6 +1718,8 @@ export class DatabaseService {
       model_id: message.modelId || '',
       timestamp: message.timestamp,
       reasoning_content: message.reasoningContent,
+      translated_text: message.translatedText || '',
+      translated_lang: message.translatedLang || '',
       parent_id: message.parentId || '',
       // 保存搜索引用数据
       search_query: message.searchQuery || '',
@@ -1839,6 +1862,8 @@ export class DatabaseService {
     message.modelId = this.safeGetString(resultSet, 'model_id')
     message.timestamp = resultSet.getLong(resultSet.getColumnIndex('timestamp'))
     message.reasoningContent = this.safeGetString(resultSet, 'reasoning_content')
+    message.translatedText = this.safeGetString(resultSet, 'translated_text')
+    message.translatedLang = this.safeGetString(resultSet, 'translated_lang')
     message.parentId = this.safeGetString(resultSet, 'parent_id')
     message.searchQuery = this.safeGetString(resultSet, 'search_query')
     message.searchEngine = this.safeGetString(resultSet, 'search_engine')
@@ -2001,6 +2026,24 @@ export class DatabaseService {
       }
     } catch (error) {
       console.error('DatabaseService', `Failed to update message: ${JSON.stringify(error)}`)
+    }
+  }
+
+  async updateMessageTranslation(messageId: string, translatedText: string, translatedLang: string): Promise<void> {
+    await this.waitForInitialization()
+    if (this.rdbStore === null || messageId === '') {
+      return
+    }
+    const valueBucket: relationalStore.ValuesBucket = {
+      translated_text: translatedText,
+      translated_lang: translatedLang
+    }
+    const predicates = new relationalStore.RdbPredicates(TableNames.MESSAGES)
+    predicates.equalTo('id', messageId)
+    try {
+      await this.rdbStore.update(valueBucket, predicates)
+    } catch (error) {
+      console.error('DatabaseService', `Failed to update message translation: ${JSON.stringify(error)}`)
     }
   }
 

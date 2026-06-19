@@ -454,17 +454,73 @@ export class ChatViewModel {
     if (session.messageCount < session.messages.length) {
       session.messageCount = session.messages.length
     }
-    // 旧数据惰性建链：没有 activeLeafId 时，按时间把消息串成单链并回写
+    // 旧数据/断链数据惰性建链：按时间把消息串成单链并回写
     this.migrateLegacyChainIfNeeded(session)
     this.currentSession = session
     this.sessionStore.setCurrentSession(session)
     return session
   }
 
-  // 旧数据迁移：会话尚未初始化对话树（activeLeafId 为空）时，
+  private countRootMessages(messages: ChatMessage[]): number {
+    let count = 0
+    for (let i = 0; i < messages.length; i++) {
+      if (messages[i].parentId === '') {
+        count = count + 1
+      }
+    }
+    return count
+  }
+
+  private hasMessage(messages: ChatMessage[], messageId: string): boolean {
+    for (let i = 0; i < messages.length; i++) {
+      if (messages[i].id === messageId) {
+        return true
+      }
+    }
+    return false
+  }
+
+  private hasHiddenRootOutsideActivePath(session: ChatSession, activePath: ChatMessage[]): boolean {
+    const activePathIds = new Set<string>()
+    for (let i = 0; i < activePath.length; i++) {
+      activePathIds.add(activePath[i].id)
+    }
+    for (let i = 0; i < session.messages.length; i++) {
+      const message = session.messages[i]
+      if (message.parentId === '' && !activePathIds.has(message.id)) {
+        return true
+      }
+    }
+    return false
+  }
+
+  private shouldMigrateLegacyChain(session: ChatSession): boolean {
+    if (session.messages.length === 0) {
+      return false
+    }
+    if (session.activeLeafId === '') {
+      return true
+    }
+    const rootCount = this.countRootMessages(session.messages)
+    if (rootCount <= 1) {
+      return false
+    }
+    if (!this.hasMessage(session.messages, session.activeLeafId)) {
+      return true
+    }
+    const activePath = computeActivePath(session.messages, session.activeLeafId)
+    if (activePath.length >= session.messages.length) {
+      return false
+    }
+    return this.hasHiddenRootOutsideActivePath(session, activePath)
+  }
+
+  // 旧数据/断链数据迁移：
+  // - activeLeafId 为空：旧会话还没有对话树结构。
+  // - 多个根消息且活跃路径漏掉早期根：旧消息没有 parentId，导致前面的对话不可见。
   // 按 timestamp 升序把全部消息串成单链，并把 parentId / activeLeafId 回写数据库。
   private migrateLegacyChainIfNeeded(session: ChatSession): void {
-    if (session.activeLeafId !== '' || session.messages.length === 0) {
+    if (!this.shouldMigrateLegacyChain(session)) {
       return
     }
     const result = buildLegacyChain(session.messages)
@@ -2966,6 +3022,17 @@ ${preview}`
       const index = this.currentSession.messages.findIndex((m: ChatMessage) => m.id === messageId)
       if (index >= 0) {
         this.currentSession.messages[index].content = content
+      }
+    }
+  }
+
+  async updateMessageTranslation(messageId: string, translatedText: string, translatedLang: string): Promise<void> {
+    await this.databaseService.updateMessageTranslation(messageId, translatedText, translatedLang)
+    if (this.currentSession !== null) {
+      const index = this.currentSession.messages.findIndex((m: ChatMessage) => m.id === messageId)
+      if (index >= 0) {
+        this.currentSession.messages[index].translatedText = translatedText
+        this.currentSession.messages[index].translatedLang = translatedLang
       }
     }
   }

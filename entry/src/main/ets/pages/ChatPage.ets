@@ -1950,11 +1950,39 @@ export struct ChatPage {
     const configs = this.toolRegistry.getAllToolConfigs()
     const tools: ToolConfig[] = []
     for (let i = 0; i < configs.length; i++) {
-      if (configs[i].enabled) {
+      if (configs[i].enabled || this.isSettingsControlledBuiltinTool(configs[i].id)) {
         tools.push(configs[i])
       }
     }
-    this.availableChatTools = tools
+    this.availableChatTools = this.sortAvailableChatToolsForSettingsOrder(tools)
+  }
+
+  private isSettingsControlledBuiltinTool(toolId: string): boolean {
+    return toolId === 'web_search' || toolId === USE_SKILL_TOOL_ID
+  }
+
+  private sortAvailableChatToolsForSettingsOrder(tools: ToolConfig[]): ToolConfig[] {
+    const searchTools: ToolConfig[] = []
+    const skillTools: ToolConfig[] = []
+    const builtinTools: ToolConfig[] = []
+    const mcpTools: ToolConfig[] = []
+    for (let i = 0; i < tools.length; i++) {
+      const tool = tools[i]
+      if (this.isMcpChatTool(tool)) {
+        mcpTools.push(tool)
+        continue
+      }
+      if (tool.id === 'web_search') {
+        searchTools.push(tool)
+        continue
+      }
+      if (tool.id === USE_SKILL_TOOL_ID) {
+        skillTools.push(tool)
+        continue
+      }
+      builtinTools.push(tool)
+    }
+    return [...searchTools, ...skillTools, ...builtinTools, ...mcpTools]
   }
 
   private async loadEnabledMcpServerIds(): Promise<Set<string>> {
@@ -3087,6 +3115,9 @@ export struct ChatPage {
             callback: (result: string, errorMessage: string) => void): void => {
             this.handleTranslate(content, targetLang, callback)
           },
+          onTranslationUpdated: (messageId: string, translatedText: string, translatedLang: string): void => {
+            this.handleTranslationUpdated(messageId, translatedText, translatedLang)
+          },
           onImageClick: (images: Array<string>, imageIndex: number): void => {
             this.handleImagePreview(images, imageIndex)
           },
@@ -3239,7 +3270,13 @@ export struct ChatPage {
               reasoningControlMode: this.getReasoningControlModeForCurrentModel(),
               reasoningXhighAvailable: this.supportsReasoningXhighForCurrentModel(),
               onOpenTools: (): void => {
-                this.showToolPickerSheet = true
+                this.syncToolAvailabilityFromPreferences()
+                  .catch((error: Object): void => {
+                    console.warn('ChatPage', `Failed to sync tools before opening picker: ${JSON.stringify(error)}`)
+                  })
+                  .finally((): void => {
+                    this.showToolPickerSheet = true
+                  })
               },
               reasoningLevel: this.getActiveComposerReasoningLevel(),
               onReasoningLevelChange: (value: ReasoningLevel): void => {
@@ -3644,6 +3681,7 @@ export struct ChatPage {
   }
 
   private handleToolSelectionToggle(toolId: string, enabled: boolean): void {
+    this.applyToolSettingToggleBeforeSelection(toolId, enabled)
     const nextToolIds = [...this.getActiveComposerSelectedToolIds()]
     const index = nextToolIds.indexOf(toolId)
     if (enabled && index < 0) {
@@ -3657,6 +3695,15 @@ export struct ChatPage {
       this.showError(pickLocalizedText('工具选择保存失败', 'Failed to save tool selection'))
     })
     if (toolId === USE_SKILL_TOOL_ID) {
+      this.rebuildAvailableChatTools()
+    }
+    if (toolId === 'web_search') {
+      this.rebuildAvailableChatTools()
+    }
+  }
+
+  private applyToolSettingToggleBeforeSelection(toolId: string, enabled: boolean): void {
+    if (toolId === USE_SKILL_TOOL_ID) {
       const skillTool = this.toolRegistry.getTool(USE_SKILL_TOOL_ID)
       if (skillTool !== undefined) {
         skillTool.config.enabled = enabled
@@ -3664,10 +3711,21 @@ export struct ChatPage {
       this.skillService.setToolEnabled(enabled).catch((error: Object) => {
         console.error('ChatPage', `Failed to sync skill tool state: ${JSON.stringify(error)}`)
       })
+      return
+    }
+    if (toolId === 'web_search') {
+      this.webSearchAvailable = enabled
+      const webSearchTool = this.toolRegistry.getTool('web_search')
+      if (webSearchTool !== undefined) {
+        webSearchTool.config.enabled = enabled
+      }
+      this.preferencesService.setBoolean(PreferenceKeys.SEARCH_SERVICE_ENABLED, enabled).catch((error: Object) => {
+        console.error('ChatPage', `Failed to sync web search service state: ${JSON.stringify(error)}`)
+      })
       if (!enabled) {
-        this.availableChatTools = this.availableChatTools.filter((tool: ToolConfig) => tool.id !== USE_SKILL_TOOL_ID)
-      } else {
-        this.rebuildAvailableChatTools()
+        this.preferencesService.setBoolean(PreferenceKeys.SEARCH_CONVERSATION_ENABLED, false).catch((error: Object) => {
+          console.error('ChatPage', `Failed to sync web search conversation state: ${JSON.stringify(error)}`)
+        })
       }
     }
   }
@@ -4946,6 +5004,18 @@ export struct ChatPage {
       }
     }).catch((error: Error) => {
       callback('', `${pickLocalizedText('翻译失败：', 'Translation failed: ')}${error.message}`)
+    })
+  }
+
+  private handleTranslationUpdated(messageId: string, translatedText: string, translatedLang: string): void {
+    const index = findMessageIndexById(this.messages, messageId)
+    if (index >= 0) {
+      this.messages[index].translatedText = translatedText
+      this.messages[index].translatedLang = translatedLang
+      this.markMessageListChanged()
+    }
+    this.chatViewModel.updateMessageTranslation(messageId, translatedText, translatedLang).catch((error: Error): void => {
+      console.error('ChatPage', `Failed to save translation: ${JSON.stringify(error)}`)
     })
   }
 
