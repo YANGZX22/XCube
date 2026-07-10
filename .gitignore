@@ -29,3 +29,6 @@ docs/appgallery
 # 下载: https://github.com/k2-fsa/sherpa-onnx/releases/download/asr-models/sherpa-onnx-sense-voice-zh-en-ja-ko-yue-2024-07-17.tar.bz2
 **/rawfile/sherpa-onnx-sense-voice-*/
 *.onnx
+
+# Runtime JavaScript crash reports
+jscrash-*.txt
