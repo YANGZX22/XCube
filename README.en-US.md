@@ -6,12 +6,19 @@
 
 <p align="center">
   A native AI chat client for HarmonyOS 6.1.1 (API 24).<br/>
-  One app, 15+ providers, web search, Canvas docs, PDF2TXT, built-in tools, MCP, and ArkTS-native UX.
 </p>
 
 <p align="center">
-  <a href="./README.md">简体中文</a> · <a href="./LICENSE">MIT License</a>
+  <a href="./README.md">简体中文</a> | <a href="./LICENSE">MIT License</a>
 </p>
+
+---
+
+## Announcement
+
+- 2026/07/10
+> [!NOTE]
+> As HarmonyOS 7 is approaching, updates to this repository will be paused briefly while the project adopts the new HarmonyOS 7 SDK and adapts to new system features.
 
 ---
 
@@ -24,7 +31,7 @@
 
 - This fork focuses more heavily on UI work. It is continuously refined around HarmonyOS 6 (API 23), with global immersive-light materials, immersive surfaces, and a stronger emphasis on native feel and visual polish.
 - It adds web search, Canvas documents, PDF-to-text, Python sandboxing, math charts, calendar read/write, and other tools. The goal is to combine AI with phone-native capabilities while keeping tool permissions, user confirmation flows, and privacy protection explicit.
-- This project will continue exploring more native HarmonyOS SDK capabilities, richer interaction patterns, and new use cases, with ongoing iteration on the user experience.
+- This repository will continue exploring more native HarmonyOS SDK capabilities, richer interaction patterns, and new use cases, with ongoing iteration on the user experience.
 
 ## Latest Screens
 
@@ -34,7 +41,6 @@ These screenshots reflect the current HarmonyOS 6 (API 23) build:
   <tr>
     <td align="center"><img src="docs/screenshots/IMAGE1.jpg" width="200" /><br/><sub>Chat</sub></td>
     <td align="center"><img src="docs/screenshots/IMAGE2.jpg" width="200" /><br/><sub>Conversations</sub></td>
-    <td align="center"><img src="docs/screenshots/providers_new.jpg" width="200" /><br/><sub>Providers</sub></td>
   </tr>
 </table>
 
@@ -42,58 +48,32 @@ These screenshots reflect the current HarmonyOS 6 (API 23) build:
 
 ### Talk to any model
 
-Connect to 15+ AI providers out of the box. Bring your own API key, pick a model, and start chatting. Add any OpenAI / Anthropic / Gemini compatible provider in seconds.
+Includes 15+ AI providers out of the box. You can also add any OpenAI / Anthropic / Gemini-compatible provider.
 
 ### Tools, web search, and MCP
 
-Built-in web search supports Bocha, Bing(local), Tavily, and Exa. When a model supports function calling, it can use tools directly, and the tools center can also connect to remote streamable MCP servers.
+Built-in web search supports Bocha, Bing (local), Tavily, and Exa. Models with function-calling support can invoke tools autonomously to retrieve real-time information. Remote streamable MCP servers are also supported.
 
 ### Built-in intelligent tools
 
-ChatCube includes local tools that capable models can call directly from a conversation:
+ChatCube provides a set of local tools that models can call:
 
 - **Web search**: fetch real-time information with a search budget and user-approved extra searches.
-- **Canvas document**: maintain a shared document beside the conversation that both the user and AI can edit, with a collapsible floating entry, Markdown preview, and version hints.
-- **PDF / image to text**: when the current model does not have native document reading enabled, uploaded PDFs are temporarily registered in the local sandbox and the model can call `pdf_to_text`; when vision understanding is disabled, uploaded images can be read through CoreVisionKit OCR via `image_to_text`. If the model supports the corresponding native input, the app leaves the upload path untouched.
+- **Canvas document**: maintain a shared document beside the conversation that both the user and AI can edit, with support for collapsing it into a floating overlay and previewing Markdown.
+- **PDF / image to text**: when the model does not have native document reading enabled, uploaded PDFs are temporarily stored in the local sandbox and the model can call `pdf_to_text` to extract their contents; when vision understanding is disabled, uploaded images can be read through CoreVisionKit OCR via `image_to_text`. If the model supports the corresponding native input, the app does not intervene.
 - **Python sandbox**: run necessary Python code in a sandboxed environment for calculation, data processing, and intermediate reasoning.
 - **Math charts**: generate VChart specs for line, bar, area, scatter/bubble, pie, donut, rose, funnel, word cloud, Sankey, and dual-axis/combo charts.
 - **Calendar read/write**: read a user-confirmed date range or create new schedule events; users can adjust range, limits, location, and note visibility to protect privacy.
-- **Ask user**: let the model ask for clarification through a dedicated card when guessing would be risky.
-
-Tool calls follow permission and confirmation flows. Operations involving system data or writes show an approval UI first; if the user refuses, the model continues with the information already available.
-
-### Markdown & beyond
-
-Full markdown rendering — code blocks with syntax highlighting, tables, LaTeX formulas, images. Even raw HTML gets a live preview.
-
-### Looks good, feels good
-
-8 color themes. Dark / Light / System mode. API 23 materials, immersive glass-like effects, and real-time blur are all part of the current visual system. A UI that feels native because it is native.
-
-### Phone & tablet ready
-
-Responsive layouts for phones and HarmonyOS tablets. Chat, settings, and provider management all stay comfortable on larger screens.
-
-### Smart Grip
-
-Detects which hand you're holding the phone with and moves the "New Chat" button to the reachable side. One-handed use, done right.
-
-### Your data, your rules
-
-Export and import everything — conversations, provider configs, preferences. JSON format, no lock-in.
-
-### Stays alive in the background
-
-Switch to another app while waiting for a long response. ChatCube keeps working and notifies you when the reply is ready.
+- **Ask user**: let the model ask the user for confirmation through a card when it encounters a critical ambiguity.
 
 ## Supported Providers
 
 | Provider | API Format | Notes |
 |----------|-----------|-------|
-| OpenAI | OpenAI | GPT-4o, o1, etc. |
-| Claude | Anthropic | Claude 4, 3.5, etc. |
-| DeepSeek | OpenAI-compatible | DeepSeek-V3, R1, etc. |
-| Gemini | Google | Gemini 2.5, etc. |
+| OpenAI | OpenAI |  |
+| Claude | Anthropic |  |
+| DeepSeek | OpenAI-compatible | deepseek-v4-pro/flash |
+| Gemini | Google |  |
 | Grok | OpenAI-compatible | xAI models |
 | Ollama | OpenAI-compatible | Local models |
 | OpenRouter | OpenAI-compatible | Multi-provider gateway |
@@ -106,14 +86,14 @@ Switch to another app while waiting for a long response. ChatCube keeps working 
 | AiHubMix | OpenAI-compatible | Multi-provider gateway |
 | MiMo | OpenAI-compatible | Xiaomi MiMo models |
 
-...or add any compatible provider yourself.
+You can also add any OpenAI-compatible or Anthropic-compatible provider.
 
-## Getting Started
+## Build and Run
 
 ### Requirements
 
-- HarmonyOS 6 (API 23)
-- DevEco Studio 5.0+
+- A smart device running HarmonyOS 6 (API 23) or later
+- [DevEco Studio](https://developer.huawei.com/consumer/cn/deveco-studio/)
 
 ### Build & Run
 
@@ -124,11 +104,15 @@ cp build-profile.json5.example build-profile.json5
 # Edit build-profile.json5 with your signing config
 ```
 
-Open in DevEco Studio → Sync → Run.
+## Deploying the HAP
 
-### Configure providers
+Install the HAP file directly on your device using [Auto-installer](https://github.com/likuai2010/auto-installer/) or [DevEco Testing](https://developer.huawei.com/consumer/cn/deveco-testing/).
 
-In the app: **Settings → Provider Management** → add your API keys.
+> [!IMPORTANT]
+> Huawei's signing servers block IP addresses outside mainland China. Keep this in mind when sideloading HarmonyOS NEXT software in countries or regions outside mainland China.
+
+> [!NOTE]
+> Apps sideloaded through self-signing on HarmonyOS NEXT are valid for 14 days by default. Completing [Developer Real-Name Authentication](https://developer.huawei.com/consumer/cn/verified/enrollment) extends this period to 180 days.
 
 ## License
 
