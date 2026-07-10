@@ -15,6 +15,16 @@
 
 ---
 
+## 公告
+
+2026/07/10
+> [!NOTE]
+> As HarmonyOS 7 is approaching, this repo will be paused for a while for applying the new HarmonyOS 7 SDK and adapting to the new system features. 
+>
+> 由于 HarmonyOS 7 即将上线，本仓库将暂停一段时间，以应用新的 HarmonyOS 7 SDK 并适应新的系统特性。
+
+---
+
 ## Fork 说明
 
 > [!NOTE]

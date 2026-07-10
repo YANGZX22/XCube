@@ -626,15 +626,37 @@ class MathChartVChartLegend {
   visible: boolean = false
   position: string = 'middle'
   orient: string = 'bottom'
+  padding: MathChartVChartPadding = new MathChartVChartPadding(8, 0, 0, 0)
 
   constructor(visible: boolean) {
     this.visible = visible
   }
 }
 
+class MathChartVChartPadding {
+  top: number = 0
+  right: number = 0
+  bottom: number = 0
+  left: number = 0
+
+  constructor(top: number, right: number, bottom: number, left: number) {
+    this.top = top
+    this.right = right
+    this.bottom = bottom
+    this.left = left
+  }
+}
+
+class MathChartVChartAxisTitleStyle {
+  fontSize: number = 11
+  lineHeight: number = 15
+}
+
 class MathChartVChartAxisTitle {
   visible: boolean = false
   text: string = ''
+  space: number = 24
+  style: MathChartVChartAxisTitleStyle = new MathChartVChartAxisTitleStyle()
 
   constructor(text: string) {
     this.visible = text !== ''
@@ -642,13 +664,49 @@ class MathChartVChartAxisTitle {
   }
 }
 
+class MathChartVChartBottomAxisLabelStyle {
+  fontSize: number = 10
+  lineHeight: number = 13
+  maxLineWidth: number = 88
+}
+
+class MathChartVChartSideAxisLabelStyle {
+  fontSize: number = 10
+  lineHeight: number = 13
+}
+
+class MathChartVChartAxisLabel {
+  visible: boolean = true
+  autoHide: boolean = true
+  autoLimit: boolean = true
+  autoRotate: boolean = false
+  autoWrap: boolean = false
+  space: number = 6
+  style: Object = new MathChartVChartSideAxisLabelStyle()
+
+  constructor(isBottomAxis: boolean) {
+    if (isBottomAxis) {
+      this.autoHide = false
+      this.autoLimit = false
+      this.autoWrap = true
+      this.space = 8
+      this.style = new MathChartVChartBottomAxisLabelStyle()
+    }
+  }
+}
+
 class MathChartVChartAxis {
   orient: string = ''
   title: MathChartVChartAxisTitle = new MathChartVChartAxisTitle('')
+  label: MathChartVChartAxisLabel = new MathChartVChartAxisLabel(false)
+  sampling: boolean = true
+  labelFlush: boolean = false
 
   constructor(orient: string, title: string) {
     this.orient = orient
     this.title = new MathChartVChartAxisTitle(title)
+    this.label = new MathChartVChartAxisLabel(orient === 'bottom')
+    this.labelFlush = orient === 'bottom'
   }
 }
 
@@ -684,6 +742,7 @@ class MathChartVChartSpec {
   yField: string = 'value'
   seriesField: string = 'series'
   color: string[] = []
+  padding: MathChartVChartPadding = new MathChartVChartPadding(26, 14, 40, 14)
   title: MathChartVChartTitle = new MathChartVChartTitle('')
   legends: MathChartVChartLegend = new MathChartVChartLegend(false)
   axes: MathChartVChartAxis[] = []
@@ -888,6 +947,7 @@ class MathChartExecutor implements ToolExecutor {
     ]
     const xField: string | string[] = chartType === 'bar' && series.length > 1 ? ['category', 'series'] : 'category'
     const spec = this.createBaseSpec(chartType, width, height, title, colors)
+    spec['padding'] = this.buildCartesianPadding(labels, xLabel, yLabel, series.length > 1)
     spec['data'] = new MathChartVChartData(values)
     spec['xField'] = xField
     spec['yField'] = 'value'
@@ -926,6 +986,7 @@ class MathChartExecutor implements ToolExecutor {
       ))
     }
     const spec = this.createBaseSpec('scatter', width, height, title, colors)
+    spec['padding'] = this.buildCartesianPadding(labels, xLabel, yLabel, series.length > 1)
     spec['data'] = new MathChartVChartData(points)
     spec['xField'] = 'x'
     spec['yField'] = 'y'
@@ -1052,6 +1113,7 @@ class MathChartExecutor implements ToolExecutor {
       }
     }
     const spec = this.createBaseSpec('common', width, height, title, colors)
+    spec['padding'] = this.buildCartesianPadding(labels, xLabel, yLabel, true)
     spec['data'] = new MathChartVChartData(values)
     spec['seriesField'] = 'series'
     spec['axes'] = [
@@ -1072,10 +1134,38 @@ class MathChartExecutor implements ToolExecutor {
     spec['type'] = type
     spec['width'] = width
     spec['height'] = height
+    spec['padding'] = new MathChartVChartPadding(26, 14, 40, 14)
     spec['title'] = new MathChartVChartTitle(title)
     spec['tooltip'] = new MathChartVChartTooltip()
     spec['color'] = colors
     return spec
+  }
+
+  private buildCartesianPadding(labels: string[], xLabel: string, yLabel: string, hasLegend: boolean): MathChartVChartPadding {
+    let bottom = this.hasDenseAxisLabels(labels) ? 116 : (this.hasLongAxisLabels(labels) ? 102 : 82)
+    if (xLabel !== '') {
+      bottom += 10
+    }
+    if (hasLegend) {
+      bottom += 16
+    }
+    return new MathChartVChartPadding(28, yLabel !== '' ? 62 : 52, Math.min(bottom, 136), yLabel !== '' ? 62 : 52)
+  }
+
+  private hasDenseAxisLabels(labels: string[]): boolean {
+    return labels.length > 6
+  }
+
+  private hasLongAxisLabels(labels: string[]): boolean {
+    if (labels.length > 5) {
+      return true
+    }
+    for (let i = 0; i < labels.length; i++) {
+      if (labels[i].length > 8 || labels[i].indexOf('\n') >= 0) {
+        return true
+      }
+    }
+    return false
   }
 
   private applyCategoryColorEncoding(spec: Record<string, Object>): void {
