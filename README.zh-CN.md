@@ -51,6 +51,27 @@
 
 内置联网搜索，支持 博查、Bing (local)、Tavily、Exa。支持 Function Calling 的模型可以自主调用工具获取实时信息。支持接入远端 streamable MCP Server。
 
+### 向量知识库与 RAG
+
+XCube 内置独立的“知识库”页，可在一处上传、管理和预览资料，并通过
+[`knowledge_search`](entry/src/main/ets/config/KnowledgeSearchTool.ets) 工具让模型按需检索：
+
+- **统一文件入口**：支持 PDF、TXT、Markdown，以及 JPG、JPEG、PNG、WebP、BMP 图片；图片会通过 OCR 建立索引，PDF 提取文字过少时会自动转为图片 OCR。
+- **混合召回**：文档按语义分块，同时建立关键词索引和 ArkData 向量 sidecar；检索时融合关键词与向量结果。向量不可用或生成失败时，关键词检索仍可继续工作。
+- **两种向量来源**：[PC/2in1](https://developer.huawei.com/consumer/cn/doc/harmonyos-releases/support-device#section36331990919) 设备可使用本地 ArkData Embedding，文档片段不离开设备；也可选择已配置的 OpenAI-compatible Embedding API。API 模式会把文档片段发送给所选服务商，请根据资料敏感程度选择。
+- **严格的工具调用边界**：输入区开启“知识库”后，应用只向模型提供知识库工具；不会预先检索，也不会把知识片段直接塞入系统提示词。只有模型实际调用 `knowledge_search` 后，应用才执行检索并在需要时为本次 query 请求 API Embedding。
+- **智能续查**：一次用户提问最多允许 5 次知识库查询；完整命中后应提前结束。若结果被截断且存在明确缺口，模型可以使用更聚焦、非重复的 query 继续查询。
+- **本地管理**：原文件、OCR/文本结果、关键词索引和向量 sidecar 均保存在应用沙箱中。列表支持预览、更新和删除，更新会使用当前选中的向量后端重建索引。
+
+使用方式：
+
+1. 打开底部“知识库”页，点击右上角加号上传文件。
+2. 点击右上角向量模型按钮选择本地 ArkData 或 API Embedding，然后按需更新索引。
+3. 回到对话，在输入区将“知识库”切换为开启状态后提问；模型会自行判断查询次数和关键词。
+
+> [!NOTE]
+> ArkData 应用数据向量化目前仅支持 2in1 设备。手机和平板请使用 API Embedding；未配置 API 时仍可使用关键词知识检索。向量数据库持久化本身仍由设备侧 ArkData 完成。
+
 ### 内置智能工具
 
 XCube 提供一组可由模型调用的本地工具：
@@ -65,23 +86,23 @@ XCube 提供一组可由模型调用的本地工具：
 
 ## 支持的服务商
 
-| 服务商 | API 格式 | 说明 |
-|--------|---------|------|
-| OpenAI | OpenAI |  |
-| Claude | Anthropic |  |
-| DeepSeek | OpenAI 兼容 | deepseek-v4-pro/flash |
-| Gemini | Google |  |
-| Grok | OpenAI 兼容 | xAI 模型 |
-| Ollama | OpenAI 兼容 | 本地模型 |
-| OpenRouter | OpenAI 兼容 | 多服务商网关 |
-| 硅基流动 | OpenAI 兼容 | 国产 AI 模型 |
-| 阿里云百炼 | OpenAI 兼容 | 通义千问系列 |
-| Kimi | OpenAI 兼容 | Moonshot / Kimi 模型 |
-| 智谱 AI | OpenAI 兼容 | GLM 系列 |
-| 火山引擎 | OpenAI 兼容 | 豆包系列 |
-| MiniMax | OpenAI 兼容 | MiniMax 模型 |
-| AiHubMix | OpenAI 兼容 | 多服务商网关 |
-| MiMo | OpenAI 兼容 | 小米 MiMo 模型 |
+| 服务商        | API 格式    | 说明                    |
+|------------|-----------|-----------------------|
+| OpenAI     | OpenAI    |                       |
+| Claude     | Anthropic |                       |
+| DeepSeek   | OpenAI 兼容 | deepseek-v4-pro/flash |
+| Gemini     | Google    |                       |
+| Grok       | OpenAI 兼容 | xAI 模型                |
+| Ollama     | OpenAI 兼容 | 本地模型                  |
+| OpenRouter | OpenAI 兼容 | 多服务商网关                |
+| 硅基流动       | OpenAI 兼容 | 国产 AI 模型              |
+| 阿里云百炼      | OpenAI 兼容 | 通义千问系列                |
+| Kimi       | OpenAI 兼容 | Moonshot / Kimi 模型    |
+| 智谱 AI      | OpenAI 兼容 | GLM 系列                |
+| 火山引擎       | OpenAI 兼容 | 豆包系列                  |
+| MiniMax    | OpenAI 兼容 | MiniMax 模型            |
+| AiHubMix   | OpenAI 兼容 | 多服务商网关                |
+| MiMo       | OpenAI 兼容 | 小米 MiMo 模型            |
 
 同时支持添加任何兼容（OpenAI 兼容/ Anthropic 兼容）的服务商。
 

@@ -152,6 +152,38 @@ export class ToolExecutionService {
     return normalized === ASK_USER_TOOL_ID || normalized === 'user_input' || normalized === 'ask'
   }
 
+  private isFunctionAllowedForRound(functionName: string, allowedFunctionNames: string[]): boolean {
+    let canonicalName = functionName
+    if (this.isAskUserFunctionName(functionName)) {
+      canonicalName = ASK_USER_TOOL_ID
+    } else {
+      const toolId = this.resolveToolId(functionName)
+      if (toolId !== undefined) {
+        const registeredTool = this.registry.getTool(toolId)
+        if (registeredTool !== undefined) {
+          canonicalName = registeredTool.definition.function.name
+        }
+      }
+    }
+    return allowedFunctionNames.includes(canonicalName)
+  }
+
+  private buildUnadvertisedToolResult(toolCall: ToolCall, functionName: string): ToolResult {
+    const displayName = functionName !== '' ? functionName : 'unknown'
+    console.warn('ToolExecutionService', `Rejected tool not advertised in this round: ${displayName}`)
+    return new ToolResult(
+      toolCall.id,
+      JSON.stringify({
+        error: '工具未在本轮提供',
+        code: 'TOOL_NOT_ADVERTISED',
+        functionName: displayName
+      }),
+      true,
+      displayName,
+      toolCall.sourceLabel
+    )
+  }
+
   private isWebSearchToolId(toolId: string): boolean {
     return toolId === 'web_search'
   }
@@ -332,7 +364,7 @@ export class ToolExecutionService {
   }
 
   // 执行单个工具调用
-  async executeToolCall(toolCall: ToolCall): Promise<ToolResult> {
+  async executeToolCall(toolCall: ToolCall, allowedFunctionNames: string[]): Promise<ToolResult> {
     console.info('ToolExecutionService', `Executing tool call: ${toolCall.functionName} (${toolCall.id})`)
 
     // 检查是否已取消
@@ -342,6 +374,9 @@ export class ToolExecutionService {
     }
 
     const normalizedFunctionName = this.normalizeFunctionName(toolCall.functionName)
+    if (!this.isFunctionAllowedForRound(normalizedFunctionName, allowedFunctionNames)) {
+      return this.buildUnadvertisedToolResult(toolCall, normalizedFunctionName)
+    }
     if (this.isAskUserFunctionName(normalizedFunctionName)) {
       return await this.handleAskUser(toolCall)
     }
@@ -442,7 +477,7 @@ export class ToolExecutionService {
   }
 
   // 批量执行工具调用（串行，避免多个确认框并发弹出）
-  async executeToolCalls(toolCalls: ToolCall[]): Promise<ToolResult[]> {
+  async executeToolCalls(toolCalls: ToolCall[], allowedFunctionNames: string[]): Promise<ToolResult[]> {
     console.info('ToolExecutionService', `Executing ${toolCalls.length} tool calls`)
 
     // 检查是否已取消
@@ -459,7 +494,7 @@ export class ToolExecutionService {
 
     const results: ToolResult[] = []
     for (let i = 0; i < toolCalls.length; i++) {
-      results.push(await this.executeToolCall(toolCalls[i]))
+      results.push(await this.executeToolCall(toolCalls[i], allowedFunctionNames))
     }
     return results
   }

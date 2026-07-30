@@ -55,6 +55,7 @@ export class AppUiState {
   @Trace materialLevel: number = 10   // ADAPTIVE
   @Trace lightColorMode: string = 'default'
   @Trace chatListImmersiveMaterial: boolean = false
+  @Trace knowledgeListImmersiveMaterial: boolean = false
 }
 
 function readStorageValue<T>(key: string, fallback: T): T {
@@ -208,6 +209,9 @@ function applyAppUiStateValue<T extends string | number | boolean>(state: AppUiS
     case AppStorageKeys.CHAT_LIST_IMMERSIVE_MATERIAL:
       state.chatListImmersiveMaterial = value as boolean
       return
+    case AppStorageKeys.KNOWLEDGE_LIST_IMMERSIVE_MATERIAL:
+      state.knowledgeListImmersiveMaterial = value as boolean
+      return
     default:
       return
   }
@@ -302,6 +306,8 @@ function createAppUiStateFromStorage(): AppUiState {
     readStorageValue<string>(AppStorageKeys.LIGHT_COLOR_MODE, 'default'))
   applyAppUiStateValue(state, AppStorageKeys.CHAT_LIST_IMMERSIVE_MATERIAL,
     readStorageValue<boolean>(AppStorageKeys.CHAT_LIST_IMMERSIVE_MATERIAL, false))
+  applyAppUiStateValue(state, AppStorageKeys.KNOWLEDGE_LIST_IMMERSIVE_MATERIAL,
+    readStorageValue<boolean>(AppStorageKeys.KNOWLEDGE_LIST_IMMERSIVE_MATERIAL, false))
   return state
 }
 

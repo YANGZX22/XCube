@@ -45,6 +45,30 @@
       "value": "对话"
     },
     {
+      "name": "tab_knowledge",
+      "value": "知识库"
+    },
+    {
+      "name": "knowledge_empty_title",
+      "value": "暂无文件"
+    },
+    {
+      "name": "knowledge_empty_hint",
+      "value": "点击 + 上传 PDF、TXT、Markdown 或图片文件。"
+    },
+    {
+      "name": "knowledge_usage_message",
+      "value": "使用 + 上传并在本机索引 PDF、TXT、Markdown 或图片文件。点击文件可预览，左右滑动可更新索引或删除。图片直接使用 OCR；PDF 提取文字过少时会自动转为逐页图片 OCR。系统优先使用本地语义向量与 BM25 关键词混合检索，设备不支持向量能力时会自动保留关键词检索。开启知识库开关后，支持工具调用的模型可自行决定调用 knowledge_search；只有模型实际发起工具调用后才会检索，文档内容不会提前插入提示词。"
+    },
+    {
+      "name": "knowledge_usage_label",
+      "value": "知识库使用说明"
+    },
+    {
+      "name": "knowledge_usage_acknowledge",
+      "value": "知道了"
+    },
+    {
       "name": "tab_assistants",
       "value": "助手"
     },
@@ -307,6 +331,14 @@
     {
       "name": "chat_list_immersive_material_desc",
       "value": "开启后对话栏使用沉浸光感材质；关闭时使用高斯模糊。"
+    },
+    {
+      "name": "knowledge_list_immersive_material_title",
+      "value": "知识库列表页沉浸材质"
+    },
+    {
+      "name": "knowledge_list_immersive_material_desc",
+      "value": "开启后知识库文件栏使用沉浸光感材质；关闭时使用高斯模糊。"
     },
     {
       "name": "settings_language",

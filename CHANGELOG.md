@@ -3,7 +3,6 @@
 ## v1.1.16 (2026-07-30)
 
 - 应用品牌名由 ChatCube 更新为 XCube
-- Bundle Name 由 `com.zixiao.chatcube` 更新为 `com.zixiao.xcube`
 - 通知、分享、日历、导出与 WebDAV 备份标识同步更新为 XCube
 - 新增 XCube 浅紫主题并设为首次安装默认主题
 - 移除应用内隐私政策入口与页面

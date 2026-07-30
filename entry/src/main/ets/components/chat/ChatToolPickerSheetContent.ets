@@ -51,7 +51,7 @@ export struct ChatToolPickerSheetContent {
     const builtinTools: ToolConfig[] = []
     for (let i = 0; i < this.availableChatTools.length; i++) {
       const tool = this.availableChatTools[i]
-      if (!this.isMcpChatTool(tool)) {
+      if (tool.id !== 'knowledge_search' && !this.isMcpChatTool(tool)) {
         builtinTools.push(tool)
       }
     }
@@ -63,7 +63,7 @@ export struct ChatToolPickerSheetContent {
     const groupIndexes: Map<string, number> = new Map()
     for (let i = 0; i < this.availableChatTools.length; i++) {
       const tool = this.availableChatTools[i]
-      if (!this.isMcpChatTool(tool)) {
+      if (tool.id === 'knowledge_search' || !this.isMcpChatTool(tool)) {
         continue
       }
       const existingIndex = groupIndexes.get(tool.sourceId)
@@ -82,6 +82,10 @@ export struct ChatToolPickerSheetContent {
       }
     }
     return groups
+  }
+
+  private hasVisibleChatTools(): boolean {
+    return this.getBuiltinChatTools().length > 0 || this.getMcpToolGroups().length > 0
   }
 
   private isMcpToolGroupSelected(group: McpToolGroup): boolean {
@@ -306,7 +310,7 @@ export struct ChatToolPickerSheetContent {
 
       Scroll() {
         Column({ space: 18 }) {
-          if (this.availableChatTools.length === 0) {
+          if (!this.hasVisibleChatTools()) {
             Column({ space: 8 }) {
               Column() {
                 SymbolGlyph($r('sys.symbol.gearshape'))

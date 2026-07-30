@@ -92,6 +92,7 @@ export struct ThemeAppearanceSettingsView {
   @Local materialLevel: number = 10
   @Local lightColorMode: string = 'default'
   @Local chatListImmersiveMaterial: boolean = false
+  @Local knowledgeListImmersiveMaterial: boolean = false
 
   @Local currentTabIndex: number = TAB_INDEX_THEME
   @Local previewTabIndex: number = PREVIEW_TAB_INDEX_CHAT
@@ -113,6 +114,7 @@ export struct ThemeAppearanceSettingsView {
     this.materialLevel = this.settingsManager.getMaterialLevel()
     this.lightColorMode = this.settingsManager.getLightColorMode()
     this.chatListImmersiveMaterial = this.settingsManager.getChatListImmersiveMaterial()
+    this.knowledgeListImmersiveMaterial = this.settingsManager.getKnowledgeListImmersiveMaterial()
   }
 
   private getContentMaxWidth(): number {
@@ -270,6 +272,18 @@ export struct ThemeAppearanceSettingsView {
       console.error('ThemeAppearanceSettingsView',
         `Failed to set chat list immersive material: ${JSON.stringify(error)}`)
       this.chatListImmersiveMaterial = previous
+    }
+  }
+
+  private async handleKnowledgeListImmersiveMaterialChanged(enabled: boolean): Promise<void> {
+    const previous = this.knowledgeListImmersiveMaterial
+    this.knowledgeListImmersiveMaterial = enabled
+    try {
+      await this.settingsManager.setKnowledgeListImmersiveMaterial(enabled)
+    } catch (error) {
+      console.error('ThemeAppearanceSettingsView',
+        `Failed to set knowledge list immersive material: ${JSON.stringify(error)}`)
+      this.knowledgeListImmersiveMaterial = previous
     }
   }
 
@@ -763,34 +777,70 @@ export struct ThemeAppearanceSettingsView {
   private MaterialTabContent() {
     Scroll() {
       Row() {
-        Row({ space: 16 }) {
-          Column({ space: 4 }) {
-            Text($r('app.string.chat_list_immersive_material_title'))
-              .fontSize(16)
-              .fontWeight(FontWeight.Medium)
-              .fontColor($r('app.color.text_primary'))
-              .width('100%')
+        Column() {
+          Row({ space: 16 }) {
+            Column({ space: 4 }) {
+              Text($r('app.string.chat_list_immersive_material_title'))
+                .fontSize(16)
+                .fontWeight(FontWeight.Medium)
+                .fontColor($r('app.color.text_primary'))
+                .width('100%')
 
-            Text($r('app.string.chat_list_immersive_material_desc'))
-              .fontSize(12)
-              .fontColor($r('app.color.text_secondary'))
-              .lineHeight(18)
-              .width('100%')
+              Text($r('app.string.chat_list_immersive_material_desc'))
+                .fontSize(12)
+                .fontColor($r('app.color.text_secondary'))
+                .lineHeight(18)
+                .width('100%')
+            }
+            .layoutWeight(1)
+            .alignItems(HorizontalAlign.Start)
+
+            Toggle({ type: ToggleType.Switch, isOn: this.chatListImmersiveMaterial })
+              .selectedColor(this.themePrimary)
+              .systemMaterial(new uiMaterial.Material())
+              .switchPointColor(Color.White)
+              .onChange((enabled: boolean) => {
+                this.handleChatListImmersiveMaterialChanged(enabled)
+              })
           }
-          .layoutWeight(1)
-          .alignItems(HorizontalAlign.Start)
+          .width('100%')
+          .padding(18)
+          .alignItems(VerticalAlign.Center)
 
-          Toggle({ type: ToggleType.Switch, isOn: this.chatListImmersiveMaterial })
-            .selectedColor(this.themePrimary)
-            .systemMaterial(new uiMaterial.Material())
-            .switchPointColor(Color.White)
-            .onChange((enabled: boolean) => {
-              this.handleChatListImmersiveMaterialChanged(enabled)
-            })
+          Divider()
+            .color(this.themePrimaryLight)
+            .margin({ left: 18, right: 18 })
+
+          Row({ space: 16 }) {
+            Column({ space: 4 }) {
+              Text($r('app.string.knowledge_list_immersive_material_title'))
+                .fontSize(16)
+                .fontWeight(FontWeight.Medium)
+                .fontColor($r('app.color.text_primary'))
+                .width('100%')
+
+              Text($r('app.string.knowledge_list_immersive_material_desc'))
+                .fontSize(12)
+                .fontColor($r('app.color.text_secondary'))
+                .lineHeight(18)
+                .width('100%')
+            }
+            .layoutWeight(1)
+            .alignItems(HorizontalAlign.Start)
+
+            Toggle({ type: ToggleType.Switch, isOn: this.knowledgeListImmersiveMaterial })
+              .selectedColor(this.themePrimary)
+              .systemMaterial(new uiMaterial.Material())
+              .switchPointColor(Color.White)
+              .onChange((enabled: boolean) => {
+                this.handleKnowledgeListImmersiveMaterialChanged(enabled)
+              })
+          }
+          .width('100%')
+          .padding(18)
+          .alignItems(VerticalAlign.Center)
         }
         .width('100%')
-        .padding(18)
-        .alignItems(VerticalAlign.Center)
         .backgroundColor(this.themeSurface)
         .borderRadius(24)
         .border({ width: 1, color: this.themePrimaryLight })

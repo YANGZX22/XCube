@@ -649,6 +649,271 @@ export interface ToolCallDelta {
   arguments?: string
 }
 
+/**
+ * A single streaming request's tool-call accumulator.
+ *
+ * AIApiService is shared by concurrent chats, so every mutable field involved in
+ * assembling structured or textual tool calls must live in this request-local
+ * object rather than on the service singleton.
+ */
+export class ToolCallStreamState {
+  private static nextRequestSequence: number = 0
+  private streamToolCalls: Map<number, ToolCall> = new Map()
+  private textualToolCallBuffer: string = ''
+  private textualToolCallBlockActive: boolean = false
+  private textualToolCallSeq: number = 0
+  private textualToolCallsEnabled: boolean = false
+  private requestNonce: string = ''
+
+  constructor(textualToolCallsEnabled: boolean = false) {
+    this.textualToolCallsEnabled = textualToolCallsEnabled
+    ToolCallStreamState.nextRequestSequence += 1
+    this.requestNonce = `${Date.now()}_${ToolCallStreamState.nextRequestSequence}`
+  }
+
+  appendToolCallDelta(delta: ToolCallDelta): void {
+    let existingToolCall = this.streamToolCalls.get(delta.index)
+    if (existingToolCall === undefined) {
+      existingToolCall = new ToolCall('', '', '')
+      this.streamToolCalls.set(delta.index, existingToolCall)
+    }
+
+    const incomingId = delta.id
+    if (incomingId !== undefined && incomingId !== '') {
+      existingToolCall.id = incomingId
+    }
+    const incomingName = delta.functionName === undefined ? '' : this.normalizeToolFunctionName(delta.functionName)
+    if (incomingName !== '') {
+      existingToolCall.functionName = this.mergeToolFunctionName(existingToolCall.functionName, incomingName)
+    }
+    const incomingArguments = delta.arguments
+    if (incomingArguments !== undefined && incomingArguments !== '') {
+      existingToolCall.arguments += incomingArguments
+    }
+  }
+
+  getAccumulatedToolCalls(): ToolCall[] {
+    if (this.textualToolCallsEnabled && this.textualToolCallBuffer !== '') {
+      this.parseTextualToolCallBlock(this.textualToolCallBuffer)
+      this.textualToolCallBuffer = ''
+      this.textualToolCallBlockActive = false
+    }
+    const result: ToolCall[] = []
+    this.streamToolCalls.forEach((toolCall, index) => {
+      const normalizedId = this.normalizeToolCallId(toolCall.id, index)
+      const normalizedName = this.normalizeToolFunctionName(toolCall.functionName)
+      const normalizedArgs = this.normalizeToolArguments(toolCall.arguments)
+      result.push(new ToolCall(normalizedId, normalizedName, normalizedArgs))
+    })
+    return result
+  }
+
+  absorbTextualToolCalls(content: string): string {
+    if (content === '') {
+      return ''
+    }
+
+    let remaining = content
+    if (!this.textualToolCallBlockActive && this.textualToolCallBuffer !== '') {
+      remaining = this.textualToolCallBuffer + remaining
+      this.textualToolCallBuffer = ''
+    }
+    let visible = ''
+    while (remaining !== '') {
+      if (this.textualToolCallBlockActive) {
+        this.textualToolCallBuffer += remaining
+        const endIndex = this.findTextualToolCallEnd(this.textualToolCallBuffer)
+        if (endIndex < 0) {
+          return visible
+        }
+        const block = this.textualToolCallBuffer.substring(0, endIndex)
+        const tail = this.textualToolCallBuffer.substring(endIndex)
+        this.parseTextualToolCallBlock(block)
+        this.textualToolCallBuffer = ''
+        this.textualToolCallBlockActive = false
+        remaining = tail
+        continue
+      }
+
+      const startIndex = this.findTextualToolCallStart(remaining)
+      if (startIndex < 0) {
+        const partialPrefixLength = this.findTrailingTextualToolCallPrefixLength(remaining)
+        if (partialPrefixLength > 0) {
+          visible += remaining.substring(0, remaining.length - partialPrefixLength)
+          this.textualToolCallBuffer = remaining.substring(remaining.length - partialPrefixLength)
+        } else {
+          visible += remaining
+        }
+        remaining = ''
+        continue
+      }
+
+      visible += remaining.substring(0, startIndex)
+      this.textualToolCallBuffer = remaining.substring(startIndex)
+      this.textualToolCallBlockActive = true
+      const endIndex = this.findTextualToolCallEnd(this.textualToolCallBuffer)
+      if (endIndex >= 0) {
+        const block = this.textualToolCallBuffer.substring(0, endIndex)
+        const tail = this.textualToolCallBuffer.substring(endIndex)
+        this.parseTextualToolCallBlock(block)
+        this.textualToolCallBuffer = ''
+        this.textualToolCallBlockActive = false
+        remaining = tail
+      } else {
+        remaining = ''
+      }
+    }
+
+    return visible
+  }
+
+  private normalizeToolCallId(rawId: string, index: number): string {
+    const value = rawId as string | null | undefined
+    if (value === undefined || value === null || value.trim() === '') {
+      return `tool_call_${this.requestNonce}_${index}`
+    }
+    return value.trim()
+  }
+
+  private normalizeToolFunctionName(rawName: string): string {
+    const value = rawName as string | null | undefined
+    if (value === undefined || value === null) {
+      return ''
+    }
+    return value.trim()
+  }
+
+  private mergeToolFunctionName(previousName: string, incomingName: string): string {
+    const prev = this.normalizeToolFunctionName(previousName)
+    const next = this.normalizeToolFunctionName(incomingName)
+    if (next === '') {
+      return prev
+    }
+    if (prev === '') {
+      return next
+    }
+    if (next.startsWith(prev)) {
+      return next
+    }
+    if (prev.startsWith(next)) {
+      return prev
+    }
+    if (next.endsWith(prev)) {
+      return next
+    }
+    if (prev.endsWith(next)) {
+      return prev
+    }
+    return prev + next
+  }
+
+  private normalizeToolArguments(rawArgs: string): string {
+    const value = rawArgs as string | Object | null | undefined
+    if (value === undefined || value === null) {
+      return '{}'
+    }
+    if (typeof value === 'string') {
+      const trimmed = value.trim()
+      return trimmed !== '' ? trimmed : '{}'
+    }
+    try {
+      return JSON.stringify(value)
+    } catch (_error) {
+      return '{}'
+    }
+  }
+
+  private findTextualToolCallStart(text: string): number {
+    const markers: string[] = ['<｜｜DSML｜｜tool_calls>', '<||DSML||tool_calls>']
+    let found = -1
+    for (let i = 0; i < markers.length; i++) {
+      const index = text.indexOf(markers[i])
+      if (index >= 0 && (found < 0 || index < found)) {
+        found = index
+      }
+    }
+    return found
+  }
+
+  private findTextualToolCallEnd(text: string): number {
+    const markers: string[] = ['</｜｜DSML｜｜tool_calls>', '</||DSML||tool_calls>']
+    let found = -1
+    for (let i = 0; i < markers.length; i++) {
+      const index = text.indexOf(markers[i])
+      if (index >= 0 && (found < 0 || index < found)) {
+        found = index + markers[i].length
+      }
+    }
+    return found
+  }
+
+  private findTrailingTextualToolCallPrefixLength(text: string): number {
+    const markers: string[] = ['<｜｜DSML｜｜tool_calls>', '<||DSML||tool_calls>']
+    let found = 0
+    for (let i = 0; i < markers.length; i++) {
+      const marker = markers[i]
+      for (let len = 3; len < marker.length; len++) {
+        if (text.endsWith(marker.substring(0, len)) && len > found) {
+          found = len
+        }
+      }
+    }
+    return found
+  }
+
+  private stripTextualToolTags(text: string): string {
+    return text
+      .replace(/<[^>]*DSML[^>]*parameter[^>]*>/g, '')
+      .replace(/<\/[^>]*DSML[^>]*parameter>/g, '')
+      .replace(/<[^>]*parameter[^>]*>/g, '')
+      .replace(/<\/[^>]*parameter>/g, '')
+      .trim()
+  }
+
+  private parseTextualToolCallBlock(block: string): void {
+    // 工具被禁用（如达到调用上限、最后一轮强制出答案）时，仍要把 DSML 块从可见文本里吞掉，
+    // 但不再解析为工具调用，避免泄漏成乱码或产生意外调用。
+    if (!this.textualToolCallsEnabled) {
+      return
+    }
+    const invokeRegex = /<[^>]*invoke\s+name=["']([^"']+)["'][^>]*>([\s\S]*?)<\/[^>]*invoke>/gi
+    let invokeMatch = invokeRegex.exec(block)
+    while (invokeMatch !== null) {
+      const rawName = invokeMatch[1] !== undefined ? invokeMatch[1] : ''
+      const functionName = this.normalizeToolFunctionName(rawName)
+      const body = invokeMatch[2] !== undefined ? invokeMatch[2] : ''
+      if (functionName !== '') {
+        const args: Record<string, string> = {}
+        const paramRegex = /<[^>]*parameter\s+name=["']([^"']+)["'][^>]*>([\s\S]*?)<\/[^>]*parameter>/gi
+        let paramMatch = paramRegex.exec(body)
+        while (paramMatch !== null) {
+          const key = paramMatch[1] !== undefined ? paramMatch[1].trim() : ''
+          const value = paramMatch[2] !== undefined ? this.stripTextualToolTags(paramMatch[2]) : ''
+          if (key !== '') {
+            args[key] = value
+          }
+          paramMatch = paramRegex.exec(body)
+        }
+
+        let argText = '{}'
+        const trimmedBody = this.stripTextualToolTags(body)
+        if (Object.keys(args).length > 0) {
+          argText = JSON.stringify(args)
+        } else if (trimmedBody.startsWith('{') && trimmedBody.endsWith('}')) {
+          argText = trimmedBody
+        }
+
+        const index = this.streamToolCalls.size + this.textualToolCallSeq
+        this.textualToolCallSeq += 1
+        const id = `textual_tool_call_${this.requestNonce}_${this.textualToolCallSeq}`
+        this.streamToolCalls.set(index, new ToolCall(id, functionName, argText))
+        console.info('AIApiService', `Parsed textual tool call: ${functionName}`)
+      }
+      invokeMatch = invokeRegex.exec(block)
+    }
+  }
+}
+
 // AI API 服务
 export class AIApiService {
   private static instance: AIApiService | null = null
@@ -671,13 +936,6 @@ export class AIApiService {
   private minimaxContentBuffer: string = ''
   // 部分标签缓冲区（处理跨 chunk 的标签）
   private partialTagBuffer: string = ''
-  // Function Calling 工具调用累积状态（流式响应）
-  private streamToolCalls: Map<number, ToolCall> = new Map()
-  // 一些 OpenAI 兼容接口会把工具调用以 DSML 文本形式输出，需拦截并转成 ToolCall。
-  private textualToolCallBuffer: string = ''
-  private textualToolCallBlockActive: boolean = false
-  private textualToolCallSeq: number = 0
-  private textualToolCallsEnabled: boolean = false
 
   private constructor() {
     this.httpService = getHttpService()
@@ -690,11 +948,6 @@ export class AIApiService {
     this.minimaxReasoningBuffer = ''
     this.minimaxContentBuffer = ''
     this.partialTagBuffer = ''
-    this.streamToolCalls = new Map()
-    this.textualToolCallBuffer = ''
-    this.textualToolCallBlockActive = false
-    this.textualToolCallSeq = 0
-    this.textualToolCallsEnabled = false
   }
 
   private toCompatibilityInfo(config: AIApiConfig): CompatibilityProviderInfo {
@@ -853,23 +1106,6 @@ export class AIApiService {
     return content
   }
 
-  // 获取累积的工具调用（流式响应完成后调用）
-  getAccumulatedToolCalls(): ToolCall[] {
-    if (this.textualToolCallsEnabled && this.textualToolCallBuffer !== '') {
-      this.parseTextualToolCallBlock(this.textualToolCallBuffer)
-      this.textualToolCallBuffer = ''
-      this.textualToolCallBlockActive = false
-    }
-    const result: ToolCall[] = []
-    this.streamToolCalls.forEach((toolCall, index) => {
-      const normalizedId = this.normalizeToolCallId(toolCall.id, index)
-      const normalizedName = this.normalizeToolFunctionName(toolCall.functionName)
-      const normalizedArgs = this.normalizeToolArguments(toolCall.arguments)
-      result.push(new ToolCall(normalizedId, normalizedName, normalizedArgs))
-    })
-    return result
-  }
-
   private normalizeToolCallId(rawId: string, index: number): string {
     const value = rawId as string | null | undefined
     if (value === undefined || value === null || value.trim() === '') {
@@ -884,30 +1120,6 @@ export class AIApiService {
       return ''
     }
     return value.trim()
-  }
-
-  private mergeToolFunctionName(previousName: string, incomingName: string): string {
-    const prev = this.normalizeToolFunctionName(previousName)
-    const next = this.normalizeToolFunctionName(incomingName)
-    if (next === '') {
-      return prev
-    }
-    if (prev === '') {
-      return next
-    }
-    if (next.startsWith(prev)) {
-      return next
-    }
-    if (prev.startsWith(next)) {
-      return prev
-    }
-    if (next.endsWith(prev)) {
-      return next
-    }
-    if (prev.endsWith(next)) {
-      return prev
-    }
-    return prev + next
   }
 
   private normalizeToolArguments(rawArgs: string): string {
@@ -941,154 +1153,6 @@ export class AIApiService {
       console.warn('AIApiService', `Failed to stringify tool argument chunk: ${JSON.stringify(error)}`)
       return ''
     }
-  }
-
-  private findTextualToolCallStart(text: string): number {
-    const markers: string[] = ['<｜｜DSML｜｜tool_calls>', '<||DSML||tool_calls>']
-    let found = -1
-    for (let i = 0; i < markers.length; i++) {
-      const index = text.indexOf(markers[i])
-      if (index >= 0 && (found < 0 || index < found)) {
-        found = index
-      }
-    }
-    return found
-  }
-
-  private findTextualToolCallEnd(text: string): number {
-    const markers: string[] = ['</｜｜DSML｜｜tool_calls>', '</||DSML||tool_calls>']
-    let found = -1
-    for (let i = 0; i < markers.length; i++) {
-      const index = text.indexOf(markers[i])
-      if (index >= 0 && (found < 0 || index < found)) {
-        found = index + markers[i].length
-      }
-    }
-    return found
-  }
-
-  private findTrailingTextualToolCallPrefixLength(text: string): number {
-    const markers: string[] = ['<｜｜DSML｜｜tool_calls>', '<||DSML||tool_calls>']
-    let found = 0
-    for (let i = 0; i < markers.length; i++) {
-      const marker = markers[i]
-      for (let len = 3; len < marker.length; len++) {
-        if (text.endsWith(marker.substring(0, len)) && len > found) {
-          found = len
-        }
-      }
-    }
-    return found
-  }
-
-  private stripTextualToolTags(text: string): string {
-    return text
-      .replace(/<[^>]*DSML[^>]*parameter[^>]*>/g, '')
-      .replace(/<\/[^>]*DSML[^>]*parameter>/g, '')
-      .replace(/<[^>]*parameter[^>]*>/g, '')
-      .replace(/<\/[^>]*parameter>/g, '')
-      .trim()
-  }
-
-  private parseTextualToolCallBlock(block: string): void {
-    // 工具被禁用（如达到调用上限、最后一轮强制出答案）时，仍要把 DSML 块从可见文本里吞掉，
-    // 但不再解析为工具调用，避免泄漏成乱码或产生意外调用。
-    if (!this.textualToolCallsEnabled) {
-      return
-    }
-    const invokeRegex = /<[^>]*invoke\s+name=["']([^"']+)["'][^>]*>([\s\S]*?)<\/[^>]*invoke>/gi
-    let invokeMatch = invokeRegex.exec(block)
-    while (invokeMatch !== null) {
-      const rawName = invokeMatch[1] !== undefined ? invokeMatch[1] : ''
-      const functionName = this.normalizeToolFunctionName(rawName)
-      const body = invokeMatch[2] !== undefined ? invokeMatch[2] : ''
-      if (functionName !== '') {
-        const args: Record<string, string> = {}
-        const paramRegex = /<[^>]*parameter\s+name=["']([^"']+)["'][^>]*>([\s\S]*?)<\/[^>]*parameter>/gi
-        let paramMatch = paramRegex.exec(body)
-        while (paramMatch !== null) {
-          const key = paramMatch[1] !== undefined ? paramMatch[1].trim() : ''
-          const value = paramMatch[2] !== undefined ? this.stripTextualToolTags(paramMatch[2]) : ''
-          if (key !== '') {
-            args[key] = value
-          }
-          paramMatch = paramRegex.exec(body)
-        }
-
-        let argText = '{}'
-        const trimmedBody = this.stripTextualToolTags(body)
-        if (Object.keys(args).length > 0) {
-          argText = JSON.stringify(args)
-        } else if (trimmedBody.startsWith('{') && trimmedBody.endsWith('}')) {
-          argText = trimmedBody
-        }
-
-        const index = this.streamToolCalls.size + this.textualToolCallSeq
-        this.textualToolCallSeq += 1
-        const id = `textual_tool_call_${Date.now()}_${this.textualToolCallSeq}`
-        this.streamToolCalls.set(index, new ToolCall(id, functionName, argText))
-        console.info('AIApiService', `Parsed textual tool call: ${functionName}`)
-      }
-      invokeMatch = invokeRegex.exec(block)
-    }
-  }
-
-  private absorbTextualToolCalls(content: string): string {
-    if (content === '') {
-      return ''
-    }
-
-    let remaining = content
-    if (!this.textualToolCallBlockActive && this.textualToolCallBuffer !== '') {
-      remaining = this.textualToolCallBuffer + remaining
-      this.textualToolCallBuffer = ''
-    }
-    let visible = ''
-    while (remaining !== '') {
-      if (this.textualToolCallBlockActive) {
-        this.textualToolCallBuffer += remaining
-        const endIndex = this.findTextualToolCallEnd(this.textualToolCallBuffer)
-        if (endIndex < 0) {
-          return visible
-        }
-        const block = this.textualToolCallBuffer.substring(0, endIndex)
-        const tail = this.textualToolCallBuffer.substring(endIndex)
-        this.parseTextualToolCallBlock(block)
-        this.textualToolCallBuffer = ''
-        this.textualToolCallBlockActive = false
-        remaining = tail
-        continue
-      }
-
-      const startIndex = this.findTextualToolCallStart(remaining)
-      if (startIndex < 0) {
-        const partialPrefixLength = this.findTrailingTextualToolCallPrefixLength(remaining)
-        if (partialPrefixLength > 0) {
-          visible += remaining.substring(0, remaining.length - partialPrefixLength)
-          this.textualToolCallBuffer = remaining.substring(remaining.length - partialPrefixLength)
-        } else {
-          visible += remaining
-        }
-        remaining = ''
-        continue
-      }
-
-      visible += remaining.substring(0, startIndex)
-      this.textualToolCallBuffer = remaining.substring(startIndex)
-      this.textualToolCallBlockActive = true
-      remaining = ''
-      const endIndex = this.findTextualToolCallEnd(this.textualToolCallBuffer)
-      if (endIndex >= 0) {
-        const block = this.textualToolCallBuffer.substring(0, endIndex)
-        const tail = this.textualToolCallBuffer.substring(endIndex)
-        this.parseTextualToolCallBlock(block)
-        this.textualToolCallBuffer = ''
-        this.textualToolCallBlockActive = false
-        remaining = tail
-      }
-    }
-
-    return visible
   }
 
   // 说明：不做“内容像推理”的启发式判断（Kelivo 策略）
@@ -2557,6 +2621,7 @@ export class AIApiService {
     reasoningLevel: ReasoningLevel = ReasoningLevel.OFF  // 推理级别参数
   ): http.HttpRequest {
     this.resetThinkingState()
+    const toolStreamState = new ToolCallStreamState(false)
 
     const useOpenAIResponses = this.shouldUseOpenAIResponses(config)
     let url = this.buildChatUrl(config, model)
@@ -2602,7 +2667,16 @@ export class AIApiService {
           buffer = lines.pop() || ''
 
           for (let i = 0; i < lines.length; i++) {
-            this.handleStreamLine(config.apiStyle, useOpenAIResponses, lines[i], onData, onError, onReasoningData, onImageData)
+            this.handleStreamLine(
+              config.apiStyle,
+              useOpenAIResponses,
+              lines[i],
+              toolStreamState,
+              onData,
+              onError,
+              onReasoningData,
+              onImageData
+            )
           }
         } catch (e) {
           console.error('AIApiService', `Stream decode error: ${JSON.stringify(e)}`)
@@ -2610,7 +2684,16 @@ export class AIApiService {
       },
       (response) => {
         if (buffer.trim() !== '') {
-          this.handleStreamLine(config.apiStyle, useOpenAIResponses, buffer, onData, onError, onReasoningData, onImageData)
+          this.handleStreamLine(
+            config.apiStyle,
+            useOpenAIResponses,
+            buffer,
+            toolStreamState,
+            onData,
+            onError,
+            onReasoningData,
+            onImageData
+          )
           buffer = ''
         }
         if (!response.success) {
@@ -2646,7 +2729,9 @@ export class AIApiService {
     onToolCallDelta?: (toolCallDeltas: ToolCallDelta[]) => void
   ): http.HttpRequest {
     this.resetThinkingState()
-    this.textualToolCallsEnabled = tools !== undefined && tools.length > 0 && toolChoice !== 'none'
+    const toolStreamState = new ToolCallStreamState(
+      tools !== undefined && tools.length > 0 && toolChoice !== 'none'
+    )
 
     let url = this.buildChatUrl(config, model, true)
     const headers = this.buildHeaders(config)
@@ -2686,7 +2771,17 @@ export class AIApiService {
           buffer = lines.pop() || ''
 
           for (let i = 0; i < lines.length; i++) {
-            this.handleStreamLineWithTools(config.apiStyle, false, lines[i], onData, onError, onReasoningData, onImageData, onToolCallDelta)
+            this.handleStreamLineWithTools(
+              config.apiStyle,
+              false,
+              lines[i],
+              toolStreamState,
+              onData,
+              onError,
+              onReasoningData,
+              onImageData,
+              onToolCallDelta
+            )
           }
         } catch (e) {
           console.error('AIApiService', `Stream decode error: ${JSON.stringify(e)}`)
@@ -2694,7 +2789,17 @@ export class AIApiService {
       },
       (response) => {
         if (buffer.trim() !== '') {
-          this.handleStreamLineWithTools(config.apiStyle, false, buffer, onData, onError, onReasoningData, onImageData, onToolCallDelta)
+          this.handleStreamLineWithTools(
+            config.apiStyle,
+            false,
+            buffer,
+            toolStreamState,
+            onData,
+            onError,
+            onReasoningData,
+            onImageData,
+            onToolCallDelta
+          )
           buffer = ''
         }
         if (!response.success) {
@@ -2703,7 +2808,7 @@ export class AIApiService {
           return
         }
         console.info('AIApiService', 'Stream completed successfully')
-        const accumulatedToolCalls = this.getAccumulatedToolCalls()
+        const accumulatedToolCalls = toolStreamState.getAccumulatedToolCalls()
         onComplete(accumulatedToolCalls)
       },
       (error) => {
@@ -2718,6 +2823,7 @@ export class AIApiService {
     apiStyle: ApiStyle,
     useOpenAIResponses: boolean,
     line: string,
+    toolStreamState: ToolCallStreamState,
     onData: (content: string) => void,
     onError: (error: string) => void,
     onReasoningData?: (content: string) => void,
@@ -2747,7 +2853,17 @@ export class AIApiService {
 
     try {
       const json = JSON.parse(jsonStr) as object
-      this.emitStreamContentWithTools(apiStyle, useOpenAIResponses, json, onData, onError, onReasoningData, onImageData, onToolCallDelta)
+      this.emitStreamContentWithTools(
+        apiStyle,
+        useOpenAIResponses,
+        json,
+        toolStreamState,
+        onData,
+        onError,
+        onReasoningData,
+        onImageData,
+        onToolCallDelta
+      )
     } catch (_e) {
       console.warn('AIApiService', `JSON parse error for line: ${jsonStr.substring(0, 100)}...`)
     }
@@ -2758,6 +2874,7 @@ export class AIApiService {
     apiStyle: ApiStyle,
     useOpenAIResponses: boolean,
     json: object,
+    toolStreamState: ToolCallStreamState,
     onData: (content: string) => void,
     onError: (error: string) => void,
     onReasoningData?: (content: string) => void,
@@ -2767,7 +2884,7 @@ export class AIApiService {
     if (Array.isArray(json)) {
       const items = json as object[]
       for (let i = 0; i < items.length; i++) {
-        const result = this.parseStreamChunk(apiStyle, useOpenAIResponses, items[i])
+        const result = this.parseStreamChunk(apiStyle, useOpenAIResponses, items[i], toolStreamState)
         if (result.errorMessage !== undefined && result.errorMessage !== '') {
           onError(result.errorMessage)
         }
@@ -2795,7 +2912,7 @@ export class AIApiService {
       return
     }
 
-    const result = this.parseStreamChunk(apiStyle, useOpenAIResponses, json)
+    const result = this.parseStreamChunk(apiStyle, useOpenAIResponses, json, toolStreamState)
     if (result.errorMessage !== undefined && result.errorMessage !== '') {
       onError(result.errorMessage)
     }
@@ -2892,7 +3009,12 @@ export class AIApiService {
     return result
   }
 
-  private parseStreamChunk(apiStyle: ApiStyle, useOpenAIResponses: boolean, json: object): StreamChunkResult {
+  private parseStreamChunk(
+    apiStyle: ApiStyle,
+    useOpenAIResponses: boolean,
+    json: object,
+    toolStreamState: ToolCallStreamState
+  ): StreamChunkResult {
     const result: StreamChunkResult = { content: '', reasoningContent: '' }
     let hasReasoningDetails: boolean = false
 
@@ -2987,22 +3109,7 @@ export class AIApiService {
               arguments: incomingArgs !== '' ? incomingArgs : undefined
             }
             toolCallDeltas.push(tcDelta)
-
-            let existingToolCall = this.streamToolCalls.get(tc.index)
-            if (existingToolCall === undefined) {
-              existingToolCall = new ToolCall('', '', '')
-              this.streamToolCalls.set(tc.index, existingToolCall)
-            }
-            const incomingId = tc.id as string | null | undefined
-            if (incomingId !== undefined && incomingId !== null && incomingId !== '') {
-              existingToolCall.id = incomingId
-            }
-            if (incomingName !== '') {
-              existingToolCall.functionName = this.mergeToolFunctionName(existingToolCall.functionName, incomingName)
-            }
-            if (incomingArgs !== '') {
-              existingToolCall.arguments += incomingArgs
-            }
+            toolStreamState.appendToolCallDelta(tcDelta)
           }
           result.toolCallDeltas = toolCallDeltas
         }
@@ -3053,7 +3160,7 @@ export class AIApiService {
       result.reasoningContent !== '' && result.content !== '') {
       result.content = this.stripReasoningOverlap(result.content, result.reasoningContent, hasReasoningDetails)
     }
-    result.content = this.absorbTextualToolCalls(result.content)
+    result.content = toolStreamState.absorbTextualToolCalls(result.content)
     return result
   }
 
@@ -3116,6 +3223,7 @@ export class AIApiService {
     apiStyle: ApiStyle,
     useOpenAIResponses: boolean,
     line: string,
+    toolStreamState: ToolCallStreamState,
     onData: (content: string) => void,
     onError: (error: string) => void,
     onReasoningData?: (content: string) => void,
@@ -3144,7 +3252,16 @@ export class AIApiService {
 
     try {
       const json = JSON.parse(jsonStr) as object
-      this.emitStreamContent(apiStyle, useOpenAIResponses, json, onData, onError, onReasoningData, onImageData)
+      this.emitStreamContent(
+        apiStyle,
+        useOpenAIResponses,
+        json,
+        toolStreamState,
+        onData,
+        onError,
+        onReasoningData,
+        onImageData
+      )
     } catch (_e) {
       console.warn('AIApiService', `JSON parse error for line: ${jsonStr.substring(0, 100)}...`)
     }
@@ -3154,6 +3271,7 @@ export class AIApiService {
     apiStyle: ApiStyle,
     useOpenAIResponses: boolean,
     json: object,
+    toolStreamState: ToolCallStreamState,
     onData: (content: string) => void,
     onError: (error: string) => void,
     onReasoningData?: (content: string) => void,
@@ -3162,7 +3280,7 @@ export class AIApiService {
     if (Array.isArray(json)) {
       const items = json as object[]
       for (let i = 0; i < items.length; i++) {
-        const result = this.parseStreamChunk(apiStyle, useOpenAIResponses, items[i])
+        const result = this.parseStreamChunk(apiStyle, useOpenAIResponses, items[i], toolStreamState)
         if (result.errorMessage !== undefined && result.errorMessage !== '') {
           onError(result.errorMessage)
         }
@@ -3183,7 +3301,7 @@ export class AIApiService {
       return
     }
 
-    const result = this.parseStreamChunk(apiStyle, useOpenAIResponses, json)
+    const result = this.parseStreamChunk(apiStyle, useOpenAIResponses, json, toolStreamState)
     if (result.errorMessage !== undefined && result.errorMessage !== '') {
       onError(result.errorMessage)
     }

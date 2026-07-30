@@ -18,6 +18,14 @@ import { CanvasDocumentMutationResult, CanvasDocumentState, getCanvasDocumentSer
 import { getPdfTextExtractionService, PdfTextExtractionRequest } from '../services/PdfTextExtractionService'
 import { getImageTextRecognitionService, ImageTextRecognitionRequest } from '../services/ImageTextRecognitionService'
 import { getSkillService } from '../services/SkillService'
+import {
+  createKnowledgeSearchToolConfig,
+  createKnowledgeSearchToolDefinition,
+  KNOWLEDGE_SEARCH_TOOL_ID,
+  KnowledgeSearchExecutor
+} from './KnowledgeSearchTool'
+
+export { KNOWLEDGE_SEARCH_TOOL_ID } from './KnowledgeSearchTool'
 
 export const ASK_USER_TOOL_ID: string = 'ask_user'
 export const READ_SCHEDULE_TOOL_ID: string = 'read_schedule'
@@ -2347,6 +2355,17 @@ export function registerBuiltinTools(): void {
   const registry = getToolRegistry()
   let registeredNow = 0
 
+  if (!registry.isToolRegistered(KNOWLEDGE_SEARCH_TOOL_ID)) {
+    const knowledgeSearchTool = new RegisteredTool(
+      KNOWLEDGE_SEARCH_TOOL_ID,
+      createKnowledgeSearchToolConfig(),
+      createKnowledgeSearchToolDefinition(),
+      new KnowledgeSearchExecutor()
+    )
+    registry.registerTool(knowledgeSearchTool)
+    registeredNow += 1
+  }
+
   if (!registry.isToolRegistered('web_search')) {
     const webSearchTool = new RegisteredTool(
       'web_search',
@@ -2480,6 +2499,7 @@ export function registerBuiltinTools(): void {
 // 获取所有内置工具 ID
 export function getBuiltinToolIds(): string[] {
   return [
+    KNOWLEDGE_SEARCH_TOOL_ID,
     'web_search',
     ASK_USER_TOOL_ID,
     PYTHON_SANDBOX_TOOL_ID,

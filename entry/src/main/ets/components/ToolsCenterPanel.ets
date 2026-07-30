@@ -5,7 +5,11 @@ import { ToolRegistry } from '../services/ToolRegistry'
 import { McpService } from '../services/McpService'
 import { SkillConfig, SkillService } from '../services/SkillService'
 import { ServiceRegistry } from '../services/ServiceRegistry'
-import { registerBuiltinTools, USE_SKILL_TOOL_ID } from '../config/BuiltinTools'
+import {
+  KNOWLEDGE_SEARCH_TOOL_ID,
+  registerBuiltinTools,
+  USE_SKILL_TOOL_ID
+} from '../config/BuiltinTools'
 import { getPreferencesService, PreferencesService, PreferenceKeys } from '../services/PreferencesService'
 import { showSnackBar, SnackBarDisplayOptions, SnackBarTone } from '../utils/ToastUtil'
 import { getAppUiState } from '../state/AppUiState'
@@ -146,7 +150,7 @@ export struct ToolsCenterPanel {
     const builtin: ToolConfig[] = []
     for (let i = 0; i < allTools.length; i++) {
       if (allTools[i].sourceType === ToolSourceType.BUILTIN && allTools[i].id !== this.searchToolId &&
-        allTools[i].id !== USE_SKILL_TOOL_ID) {
+        allTools[i].id !== USE_SKILL_TOOL_ID && allTools[i].id !== KNOWLEDGE_SEARCH_TOOL_ID) {
         builtin.push(allTools[i])
       }
     }

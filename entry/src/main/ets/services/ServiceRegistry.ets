@@ -25,6 +25,10 @@ import {
   getDocumentAttachmentRegistryService,
   DocumentAttachmentRegistryService
 } from './DocumentAttachmentRegistryService'
+import {
+  getKnowledgeDocumentService,
+  KnowledgeDocumentService
+} from './KnowledgeDocumentService'
 import { getSettingsManager, SettingsManager } from '../viewmodels/SettingsManager'
 import { getAppStateManager, AppStateManager } from '../viewmodels/AppStateManager'
 import { getProviderViewModel, ProviderViewModel } from '../viewmodels/ProviderViewModel'
@@ -138,6 +142,10 @@ export class ServiceRegistry {
 
   static documentAttachmentRegistry(): DocumentAttachmentRegistryService {
     return getDocumentAttachmentRegistryService()
+  }
+
+  static knowledgeDocuments(): KnowledgeDocumentService {
+    return getKnowledgeDocumentService()
   }
 
   static chat(): ChatViewModel {

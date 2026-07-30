@@ -2,6 +2,7 @@
 /oh_modules
 /local.properties
 /.idea
+/.vscode
 **/build
 /.hvigor
 .cxx
@@ -14,6 +15,9 @@
 .agent/
 .claude/
 .codex/
+
+# 本机编辑器与系统元数据
+.DS_Store
 
 .codeartsdoer
 

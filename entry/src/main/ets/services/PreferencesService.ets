@@ -58,9 +58,10 @@ export class PreferenceKeys {
   static readonly MCP_SERVER_CONFIGS_JSON: string = 'mcp_server_configs_json'
   static readonly CHAT_SELECTED_TOOL_IDS_JSON: string = 'chat_selected_tool_ids_json'
   static readonly CHAT_REASONING_LEVEL: string = 'chat_reasoning_level'
+  static readonly KNOWLEDGE_CONVERSATION_ENABLED: string = 'knowledge_conversation_enabled'
+  static readonly KNOWLEDGE_EMBEDDING_SELECTION_JSON: string = 'knowledge_embedding_selection_json'
   static readonly SKILL_TOOL_ENABLED: string = 'skill_tool_enabled'
   static readonly SKILL_CONFIGS_JSON: string = 'skill_configs_json'
-
   // 主题配色
   static readonly COLOR_THEME: string = 'color_theme'
 
@@ -90,6 +91,7 @@ export class PreferenceKeys {
   static readonly MATERIAL_LEVEL: string = 'material_level'
   static readonly LIGHT_COLOR_MODE: string = 'light_color_mode'
   static readonly CHAT_LIST_IMMERSIVE_MATERIAL: string = 'chat_list_immersive_material'
+  static readonly KNOWLEDGE_LIST_IMMERSIVE_MATERIAL: string = 'knowledge_list_immersive_material'
 
   // WebDAV 同步配置
   static readonly WEBDAV_SERVER_URL: string = 'webdav_server_url'
@@ -498,6 +500,16 @@ export class PreferencesService {
   // 设置对话列表页是否使用沉浸材质
   async setChatListImmersiveMaterial(enabled: boolean): Promise<void> {
     await this.setBoolean(PreferenceKeys.CHAT_LIST_IMMERSIVE_MATERIAL, enabled)
+  }
+
+  // 获取知识库列表页是否使用沉浸材质，默认关闭
+  async getKnowledgeListImmersiveMaterial(): Promise<boolean> {
+    return await this.getBoolean(PreferenceKeys.KNOWLEDGE_LIST_IMMERSIVE_MATERIAL, false)
+  }
+
+  // 设置知识库列表页是否使用沉浸材质
+  async setKnowledgeListImmersiveMaterial(enabled: boolean): Promise<void> {
+    await this.setBoolean(PreferenceKeys.KNOWLEDGE_LIST_IMMERSIVE_MATERIAL, enabled)
   }
 }
 

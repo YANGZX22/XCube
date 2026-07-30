@@ -43,6 +43,10 @@ import {
   normalizeOptimizedSearchQuery,
   normalizeRelativeTimeForSearchQuery as normalizeRelativeTimeForSearchQueryShared
 } from '../utils/SearchQueryUtils'
+import {
+  KNOWLEDGE_SEARCH_MAX_CALLS_PER_USER_TURN,
+  KNOWLEDGE_SEARCH_TOOL_ID
+} from '../config/KnowledgeSearchTool'
 
 // 标题生成状态
 export interface TitleGenerationCallbacks {
@@ -79,6 +83,63 @@ interface SearchResultData {
   searchEngine: string
   results: SearchResultItem[]
   summary: string
+}
+
+interface KnowledgeToolResultHitData {
+  documentId?: string
+  chunkId?: string
+  title?: string
+  locator?: string
+  score?: number
+}
+
+interface KnowledgeToolResultData {
+  status?: string
+  code?: string
+  error?: string
+  message?: string
+  query?: string
+  topK?: number
+  truncated?: boolean
+  queryTruncated?: boolean
+  knowledgeQueryCount?: number
+  remainingKnowledgeQueries?: number
+  maxKnowledgeQueries?: number
+  continuationGuidance?: string
+  hits?: KnowledgeToolResultHitData[]
+}
+
+class PersistedKnowledgeToolHit {
+  documentId: string = ''
+  chunkId: string = ''
+  title: string = ''
+  locator: string = ''
+  score: number = 0
+
+  constructor(source: KnowledgeToolResultHitData) {
+    this.documentId = source.documentId === undefined ? '' : source.documentId
+    this.chunkId = source.chunkId === undefined ? '' : source.chunkId
+    this.title = source.title === undefined ? '' : source.title
+    this.locator = source.locator === undefined ? '' : source.locator
+    this.score = source.score === undefined ? 0 : source.score
+  }
+}
+
+class PersistedKnowledgeToolResult {
+  status: string = ''
+  code: string = ''
+  error: string = ''
+  message: string = ''
+  query: string = ''
+  topK: number = 0
+  hitCount: number = 0
+  truncated: boolean = false
+  queryTruncated: boolean = false
+  knowledgeQueryCount: number = 0
+  remainingKnowledgeQueries: number = 0
+  maxKnowledgeQueries: number = 0
+  continuationGuidance: string = ''
+  hits: PersistedKnowledgeToolHit[] = []
 }
 
 interface AskUserApprovalAnswer {
@@ -2171,12 +2232,14 @@ ${preview}`
     onComplete()
   }
 
-  private async executeToolCallsWithWebSearchBudget(
+  private async executeToolCallsWithSearchBudgets(
     toolCalls: ToolCall[],
-    aiMessage: ChatMessage
+    aiMessage: ChatMessage,
+    allowedFunctionNames: string[]
   ): Promise<ToolResult[]> {
     const results: ToolResult[] = []
     let executedSearchesInBatch = 0
+    let executedKnowledgeQueriesInBatch = 0
     for (let i = 0; i < toolCalls.length; i++) {
       const toolCall = toolCalls[i]
       if (this.isWebSearchFunction(toolCall.functionName)) {
@@ -2186,16 +2249,123 @@ ${preview}`
           results.push(this.buildWebSearchBudgetResult(toolCall, usedSearchCount, limit, aiMessage))
           continue
         }
-        const result = await this.toolExecutionService.executeToolCall(toolCall)
+        const result = await this.toolExecutionService.executeToolCall(toolCall, allowedFunctionNames)
         results.push(result)
         if (!this.isWebSearchBudgetResult(result)) {
           executedSearchesInBatch += 1
         }
-      } else {
-        results.push(await this.toolExecutionService.executeToolCall(toolCall))
+        continue
       }
+      if (this.isKnowledgeSearchFunction(toolCall.functionName)) {
+        const usedKnowledgeQueryCount =
+          this.countCompletedKnowledgeSearchCalls(aiMessage) + executedKnowledgeQueriesInBatch
+        if (usedKnowledgeQueryCount >= KNOWLEDGE_SEARCH_MAX_CALLS_PER_USER_TURN) {
+          results.push(this.buildKnowledgeSearchBudgetResult(toolCall, usedKnowledgeQueryCount))
+          continue
+        }
+        const result = await this.toolExecutionService.executeToolCall(toolCall, allowedFunctionNames)
+        executedKnowledgeQueriesInBatch += 1
+        this.decorateKnowledgeSearchResult(result, usedKnowledgeQueryCount + 1)
+        results.push(result)
+        continue
+      }
+      results.push(await this.toolExecutionService.executeToolCall(toolCall, allowedFunctionNames))
     }
     return results
+  }
+
+  private buildAllowedToolFunctionNames(tools: ToolDefinition[]): string[] {
+    const functionNames: string[] = []
+    for (let i = 0; i < tools.length; i++) {
+      const functionName = tools[i].function.name.trim()
+      if (functionName !== '' && !functionNames.includes(functionName)) {
+        functionNames.push(functionName)
+      }
+    }
+    return functionNames
+  }
+
+  private isKnowledgeSearchFunction(functionName: string): boolean {
+    return functionName.trim() === KNOWLEDGE_SEARCH_TOOL_ID
+  }
+
+  private hasCanonicalKnowledgeSearchCall(toolCalls: ToolCall[]): boolean {
+    for (let i = 0; i < toolCalls.length; i++) {
+      if (this.isKnowledgeSearchFunction(toolCalls[i].functionName)) {
+        return true
+      }
+    }
+    return false
+  }
+
+  private hasKnowledgeSearchTool(tools: ToolDefinition[]): boolean {
+    for (let i = 0; i < tools.length; i++) {
+      if (this.isKnowledgeSearchFunction(tools[i].function.name)) {
+        return true
+      }
+    }
+    return false
+  }
+
+  private getOnlyKnowledgeSearchTools(tools: ToolDefinition[]): ToolDefinition[] {
+    const knowledgeTools: ToolDefinition[] = []
+    for (let i = 0; i < tools.length; i++) {
+      if (this.isKnowledgeSearchFunction(tools[i].function.name)) {
+        knowledgeTools.push(tools[i])
+      }
+    }
+    return knowledgeTools
+  }
+
+  private getToolsWithoutKnowledgeSearch(tools: ToolDefinition[]): ToolDefinition[] {
+    const remainingTools: ToolDefinition[] = []
+    for (let i = 0; i < tools.length; i++) {
+      if (!this.isKnowledgeSearchFunction(tools[i].function.name)) {
+        remainingTools.push(tools[i])
+      }
+    }
+    return remainingTools
+  }
+
+  /**
+   * knowledge_search 的完整片段只用于当前工具续轮。
+   * 持久化仅保留引用元数据，避免把私有知识正文复制进 chatbox.db。
+   */
+  private buildPersistedToolResult(functionName: string, resultContent: string): string {
+    if (!this.isKnowledgeSearchFunction(functionName)) {
+      return resultContent
+    }
+
+    const persisted = new PersistedKnowledgeToolResult()
+    try {
+      const source = JSON.parse(resultContent) as KnowledgeToolResultData
+      persisted.status = source.status === undefined ? '' : source.status
+      persisted.code = source.code === undefined ? '' : source.code
+      persisted.error = source.error === undefined ? '' : source.error
+      persisted.message = source.message === undefined ? '' : source.message
+      persisted.query = source.query === undefined ? '' : source.query
+      persisted.topK = source.topK === undefined ? 0 : source.topK
+      persisted.truncated = source.truncated === true
+      persisted.queryTruncated = source.queryTruncated === true
+      persisted.knowledgeQueryCount =
+        source.knowledgeQueryCount === undefined ? 0 : source.knowledgeQueryCount
+      persisted.remainingKnowledgeQueries =
+        source.remainingKnowledgeQueries === undefined ? 0 : source.remainingKnowledgeQueries
+      persisted.maxKnowledgeQueries =
+        source.maxKnowledgeQueries === undefined ? 0 : source.maxKnowledgeQueries
+      persisted.continuationGuidance =
+        source.continuationGuidance === undefined ? '' : source.continuationGuidance
+      const hits = source.hits === undefined ? [] : source.hits
+      persisted.hitCount = hits.length
+      for (let i = 0; i < hits.length; i++) {
+        persisted.hits.push(new PersistedKnowledgeToolHit(hits[i]))
+      }
+    } catch (_error) {
+      persisted.status = 'redacted'
+      persisted.code = 'KNOWLEDGE_RESULT_METADATA_ONLY'
+      persisted.message = '知识库工具结果正文未持久化'
+    }
+    return JSON.stringify(persisted)
   }
 
   private countCompletedWebSearchCalls(aiMessage: ChatMessage): number {
@@ -2211,6 +2381,67 @@ ${preview}`
       }
     }
     return count
+  }
+
+  private countCompletedKnowledgeSearchCalls(aiMessage: ChatMessage): number {
+    let count = 0
+    for (let i = 0; i < aiMessage.toolCalls.length; i++) {
+      const toolCall = aiMessage.toolCalls[i]
+      if (!this.isKnowledgeSearchFunction(toolCall.functionName)) {
+        continue
+      }
+      const result = this.findToolResult(aiMessage, toolCall.id)
+      if (result !== null && !this.isKnowledgeSearchBudgetResult(result)) {
+        count += 1
+      }
+    }
+    return count
+  }
+
+  private decorateKnowledgeSearchResult(result: ToolResult, completedCount: number): void {
+    try {
+      const data = JSON.parse(result.content) as Record<string, Object>
+      const remaining = Math.max(0, KNOWLEDGE_SEARCH_MAX_CALLS_PER_USER_TURN - completedCount)
+      data['knowledgeQueryCount'] = completedCount
+      data['remainingKnowledgeQueries'] = remaining
+      data['maxKnowledgeQueries'] = KNOWLEDGE_SEARCH_MAX_CALLS_PER_USER_TURN
+      if (remaining <= 0) {
+        data['continuationGuidance'] =
+          '知识库查询次数已达上限。停止调用 knowledge_search，基于已有证据直接回答；证据不足时明确说明。'
+      } else if (data['truncated'] === true) {
+        data['continuationGuidance'] =
+          'truncated 仅表示本次返回受长度预算截断。若当前证据已足够，立即回答；仅在能指出明确缺口且下一条 query 能更聚焦地补齐时续查，禁止重复或仅同义改写。'
+      } else {
+        data['continuationGuidance'] =
+          '若当前证据已完整命中，立即回答；仅在存在明确证据缺口时使用更聚焦且不重复的 query 续查。'
+      }
+      result.content = JSON.stringify(data)
+    } catch (_error) {
+      // knowledge_search 的标准结果始终为 JSON；异常结果仍计入查询上限。
+    }
+  }
+
+  private buildKnowledgeSearchBudgetResult(toolCall: ToolCall, usedQueryCount: number): ToolResult {
+    toolCall.toolId = KNOWLEDGE_SEARCH_TOOL_ID
+    toolCall.displayName = '知识库检索'
+    toolCall.sourceLabel = '内置工具'
+    toolCall.permissionLevel = 'read'
+    return new ToolResult(
+      toolCall.id,
+      JSON.stringify({
+        status: 'error',
+        error: 'knowledge_search_budget_exhausted',
+        code: 'KNOWLEDGE_SEARCH_BUDGET_EXHAUSTED',
+        knowledgeQueryCount: usedQueryCount,
+        remainingKnowledgeQueries: 0,
+        maxKnowledgeQueries: KNOWLEDGE_SEARCH_MAX_CALLS_PER_USER_TURN,
+        message: '本次用户提问的知识库查询已达 5 次上限。不要继续调用 knowledge_search；请基于已有结果直接回答，证据不足时明确说明。',
+        continuationGuidance: '停止查询并完成最终回答。'
+      }),
+      true,
+      toolCall.displayName,
+      toolCall.sourceLabel
+    )
   }
 
   private getCurrentWebSearchLimit(aiMessage: ChatMessage): number {
@@ -2266,6 +2497,16 @@ ${preview}`
       const data = JSON.parse(result.content) as Record<string, Object>
       return `${data.code ?? ''}` === 'WEB_SEARCH_BUDGET_EXHAUSTED' ||
         `${data.error ?? ''}` === 'web_search_budget_exhausted'
+    } catch (_error) {
+      return false
+    }
+  }
+
+  private isKnowledgeSearchBudgetResult(result: ToolResult): boolean {
+    try {
+      const data = JSON.parse(result.content) as Record<string, Object>
+      return `${data.code ?? ''}` === 'KNOWLEDGE_SEARCH_BUDGET_EXHAUSTED' ||
+        `${data.error ?? ''}` === 'knowledge_search_budget_exhausted'
     } catch (_error) {
       return false
     }
@@ -2373,11 +2614,36 @@ ${preview}`
       return
     }
 
-    const toolsEnabledInThisRound = iteration < this.MAX_TOOL_ITERATIONS
-    if (!toolsEnabledInThisRound) {
+    const globalToolLimitReached = iteration >= this.MAX_TOOL_ITERATIONS
+    if (globalToolLimitReached) {
       console.warn('ChatViewModel', `Max tool iterations (${this.MAX_TOOL_ITERATIONS}) reached, forcing final answer without tools`)
     }
-    const requestMessagesForRound = toolsEnabledInThisRound ? requestMessages : requestMessages.concat([
+    const completedKnowledgeQueryCount = this.countCompletedKnowledgeSearchCalls(aiMessage)
+    const requestHasKnowledgeSearch = this.hasKnowledgeSearchTool(tools)
+    const forceKnowledgeSearchInThisRound =
+      !globalToolLimitReached && requestHasKnowledgeSearch && completedKnowledgeQueryCount === 0
+    // DashScope 等 OpenAI 兼容接口在 Thinking 模式下拒绝 required tool_choice。
+    // 首轮只负责让模型生成知识库 query，因此临时关闭该轮 Thinking；拿到 tool result
+    // 后的续轮会恢复用户原本选择的推理级别。
+    const reasoningLevelForThisRound =
+      forceKnowledgeSearchInThisRound ? ReasoningLevel.OFF : reasoningLevel
+    let toolsForThisRound: ToolDefinition[] = []
+    let toolChoiceForThisRound = 'none'
+    if (!globalToolLimitReached) {
+      if (forceKnowledgeSearchInThisRound) {
+        toolsForThisRound = this.getOnlyKnowledgeSearchTools(tools)
+        toolChoiceForThisRound = 'required'
+      } else if (requestHasKnowledgeSearch &&
+        completedKnowledgeQueryCount >= KNOWLEDGE_SEARCH_MAX_CALLS_PER_USER_TURN) {
+        toolsForThisRound = this.getToolsWithoutKnowledgeSearch(tools)
+        toolChoiceForThisRound = toolsForThisRound.length > 0 ? 'auto' : 'none'
+      } else {
+        toolsForThisRound = tools
+        toolChoiceForThisRound = toolsForThisRound.length > 0 ? 'auto' : 'none'
+      }
+    }
+    const toolsEnabledInThisRound = !globalToolLimitReached && toolsForThisRound.length > 0
+    const requestMessagesForRound = !globalToolLimitReached ? requestMessages : requestMessages.concat([
       new RequestMessage(
         'system',
         '工具调用次数已达上限。不要再调用任何工具，也不要输出工具调用标记；请仅根据前文已有工具结果，直接用自然语言回答用户。不要说“模型未返回最终回答”，不要把搜索摘要或工具 JSON 原样返回；如果证据不足，请给出谨慎结论和下一步建议。'
@@ -2520,6 +2786,23 @@ ${preview}`
         })
         setHasReceivedFirstChunk(false)
 
+        if (forceKnowledgeSearchInThisRound && !this.hasCanonicalKnowledgeSearchCall(toolCalls)) {
+          rollbackStreamedRoundOutput()
+          roundContentBuffer = ''
+          roundReasoningBuffer = ''
+          const requiredToolError =
+            '当前模型未按要求调用知识库。请重试，或切换到完整支持 OpenAI 工具调用的模型。'
+          aiMessage.content = requiredToolError
+          aiMessage.isGenerating = false
+          aiMessage.isSearching = false
+          onAIMessageUpdated(aiMessage)
+          this.clearPendingAIMessageIfMatches(aiMessage.id)
+          this.unregisterActiveRequest(requestId)
+          this.toolExecutionService.clearCancelCheckCallback()
+          onError(requiredToolError)
+          return
+        }
+
         // 检查是否有工具调用
         if (toolCalls.length > 0 && toolsEnabledInThisRound) {
           console.info('ChatViewModel', `[Function Calling] Received ${toolCalls.length} tool calls`)
@@ -2569,7 +2852,11 @@ ${preview}`
           }
 
           // 执行工具调用
-          const toolResults = await this.executeToolCallsWithWebSearchBudget(toolCalls, aiMessage)
+          const toolResults = await this.executeToolCallsWithSearchBudgets(
+            toolCalls,
+            aiMessage,
+            this.buildAllowedToolFunctionNames(toolsForThisRound)
+          )
           if (isCancelledFn()) {
             return
           }
@@ -2606,7 +2893,10 @@ ${preview}`
                 toolCalls[i].sourceType,
                 toolCalls[i].permissionLevel,
                 toolCalls[i].arguments,
-                result !== null ? result.content : '',
+                this.buildPersistedToolResult(
+                  toolCalls[i].functionName,
+                  result !== null ? result.content : ''
+                ),
                 status
               )
             }
@@ -2775,9 +3065,9 @@ ${preview}`
           console.error('ChatViewModel', `Failed to save AI generated image: ${JSON.stringify(error)}`)
         }
       },
-      reasoningLevel,
-      toolsEnabledInThisRound ? tools : undefined,
-      toolsEnabledInThisRound ? 'auto' : 'none',
+      reasoningLevelForThisRound,
+      toolsEnabledInThisRound ? toolsForThisRound : undefined,
+      toolChoiceForThisRound,
       (toolCallDeltas: ToolCallDelta[]) => {
         if (isCancelledFn() || !toolsEnabledInThisRound || toolCallDeltas.length <= 0) {
           return

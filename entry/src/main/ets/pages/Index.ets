@@ -13,7 +13,15 @@ import {
   HdsTabs,
   hdsMaterial
 } from '@kit.UIDesignKit'
-import { ChatSession, ChatMessage, ModelProvider } from '../models/ChatModels'
+import {
+  ApiStyle,
+  ChatSession,
+  ChatMessage,
+  ModelInfo,
+  ModelProvider,
+  ModelType,
+  ProviderType
+} from '../models/ChatModels'
 import { Assistant, DEFAULT_ASSISTANT_ID } from '../models/AssistantModels'
 import { ChatViewModel } from '../viewmodels/ChatViewModel'
 import { SettingsChangeCallback } from '../viewmodels/SettingsManager'
@@ -51,6 +59,8 @@ import { IndexSettingsSheetContent } from '../components/index/IndexSettingsShee
 import { IndexSessionListSection } from '../components/index/IndexSessionListSection'
 import { ChatMultiSelectToolbar } from '../components/chat/ChatMultiSelectToolbar'
 import { ChatFloatingImmersiveButton } from '../components/ChatFloatingImmersiveButton'
+import { KnowledgeBasePanel } from '../components/KnowledgeBasePanel'
+import { KnowledgeEmbeddingSelectSheetContent } from '../components/KnowledgeEmbeddingSelectSheetContent'
 import { ModelSelectorContent } from '../components/ModelSelector'
 import {
   AssistantAvatarView,
@@ -75,6 +85,7 @@ import {
 import {
   INDEX_TAB_ASSISTANTS,
   INDEX_TAB_CHAT,
+  INDEX_TAB_KNOWLEDGE,
   INDEX_TAB_SETTINGS,
   shouldHideCompactTabsBarForIndex,
   shouldHideCompactTabsHostForIndex
@@ -89,6 +100,7 @@ import {
 import {
   buildHdsTopNavigationTitleBarOptions,
   getHdsTopNavigationBlurEffectiveEndOffset,
+  getHdsTopNavigationContentTopPadding,
   getHdsTopNavigationMaskExtraHeight,
   HdsTopNavigationBlurOptions,
   getHdsStatusBarContentColor
@@ -103,20 +115,40 @@ import { tryHandleProviderDetailInternalBack } from '../components/ProviderDetai
 import { tryHandleModelManageInternalBack } from './ModelManagePage'
 import { TRANSPARENT_BG_COLOR } from '../utils/IconGeneratorUtils'
 import { DEFAULT_PRIMARY_COLOR } from '../config/ThemeDefaults'
+import { pickLocalizedText } from '../utils/LocalizedTextUtils'
+import {
+  buildKnowledgeEmbeddingEndpointFingerprint,
+  getKnowledgeEmbeddingService,
+  KnowledgeEmbeddingBackend,
+  KnowledgeEmbeddingSelection
+} from '../services/KnowledgeEmbeddingService'
+import { KnowledgeEmbeddingMigrationResult } from '../services/KnowledgeDocumentService'
 
 @Entry
 @ComponentV2
 struct Index {
   private static readonly COMPACT_TABS_BAR_HEIGHT: number = 56
+  private static readonly TAB_TITLE_BAR_HEIGHT: number = 56
+  private static readonly TAB_TITLE_FONT_SIZE: number = 18
+  private static readonly TAB_TITLE_VERTICAL_OFFSET: number = -2
   private static readonly COMPACT_TABS_FLOATING_SIDE_MARGIN: number = 16
-  private static readonly COMPACT_TABS_WITH_ACTION_SMALL_WIDTH: number = 220
-  private static readonly COMPACT_TABS_WITH_ACTION_MEDIUM_WIDTH: number = 238
-  private static readonly COMPACT_TABS_WITH_ACTION_LARGE_WIDTH: number = 256
+  private static readonly COMPACT_TABS_WITH_ACTION_SMALL_WIDTH: number = 272
+  private static readonly COMPACT_TABS_WITH_ACTION_MEDIUM_WIDTH: number = 304
+  private static readonly COMPACT_TABS_WITH_ACTION_LARGE_WIDTH: number = 336
   private static readonly COMPACT_MINI_BAR_WIDTH: number = 56
   private static readonly TAB_ASSISTANTS: number = INDEX_TAB_ASSISTANTS
   private static readonly TAB_CHAT: number = INDEX_TAB_CHAT
+  private static readonly TAB_KNOWLEDGE: number = INDEX_TAB_KNOWLEDGE
   private static readonly TAB_SETTINGS: number = INDEX_TAB_SETTINGS
   @Local currentTabIndex: number = Index.TAB_CHAT
+  @Local knowledgeUploadRequestTick: number = 0
+  @Local knowledgeRefreshRequestTick: number = 0
+  @Local showKnowledgeEmbeddingSheet: boolean = false
+  @Local knowledgeEmbeddingProviders: ModelProvider[] = []
+  @Local knowledgeEmbeddingSelection: KnowledgeEmbeddingSelection =
+    KnowledgeEmbeddingSelection.createLocal()
+  @Local knowledgeEmbeddingLoading: boolean = false
+  @Local knowledgeEmbeddingApplying: boolean = false
   @Local sessions: ChatSession[] = []
   @Local isLoading: boolean = false
   @Local currentThemeMode: ThemeMode = ThemeMode.SYSTEM
@@ -297,6 +329,7 @@ struct Index {
   private providerBalanceService: ProviderBalanceService = getProviderBalanceService()
   private assistantListScroller: ListScroller = new ListScroller()
   private sessionListScroller: ListScroller = new ListScroller()
+  private knowledgeScroller: ListScroller = new ListScroller()
   private settingsRootScroller: Scroller = new Scroller()
   private settingsCallback: SettingsChangeCallback | null = null
   private holdingHandSubscribed: boolean = false
@@ -643,6 +676,7 @@ struct Index {
     this.loadAssistants()
     this.loadSessions()
     this.loadSettings()
+    this.refreshKnowledgeEmbeddingSelection()
     this.registerSettingsCallback()
     this.handleOpenSessionPayload(this.openSessionPayload)
     this.handleInAppTaskAlertPayload(this.inAppTaskAlertPayload)
@@ -653,6 +687,7 @@ struct Index {
     this.loadSessions()
     this.refreshSettingsState()
     this.loadHandAdaptiveSettings()
+    this.refreshKnowledgeEmbeddingSelection()
     this.processInAppTaskAlertPayload(this.inAppTaskAlertPayload)
   }
 
@@ -676,6 +711,13 @@ struct Index {
     // 如果余额查询弹窗打开，关闭弹窗
     if (this.showBalanceSheet) {
       this.showBalanceSheet = false
+      return true
+    }
+
+    if (this.showKnowledgeEmbeddingSheet) {
+      if (!this.knowledgeEmbeddingApplying) {
+        this.showKnowledgeEmbeddingSheet = false
+      }
       return true
     }
 
@@ -1109,7 +1151,7 @@ struct Index {
   }
 
   private getCompactChatHeaderDefaultHeight(): number {
-    return this.px2vp(this.topAvoidHeight) + 56
+    return this.px2vp(this.topAvoidHeight) + Index.TAB_TITLE_BAR_HEIGHT
   }
 
   private getCompactChatHeaderOverlayHeight(): number {
@@ -1123,7 +1165,7 @@ struct Index {
   }
 
   private getCompactSettingsHeaderDefaultHeight(): number {
-    return this.px2vp(this.topAvoidHeight) + 56
+    return this.px2vp(this.topAvoidHeight) + Index.TAB_TITLE_BAR_HEIGHT
   }
 
   private getCompactSettingsTitleBarMaskExtraHeight(): number {
@@ -1474,6 +1516,24 @@ struct Index {
       Column()
         .width(0)
         .height(0)
+        .bindSheet($$this.showKnowledgeEmbeddingSheet, this.KnowledgeEmbeddingSheetBuilder(), {
+          height: SheetSize.LARGE,
+          dragBar: true,
+          showClose: false,
+          backgroundColor: Color.Transparent,
+          systemMaterial: new uiMaterial.ImmersiveMaterial({
+            style: uiMaterial.ImmersiveStyle.REGULAR
+          }),
+          preferType: SheetType.BOTTOM,
+          maskColor: '#66000000',
+          onDisappear: () => {
+            this.showKnowledgeEmbeddingSheet = false
+          }
+        })
+
+      Column()
+        .width(0)
+        .height(0)
         .bindSheet($$this.showSettingsSheet, this.SettingsSheetBuilder(), {
           height: this.getActiveSettingsSheetHeight(),
           dragBar: true,
@@ -1612,6 +1672,11 @@ struct Index {
             .tabBar(this.TabBarChat())
 
             TabContent() {
+              this.KnowledgeTab()
+            }
+            .tabBar(this.TabBarKnowledge())
+
+            TabContent() {
               this.SettingsTab()
             }
             .tabBar(this.TabBarSettings())
@@ -1625,7 +1690,7 @@ struct Index {
           .vertical(false)
           .barBackgroundColor(Color.Transparent)
           .scrollable(false)
-          .cachedMaxCount(3, TabsCacheMode.CACHE_LATEST_SWITCHED)
+          .cachedMaxCount(4, TabsCacheMode.CACHE_LATEST_SWITCHED)
           .onChange((index: number) => {
             if (this.currentTabIndex !== index) {
               this.switchToTab(index)
@@ -1660,6 +1725,8 @@ struct Index {
       this.ChatTab()
     } else if (this.currentTabIndex === Index.TAB_ASSISTANTS) {
       this.AssistantsTab()
+    } else if (this.currentTabIndex === Index.TAB_KNOWLEDGE) {
+      this.KnowledgeTab()
     } else {
       this.SettingsTab()
     }
@@ -1694,6 +1761,8 @@ struct Index {
             })
           } else if (this.currentTabIndex === Index.TAB_ASSISTANTS) {
             this.ExpandedAssistantsTab()
+          } else if (this.currentTabIndex === Index.TAB_KNOWLEDGE) {
+            this.ExpandedKnowledgeTab()
           } else {
             this.ExpandedSettingsTab()
           }
@@ -1717,6 +1786,8 @@ struct Index {
       this.RailTabButton(Index.TAB_ASSISTANTS, $r('sys.symbol.person_fill'), $r('sys.symbol.person'),
         $r('app.string.tab_assistants'))
       this.RailTabButton(Index.TAB_CHAT, $r('sys.symbol.message_fill'), $r('sys.symbol.message'), $r('app.string.tab_chat'))
+      this.RailTabButton(Index.TAB_KNOWLEDGE, $r('sys.symbol.externaldrive_fill'), $r('sys.symbol.externaldrive'),
+        $r('app.string.tab_knowledge'))
       this.RailTabButton(Index.TAB_SETTINGS, $r('sys.symbol.gearshape_fill'), $r('sys.symbol.gearshape'), $r('app.string.tab_settings'))
 
       Blank()
@@ -1927,13 +1998,21 @@ struct Index {
   }
 
   private getCompactBottomTabBarWidth(): number {
+    let preferredWidth = Index.COMPACT_TABS_WITH_ACTION_SMALL_WIDTH
     if (this.windowWidthVp >= 840) {
-      return Index.COMPACT_TABS_WITH_ACTION_LARGE_WIDTH
+      preferredWidth = Index.COMPACT_TABS_WITH_ACTION_LARGE_WIDTH
+    } else if (this.windowWidthVp >= 440) {
+      preferredWidth = Index.COMPACT_TABS_WITH_ACTION_MEDIUM_WIDTH
     }
-    if (this.windowWidthVp >= 440) {
-      return Index.COMPACT_TABS_WITH_ACTION_MEDIUM_WIDTH
+    if (this.windowWidthVp <= 0) {
+      return 220
     }
-    return Index.COMPACT_TABS_WITH_ACTION_SMALL_WIDTH
+    const minimumGap = 8
+    const maximumAvailableWidth = this.windowWidthVp -
+      Index.COMPACT_TABS_FLOATING_SIDE_MARGIN * 2 -
+      Index.COMPACT_MINI_BAR_WIDTH -
+      minimumGap
+    return Math.min(preferredWidth, Math.max(208, maximumAvailableWidth))
   }
 
   private getCompactBottomBarsWidth(): number {
@@ -1973,6 +2052,10 @@ struct Index {
   private handleCompactBottomMiniBarClick(): void {
     if (this.currentTabIndex === Index.TAB_ASSISTANTS) {
       this.openAssistantManageForNew()
+      return
+    }
+    if (this.currentTabIndex === Index.TAB_KNOWLEDGE) {
+      this.requestKnowledgeUpload()
       return
     }
     if (this.currentTabIndex !== Index.TAB_CHAT) {
@@ -2093,6 +2176,15 @@ struct Index {
       })
 
       Row() {
+        this.TabBarKnowledge()
+      }
+      .layoutWeight(1)
+      .height('100%')
+      .onClick(() => {
+        this.switchToTab(Index.TAB_KNOWLEDGE)
+      })
+
+      Row() {
         this.TabBarSettings()
       }
       .layoutWeight(1)
@@ -2125,6 +2217,16 @@ struct Index {
       activeIcon: $r('sys.symbol.person_fill'),
       inactiveIcon: $r('sys.symbol.person'),
       label: $r('app.string.tab_assistants')
+    })
+  }
+
+  @Builder
+  TabBarKnowledge() {
+    IndexBottomTabItem({
+      active: this.isTabActive(Index.TAB_KNOWLEDGE),
+      activeIcon: $r('sys.symbol.externaldrive_fill'),
+      inactiveIcon: $r('sys.symbol.externaldrive'),
+      label: $r('app.string.tab_knowledge')
     })
   }
 
@@ -2378,8 +2480,8 @@ struct Index {
       this.ChatListHeaderMainRow()
     }
     .width('100%')
-    .height(56)
-    .translate({ y: -2 })
+    .height(Index.TAB_TITLE_BAR_HEIGHT)
+    .translate({ y: Index.TAB_TITLE_VERTICAL_OFFSET })
     .renderGroup(false)
   }
 
@@ -2752,27 +2854,462 @@ struct Index {
     })
   }
 
-  @Builder
-  private AssistantsHeader() {
-    Column() {
-      Row() {
-        Text($r('app.string.assistant_manage_title'))
-          .fontSize(22)
-          .fontWeight(FontWeight.Bold)
-          .fontColor($r('app.color.text_primary'))
-          .layoutWeight(1)
+  private getKnowledgeTabBottomSpacerHeight(): number {
+    return this.isExpandedLayout()
+      ? INDEX_NEW_CHAT_FAB_STACK_HEIGHT + INDEX_NEW_CHAT_FAB_BOTTOM_SPACING
+      : this.getCompactTabsBottomInset() + 12
+  }
 
-        Row({ space: 8 }) {
-          this.AssistantHeaderPill(this.assistants.length.toString(), $r('app.string.assistant_total_label'))
-          this.AssistantHeaderPill(this.getTotalAssistantSessionCount().toString(), $r('app.string.assistant_sessions_label'))
+  private requestKnowledgeUpload(): void {
+    this.knowledgeUploadRequestTick += 1
+  }
+
+  private requestKnowledgeRefresh(): void {
+    this.knowledgeRefreshRequestTick += 1
+  }
+
+  private showKnowledgeUsageInfo(): void {
+    this.getUIContext().showAlertDialog({
+      title: $r('app.string.tab_knowledge'),
+      message: $r('app.string.knowledge_usage_message'),
+      primaryButton: {
+        value: $r('app.string.knowledge_usage_acknowledge'),
+        action: () => {
         }
       }
-      .width('100%')
-      .alignItems(VerticalAlign.Center)
+    })
+  }
+
+  private openKnowledgeEmbeddingSelector(): void {
+    this.showKnowledgeEmbeddingSheet = true
+    this.loadKnowledgeEmbeddingOptions()
+  }
+
+  private refreshKnowledgeEmbeddingSelection(): void {
+    this.performRefreshKnowledgeEmbeddingSelection().catch((error: Object): void => {
+      console.warn('Index', `[refreshKnowledgeEmbeddingSelection] Failed: ${JSON.stringify(error)}`)
+    })
+  }
+
+  private async performRefreshKnowledgeEmbeddingSelection(): Promise<void> {
+    const embeddingService = getKnowledgeEmbeddingService()
+    await embeddingService.initialize()
+    this.knowledgeEmbeddingSelection = embeddingService.getSelection()
+  }
+
+  private loadKnowledgeEmbeddingOptions(): void {
+    this.performLoadKnowledgeEmbeddingOptions().catch((error: Object): void => {
+      console.error('Index', `[loadKnowledgeEmbeddingOptions] Failed: ${JSON.stringify(error)}`)
+      this.knowledgeEmbeddingLoading = false
+      this.showIndexSnack(
+        pickLocalizedText('加载向量模型失败', 'Failed to load embedding models'),
+        2400,
+        SnackBarTone.ERROR
+      )
+    })
+  }
+
+  private async performLoadKnowledgeEmbeddingOptions(): Promise<void> {
+    this.knowledgeEmbeddingLoading = true
+    const embeddingService = getKnowledgeEmbeddingService()
+    await embeddingService.initialize()
+    this.knowledgeEmbeddingSelection = embeddingService.getSelection()
+    const providers = await this.providerViewModel.loadProviders()
+    this.knowledgeEmbeddingProviders = this.buildKnowledgeEmbeddingProviderProjection(providers)
+    this.knowledgeEmbeddingLoading = false
+  }
+
+  private buildKnowledgeEmbeddingProviderProjection(providers: ModelProvider[]): ModelProvider[] {
+    const projectedProviders: ModelProvider[] = []
+    for (let index = 0; index < providers.length; index++) {
+      const provider = providers[index]
+      if (provider.apiStyle !== ApiStyle.OPENAI ||
+        provider.type === ProviderType.AZURE ||
+        provider.baseUrl.trim() === '') {
+        continue
+      }
+      const likelyEmbeddingModels: ModelInfo[] = []
+      const otherModels: ModelInfo[] = []
+      for (let modelIndex = 0; modelIndex < provider.models.length; modelIndex++) {
+        const model = provider.models[modelIndex]
+        if (!model.isEnabled) {
+          continue
+        }
+        if (model.modelType === ModelType.EMBEDDING || this.isLikelyEmbeddingModel(model)) {
+          likelyEmbeddingModels.push(model)
+        } else {
+          otherModels.push(model)
+        }
+      }
+      if (likelyEmbeddingModels.length === 0 && otherModels.length === 0) {
+        continue
+      }
+
+      const projected = new ModelProvider(
+        provider.id,
+        provider.name,
+        provider.type,
+        provider.iconSymbol,
+        provider.brandColor,
+        provider.baseUrl,
+        provider.apiStyle
+      )
+      this.providerViewModel.syncProviderProperties(projected, provider)
+      projected.models = likelyEmbeddingModels.concat(otherModels)
+      projectedProviders.push(projected)
+    }
+    return projectedProviders
+  }
+
+  private isLikelyEmbeddingModel(model: ModelInfo): boolean {
+    const identity = `${model.id} ${model.name}`.toLowerCase()
+    const markers: string[] = [
+      'embedding',
+      'embed',
+      'bge',
+      'm3e',
+      'mxbai',
+      'nomic',
+      'jina',
+      'gte-',
+      '/gte',
+      'e5-',
+      '/e5'
+    ]
+    for (let index = 0; index < markers.length; index++) {
+      if (identity.includes(markers[index])) {
+        return true
+      }
+    }
+    return false
+  }
+
+  private selectLocalKnowledgeEmbedding(): void {
+    this.applyKnowledgeEmbeddingSelection(KnowledgeEmbeddingSelection.createLocal())
+  }
+
+  private selectApiKnowledgeEmbedding(providerId: string, modelId: string, modelName: string): void {
+    let provider: ModelProvider | null = null
+    for (let index = 0; index < this.knowledgeEmbeddingProviders.length; index++) {
+      if (this.knowledgeEmbeddingProviders[index].id === providerId) {
+        provider = this.knowledgeEmbeddingProviders[index]
+        break
+      }
+    }
+    if (provider === null) {
+      this.showIndexSnack(
+        pickLocalizedText('未找到所选服务商', 'The selected provider was not found'),
+        2400,
+        SnackBarTone.ERROR
+      )
+      return
+    }
+    const selection = new KnowledgeEmbeddingSelection(
+      KnowledgeEmbeddingBackend.API,
+      provider.id,
+      provider.name,
+      modelId,
+      modelName,
+      buildKnowledgeEmbeddingEndpointFingerprint(
+        provider.baseUrl,
+        provider.apiPath,
+        provider.customHeadersJson
+      )
+    )
+    this.applyKnowledgeEmbeddingSelection(selection)
+  }
+
+  private applyKnowledgeEmbeddingSelection(selection: KnowledgeEmbeddingSelection): void {
+    if (this.knowledgeEmbeddingApplying) {
+      return
+    }
+    this.performApplyKnowledgeEmbeddingSelection(selection).catch((error: Object): void => {
+      const message: string = error instanceof Error && error.message.trim() !== ''
+        ? error.message
+        : pickLocalizedText('切换向量模型失败', 'Failed to switch embedding model')
+      console.error('Index', `[applyKnowledgeEmbeddingSelection] Failed: ${JSON.stringify(error)}`)
+      this.knowledgeEmbeddingApplying = false
+      this.showIndexSnack(message, 3600, SnackBarTone.ERROR)
+    })
+  }
+
+  private async performApplyKnowledgeEmbeddingSelection(
+    selection: KnowledgeEmbeddingSelection
+  ): Promise<void> {
+    this.knowledgeEmbeddingApplying = true
+    const result: KnowledgeEmbeddingMigrationResult =
+      await ServiceRegistry.knowledgeDocuments().switchEmbeddingSelection(selection)
+    this.knowledgeEmbeddingSelection = getKnowledgeEmbeddingService().getSelection()
+    this.knowledgeEmbeddingApplying = false
+    this.showKnowledgeEmbeddingSheet = false
+
+    if (!result.changed) {
+      return
+    }
+    if (result.cancelled) {
+      this.showIndexSnack(
+        pickLocalizedText('向量模型已切换，后台重建已被新的切换任务替代',
+          'Embedding model switched; the rebuild was superseded by a newer switch'),
+        3200
+      )
+      return
+    }
+    if (result.failedDocuments > 0) {
+      const failureDetail = result.lastVectorMessage.trim() === ''
+        ? ''
+        : `；${result.lastVectorMessage}`
+      this.showIndexSnack(
+        pickLocalizedText(
+          `向量模型已切换：知识索引 ${result.keywordReadyDocuments}/${result.totalDocuments}，` +
+            `语义向量 ${result.vectorReadyDocuments}/${result.totalDocuments}${failureDetail}`,
+          `Embedding model switched: knowledge index ${result.keywordReadyDocuments}/${result.totalDocuments}, ` +
+            `semantic vectors ${result.vectorReadyDocuments}/${result.totalDocuments}${failureDetail}`
+        ),
+        4200,
+        SnackBarTone.DEFAULT
+      )
+      return
+    }
+    if (result.totalDocuments > 0 && result.vectorReadyDocuments < result.totalDocuments) {
+      const vectorDetail = result.lastVectorMessage.trim() === ''
+        ? pickLocalizedText('未完成的文件继续使用关键词检索',
+          'Files without vectors continue to use keyword retrieval')
+        : result.lastVectorMessage
+      this.showIndexSnack(
+        pickLocalizedText(
+          `向量模型已切换：知识索引 ${result.keywordReadyDocuments}/${result.totalDocuments}，` +
+            `语义向量 ${result.vectorReadyDocuments}/${result.totalDocuments}；${vectorDetail}`,
+          `Embedding model switched: knowledge index ${result.keywordReadyDocuments}/${result.totalDocuments}, ` +
+            `semantic vectors ${result.vectorReadyDocuments}/${result.totalDocuments}; ${vectorDetail}`
+        ),
+        4600,
+        SnackBarTone.DEFAULT
+      )
+      return
+    }
+    const successMessage: string = result.totalDocuments > 0
+      ? pickLocalizedText(
+        `已切换向量模型：${result.vectorReadyDocuments} 个文件的知识索引与语义向量均已就绪`,
+        `Embedding model switched: knowledge indexes and semantic vectors are ready for ` +
+          `${result.vectorReadyDocuments} file(s)`
+      )
+      : pickLocalizedText('已切换向量模型', 'Embedding model switched')
+    this.showIndexSnack(successMessage, 3000, SnackBarTone.SUCCESS)
+  }
+
+  @Builder
+  private KnowledgeEmbeddingSheetBuilder() {
+    KnowledgeEmbeddingSelectSheetContent({
+      providers: this.knowledgeEmbeddingProviders,
+      currentSelection: this.knowledgeEmbeddingSelection,
+      isLoading: this.knowledgeEmbeddingLoading,
+      isApplying: this.knowledgeEmbeddingApplying,
+      onSelectLocal: (): void => {
+        this.selectLocalKnowledgeEmbedding()
+      },
+      onSelectApi: (providerId: string, modelId: string, modelName: string): void => {
+        this.selectApiKnowledgeEmbedding(providerId, modelId, modelName)
+      },
+      onClose: (): void => {
+        if (!this.knowledgeEmbeddingApplying) {
+          this.showKnowledgeEmbeddingSheet = false
+        }
+      }
+    })
+  }
+
+  private getKnowledgeContentTopPadding(): number {
+    const topAvoidHeightVp = this.isExpandedLayout() ? 0 : this.px2vp(this.topAvoidHeight)
+    return getHdsTopNavigationContentTopPadding(topAvoidHeightVp, this.windowWidthVp, this.windowHeightVp,
+      Index.TAB_TITLE_BAR_HEIGHT)
+  }
+
+  @Builder
+  private KnowledgeTitleStackBuilder() {
+    Row() {
+      Text($r('app.string.tab_knowledge'))
+        .fontSize(Index.TAB_TITLE_FONT_SIZE)
+        .fontWeight(FontWeight.Bold)
+        .fontColor($r('app.color.text_primary'))
+        .layoutWeight(1)
     }
     .width('100%')
-    .padding({ left: 20, right: 20, top: 4, bottom: 6 })
-    .alignItems(HorizontalAlign.Start)
+    .height(Index.TAB_TITLE_BAR_HEIGHT)
+    .padding({ left: 8, right: 8 })
+    .alignItems(VerticalAlign.Center)
+    .translate({ y: Index.TAB_TITLE_VERTICAL_OFFSET })
+    .renderGroup(false)
+  }
+
+  private getKnowledgeTitleBarOptions(): HdsNavigationTitleBarOptions {
+    const options = new HdsTopNavigationBlurOptions()
+    options.startPaddingVp = 16
+    options.endPaddingVp = 16
+    options.materialType = this.materialType
+    options.materialLevel = this.materialLevel
+    options.windowWidthVp = this.windowWidthVp
+    options.windowHeightVp = this.windowHeightVp
+    options.maskExtraHeightVp = getHdsTopNavigationMaskExtraHeight(this.windowWidthVp, this.windowHeightVp)
+    options.blurEffectiveEndOffsetVp = getHdsTopNavigationBlurEffectiveEndOffset(this.windowWidthVp,
+      this.windowHeightVp)
+    options.menuItems = [
+      {
+        content: {
+          label: pickLocalizedText('选择向量模型', 'Select embedding model'),
+          icon: this.buildCompactChatTitleBarMenuIcon(
+            $r('sys.symbol.square_stack_3d'),
+            this.knowledgeEmbeddingSelection.isApi()
+              ? this.themePrimary
+              : $r('app.color.text_primary')
+          ),
+          action: () => {
+            this.openKnowledgeEmbeddingSelector()
+          }
+        }
+      },
+      {
+        content: {
+          label: pickLocalizedText('更新知识库', 'Update knowledge base'),
+          icon: this.buildCompactChatTitleBarMenuIcon(
+            $r('sys.symbol.doc_text_badge_leaf'),
+            $r('app.color.text_primary')
+          ),
+          action: () => {
+            this.requestKnowledgeRefresh()
+          }
+        }
+      },
+      {
+        content: {
+          label: $r('app.string.knowledge_usage_label'),
+          icon: this.buildCompactChatTitleBarMenuIcon(
+            $r('sys.symbol.info_circle'),
+            $r('app.color.text_primary')
+          ),
+          action: () => {
+            this.showKnowledgeUsageInfo()
+          }
+        }
+      }
+    ]
+    options.stackBuilder = (): void => this.KnowledgeTitleStackBuilder()
+    return buildHdsTopNavigationTitleBarOptions(options)
+  }
+
+  @Builder
+  private KnowledgeTabScrollableContent() {
+    KnowledgeBasePanel({
+      uploadRequestTick: this.knowledgeUploadRequestTick,
+      refreshRequestTick: this.knowledgeRefreshRequestTick,
+      listScroller: this.knowledgeScroller,
+      topSpacerHeight: this.getKnowledgeContentTopPadding(),
+      bottomSpacerHeight: this.getKnowledgeTabBottomSpacerHeight()
+    })
+  }
+
+  @Builder
+  KnowledgeTab() {
+    HdsNavigation() {
+      this.KnowledgeTabScrollableContent()
+    }
+    .width('100%')
+    .height('100%')
+    .backgroundColor(this.themeBackground)
+    .titleBar(this.getKnowledgeTitleBarOptions())
+    .bindToScrollable([this.knowledgeScroller])
+    .titleMode(HdsNavigationTitleMode.MINI)
+    .systemBarStyle(
+      { statusBarContentColor: getHdsStatusBarContentColor() },
+      { statusBarContentColor: getHdsStatusBarContentColor() }
+    )
+    .hideBackButton(true)
+    .hideToolBar(true)
+    .mode(NavigationMode.Stack)
+    .ignoreLayoutSafeArea([LayoutSafeAreaType.SYSTEM], [LayoutSafeAreaEdge.TOP])
+  }
+
+  @Builder
+  private KnowledgeUploadFloatingActionButton() {
+    Button() {
+      SymbolGlyph($r('sys.symbol.plus'))
+        .fontSize(24)
+        .fontColor([Color.White])
+    }
+    .width(INDEX_NEW_CHAT_FAB_SIZE)
+    .height(INDEX_NEW_CHAT_FAB_SIZE)
+    .borderRadius(INDEX_NEW_CHAT_FAB_SIZE / 2)
+    .backgroundColor(this.themePrimary)
+    .type(ButtonType.Circle)
+    .stateEffect(false)
+    .padding(0)
+    .position({ x: this.shouldPlaceFabOnLeft() ? 0 : '100%', y: '100%' })
+    .translate({ x: this.getFabOffsetX(), y: this.getFabOffsetY() })
+    .scale(getButtonScale(this.fabPressed))
+    .animation({
+      duration: 420,
+      curve: curves.springMotion(0.75, 0.86)
+    })
+    .shadow({
+      radius: this.fabPressed ? 20 : 14,
+      color: this.fabShadowColor,
+      offsetX: 0,
+      offsetY: 8
+    })
+    .onTouch(createButtonTouchHandler((pressed: boolean) => {
+      this.fabPressed = pressed
+    }))
+    .onClick(() => {
+      this.fabPressed = false
+      this.requestKnowledgeUpload()
+    })
+  }
+
+  @Builder
+  ExpandedKnowledgeTab() {
+    Row() {
+      Stack({ alignContent: Alignment.BottomEnd }) {
+        Column() {
+          this.KnowledgeTab()
+        }
+        .width('100%')
+        .height('100%')
+
+        this.KnowledgeUploadFloatingActionButton()
+      }
+      .width('100%')
+      .height('100%')
+      .constraintSize({ maxWidth: 720 })
+    }
+    .width('100%')
+    .layoutWeight(1)
+    .justifyContent(FlexAlign.Center)
+    .padding({
+      left: this.getExpandedPageHorizontalPadding(),
+      right: this.getExpandedPageHorizontalPadding(),
+      bottom: 12
+    })
+  }
+
+  @Builder
+  private AssistantsHeader() {
+    Row() {
+      Text($r('app.string.assistant_manage_title'))
+        .fontSize(Index.TAB_TITLE_FONT_SIZE)
+        .fontWeight(FontWeight.Bold)
+        .fontColor($r('app.color.text_primary'))
+        .layoutWeight(1)
+
+      Row({ space: 8 }) {
+        this.AssistantHeaderPill(this.assistants.length.toString(), $r('app.string.assistant_total_label'))
+        this.AssistantHeaderPill(this.getTotalAssistantSessionCount().toString(), $r('app.string.assistant_sessions_label'))
+      }
+    }
+    .width('100%')
+    .height(Index.TAB_TITLE_BAR_HEIGHT)
+    .padding({ left: 24, right: 24 })
+    .alignItems(VerticalAlign.Center)
+    .translate({ y: Index.TAB_TITLE_VERTICAL_OFFSET })
+    .renderGroup(false)
   }
 
   @Builder
@@ -3628,7 +4165,7 @@ struct Index {
             '', '', '', true)
 
           Text(this.getCurrentAssistantName())
-            .fontSize(18)
+            .fontSize(Index.TAB_TITLE_FONT_SIZE)
             .fontWeight(FontWeight.Bold)
             .fontColor($r('app.color.text_primary'))
             .maxLines(1)
@@ -3875,20 +4412,20 @@ struct Index {
         Blank()
       }
       .width('100%')
-      .height(56)
+      .height(Index.TAB_TITLE_BAR_HEIGHT)
       .padding({ left: 8, right: 8 })
       .alignItems(VerticalAlign.Center)
     } else {
       Row() {
         Text($r('app.string.select_conversations'))
-          .fontSize(18)
+          .fontSize(Index.TAB_TITLE_FONT_SIZE)
           .fontWeight(FontWeight.Bold)
           .fontColor($r('app.color.text_primary'))
 
         Blank()
       }
       .width('100%')
-      .height(56)
+      .height(Index.TAB_TITLE_BAR_HEIGHT)
       .padding({ left: 8, right: 8 })
       .alignItems(VerticalAlign.Center)
     }
@@ -4256,20 +4793,23 @@ struct Index {
   private CompactSettingsTitleStackBuilder() {
     Row() {
       Text($r('app.string.tab_settings'))
-        .fontSize(18)
+        .fontSize(Index.TAB_TITLE_FONT_SIZE)
         .fontWeight(FontWeight.Bold)
         .fontColor($r('app.color.text_primary'))
         .layoutWeight(1)
     }
     .width('100%')
-    .height(56)
+    .height(Index.TAB_TITLE_BAR_HEIGHT)
     .padding({ left: 8, right: 8 })
     .alignItems(VerticalAlign.Center)
+    .translate({ y: Index.TAB_TITLE_VERTICAL_OFFSET })
     .renderGroup(false)
   }
 
   private getCompactSettingsTitleBarOptions(): HdsNavigationTitleBarOptions {
     const options = new HdsTopNavigationBlurOptions()
+    options.startPaddingVp = 16
+    options.endPaddingVp = 16
     options.materialType = this.materialType
     options.materialLevel = this.materialLevel
     options.windowWidthVp = this.windowWidthVp

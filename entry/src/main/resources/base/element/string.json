@@ -45,6 +45,30 @@
       "value": "Chat"
     },
     {
+      "name": "tab_knowledge",
+      "value": "Knowledge"
+    },
+    {
+      "name": "knowledge_empty_title",
+      "value": "No files"
+    },
+    {
+      "name": "knowledge_empty_hint",
+      "value": "Tap + to upload PDF, TXT, Markdown, or image files."
+    },
+    {
+      "name": "knowledge_usage_message",
+      "value": "Use + to upload and index PDF, TXT, Markdown, or image files on this device. Tap a file to preview it, or swipe left or right to update its index or delete it. Images use OCR; PDFs with too little extracted text automatically fall back to page-image OCR. Retrieval combines local semantic vectors with BM25 keywords and transparently keeps BM25 when vector capability is unavailable. When the knowledge-base switch is enabled, a tool-capable model may decide to call knowledge_search. Retrieval starts only after that tool call; document content is never inserted into the prompt in advance."
+    },
+    {
+      "name": "knowledge_usage_label",
+      "value": "Knowledge base instructions"
+    },
+    {
+      "name": "knowledge_usage_acknowledge",
+      "value": "Got it"
+    },
+    {
       "name": "tab_assistants",
       "value": "Assistants"
     },
@@ -307,6 +331,14 @@
     {
       "name": "chat_list_immersive_material_desc",
       "value": "Use immersive light-sense material for conversation rows. When off, Gaussian blur is used."
+    },
+    {
+      "name": "knowledge_list_immersive_material_title",
+      "value": "Immersive knowledge list material"
+    },
+    {
+      "name": "knowledge_list_immersive_material_desc",
+      "value": "Use immersive light-sense material for knowledge rows. When off, Gaussian blur is used."
     },
     {
       "name": "settings_language",

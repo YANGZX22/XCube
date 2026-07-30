@@ -17,7 +17,8 @@ import {
   ModelRole,
   ToolCall,
   ToolConfig,
-  ToolSourceType
+  ToolSourceType,
+  ApiStyle
 } from '../models/ChatModels'
 import { Assistant, DEFAULT_ASSISTANT_ID } from '../models/AssistantModels'
 import { ImagePreview } from '../components/ImagePreview'
@@ -42,6 +43,7 @@ import {
   ASK_USER_TOOL_ID,
   CANVAS_DOCUMENT_TOOL_ID,
   IMAGE_TO_TEXT_TOOL_ID,
+  KNOWLEDGE_SEARCH_TOOL_ID,
   MATH_CHART_TOOL_ID,
   PDF_TO_TEXT_TOOL_ID,
   PYTHON_SANDBOX_TOOL_ID,
@@ -113,6 +115,7 @@ import { CanvasDocumentService } from '../services/CanvasDocumentService'
 import { DocumentAttachmentRegistryService } from '../services/DocumentAttachmentRegistryService'
 import { getPdfTextExtractionService } from '../services/PdfTextExtractionService'
 import { getImageTextRecognitionService } from '../services/ImageTextRecognitionService'
+import { resolveKnowledgeToolExposure } from './chat/KnowledgeToolExposurePolicy'
 
 const DOMAIN = 0x0003
 const TAG = 'ChatPage'
@@ -259,6 +262,8 @@ export struct ChatPage {
   // 联网查询全局可用状态（工具中心控制）
   @Local webSearchAvailable: boolean = false
   @Local webSearchConversationEnabled: boolean = false
+  // 聊天输入区的独立持久化开关；不会预检索或把知识片段拼入提示词。
+  @Local knowledgeConversationEnabled: boolean = false
   @Local selectedToolIds: string[] = []
   @Local availableChatTools: ToolConfig[] = []
   @Local isRefreshingMcpToolAvailability: boolean = false
@@ -624,6 +629,10 @@ export struct ChatPage {
     const loadResult = await this.getLoadFlow().loadPageData(this.routeParams, this.sessionTitle)
 
     this.webSearchAvailable = loadResult.webSearchEnabled
+    this.knowledgeConversationEnabled = await this.preferencesService.getBoolean(
+      PreferenceKeys.KNOWLEDGE_CONVERSATION_ENABLED,
+      false
+    )
     await this.syncToolAvailabilityFromPreferences()
     console.info(
       'ChatPage',
@@ -1922,6 +1931,7 @@ export struct ChatPage {
       !this.toolRegistry.isToolRegistered(CANVAS_DOCUMENT_TOOL_ID) ||
       !this.toolRegistry.isToolRegistered(PDF_TO_TEXT_TOOL_ID) ||
       !this.toolRegistry.isToolRegistered(IMAGE_TO_TEXT_TOOL_ID) ||
+      !this.toolRegistry.isToolRegistered(KNOWLEDGE_SEARCH_TOOL_ID) ||
       !this.toolRegistry.isToolRegistered(USE_SKILL_TOOL_ID) ||
       !this.toolRegistry.isToolRegistered(MATH_CHART_TOOL_ID) ||
       !this.toolRegistry.isToolRegistered(READ_SCHEDULE_TOOL_ID) ||
@@ -1935,6 +1945,10 @@ export struct ChatPage {
     const webSearchTool = this.toolRegistry.getTool('web_search')
     if (webSearchTool !== undefined) {
       webSearchTool.config.enabled = this.webSearchAvailable
+    }
+    const knowledgeSearchTool = this.toolRegistry.getTool(KNOWLEDGE_SEARCH_TOOL_ID)
+    if (knowledgeSearchTool !== undefined) {
+      knowledgeSearchTool.config.enabled = ServiceRegistry.knowledgeDocuments().isRetrievalReady()
     }
     const skillTool = this.toolRegistry.getTool(USE_SKILL_TOOL_ID)
     if (skillTool !== undefined) {
@@ -1953,6 +1967,9 @@ export struct ChatPage {
     const configs = this.toolRegistry.getAllToolConfigs()
     const tools: ToolConfig[] = []
     for (let i = 0; i < configs.length; i++) {
+      if (configs[i].id === KNOWLEDGE_SEARCH_TOOL_ID) {
+        continue
+      }
       if (configs[i].enabled || this.isSettingsControlledBuiltinTool(configs[i].id)) {
         tools.push(configs[i])
       }
@@ -2267,6 +2284,14 @@ export struct ChatPage {
     await this.preferencesService.setString(PreferenceKeys.CHAT_REASONING_LEVEL, level)
   }
 
+  private updateKnowledgeConversationEnabled(enabled: boolean): void {
+    this.knowledgeConversationEnabled = enabled
+    this.preferencesService.setBoolean(PreferenceKeys.KNOWLEDGE_CONVERSATION_ENABLED, enabled)
+      .catch((error: Object): void => {
+        console.error('ChatPage', `[persistKnowledgeConversationEnabled] Failed: ${JSON.stringify(error)}`)
+      })
+  }
+
   private handleMcpToolGroupSelectionToggle(toolIds: string[], enabled: boolean): void {
     const nextToolIds = [...this.getActiveComposerSelectedToolIds()]
     for (let i = 0; i < toolIds.length; i++) {
@@ -2287,6 +2312,15 @@ export struct ChatPage {
 
   private hasSelectedTools(): boolean {
     return this.getActiveComposerSelectedToolIds().length > 0
+  }
+
+  private isKnowledgeConversationAvailable(): boolean {
+    const model = this.getCurrentModelInfo()
+    return this.currentProvider !== null &&
+      this.currentProvider.apiStyle === ApiStyle.OPENAI &&
+      model !== null &&
+      model.capabilities.supportsTools &&
+      ServiceRegistry.knowledgeDocuments().isRetrievalReady()
   }
 
   private getDefaultSessionTitle(): string {
@@ -3285,6 +3319,11 @@ export struct ChatPage {
               reasoningLevel: this.getActiveComposerReasoningLevel(),
               onReasoningLevelChange: (value: ReasoningLevel): void => {
                 this.updateActiveComposerReasoningLevel(value)
+              },
+              knowledgeEnabled: this.knowledgeConversationEnabled,
+              knowledgeAvailable: this.isKnowledgeConversationAvailable(),
+              onKnowledgeToggle: (enabled: boolean): void => {
+                this.updateKnowledgeConversationEnabled(enabled)
               },
               hasRecentScreenshot: this.hasRecentScreenshot,
               bottomAvoidHeight: this.getComposerBottomAvoidHeightVp(),
@@ -4703,8 +4742,30 @@ export struct ChatPage {
       const attachmentsToSend = [...sourceAttachments]
       const modelSupportsDocuments = this.currentModelSupportsDocuments()
       const modelSupportsVision = this.currentModelSupportsVision()
-      const selectedToolIds = this.filterFallbackToolIdsForCurrentModel(this.selectedToolIds)
+      const knowledgeDocumentService = ServiceRegistry.knowledgeDocuments()
+      const knowledgeEnabledForRequest = this.knowledgeConversationEnabled
+      const modelSupportsTools = this.getSendFlow().isCurrentModelSupportsTools(
+        currentProvider,
+        this.currentModelId
+      )
+      if (knowledgeEnabledForRequest &&
+        (currentProvider.apiStyle !== ApiStyle.OPENAI || !modelSupportsTools ||
+          !knowledgeDocumentService.isRetrievalReady())) {
+        this.showError(pickLocalizedText(
+          '知识库当前不可用：请确认已有可检索文件，并使用支持工具调用的模型。',
+          'The knowledge base is unavailable. Add a searchable file and use a model that supports tools.'
+        ))
+        return
+      }
+      const selectedToolIds = resolveKnowledgeToolExposure({
+        currentApiStyle: currentProvider.apiStyle,
+        modelSupportsTools: modelSupportsTools,
+        knowledgeReady: knowledgeDocumentService.isRetrievalReady(),
+        userEnabled: knowledgeEnabledForRequest,
+        baseToolIds: this.filterFallbackToolIdsForCurrentModel(this.selectedToolIds)
+      })
       const forcedToolIds = this.filterFallbackToolIdsForCurrentModel(this.forcedToolIdsOnce)
+        .filter((toolId: string): boolean => toolId !== KNOWLEDGE_SEARCH_TOOL_ID)
       const fallbackHintTexts: string[] = []
       if (!modelSupportsDocuments) {
         const documentFallback = await this.prepareDocumentFallbackForSend(

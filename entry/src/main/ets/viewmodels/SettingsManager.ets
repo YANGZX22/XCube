@@ -30,6 +30,7 @@ export class SettingsManager {
   private materialLevel: number = 10    // ADAPTIVE
   private lightColorMode: string = 'default'
   private chatListImmersiveMaterial: boolean = false
+  private knowledgeListImmersiveMaterial: boolean = false
   private callbacks: SettingsChangeCallback[] = []
   private isInitialized: boolean = false
   private initPromise: Promise<void> | null = null
@@ -71,8 +72,10 @@ export class SettingsManager {
     this.materialLevel = await preferencesService.getMaterialLevel()
     this.lightColorMode = await preferencesService.getLightColorMode()
     this.chatListImmersiveMaterial = await preferencesService.getChatListImmersiveMaterial()
+    this.knowledgeListImmersiveMaterial = await preferencesService.getKnowledgeListImmersiveMaterial()
     setAppUiStateValue(AppStorageKeys.CHAT_INPUT_ENTER_KEY_SEND, this.chatInputEnterKeySend)
     setAppUiStateValue(AppStorageKeys.CHAT_LIST_IMMERSIVE_MATERIAL, this.chatListImmersiveMaterial)
+    setAppUiStateValue(AppStorageKeys.KNOWLEDGE_LIST_IMMERSIVE_MATERIAL, this.knowledgeListImmersiveMaterial)
     this.isInitialized = true
   }
 
@@ -90,8 +93,10 @@ export class SettingsManager {
     this.materialLevel = await preferencesService.getMaterialLevel()
     this.lightColorMode = await preferencesService.getLightColorMode()
     this.chatListImmersiveMaterial = await preferencesService.getChatListImmersiveMaterial()
+    this.knowledgeListImmersiveMaterial = await preferencesService.getKnowledgeListImmersiveMaterial()
     setAppUiStateValue(AppStorageKeys.CHAT_INPUT_ENTER_KEY_SEND, this.chatInputEnterKeySend)
     setAppUiStateValue(AppStorageKeys.CHAT_LIST_IMMERSIVE_MATERIAL, this.chatListImmersiveMaterial)
+    setAppUiStateValue(AppStorageKeys.KNOWLEDGE_LIST_IMMERSIVE_MATERIAL, this.knowledgeListImmersiveMaterial)
   }
 
   // 等待初始化完成
@@ -333,6 +338,20 @@ export class SettingsManager {
     this.chatListImmersiveMaterial = enabled
     await getPreferencesService().setChatListImmersiveMaterial(enabled)
     setAppUiStateValue(AppStorageKeys.CHAT_LIST_IMMERSIVE_MATERIAL, enabled)
+  }
+
+  getKnowledgeListImmersiveMaterial(): boolean {
+    return this.knowledgeListImmersiveMaterial
+  }
+
+  async setKnowledgeListImmersiveMaterial(enabled: boolean): Promise<void> {
+    if (this.knowledgeListImmersiveMaterial === enabled) {
+      return
+    }
+
+    this.knowledgeListImmersiveMaterial = enabled
+    await getPreferencesService().setKnowledgeListImmersiveMaterial(enabled)
+    setAppUiStateValue(AppStorageKeys.KNOWLEDGE_LIST_IMMERSIVE_MATERIAL, enabled)
   }
 
   async setMaterialType(materialType: number): Promise<void> {

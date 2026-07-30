@@ -51,6 +51,27 @@ Includes 15+ AI providers out of the box. You can also add any OpenAI / Anthropi
 
 Built-in web search supports Bocha, Bing (local), Tavily, and Exa. Models with function-calling support can invoke tools autonomously to retrieve real-time information. Remote streamable MCP servers are also supported.
 
+### Vector knowledge base and RAG
+
+XCube includes a dedicated Knowledge Base tab for uploading, managing, and previewing reference material in one place. Models retrieve it on demand through the
+[`knowledge_search`](entry/src/main/ets/config/KnowledgeSearchTool.ets) tool:
+
+- **One file entry point**: supports PDF, TXT, Markdown, and JPG, JPEG, PNG, WebP, and BMP images. Images are indexed through OCR; PDFs with too little extracted text automatically fall back to page-image OCR.
+- **Hybrid retrieval**: documents are split into semantic chunks and indexed in both a keyword index and an ArkData vector sidecar. Search merges keyword and vector recall, while keyword retrieval remains available if vector generation is unavailable or fails.
+- **Two embedding sources**: [PC/2in1](https://developer.huawei.com/consumer/cn/doc/harmonyos-releases/support-device#section36331990919) devices can use local ArkData Embedding without sending document chunks off-device. You can also select a configured OpenAI-compatible Embedding API. API mode sends document chunks to the selected provider, so choose it according to the sensitivity of your files.
+- **Strict tool-call boundary**: enabling Knowledge Base in the input bar exposes the tool to the model, but the app does not pre-retrieve content or inject knowledge into the system prompt. Retrieval—and API query embedding when needed—starts only after the model actually calls `knowledge_search`.
+- **Focused follow-up search**: each user turn allows at most five knowledge queries and should stop early after a complete hit. If a result is truncated and has a clear information gap, the model may issue a narrower, non-duplicate query.
+- **Local management**: original files, OCR/text results, keyword indexes, and the vector sidecar remain in the app sandbox. Files can be previewed, refreshed, or deleted; refreshing rebuilds indexes with the currently selected embedding backend.
+
+To use it:
+
+1. Open the Knowledge Base tab and use the plus button to upload files.
+2. Use the embedding-model button in the upper-right corner to select local ArkData or an API Embedding model, then refresh indexes when needed.
+3. Return to chat, turn on Knowledge Base in the input bar, and ask your question. The model decides when and how often to search.
+
+> [!NOTE]
+> ArkData application data vectorization currently supports only 2-in-1 devices. Phones and tablets should use API Embedding; keyword knowledge retrieval remains available when no API is configured. Vector-store persistence itself still runs locally through ArkData.
+
 ### Built-in intelligent tools
 
 XCube provides a set of local tools that models can call:

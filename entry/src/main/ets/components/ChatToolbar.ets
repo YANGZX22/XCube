@@ -21,6 +21,10 @@ export struct ChatToolbar {
   @Param reasoningLevel: ReasoningLevel = ReasoningLevel.OFF
   @Event onReasoningLevelChange: (value: ReasoningLevel) => void =
     (_value: ReasoningLevel): void => {}
+  @Param knowledgeEnabled: boolean = false
+  @Param knowledgeAvailable: boolean = false
+  @Event onKnowledgeToggle: (enabled: boolean) => void =
+    (_enabled: boolean): void => {}
   // 推理强度滑块面板是否展开
   @Local showReasoningPanel: boolean = false
 
@@ -43,7 +47,7 @@ export struct ChatToolbar {
   }
 
   private getToolbarChipBarHeight(): number {
-    return 40
+    return 36
   }
 
   private getToolChipWidth(): number {
@@ -54,12 +58,23 @@ export struct ChatToolbar {
     return 112
   }
 
+  private getKnowledgeChipWidth(): number {
+    return 96
+  }
+
   private getToolChipForegroundColor(): ResourceColor {
     return this.hasSelectedTools ? this.themePrimary : $r('app.color.text_secondary')
   }
 
   private getReasoningChipForegroundColor(): ResourceColor {
     return this.isReasoningEnabled() ? this.themePrimary : $r('app.color.text_secondary')
+  }
+
+  private getKnowledgeChipForegroundColor(): ResourceColor {
+    if (this.knowledgeEnabled) {
+      return this.themePrimary
+    }
+    return $r('app.color.text_secondary')
   }
 
   build() {
@@ -72,12 +87,14 @@ export struct ChatToolbar {
         this.ReasoningImmersiveChip()
       }
 
+      this.KnowledgeImmersiveChip()
+
       Blank()
     }
     .width('100%')
     .height(this.getToolbarChipBarHeight())
     .clip(false)
-    .margin({ bottom: 6 })
+    .margin({ bottom: 4 })
   }
 
   @Builder
@@ -195,6 +212,56 @@ export struct ChatToolbar {
     .padding({ left: 8, right: 6 })
     .alignItems(VerticalAlign.Center)
     .justifyContent(FlexAlign.Center)
+  }
+
+  @Builder
+  private KnowledgeImmersiveChip() {
+    Button({ type: ButtonType.Normal, stateEffect: false }) {
+      Row() {
+        SymbolGlyph($r('sys.symbol.externaldrive'))
+          .fontSize(16)
+          .fontColor([this.getKnowledgeChipForegroundColor()])
+
+        Text('知识库')
+          .fontSize(14)
+          .fontColor(this.getKnowledgeChipForegroundColor())
+          .fontWeight(this.knowledgeEnabled ? FontWeight.Medium : FontWeight.Regular)
+          .maxLines(1)
+          .textOverflow({ overflow: TextOverflow.Ellipsis })
+          .margin({ left: 4 })
+
+        SymbolGlyph(this.knowledgeEnabled
+          ? $r('sys.symbol.checkmark_circle_fill')
+          : $r('sys.symbol.xmark_circle_fill'))
+          .fontSize(14)
+          .fontColor([this.getKnowledgeChipForegroundColor()])
+          .margin({ left: 4 })
+      }
+      .width(this.getKnowledgeChipWidth())
+      .height(this.getToolbarChipBarHeight())
+      .padding({ left: 8, right: 8 })
+      .alignItems(VerticalAlign.Center)
+      .justifyContent(FlexAlign.Center)
+    }
+    .width(this.getKnowledgeChipWidth())
+    .height(this.getToolbarChipBarHeight())
+    .padding(0)
+    .backgroundColor(Color.Transparent)
+    .borderRadius(Math.min(this.getKnowledgeChipWidth(), this.getToolbarChipBarHeight()) / 2)
+    .clip(true)
+    .enabled(this.knowledgeAvailable)
+    .opacity(this.knowledgeAvailable ? 1 : 0.45)
+    .onClick(() => {
+      if (this.knowledgeAvailable) {
+        this.onKnowledgeToggle(!this.knowledgeEnabled)
+      }
+    })
+    .systemMaterial(new uiMaterial.ImmersiveMaterial({
+      style: uiMaterial.ImmersiveStyle.REGULAR,
+      interactive: this.knowledgeAvailable,
+      lightEffect: { color: undefined }
+    }))
+    .margin({ left: this.toolSelectionAvailable || this.reasoningAvailable ? 6 : 0 })
   }
 
   private isReasoningEnabled(): boolean {

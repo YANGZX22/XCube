@@ -34,6 +34,10 @@ export struct ChatInputAreaSection {
   @Param reasoningLevel: ReasoningLevel = ReasoningLevel.OFF
   @Event onReasoningLevelChange: (value: ReasoningLevel) => void =
     (_value: ReasoningLevel): void => {}
+  @Param knowledgeEnabled: boolean = false
+  @Param knowledgeAvailable: boolean = false
+  @Event onKnowledgeToggle: (enabled: boolean) => void =
+    (_enabled: boolean): void => {}
   @Param hasRecentScreenshot: boolean = false
   @Param bottomAvoidHeight: number = 0
   @Param contentMaxWidth: number = 99999
@@ -88,6 +92,11 @@ export struct ChatInputAreaSection {
           reasoningLevel: this.reasoningLevel,
           onReasoningLevelChange: (value: ReasoningLevel): void => {
             this.onReasoningLevelChange(value)
+          },
+          knowledgeEnabled: this.knowledgeEnabled,
+          knowledgeAvailable: this.knowledgeAvailable,
+          onKnowledgeToggle: (enabled: boolean): void => {
+            this.onKnowledgeToggle(enabled)
           }
         })
 

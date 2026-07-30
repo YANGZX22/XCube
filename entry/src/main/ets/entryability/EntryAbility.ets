@@ -108,6 +108,18 @@ export default class EntryAbility extends UIAbility {
       await ServiceRegistry.attachmentStorage().initialize(this.context);
       hilog.info(DOMAIN, 'testTag', 'AttachmentStorageService initialized successfully');
 
+      try {
+        await ServiceRegistry.knowledgeDocuments().initialize(this.context);
+        hilog.info(DOMAIN, 'testTag', 'KnowledgeDocumentService initialized successfully');
+      } catch (error) {
+        hilog.warn(
+          DOMAIN,
+          'testTag',
+          'KnowledgeDocumentService unavailable: %{public}s',
+          JSON.stringify(error)
+        );
+      }
+
       // 初始化图标下载缓存服务
       await IconDownloadCache.getInstance().initialize(this.context);
       hilog.info(DOMAIN, 'testTag', 'IconDownloadCache initialized successfully');

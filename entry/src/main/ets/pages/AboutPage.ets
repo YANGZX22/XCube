@@ -14,7 +14,7 @@ import {
 } from '../utils/HdsVisualEffectUtil'
 
 const TAG = 'AboutPage'
-const GITHUB_URL = 'https://github.com/YANGZX22/chatcube'
+const GITHUB_URL = 'https://github.com/YANGZX22/XCube'
 
 let aboutPagePathStack: NavPathStack | null = null
 
@@ -163,7 +163,7 @@ struct AboutPage {
                   .fontSize(14)
                   .fontWeight(FontWeight.Medium)
                   .fontColor($r('app.color.text_primary'))
-                Text('YANGZX22/chatcube')
+                Text('YANGZX22/XCube')
                   .fontSize(12)
                   .fontColor($r('app.color.text_secondary'))
               }

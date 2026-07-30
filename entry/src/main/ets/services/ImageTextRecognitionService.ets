@@ -77,7 +77,11 @@ export class ImageTextRecognitionService {
     let text = this.cache.get(cacheKey)
     if (text === undefined) {
       text = await this.recognizeTextFromImagePath(attachment.filePath)
-      this.cache.set(cacheKey, text)
+      // OCR 模型首次加载或系统能力瞬时失败时可能返回空串。空结果不缓存，
+      // 让“更新索引”能够真正重试，而不是在整个应用运行期永久命中失败缓存。
+      if (text.trim() !== '') {
+        this.cache.set(cacheKey, text)
+      }
     }
     const normalizedMaxChars = Math.max(1000, maxChars > 0 ? maxChars : 12000)
     const truncated = text.length > normalizedMaxChars
