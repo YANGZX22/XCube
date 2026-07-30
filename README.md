@@ -94,6 +94,14 @@ You can also add any OpenAI-compatible or Anthropic-compatible provider.
 
 ### Build & Run
 
+The speech-recognition model is too large to store in Git and must be added manually before building:
+
+1. Download [sherpa-onnx SenseVoice (Chinese, English, Japanese, Korean, and Cantonese)](https://github.com/k2-fsa/sherpa-onnx/releases/download/asr-models/sherpa-onnx-sense-voice-zh-en-ja-ko-yue-2024-07-17.tar.bz2).
+2. Extract the archive.
+3. Place the extracted `sherpa-onnx-sense-voice-zh-en-ja-ko-yue-2024-07-17` directory in `entry/src/main/resources/rawfile/`.
+
+The model directory and all `*.onnx` files are excluded by `.gitignore` and will not be committed to the repository.
+
 ```bash
 git clone https://github.com/YANGZX22/XCube.git
 cd XCube

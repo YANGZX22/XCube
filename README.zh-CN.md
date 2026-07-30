@@ -94,6 +94,14 @@ XCube 提供一组可由模型调用的本地工具：
 
 ### 构建运行
 
+语音识别模型文件体积较大，不纳入 Git 仓库，构建前需要手动放入：
+
+1. 下载 [sherpa-onnx SenseVoice 中/英/日/韩/粤语音识别模型](https://github.com/k2-fsa/sherpa-onnx/releases/download/asr-models/sherpa-onnx-sense-voice-zh-en-ja-ko-yue-2024-07-17.tar.bz2)。
+2. 解压下载的压缩包。
+3. 将解压得到的 `sherpa-onnx-sense-voice-zh-en-ja-ko-yue-2024-07-17` 文件夹放入 `entry/src/main/resources/rawfile/`。
+
+模型目录及所有 `*.onnx` 文件已由 `.gitignore` 排除，不会提交到仓库。
+
 ```bash
 git clone https://github.com/YANGZX22/XCube.git
 cd XCube
