@@ -352,9 +352,9 @@ export class CalendarWriteService {
       calendar = await manager.getCalendar()
     } catch (_error) {
       calendar = await manager.createCalendar({
-        name: 'ChatCube',
+        name: 'XCube',
         type: calendarManager.CalendarType.LOCAL,
-        displayName: 'ChatCube'
+        displayName: 'XCube'
       })
     }
 

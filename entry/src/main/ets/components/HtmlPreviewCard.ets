@@ -44,7 +44,7 @@ export struct HtmlPreviewCard {
       'table { border-collapse: collapse; width: 100%; }' +
       'th, td { border: 1px solid ' + (this.isDarkMode ? '#444' : '#ddd') + '; padding: 8px; text-align: left; }' +
       'th { background: ' + (this.isDarkMode ? '#2a2a2a' : '#f5f5f5') + '; }' +
-      'a { color: ' + (this.isDarkMode ? '#9CBFE8' : '#4E6F9E') + '; }' +
+      'a { color: ' + (this.isDarkMode ? '#A99FFF' : '#8576FF') + '; }' +
       'pre, code { font-family: monospace; }' +
       'pre { padding: 12px; border-radius: 8px; overflow-x: auto; ' +
       'background: ' + (this.isDarkMode ? '#0d0d0d' : '#f6f8fa') + '; }' +
@@ -266,4 +266,3 @@ export struct HtmlPreviewCard {
     .backgroundColor($r('app.color.background'))
   }
 }
-

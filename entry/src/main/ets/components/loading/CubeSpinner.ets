@@ -1,5 +1,5 @@
 /**
- * ChatCube 品牌 Loading 动效组件 — 围绕 app icon 卡通形象设计
+ * XCube 品牌 Loading 动效组件 — 围绕 app icon 卡通形象设计
  *
  * 四种变体 (export 名保留, 实现已重写):
  *   A) CubeSpinnerLight     - 看四周笑脸: 主题色圆角脸 + 双白点眼睛
@@ -15,7 +15,7 @@
  *                             点亮是离散切换 (不插值) 以保留 8-bit / 生图 AI 逐步渲染感
  *                             适合: 生图占位 (≥ 56vp)
  *
- *   D) CubeSpinner3D        - 跑步小人: 完整 ChatCube 形象 (身子 + 双手 + 双腿 + 椭圆阴影)
+ *   D) CubeSpinner3D        - 跑步小人: 完整 XCube 形象 (身子 + 双手 + 双腿 + 椭圆阴影)
  *                             两脚两手交替摆动, 整体上下跳, 阴影同步缩放
  *                             适合: 中大尺寸 (≥ 64vp), 加载等待场景
  *

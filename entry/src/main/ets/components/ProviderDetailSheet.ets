@@ -1,4 +1,4 @@
-import { KeyboardAvoidMode, SymbolGlyphModifier } from '@kit.ArkUI'
+import { KeyboardAvoidMode, SymbolGlyphModifier, uiMaterial } from '@kit.ArkUI'
 import {
   HdsNavigation,
   HdsNavigationMenuItemOptions,
@@ -165,6 +165,7 @@ export struct ProviderDetailPanel {
   // 模型编辑相关状态
   @Local showEditSheet: boolean = false
   @Local editingModel: ModelInfo | null = null
+  @Local isModelEditAdvancedExpanded: boolean = false
   // 模型选择器相关状态
   @Local fetchedModels: string[] = []
   // 统一的弹窗控制：'none' | 'edit' | 'picker' | 'icon'
@@ -227,6 +228,7 @@ export struct ProviderDetailPanel {
     this.provider = null
     this.showEditSheet = false
     this.editingModel = null
+    this.isModelEditAdvancedExpanded = false
     this.showSheet = false
     this.activeSheet = 'none'
     this.fetchedModels = []
@@ -653,6 +655,7 @@ export struct ProviderDetailPanel {
     this.notifyProviderChanged()
     // 自动打开编辑面板
     this.editingModel = model
+    this.isModelEditAdvancedExpanded = false
     this.activeSheet = 'edit'
     this.showSheet = true
     // 异步匹配能力
@@ -887,6 +890,7 @@ export struct ProviderDetailPanel {
   // 打开模型编辑弹窗
   private openModelEditSheet(model: ModelInfo): void {
     this.editingModel = model
+    this.isModelEditAdvancedExpanded = false
     this.activeSheet = 'edit'
     this.showSheet = true
   }
@@ -951,6 +955,7 @@ export struct ProviderDetailPanel {
   // 清理编辑状态
   private clearEditState(): void {
     this.editingModel = null
+    this.isModelEditAdvancedExpanded = false
     this.activeSheet = 'none'
     this.fetchedModels = []
   }
@@ -1242,10 +1247,17 @@ export struct ProviderDetailPanel {
       .width(0)
       .height(0)
       .bindSheet($$this.showSheet, this.UnifiedSheetBuilder(), {
-        height: SheetSize.LARGE,
+        height: this.activeSheet === 'edit'
+          ? (this.isModelEditAdvancedExpanded ? SheetSize.LARGE : SheetSize.FIT_CONTENT)
+          : SheetSize.LARGE,
         showClose: false,
         dragBar: true,
-        blurStyle: BlurStyle.Regular,
+        backgroundColor: this.activeSheet === 'edit' || this.activeSheet === 'picker' ? Color.Transparent : undefined,
+        blurStyle: this.activeSheet === 'edit' || this.activeSheet === 'picker' ? undefined : BlurStyle.Regular,
+        systemMaterial: this.activeSheet === 'edit' || this.activeSheet === 'picker' ?
+          new uiMaterial.ImmersiveMaterial({
+            style: uiMaterial.ImmersiveStyle.REGULAR
+          }) : undefined,
         shouldDismiss: (dismissAction: SheetDismiss) => {
           dismissAction.dismiss()
         },
@@ -1727,8 +1739,8 @@ export struct ProviderDetailPanel {
                   .fontSize(20)
                   .fontWeight(FontWeight.Bold)
                   .fontColor($r('app.color.text_primary'))
-                  .backgroundColor(Color.Transparent)
-                  .borderRadius(0)
+                  .backgroundColor(this.themePrimaryLight)
+                  .borderRadius(8)
                   .padding({ left: 8, right: 4, top: 0, bottom: 0 })
                   .onChange((value: string) => {
                     if (this.provider !== null) {
@@ -1744,8 +1756,8 @@ export struct ProviderDetailPanel {
                   .fontSize(20)
                   .fontWeight(FontWeight.Bold)
                   .fontColor($r('app.color.text_primary'))
-                  .backgroundColor(Color.Transparent)
-                  .borderRadius(0)
+                  .backgroundColor(this.themePrimaryLight)
+                  .borderRadius(8)
                   .padding({ left: 8, right: 4, top: 0, bottom: 0 })
                   .onChange((value: string) => {
                     if (this.provider !== null) {
@@ -1774,6 +1786,8 @@ export struct ProviderDetailPanel {
             if (this.provider?.id !== 'siliconflow') {
               Toggle({ type: ToggleType.Switch, isOn: this.provider?.isConnected ?? false })
                 .selectedColor(this.themePrimary)
+                .systemMaterial(new uiMaterial.Material())
+                .switchPointColor(Color.White)
                 .onChange((isOn: boolean) => {
                   if (this.provider !== null && this.provider.isConnected !== isOn) {
                     this.toggleEnabled()
@@ -1845,9 +1859,6 @@ export struct ProviderDetailPanel {
         .padding({ left: 16, right: 16, top: 16, bottom: 14 })
       }
       .width('100%')
-      .backgroundColor(getAppUiState().themeSurface)
-      .borderRadius(20)
-      .clip(true)
       .margin({ left: 16, right: 16, top: 2, bottom: 4 })
     } else {
       Column() {
@@ -1887,8 +1898,8 @@ export struct ProviderDetailPanel {
                 .fontSize(18)
                 .fontWeight(FontWeight.Bold)
                 .fontColor($r('app.color.text_primary'))
-                .backgroundColor(Color.Transparent)
-                .borderRadius(0)
+                .backgroundColor(this.themePrimaryLight)
+                .borderRadius(8)
                 .padding({ left: 8, right: 4, top: 0, bottom: 0 })
                 .onChange((value: string) => {
                   if (this.provider !== null) {
@@ -1905,8 +1916,8 @@ export struct ProviderDetailPanel {
                 .fontSize(18)
                 .fontWeight(FontWeight.Bold)
                 .fontColor($r('app.color.text_primary'))
-                .backgroundColor(Color.Transparent)
-                .borderRadius(0)
+                .backgroundColor(this.themePrimaryLight)
+                .borderRadius(8)
                 .padding({ left: 8, right: 4, top: 0, bottom: 0 })
                 .onChange((value: string) => {
                   if (this.provider !== null) {
@@ -1936,6 +1947,8 @@ export struct ProviderDetailPanel {
           if (this.provider?.id !== 'siliconflow') {
             Toggle({ type: ToggleType.Switch, isOn: this.provider?.isConnected ?? false })
               .selectedColor(this.themePrimary)
+              .systemMaterial(new uiMaterial.Material())
+              .switchPointColor(Color.White)
               .onChange((isOn: boolean) => {
                 // 只有当状态真正改变时才处理（避免重复触发）
                 if (this.provider !== null && this.provider.isConnected !== isOn) {
@@ -1948,8 +1961,6 @@ export struct ProviderDetailPanel {
         .padding({ left: 16, right: 16, top: 12, bottom: 12 })
       }
       .width('100%')
-      .backgroundColor(getAppUiState().themeSurface)
-      .borderRadius(16)
       .margin({ left: 16, right: 16, top: 4 })
     }
   }
@@ -1994,6 +2005,10 @@ export struct ProviderDetailPanel {
               Row() {
                 Radio({ value: option.style, group: 'apiStyleSheet' })
                   .checked(this.provider?.apiStyle === option.style)
+                  .radioStyle({
+                    checkedBackgroundColor: this.themePrimary,
+                    indicatorColor: Color.White
+                  })
                   .onChange((isChecked: boolean) => {
                     if (isChecked && this.provider !== null) {
                       this.provider.apiStyle = option.style
@@ -2052,6 +2067,10 @@ export struct ProviderDetailPanel {
                 Row() {
                   Radio({ value: option.transport, group: 'openaiTransportSheet' })
                     .checked(this.provider?.openaiTransport === option.transport)
+                    .radioStyle({
+                      checkedBackgroundColor: this.themePrimary,
+                      indicatorColor: Color.White
+                    })
                     .onChange((isChecked: boolean) => {
                       if (isChecked && this.provider !== null) {
                         this.provider.openaiTransport = option.transport
@@ -2117,6 +2136,8 @@ export struct ProviderDetailPanel {
 
               Toggle({ type: ToggleType.Switch, isOn: this.provider.requiresApiKey })
                 .selectedColor(this.themePrimary)
+                .systemMaterial(new uiMaterial.Material())
+                .switchPointColor(Color.White)
                 .onChange((isOn: boolean) => {
                   if (this.provider !== null) {
                     this.provider.requiresApiKey = isOn
@@ -2180,6 +2201,12 @@ export struct ProviderDetailPanel {
           .padding({ left: 12, right: 12 })
           .backgroundColor(this.themePrimaryLight)
           .borderRadius(16)
+          .systemMaterial(new uiMaterial.ImmersiveMaterial({
+            style: uiMaterial.ImmersiveStyle.REGULAR,
+            materialColor: this.themePrimaryLight,
+            interactive: true,
+            lightEffect: { color: undefined }
+          }))
           .margin({ left: 8 })
           .enabled(!this.isTesting)
           .onClick(() => {
@@ -2188,7 +2215,7 @@ export struct ProviderDetailPanel {
         }
         .width('100%')
         .height(48)
-        .backgroundColor(getAppUiState().themeBackground)
+        .backgroundColor(this.themePrimaryLight)
         .borderRadius(8)
         .padding({ left: 12, right: 8 })
         .margin({ top: 8 })
@@ -2215,7 +2242,7 @@ export struct ProviderDetailPanel {
         TextInput({ text: this.provider?.baseUrl ?? '', placeholder: $r('app.string.provider_base_url_placeholder') })
           .fontSize(14)
           .fontColor($r('app.color.text_primary'))
-          .backgroundColor(getAppUiState().themeBackground)
+          .backgroundColor(this.themePrimaryLight)
           .borderRadius(8)
           .height(48)
           .width('100%')
@@ -2244,7 +2271,7 @@ export struct ProviderDetailPanel {
         TextInput({ text: this.provider?.apiPath ?? '', placeholder: $r('app.string.provider_api_path_placeholder') })
           .fontSize(14)
           .fontColor($r('app.color.text_primary'))
-          .backgroundColor(getAppUiState().themeBackground)
+          .backgroundColor(this.themePrimaryLight)
           .borderRadius(8)
           .height(48)
           .width('100%')
@@ -2275,6 +2302,8 @@ export struct ProviderDetailPanel {
 
           Toggle({ type: ToggleType.Switch, isOn: this.showProviderCustomHeadersEditor })
             .selectedColor(this.themePrimary)
+            .systemMaterial(new uiMaterial.Material())
+            .switchPointColor(Color.White)
             .onChange((isOn: boolean) => {
               this.showProviderCustomHeadersEditor = isOn
             })
@@ -2356,7 +2385,7 @@ export struct ProviderDetailPanel {
                   .width('100%')
                   .height(44)
                   .borderRadius(14)
-                  .backgroundColor(getAppUiState().themeBackground)
+                  .backgroundColor(this.themePrimaryLight)
                   .border({ width: 1, color: $r('app.color.divider') })
                   .padding({ left: 14, right: 14 })
               }
@@ -2379,7 +2408,7 @@ export struct ProviderDetailPanel {
                     .width('100%')
                     .height(44)
                     .borderRadius(14)
-                    .backgroundColor(getAppUiState().themeBackground)
+                    .backgroundColor(this.themePrimaryLight)
                     .border({ width: 1, color: $r('app.color.divider') })
                     .padding({ left: 14, right: 14 })
                 } else {
@@ -2391,7 +2420,7 @@ export struct ProviderDetailPanel {
                     .width('100%')
                     .height(44)
                     .borderRadius(14)
-                    .backgroundColor(getAppUiState().themeBackground)
+                    .backgroundColor(this.themePrimaryLight)
                     .border({ width: 1, color: $r('app.color.divider') })
                     .padding({ left: 14, right: 14 })
                 }
@@ -2416,8 +2445,6 @@ export struct ProviderDetailPanel {
       this.BalanceConfigSection()
   }
   .width('100%')
-  .backgroundColor(getAppUiState().themeSurface)
-  .borderRadius(16)
   .margin({ left: 16, right: 16, top: 8 })
 }
 
@@ -2436,6 +2463,8 @@ BalanceConfigSection() {
 
       Toggle({ type: ToggleType.Switch, isOn: this.balanceConfig.enabled })
         .selectedColor(this.themePrimary)
+        .systemMaterial(new uiMaterial.Material())
+        .switchPointColor(Color.White)
         .onChange((isOn: boolean) => {
           this.updateBalanceEnabled(isOn)
         })
@@ -2471,7 +2500,7 @@ BalanceInput(label: Resource, placeholder: Resource, value: string, field: strin
     TextInput({ text: value, placeholder: placeholder })
       .fontSize(14)
       .fontColor($r('app.color.text_primary'))
-      .backgroundColor(getAppUiState().themeBackground)
+      .backgroundColor(this.themePrimaryLight)
       .borderRadius(8)
       .height(44)
       .width('100%')
@@ -2517,6 +2546,12 @@ ModelsCard() {
           .padding({ left: 10, right: 10 })
           .backgroundColor(this.isAllModelsEnabled() ? getAppUiState().themeBackground : this.themePrimaryLight)
           .borderRadius(16)
+          .systemMaterial(new uiMaterial.ImmersiveMaterial({
+            style: uiMaterial.ImmersiveStyle.REGULAR,
+            materialColor: this.isAllModelsEnabled() ? getAppUiState().themeBackground : this.themePrimaryLight,
+            interactive: true,
+            lightEffect: { color: undefined }
+          }))
           .margin({ right: 8 })
           .onClick(() => {
             // 触发切换动效
@@ -2539,6 +2574,12 @@ ModelsCard() {
         .width(32)
         .height(32)
         .backgroundColor(this.themePrimaryLight)
+        .systemMaterial(new uiMaterial.ImmersiveMaterial({
+          style: uiMaterial.ImmersiveStyle.REGULAR,
+          materialColor: this.themePrimaryLight,
+          interactive: true,
+          lightEffect: { color: undefined }
+        }))
         .margin({ right: 8 })
         .onClick(() => {
           this.showAddModelInput = !this.showAddModelInput
@@ -2570,6 +2611,12 @@ ModelsCard() {
         .padding({ left: 12, right: 12 })
         .backgroundColor(this.themePrimaryLight)
         .borderRadius(16)
+        .systemMaterial(new uiMaterial.ImmersiveMaterial({
+          style: uiMaterial.ImmersiveStyle.REGULAR,
+          materialColor: this.themePrimaryLight,
+          interactive: true,
+          lightEffect: { color: undefined }
+        }))
         .enabled(!this.isFetchingModels)
         .onClick(() => {
           this.fetchModels()
@@ -2580,10 +2627,17 @@ ModelsCard() {
 
       // 搜索框
       Search({ value: this.searchKeywords, placeholder: $r('app.string.filter_models_placeholder') })
-        .width('100%')
+        .width(this.windowWidthVp >= 600 ? 360 : '82%')
         .height(40)
-        .backgroundColor(getAppUiState().themeBackground)
-        .margin({ left: 16, right: 16 })
+        .borderRadius(20)
+        .backgroundColor(Color.Transparent)
+        .systemMaterial(new uiMaterial.ImmersiveMaterial({
+          style: uiMaterial.ImmersiveStyle.ULTRA_THIN,
+          materialColor: Color.Transparent,
+          applyShadow: false,
+          interactive: true,
+          lightEffect: { color: undefined }
+        }))
         .padding({ left: 16, right: 16 })
         .onChange((value: string) => {
           this.searchKeywords = value
@@ -2597,7 +2651,7 @@ ModelsCard() {
             .layoutWeight(1)
             .height(36)
             .fontSize(14)
-            .backgroundColor(getAppUiState().themeBackground)
+            .backgroundColor(this.themePrimaryLight)
             .borderRadius(8)
             .onChange((value: string) => {
               this.addModelIdText = value
@@ -2763,8 +2817,6 @@ ModelsCard() {
     }
     .width('100%')
     .height('100%')
-    .backgroundColor(getAppUiState().themeSurface)
-    .borderRadius(16)
     .margin({ left: 16, right: 16, top: 8 })
   }
 
@@ -2779,6 +2831,9 @@ ModelsCard() {
         },
         onCancel: () => {
           this.cancelModelEdit()
+        },
+        onAdvancedExpandedChange: (expanded: boolean): void => {
+          this.isModelEditAdvancedExpanded = expanded
         }
       })
     } else if (this.activeSheet === 'picker' && this.provider !== null) {
@@ -3025,6 +3080,8 @@ export struct ModelItemCard {
           .selectedColor(this.themePrimary)
           .width(44)
           .height(24)
+          .systemMaterial(new uiMaterial.Material())
+          .switchPointColor(Color.White)
           .onChange((isOn: boolean) => {
             this.onToggle(this.model.id, isOn)
           })

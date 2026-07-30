@@ -6,7 +6,7 @@
 import { ReasoningLevel } from '../models/ChatModels'
 import { ReasoningControlMode } from '../services/ProviderCompatibilityRegistry'
 import { getAppUiState } from '../state/AppUiState'
-import { HdsTabs, DividerMode, hdsMaterial } from '@kit.UIDesignKit'
+import { uiMaterial } from '@kit.ArkUI'
 
 @ComponentV2
 export struct ChatToolbar {
@@ -42,24 +42,8 @@ export struct ChatToolbar {
     return color
   }
 
-  private getChipBackgroundColor(): string {
-    return this.withAlpha(this.themeAiBubble, '33')
-  }
-
   private getToolbarChipBarHeight(): number {
-    return 32
-  }
-
-  private getToolbarChipContentPadding(): number {
-    return 3
-  }
-
-  private getToolbarChipContainerHeight(): number {
-    return this.getToolbarChipBarHeight() + this.getToolbarChipContentPadding() * 4
-  }
-
-  private getToolbarChipContainerWidth(barWidth: number): number {
-    return barWidth + this.getToolbarChipContentPadding() * 4
+    return 40
   }
 
   private getToolChipWidth(): number {
@@ -91,58 +75,30 @@ export struct ChatToolbar {
       Blank()
     }
     .width('100%')
-    .padding({ left: 4, right: 4 })
-    .margin({ bottom: 2 })
+    .height(this.getToolbarChipBarHeight())
+    .clip(false)
+    .margin({ bottom: 6 })
   }
 
   @Builder
   private ToolImmersiveChip() {
-    Stack({ alignContent: Alignment.Center }) {
-      HdsTabs() {
-        TabContent() {
-        }
-        .tabBar(this.ToolChipContent())
-      }
-      .barWidth(this.getToolChipWidth())
-      .barHeight(this.getToolbarChipBarHeight())
-      .barOverlap(true)
-      .barPosition(BarPosition.End)
-      .vertical(false)
-      .barBackgroundColor(Color.Transparent)
-      .width(this.getToolChipWidth())
-      .height(this.getToolbarChipBarHeight())
-      .backgroundColor(Color.Transparent)
-      .borderRadius(this.getToolbarChipBarHeight() / 2)
-      .clip(false)
-      .barFloatingStyle({
-        barBottomMargin: 2,
-        gradientMask: { maskColor: Color.Transparent },
-        systemMaterialEffect: {
-          materialType: hdsMaterial.MaterialType.IMMERSIVE,
-          materialLevel: hdsMaterial.MaterialLevel.ADAPTIVE
-        }
-      })
-      .onTabBarClick(() => {
-        this.onOpenTools()
-      })
-
-      Row() {
-      }
-      .size({
-        width: this.getToolbarChipContainerWidth(this.getToolChipWidth()),
-        height: this.getToolbarChipContainerHeight()
-      })
-      .backgroundColor(Color.Transparent)
-      .hitTestBehavior(HitTestMode.Transparent)
-      .onClick(() => {
-        this.onOpenTools()
-      })
+    Button({ type: ButtonType.Normal, stateEffect: false }) {
+      this.ToolChipContent()
     }
-    .size({
-      width: this.getToolbarChipContainerWidth(this.getToolChipWidth()),
-      height: this.getToolbarChipContainerHeight()
-    })
+    .width(this.getToolChipWidth())
+    .height(this.getToolbarChipBarHeight())
+    .padding(0)
     .backgroundColor(Color.Transparent)
+    .borderRadius(Math.min(this.getToolChipWidth(), this.getToolbarChipBarHeight()) / 2)
+    .clip(true)
+    .onClick(() => {
+      this.onOpenTools()
+    })
+    .systemMaterial(new uiMaterial.ImmersiveMaterial({
+      style: uiMaterial.ImmersiveStyle.REGULAR,
+      interactive: true,
+      lightEffect: { color: undefined }
+    }))
   }
 
   @Builder
@@ -163,81 +119,43 @@ export struct ChatToolbar {
     .width(this.getToolChipWidth())
     .height(this.getToolbarChipBarHeight())
     .padding({ left: 8, right: 8 })
-    .borderRadius(this.getToolbarChipBarHeight() / 2)
-    .backgroundColor(Color.Transparent)
     .alignItems(VerticalAlign.Center)
     .justifyContent(FlexAlign.Center)
-    .translate({ y: -4 })
-    .animation({ duration: 200, curve: Curve.EaseOut })
   }
 
   @Builder
   private ReasoningImmersiveChip() {
-    Stack({ alignContent: Alignment.Center }) {
-      HdsTabs() {
-        TabContent() {
-        }
-        .tabBar(this.ReasoningChipContent())
-      }
-      .barWidth(this.getReasoningChipWidth())
-      .barHeight(this.getToolbarChipBarHeight())
-      .barOverlap(true)
-      .barPosition(BarPosition.End)
-      .vertical(false)
-      .barBackgroundColor(Color.Transparent)
-      .width(this.getReasoningChipWidth())
-      .height(this.getToolbarChipBarHeight())
-      .backgroundColor(Color.Transparent)
-      .borderRadius(this.getToolbarChipBarHeight() / 2)
-      .clip(false)
-      .barFloatingStyle({
-        barBottomMargin: 2,
-        gradientMask: { maskColor: Color.Transparent },
-        systemMaterialEffect: {
-          materialType: hdsMaterial.MaterialType.IMMERSIVE,
-          materialLevel: hdsMaterial.MaterialLevel.ADAPTIVE
-        }
-      })
-      .onTabBarClick(() => {
-      })
-
-      Row() {
-      }
-      .size({
-        width: this.getToolbarChipContainerWidth(this.getReasoningChipWidth()),
-        height: this.getToolbarChipContainerHeight()
-      })
-      .backgroundColor(Color.Transparent)
-      .hitTestBehavior(HitTestMode.Transparent)
-      .onClick(() => {
-        this.showReasoningPanel = true
-      })
-      .bindPopup(this.showReasoningPanel, {
-        builder: this.ReasoningSliderPanel(),
-        placement: Placement.Top,
-        enableArrow: false,
-        popupColor: Color.Transparent,
-        backgroundBlurStyle: BlurStyle.NONE,
-        radius: 0,
-        shadow: {
-          radius: 0,
-          color: Color.Transparent,
-          offsetX: 0,
-          offsetY: 0
-        },
-        onStateChange: (event: PopupStateChangeParam) => {
-          if (!event.isVisible) {
-            this.showReasoningPanel = false
-          }
-        }
-      })
+    Button({ type: ButtonType.Normal, stateEffect: false }) {
+      this.ReasoningChipContent()
     }
-    .size({
-      width: this.getToolbarChipContainerWidth(this.getReasoningChipWidth()),
-      height: this.getToolbarChipContainerHeight()
-    })
+    .width(this.getReasoningChipWidth())
+    .height(this.getToolbarChipBarHeight())
+    .padding(0)
     .backgroundColor(Color.Transparent)
-    .margin({ left: this.toolSelectionAvailable ? 4 : 0 })
+    .borderRadius(Math.min(this.getReasoningChipWidth(), this.getToolbarChipBarHeight()) / 2)
+    .clip(true)
+    .onClick(() => {
+      this.showReasoningPanel = true
+    })
+    .bindSheet($$this.showReasoningPanel, this.ReasoningSliderSheet(), {
+      height: SheetSize.FIT_CONTENT,
+      dragBar: true,
+      showClose: false,
+      backgroundColor: Color.Transparent,
+      systemMaterial: new uiMaterial.ImmersiveMaterial({
+        style: uiMaterial.ImmersiveStyle.REGULAR
+      }),
+      preferType: SheetType.BOTTOM,
+      onDisappear: (): void => {
+        this.showReasoningPanel = false
+      }
+    })
+    .systemMaterial(new uiMaterial.ImmersiveMaterial({
+      style: uiMaterial.ImmersiveStyle.REGULAR,
+      interactive: true,
+      lightEffect: { color: undefined }
+    }))
+    .margin({ left: this.toolSelectionAvailable ? 6 : 0 })
   }
 
   @Builder
@@ -275,12 +193,8 @@ export struct ChatToolbar {
     .width(this.getReasoningChipWidth())
     .height(this.getToolbarChipBarHeight())
     .padding({ left: 8, right: 6 })
-    .borderRadius(this.getToolbarChipBarHeight() / 2)
-    .backgroundColor(Color.Transparent)
     .alignItems(VerticalAlign.Center)
     .justifyContent(FlexAlign.Center)
-    .translate({ y: -4 })
-    .animation({ duration: 200, curve: Curve.EaseOut })
   }
 
   private isReasoningEnabled(): boolean {
@@ -336,66 +250,14 @@ export struct ChatToolbar {
     }
   }
 
-  private getReasoningPanelWidth(): number {
-    return 280
-  }
-
-  private getReasoningPanelHeight(): number {
-    return 96
-  }
-
-  private getReasoningPanelHaloPadding(): number {
-    return 8
-  }
-
-  private getReasoningPanelHostWidth(): number {
-    return this.getReasoningPanelWidth() + this.getReasoningPanelHaloPadding() * 2
-  }
-
-  private getReasoningPanelHostHeight(): number {
-    return this.getReasoningPanelHeight() + this.getReasoningPanelHaloPadding() * 2
-  }
-
-  // 用 HdsTabs 沉浸浮动条把滑块面板包成与 chip 一致的光感材质
   @Builder
-  private ReasoningSliderPanel() {
-    Stack({ alignContent: Alignment.Center }) {
-      HdsTabs() {
-        TabContent() {
-        }
-        .tabBar(this.ReasoningSliderContent())
-      }
-      .barOverlap(true)
-      .barPosition(BarPosition.End)
-      .vertical(false)
-      .barWidth(this.getReasoningPanelWidth())
-      .barHeight(this.getReasoningPanelHeight())
-      .width(this.getReasoningPanelWidth())
-      .height(this.getReasoningPanelHeight())
-      .barBackgroundColor(Color.Transparent)
-      .backgroundColor(Color.Transparent)
-      .borderRadius(this.getReasoningPanelHeight() / 2)
-      .clip(false)
-      .divider({ mode: DividerMode.NONE })
-      .barFloatingStyle({
-        barBottomMargin: 0,
-        barSideMargin: 0,
-        barWidth: {
-          smallWidth: this.getReasoningPanelWidth(),
-          mediumWidth: this.getReasoningPanelWidth(),
-          largeWidth: this.getReasoningPanelWidth()
-        },
-        gradientMask: { maskColor: Color.Transparent },
-        systemMaterialEffect: {
-          materialType: hdsMaterial.MaterialType.IMMERSIVE,
-          materialLevel: hdsMaterial.MaterialLevel.ADAPTIVE
-        }
-      })
+  private ReasoningSliderSheet() {
+    Column() {
+      this.ReasoningSliderContent()
     }
-    .width(this.getReasoningPanelHostWidth())
-    .height(this.getReasoningPanelHostHeight())
+    .width('100%')
+    .padding({ left: 16, right: 16, top: 8, bottom: 12 })
     .backgroundColor(Color.Transparent)
-    .clip(false)
   }
 
   @Builder
@@ -435,7 +297,12 @@ export struct ChatToolbar {
         .blockColor(Color.White)
         .selectedColor(this.themePrimary)
         .trackColor(this.withAlpha(this.themeAiBubble, '66'))
+        .trackThickness(20)
+        .blockSize({ width: 18, height: 18 })
         .showSteps(true)
+        .systemMaterial(new uiMaterial.ImmersiveMaterial({
+          style: uiMaterial.ImmersiveStyle.ULTRA_THIN
+        }))
         .margin({ top: 8, bottom: 2 })
         .onChange((value: number, mode: SliderChangeMode) => {
           if (mode === SliderChangeMode.End || mode === SliderChangeMode.Click ||
@@ -465,9 +332,9 @@ export struct ChatToolbar {
       }
       .width('100%')
     }
-    .width(this.getReasoningPanelWidth())
-    .height(this.getReasoningPanelHeight())
-    .padding({ left: 18, right: 18, top: 10, bottom: 10 })
+    .width('100%')
+    .constraintSize({ maxWidth: 560 })
+    .padding({ left: 20, right: 20, top: 10, bottom: 16 })
     .justifyContent(FlexAlign.Center)
   }
 }

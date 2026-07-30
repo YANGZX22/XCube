@@ -5,8 +5,8 @@ import {
   hasSessionDraftContent,
   SESSION_DRAFT_TAG_TEXT
 } from '../utils/ChatSessionDisplayHelper'
+import { uiMaterial } from '@kit.ArkUI'
 import { getAppUiState } from '../state/AppUiState'
-import { buildPointLightBorderEffect } from '../utils/HdsVisualEffectUtil'
 
 @ComponentV2
 export struct SessionCard {
@@ -38,7 +38,9 @@ export struct SessionCard {
   private get themeTextTertiary(): string {
     return getAppUiState().themeTextTertiary
   }
-  @Param uiVisualEnhanced: boolean = false
+  private get chatListImmersiveMaterial(): boolean {
+    return getAppUiState().chatListImmersiveMaterial
+  }
   @Event onTap: () => void = () => {}
   @Event onDelete: () => void = () => {}
   @Event onMultiSelect: () => void = () => {}
@@ -249,30 +251,73 @@ export struct SessionCard {
     return this.isDarkMode ? this.themeTextSecondary : this.themeTextTertiary
   }
 
-  build() {
+  @Builder
+  private SessionCardContent() {
+    this.PrefixContent()
+
+    Column() {
+      this.MiddleContent()
+    }
+    .layoutWeight(1)
+    .margin({ left: 10 })
+
+    this.SuffixContent()
+  }
+
+  @Builder
+  private ImmersiveSessionCard() {
     Row() {
-      this.PrefixContent()
-
-      Column() {
-        this.MiddleContent()
-      }
-      .layoutWeight(1)
-      .margin({ left: 10 })
-
-      this.SuffixContent()
+      this.SessionCardContent()
     }
     .width('100%')
-    .backgroundColor(this.themeSurface)
-    .border({ width: 1, color: this.themeDivider })
     .borderRadius(12)
+    .border({ width: 0.5, color: this.themeDivider })
     .padding({ left: 12, right: 12, top: 10, bottom: 10 })
-    .visualEffect(buildPointLightBorderEffect(this.uiVisualEnhanced))
     .onClick(() => {
       this.onTap()
     })
     .bindContextMenu(this.enableContextMenu ? this.SessionContextMenu : undefined, ResponseType.LongPress, {
-      preview: this.SessionPreview
+      preview: this.SessionPreview,
+      systemMaterial: new uiMaterial.ImmersiveMaterial({
+        style: uiMaterial.ImmersiveStyle.THICK
+      })
     })
+    .systemMaterial(new uiMaterial.ImmersiveMaterial({
+      style: uiMaterial.ImmersiveStyle.REGULAR,
+      interactive: true,
+      lightEffect: { color: undefined }
+    }))
+  }
+
+  @Builder
+  private GaussianBlurSessionCard() {
+    Row() {
+      this.SessionCardContent()
+    }
+    .width('100%')
+    .borderRadius(12)
+    .clip(true)
+    .border({ width: 0.5, color: this.themeDivider })
+    .padding({ left: 12, right: 12, top: 10, bottom: 10 })
+    .backgroundColor(Color.Transparent)
+    .backgroundBlurStyle(BlurStyle.COMPONENT_REGULAR)
+    .onClick(() => {
+      this.onTap()
+    })
+    .bindContextMenu(this.enableContextMenu ? this.SessionContextMenu : undefined, ResponseType.LongPress, {
+      preview: this.SessionPreview,
+      systemMaterial: new uiMaterial.ImmersiveMaterial({
+        style: uiMaterial.ImmersiveStyle.THICK
+      })
+    })
+  }
+
+  build() {
+    if (this.chatListImmersiveMaterial) {
+      this.ImmersiveSessionCard()
+    } else {
+      this.GaussianBlurSessionCard()
+    }
   }
 
   @Builder
@@ -355,4 +400,3 @@ export struct SessionCard {
     return `${Math.floor(this.getRelativeDiff(timestamp) / (24 * 60 * 60 * 1000))}`
   }
 }
-

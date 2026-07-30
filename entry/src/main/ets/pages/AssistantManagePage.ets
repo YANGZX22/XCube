@@ -1,3 +1,4 @@
+import { uiMaterial } from '@kit.ArkUI'
 import { Assistant, DEFAULT_ASSISTANT_ID } from '../models/AssistantModels'
 import { ModelProvider } from '../models/ChatModels'
 import { ServiceRegistry } from '../services/ServiceRegistry'
@@ -990,6 +991,8 @@ struct AssistantManagePage {
           .layoutWeight(1)
 
         Toggle({ type: ToggleType.Switch, isOn: this.formTemperatureEnabled })
+          .systemMaterial(new uiMaterial.Material())
+          .switchPointColor(Color.White)
           .onChange((value: boolean) => {
             this.formTemperatureEnabled = value
           })

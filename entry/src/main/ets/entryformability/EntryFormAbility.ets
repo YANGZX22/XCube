@@ -18,7 +18,7 @@ export default class EntryFormAbility extends FormExtensionAbility {
     hilog.info(DOMAIN, 'EntryFormAbility', 'onAddForm called');
     void this.registerAndRefreshForm(want);
     const darkMode = this.isSystemDarkMode()
-    return createNewChatFormBindingData(getThemeColors(ColorTheme.DEFAULT, darkMode), darkMode);
+    return createNewChatFormBindingData(getThemeColors(ColorTheme.LAVENDER, darkMode), darkMode);
   }
 
   onCastToNormalForm(formId: string): void {

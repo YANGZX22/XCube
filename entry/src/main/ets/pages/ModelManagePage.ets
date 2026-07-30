@@ -1,4 +1,4 @@
-import { SymbolGlyphModifier } from '@kit.ArkUI'
+import { SymbolGlyphModifier, uiMaterial } from '@kit.ArkUI'
 import { ModelProvider, ModelInfo, ProviderType } from '../models/ChatModels'
 import { ProviderViewModel } from '../viewmodels/ProviderViewModel'
 import { showToast } from '../utils/ToastUtil'
@@ -64,6 +64,9 @@ struct ModelManagePage {
   }
   private get themePrimaryLight(): string {
     return getAppUiState().themePrimaryLight
+  }
+  private get themeUserBubbleText(): string {
+    return getAppUiState().themeUserBubbleText
   }
   private get layoutSizeClass(): string {
     return getAppUiState().layoutSizeClass
@@ -617,12 +620,6 @@ struct ModelManagePage {
         .focusable(false)
         .selectable(false)
 
-        ListItem() {
-          this.ProviderSearchBar(false)
-        }
-        .focusable(false)
-        .selectable(false)
-
         if (this.isLoading) {
           ListItem() {
             this.LoadingView()
@@ -699,8 +696,14 @@ struct ModelManagePage {
               }
               .width('100%')
               .height(56)
-              .backgroundColor(getAppUiState().themeSurface)
+              .backgroundColor(Color.Transparent)
               .borderRadius(24)
+              .systemMaterial(new uiMaterial.ImmersiveMaterial({
+                style: uiMaterial.ImmersiveStyle.REGULAR,
+                materialColor: Color.Transparent,
+                interactive: true,
+                lightEffect: { color: undefined }
+              }))
               .onClick(() => {
                 this.openCreateProvider()
               })
@@ -731,8 +734,6 @@ struct ModelManagePage {
   private ProviderListPaneContent(isExpandedPane: boolean) {
     Column() {
       this.ProviderStatusTabs(isExpandedPane)
-
-      this.ProviderSearchBar(isExpandedPane)
 
       if (this.isLoading) {
         this.LoadingView()
@@ -809,8 +810,14 @@ struct ModelManagePage {
               }
               .width('100%')
               .height(56)
-              .backgroundColor(getAppUiState().themeSurface)
+              .backgroundColor(Color.Transparent)
               .borderRadius(24)
+              .systemMaterial(new uiMaterial.ImmersiveMaterial({
+                style: uiMaterial.ImmersiveStyle.REGULAR,
+                materialColor: Color.Transparent,
+                interactive: true,
+                lightEffect: { color: undefined }
+              }))
               .onClick(() => {
                 this.openCreateProvider()
               })
@@ -836,81 +843,53 @@ struct ModelManagePage {
   }
 
   @Builder
-  private ProviderSearchBar(isExpandedPane: boolean) {
-    Row() {
-      Row({ space: 8 }) {
-        SymbolGlyph($r('sys.symbol.magnifyingglass'))
-          .fontSize(16)
-          .fontColor([$r('app.color.text_tertiary')])
-
-        TextInput({ text: this.searchKeywords, placeholder: $r('app.string.filter_models_placeholder') })
-          .layoutWeight(1)
+  private ProviderStatusTabBar(title: Resource, tabKey: ProviderManageTabKey) {
+    Button({ type: ButtonType.Normal, stateEffect: false }) {
+      Row() {
+        Text(title)
           .fontSize(14)
-          .fontColor($r('app.color.text_primary'))
-          .placeholderColor($r('app.color.text_tertiary'))
-          .backgroundColor(Color.Transparent)
-          .onChange((value: string) => {
-            this.searchKeywords = value
-          })
+          .fontWeight(this.currentTabKey === tabKey ? FontWeight.Bold : FontWeight.Medium)
+          .fontColor(this.currentTabKey === tabKey ? this.themeUserBubbleText : $r('app.color.text_secondary'))
       }
       .width('100%')
-      .height(40)
-      .padding({ left: 12, right: 12 })
-      .backgroundColor(getAppUiState().themeBackground)
+      .height('100%')
+      .justifyContent(FlexAlign.Center)
       .borderRadius(20)
-      .border({
-        width: 1,
-        color: $r('app.color.divider')
-      })
-      .alignItems(VerticalAlign.Center)
+      .backgroundColor(this.currentTabKey === tabKey ? this.themePrimary : Color.Transparent)
     }
-    .width('100%')
-    .padding({
-      left: 16,
-      right: 16,
-      top: isExpandedPane ? 16 : 0,
-      bottom: 8
+    .layoutWeight(1)
+    .height(40)
+    .padding(0)
+    .borderRadius(20)
+    .clip(true)
+    .backgroundColor(Color.Transparent)
+    .systemMaterial(new uiMaterial.ImmersiveMaterial({
+      style: uiMaterial.ImmersiveStyle.ULTRA_THIN,
+      applyShadow: true,
+      interactive: true,
+      lightEffect: { color: Color.White }
+    }))
+    .onClick(() => {
+      if (this.currentTabKey !== tabKey) {
+        this.currentTabKey = tabKey
+      }
     })
   }
 
   @Builder
   private ProviderStatusTabs(isExpandedPane: boolean) {
-    Row({ space: 20 }) {
-      this.ProviderStatusTabButton(ProviderManageTabKey.ENABLED, $r('app.string.provider_tab_enabled'))
-      this.ProviderStatusTabButton(ProviderManageTabKey.DISABLED, $r('app.string.provider_tab_disabled'))
-      Blank()
+    Row() {
+      Row({ space: 8 }) {
+        this.ProviderStatusTabBar($r('app.string.provider_tab_enabled'), ProviderManageTabKey.ENABLED)
+        this.ProviderStatusTabBar($r('app.string.provider_tab_disabled'), ProviderManageTabKey.DISABLED)
+      }
+      .width(this.windowWidthVp >= 600 ? 184 : 168)
+      .height(40)
     }
     .width('100%')
-    .padding({ left: 16, right: 16, top: isExpandedPane ? 16 : 8, bottom: 8 })
-  }
-
-  @Builder
-  private ProviderStatusTabButton(tabKey: ProviderManageTabKey, title: Resource) {
-    Button() {
-      Column({ space: 6 }) {
-        Text(title)
-          .fontSize(15)
-          .fontWeight(this.currentTabKey === tabKey ? FontWeight.Bold : FontWeight.Medium)
-          .fontColor(this.currentTabKey === tabKey ? $r('app.color.text_primary') : $r('app.color.text_secondary'))
-
-        Column()
-          .width(this.currentTabKey === tabKey ? 24 : 14)
-          .height(3)
-          .borderRadius(2)
-          .backgroundColor(this.currentTabKey === tabKey ? this.themePrimary : Color.Transparent)
-      }
-      .alignItems(HorizontalAlign.Start)
-    }
-    .type(ButtonType.Normal)
-    .stateEffect(false)
-    .padding({ left: 0, right: 0, top: 4, bottom: 4 })
+    .justifyContent(FlexAlign.Center)
     .backgroundColor(Color.Transparent)
-    .onClick(() => {
-      if (this.currentTabKey === tabKey) {
-        return
-      }
-      this.currentTabKey = tabKey
-    })
+    .padding({ top: isExpandedPane ? 16 : 8, bottom: 8 })
   }
 
   @Builder
@@ -1155,6 +1134,8 @@ struct ProviderCardItem {
           if (this.provider.id !== 'siliconflow') {
             Toggle({ type: ToggleType.Switch, isOn: this.provider.isConnected })
               .selectedColor(this.themePrimary)
+              .systemMaterial(new uiMaterial.Material())
+              .switchPointColor(Color.White)
               .onChange((isOn: boolean) => {
                 if (this.provider.isConnected !== isOn) {
                   this.onToggleEnabled()
@@ -1190,8 +1171,11 @@ struct ProviderCardItem {
     .width('100%')
     .borderRadius(16)
     .clip(true)
-    .backgroundColor(this.active ? this.themePrimaryLight : getAppUiState().themeSurface)
-    .border(this.active ? { width: 1.5, color: this.themePrimary } : { width: 0, color: Color.Transparent })
+    .backgroundColor(Color.Transparent)
+    .border({
+      width: this.active ? 1.5 : 1,
+      color: this.active ? this.themePrimary : this.themePrimaryLight
+    })
   }
 }
 

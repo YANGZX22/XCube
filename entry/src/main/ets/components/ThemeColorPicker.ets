@@ -4,7 +4,7 @@ import { getAppUiState } from '../state/AppUiState'
 
 @ComponentV2
 export struct ThemeColorPicker {
-  @Local currentTheme: ColorTheme = ColorTheme.DEFAULT
+  @Local currentTheme: ColorTheme = ColorTheme.LAVENDER
   private get isDarkMode(): boolean {
     return getAppUiState().isDarkMode
   }
@@ -118,7 +118,9 @@ export struct ThemeColorPicker {
   }
 
   private getThemeName(themeId: ColorTheme): Resource {
-    if (themeId === ColorTheme.DEFAULT) {
+    if (themeId === ColorTheme.LAVENDER) {
+      return $r('app.string.theme_color_lavender')
+    } else if (themeId === ColorTheme.DEFAULT) {
       return $r('app.string.theme_color_default')
     } else if (themeId === ColorTheme.CLAUDE) {
       return $r('app.string.theme_color_claude')
@@ -136,7 +138,9 @@ export struct ThemeColorPicker {
   }
 
   private getThemeDescription(themeId: ColorTheme): Resource {
-    if (themeId === ColorTheme.DEFAULT) {
+    if (themeId === ColorTheme.LAVENDER) {
+      return $r('app.string.theme_color_lavender_desc')
+    } else if (themeId === ColorTheme.DEFAULT) {
       return $r('app.string.theme_color_default_desc')
     } else if (themeId === ColorTheme.CLAUDE) {
       return $r('app.string.theme_color_claude_desc')
@@ -153,4 +157,3 @@ export struct ThemeColorPicker {
     }
   }
 }
-

@@ -1,3 +1,4 @@
+import { uiMaterial } from '@kit.ArkUI'
 import { picker, fileIo } from '@kit.CoreFileKit'
 import { ChatSession } from '../models/ChatModels'
 import { ChatViewModel } from '../viewmodels/ChatViewModel'
@@ -181,7 +182,7 @@ struct ExportDataPage {
       // 使用文件选择器保存
       const documentSaveOptions = new picker.DocumentSaveOptions()
       const timestamp = new Date().toISOString().replace(/[:.]/g, '-').substring(0, 19)
-      documentSaveOptions.newFileNames = [`chatcube_export_${timestamp}.zip`]
+      documentSaveOptions.newFileNames = [`xcube_export_${timestamp}.zip`]
       documentSaveOptions.fileSuffixChoices = ['.zip']
 
       if (context) {
@@ -262,6 +263,12 @@ struct ExportDataPage {
               .fontWeight(FontWeight.Medium)
               .backgroundColor(this.themePrimary)
               .borderRadius(12)
+              .systemMaterial(new uiMaterial.ImmersiveMaterial({
+                style: uiMaterial.ImmersiveStyle.REGULAR,
+                materialColor: this.themePrimary,
+                interactive: true,
+                lightEffect: { color: undefined }
+              }))
               .enabled(this.selectedSessionIds.length > 0)
               .onClick(() => {
                 this.startExport()
@@ -303,6 +310,9 @@ struct ExportDataPage {
         .layoutWeight(1)
 
         Toggle({ type: ToggleType.Switch, isOn: this.selectAll })
+          .selectedColor(this.themePrimary)
+          .systemMaterial(new uiMaterial.Material())
+          .switchPointColor(Color.White)
           .onChange((_value: boolean) => {
             this.toggleSelectAll()
           })

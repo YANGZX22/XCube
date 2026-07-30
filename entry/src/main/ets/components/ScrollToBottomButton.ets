@@ -94,6 +94,7 @@ export struct ScrollToBottomButton {
         x: -56,
         y: -(this.fixedBottomOffset + this.bottomAvoidHeight) + this.extraOffsetY
       })
+      .animation({ duration: 200, curve: Curve.EaseOut })
       .zIndex(12)
       .transition(
         TransitionEffect.OPACITY.combine(

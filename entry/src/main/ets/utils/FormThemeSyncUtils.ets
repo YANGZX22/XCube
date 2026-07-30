@@ -17,7 +17,7 @@ class NewChatFormData {
   title: string = '新对话'
   subtitle: string = '点击开始聊天'
   themePrimary: string = DEFAULT_THEME_PRIMARY
-  surfaceColor: string = '#FFFDF8'
+  surfaceColor: string = '#FEFDFF'
   textPrimary: string = '#24211C'
   textColor: string = ''
   glassBgColor: string = 'rgba(255,253,248,0.62)'
@@ -123,13 +123,13 @@ async function resolveStoredSystemDarkMode(): Promise<boolean> {
 }
 
 async function loadStoredWidgetThemeId(): Promise<ColorTheme> {
-  const themeId = await getPreferencesService().getString(AppStorageKeys.COLOR_THEME, ColorTheme.DEFAULT)
+  const themeId = await getPreferencesService().getString(AppStorageKeys.COLOR_THEME, ColorTheme.LAVENDER)
   return themeId as ColorTheme
 }
 
 export async function loadWidgetThemeColors(context: Context): Promise<ThemeColorConfig> {
   const store = await getFormPreferences(context)
-  const themeId = await store.get(AppStorageKeys.COLOR_THEME, ColorTheme.DEFAULT) as string
+  const themeId = await store.get(AppStorageKeys.COLOR_THEME, ColorTheme.LAVENDER) as string
   return getThemeColors(themeId as ColorTheme, resolveContextSystemDarkMode(context))
 }
 

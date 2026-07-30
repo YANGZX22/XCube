@@ -1,7 +1,7 @@
 import { Context, wantAgent, WantAgent } from '@kit.AbilityKit'
 import { backgroundTaskManager } from '@kit.BackgroundTasksKit'
 
-const DEFAULT_BUNDLE_NAME = 'com.longlive.chatcube'
+const DEFAULT_BUNDLE_NAME = 'com.zixiao.xcube'
 const DEFAULT_ABILITY_NAME = 'EntryAbility'
 
 export class BackgroundRunGuardService {

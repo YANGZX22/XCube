@@ -35,9 +35,9 @@ struct UsageMetricCard {
   @Param title: ResourceStr = ''
   @Param value: number = 0
   @Param unit: ResourceStr = ''
-  @Param primaryColor: string = '#4E6F9E'
-  @Param primaryLightColor: string = '#D8E2EE'
-  @Param surfaceColor: string = '#FFFDF8'
+  @Param primaryColor: string = '#8576FF'
+  @Param primaryLightColor: string = '#E9E6FF'
+  @Param surfaceColor: string = '#FEFDFF'
 
   build() {
     Column() {
@@ -82,7 +82,7 @@ struct UsageMetricCard {
     .padding(14)
     .backgroundColor(this.surfaceColor)
     .borderRadius(16)
-    .border({ width: 1, color: $r('app.color.divider') })
+    .border({ width: 1, color: this.primaryLightColor })
     .visualEffect(buildPointLightBorderEffect())
   }
 }
@@ -372,7 +372,7 @@ struct UsageStatsPage {
     }
     .width('100%')
     .backgroundColor(this.themeBackground)
-    .border({ width: { bottom: 1 }, color: $r('app.color.divider') })
+    .border({ width: { bottom: 1 }, color: this.themePrimaryLight })
   }
 
   @Builder
@@ -523,7 +523,7 @@ struct UsageStatsPage {
           .width('100%')
           .height(6)
           .borderRadius(3)
-          .backgroundColor($r('app.color.divider'))
+          .backgroundColor(this.themePrimaryLight)
 
         Column()
           .width(`${this.getAnimatedRankingFraction(item.count) * 100}%`)
@@ -546,7 +546,7 @@ struct UsageStatsPage {
           this.RankingRow(item, index + 1)
           if (index < this.ranking.length - 1) {
             Divider()
-              .color($r('app.color.divider'))
+              .color(this.themePrimaryLight)
               .margin({ left: 50, right: 14 })
           }
         }
@@ -556,7 +556,7 @@ struct UsageStatsPage {
     .backgroundColor(this.themeSurface)
     .borderRadius(18)
     .clip(true)
-    .border({ width: 1, color: $r('app.color.divider') })
+    .border({ width: 1, color: this.themePrimaryLight })
     .visualEffect(buildPointLightBorderEffect())
   }
 

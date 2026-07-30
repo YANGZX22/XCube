@@ -10,7 +10,7 @@
     },
     {
       "name": "EntryAbility_label",
-      "value": "ChatCube"
+      "value": "XCube"
     },
     {
       "name": "model_manage_title",
@@ -301,6 +301,14 @@
       "value": "Material"
     },
     {
+      "name": "chat_list_immersive_material_title",
+      "value": "Immersive conversation list material"
+    },
+    {
+      "name": "chat_list_immersive_material_desc",
+      "value": "Use immersive light-sense material for conversation rows. When off, Gaussian blur is used."
+    },
+    {
       "name": "settings_language",
       "value": "Language"
     },
@@ -425,12 +433,8 @@
       "value": "About"
     },
     {
-      "name": "settings_about_chatcube",
-      "value": "About ChatCube"
-    },
-    {
-      "name": "settings_privacy_policy",
-      "value": "Privacy Policy"
+      "name": "settings_about_xcube",
+      "value": "About XCube"
     },
     {
       "name": "settings_data_management",
@@ -963,6 +967,14 @@
     {
       "name": "settings_color_theme",
       "value": "Color Theme"
+    },
+    {
+      "name": "theme_color_lavender",
+      "value": "XCube Lavender"
+    },
+    {
+      "name": "theme_color_lavender_desc",
+      "value": "Soft translucent violet"
     },
     {
       "name": "theme_color_default",
@@ -1730,7 +1742,7 @@
     },
     {
       "name": "about_github_repo",
-      "value": "ChatCube Open Source Repo"
+      "value": "XCube Open Source Repo"
     },
     {
       "name": "about_save_qrcode",
@@ -1758,7 +1770,7 @@
     },
     {
       "name": "about_copyright",
-      "value": "© 2026 ChatCube. All rights reserved."
+      "value": "© 2026 XCube. All rights reserved."
     },
     {
       "name": "provider_tab_config",
@@ -2162,7 +2174,7 @@
     },
     {
       "name": "webdav_remote_dir_placeholder",
-      "value": "chatcube"
+      "value": "xcube"
     },
     {
       "name": "webdav_remote_file_name",

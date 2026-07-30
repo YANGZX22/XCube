@@ -1,3 +1,4 @@
+import { uiMaterial } from '@kit.ArkUI'
 import { ThemeMode, AppLanguage } from '../../services/PreferencesService'
 import { SettingsSheetType } from '../../pages/index/IndexPageTypes'
 import { IndexSettingsSheetActionCallbacks } from '../../pages/index/IndexSettingsSheetCoordinator'
@@ -8,9 +9,6 @@ export struct IndexSettingsSheetContent {
   @Param settingsSheetType: SettingsSheetType = SettingsSheetType.NONE
   private get themePrimary(): string {
     return getAppUiState().themePrimary
-  }
-  private get themePrimaryLight(): string {
-    return getAppUiState().themePrimaryLight
   }
   private get themeDivider(): string {
     return getAppUiState().themeDivider
@@ -92,6 +90,8 @@ export struct IndexSettingsSheetContent {
       Toggle({ type: ToggleType.Switch, isOn: checked })
         .selectedColor(this.themePrimary)
         .enabled(enabled)
+        .systemMaterial(new uiMaterial.Material())
+        .switchPointColor(Color.White)
         .onChange((value: boolean) => {
           onChanged(value)
         })
@@ -148,6 +148,8 @@ export struct IndexSettingsSheetContent {
 
       Toggle({ type: ToggleType.Switch, isOn: checked })
         .selectedColor(this.themePrimary)
+        .systemMaterial(new uiMaterial.Material())
+        .switchPointColor(Color.White)
         .onChange((value: boolean) => {
           onChanged(value)
         })
@@ -182,8 +184,13 @@ export struct IndexSettingsSheetContent {
         .fontSize(14)
         .fontWeight(FontWeight.Medium)
         .fontColor(this.themePrimary)
-        .backgroundColor(this.themePrimaryLight)
+        .backgroundColor(Color.Transparent)
         .borderRadius(12)
+        .systemMaterial(new uiMaterial.ImmersiveMaterial({
+          style: uiMaterial.ImmersiveStyle.REGULAR,
+          interactive: true,
+          lightEffect: { color: undefined }
+        }))
         .onClick(() => {
           this.callbacks.onOpenSystemNotificationSettings()
         })

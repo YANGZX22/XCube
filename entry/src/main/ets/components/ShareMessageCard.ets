@@ -11,7 +11,7 @@ import { getAppUiState } from '../state/AppUiState'
 @ComponentV2
 export struct ShareMessageCard {
   @Param messages: ChatMessage[] = []
-  @Param appName: string = 'ChatCube'
+  @Param appName: string = 'XCube'
   @Param currentModelId: string = ''
   @Param iconRenderVersion: number = 0
   private get isDarkMode(): boolean {
@@ -380,4 +380,3 @@ export function ShareMessageCardBuilder(messages: ChatMessage[], appName: string
     appName: appName
   })
 }
-

@@ -1,4 +1,4 @@
-import { curves, SymbolGlyphModifier } from '@kit.ArkUI'
+import { curves, SymbolGlyphModifier, uiMaterial } from '@kit.ArkUI'
 import { ConfigurationConstant, common } from '@kit.AbilityKit'
 import { notificationManager } from '@kit.NotificationKit'
 import { motion } from '@kit.MultimodalAwarenessKit'
@@ -21,7 +21,7 @@ import { ThemeMode, AppLanguage, PreferenceKeys } from '../services/PreferencesS
 import { dismissActiveSnackBarOnBack, showSnackBar, SnackBarDisplayOptions, SnackBarTone } from '../utils/ToastUtil'
 import { MultiSelectToolbar } from '../components/MultiSelectToolbar'
 import { SharePreviewSheet } from '../components/SharePreviewSheet'
-import { ProviderBalanceSheet } from '../components/ProviderBalanceSheet'
+import { ProviderBalanceSheet, BalanceSheetState } from '../components/ProviderBalanceSheet'
 import { ColorTheme, ThemeColorConfig } from '../models/ThemeColors'
 import { ServiceRegistry } from '../services/ServiceRegistry'
 import { BalanceResult, getProviderBalanceService, ProviderBalanceService } from '../services/ProviderBalanceService'
@@ -133,7 +133,7 @@ struct Index {
   }
   @Local currentHoldingHand: motion.HoldingHandStatus = motion.HoldingHandStatus.UNKNOWN_STATUS
   @Local fabPressed: boolean = false
-  @Local currentColorTheme: ColorTheme = ColorTheme.DEFAULT
+  @Local currentColorTheme: ColorTheme = ColorTheme.LAVENDER
   @Local showSettingsSheet: boolean = false
   @Local activeSettingsSheetType: SettingsSheetType = SettingsSheetType.NONE
   @Local showSystemPromptSheet: boolean = false
@@ -277,8 +277,7 @@ struct Index {
   @Local shareMessages: ChatMessage[] = []
   // 服务商余额查询弹窗状态
   @Local showBalanceSheet: boolean = false
-  @Local balanceResults: BalanceResult[] = []
-  @Local balanceLoading: boolean = false
+  private balanceSheetState: BalanceSheetState = new BalanceSheetState()
   // Settings Sheet 关闭动画期间的状态机（避免“关闭回调晚到”误关新弹窗）
   private settingsSheetClosing: boolean = false
   private pendingSettingsSheetType: SettingsSheetType = SettingsSheetType.NONE
@@ -530,10 +529,6 @@ struct Index {
     } else {
       this.settingsNavPathStack.pushPath({ name: routeName })
     }
-  }
-
-  private openPrivacyPolicy(): void {
-    this.openSettingsDestination(SettingsRouteName.PRIVACY_POLICY)
   }
 
   private clearSettingsDestination(animated: boolean = false): void {
@@ -1466,8 +1461,10 @@ struct Index {
           height: SheetSize.FIT_CONTENT,
           dragBar: true,
           showClose: false,
-          backgroundColor: this.themeSurface,
-          blurStyle: BlurStyle.Thin,
+          backgroundColor: Color.Transparent,
+          systemMaterial: new uiMaterial.ImmersiveMaterial({
+            style: uiMaterial.ImmersiveStyle.REGULAR
+          }),
           preferType: SheetType.BOTTOM,
           onDisappear: () => {
             this.showBalanceSheet = false
@@ -1481,8 +1478,10 @@ struct Index {
           height: this.getActiveSettingsSheetHeight(),
           dragBar: true,
           showClose: false,
-          backgroundColor: this.getSettingsSheetBackgroundColor(),
-          blurStyle: BlurStyle.Thin,
+          backgroundColor: Color.Transparent,
+          systemMaterial: new uiMaterial.ImmersiveMaterial({
+            style: uiMaterial.ImmersiveStyle.REGULAR
+          }),
           preferType: SheetType.BOTTOM,
           maskColor: '#66000000',
           onWillDismiss: (dismissAction: DismissSheetAction) => {
@@ -1541,7 +1540,10 @@ struct Index {
           height: SheetSize.LARGE,
           dragBar: true,
           showClose: false,
-          backgroundColor: this.themeBackground,
+          backgroundColor: Color.Transparent,
+          systemMaterial: new uiMaterial.ImmersiveMaterial({
+            style: uiMaterial.ImmersiveStyle.REGULAR
+          }),
           preferType: SheetType.BOTTOM,
           onDisappear: () => {
             this.showAssistantEditorSheet = false
@@ -1782,8 +1784,7 @@ struct Index {
   @Builder
   BalanceSheetBuilder() {
     ProviderBalanceSheet({
-      results: this.balanceResults,
-      loading: this.balanceLoading,
+      state: this.balanceSheetState,
       onRefresh: () => {
         this.refreshBalanceResults()
       },
@@ -2222,29 +2223,29 @@ struct Index {
   }
 
   private async refreshBalanceResults(): Promise<void> {
-    if (this.balanceLoading) {
+    if (this.balanceSheetState.loading) {
       return
     }
 
     const querySeq = ++this.balanceQuerySeq
-    this.balanceLoading = true
+    this.balanceSheetState.loading = true
     try {
       const providers = await this.providerViewModel.loadAllProviders()
       const results = await this.providerBalanceService.queryAllEnabled(providers)
       if (querySeq !== this.balanceQuerySeq) {
         return
       }
-      this.balanceResults = results
+      this.balanceSheetState.results = results
     } catch (error) {
       if (querySeq !== this.balanceQuerySeq) {
         return
       }
       console.error('Index', `Failed to query provider balances: ${JSON.stringify(error)}`)
-      this.balanceResults = []
+      this.balanceSheetState.results = []
       this.showIndexSnack($r('app.string.balance_query_failed'), 2000, SnackBarTone.ERROR)
     } finally {
       if (querySeq === this.balanceQuerySeq) {
-        this.balanceLoading = false
+        this.balanceSheetState.loading = false
       }
     }
   }
@@ -2258,7 +2259,18 @@ struct Index {
 
   private getCompactChatTitleBarMenuItems(): Array<HdsNavigationMenuItemOptions> {
     if (this.isMultiSelectMode) {
-      return []
+      return [
+        {
+          content: {
+            label: $r('app.string.delete'),
+            icon: this.buildCompactChatTitleBarMenuIcon($r('sys.symbol.trash'),
+              $r('app.color.status_error')),
+            action: () => {
+              this.handleDeleteSelectedSessions()
+            }
+          }
+        }
+      ]
     }
 
     const menus: Array<HdsNavigationMenuItemOptions> = [
@@ -3308,7 +3320,7 @@ struct Index {
     }
     .width('100%')
     .height('100%')
-    .backgroundColor(this.themeBackground)
+    .backgroundColor(Color.Transparent)
   }
 
   @Builder
@@ -3549,6 +3561,8 @@ struct Index {
 
         Toggle({ type: ToggleType.Switch, isOn: this.assistantFormTemperatureEnabled })
           .selectedColor(this.themePrimary)
+          .systemMaterial(new uiMaterial.Material())
+          .switchPointColor(Color.White)
           .onChange((value: boolean) => {
             this.assistantFormTemperatureEnabled = value
           })
@@ -3872,13 +3886,6 @@ struct Index {
           .fontColor($r('app.color.text_primary'))
 
         Blank()
-
-        Text($r('app.string.cancel'))
-          .fontSize(15)
-          .fontColor(this.themePrimary)
-          .onClick(() => {
-            this.handleExitMultiSelectMode()
-          })
       }
       .width('100%')
       .height(56)
@@ -4215,9 +4222,6 @@ struct Index {
       },
       onOpenAbout: (): void => {
         this.openSettingsDestination(SettingsRouteName.ABOUT)
-      },
-      onOpenPrivacy: (): void => {
-        this.openPrivacyPolicy()
       }
     })
   }
@@ -4346,10 +4350,6 @@ struct Index {
     return SheetSize.FIT_CONTENT
   }
 
-  private getSettingsSheetBackgroundColor(): ResourceColor {
-    return this.themeSurface
-  }
-
   @Builder
   SettingsSheetBuilder() {
     Column() {
@@ -4411,12 +4411,12 @@ struct Index {
       }
       .width('100%')
       .constraintSize({ maxWidth: 560 })
-      .backgroundColor(this.getSettingsSheetBackgroundColor())
+      .backgroundColor(Color.Transparent)
       .borderRadius({ topLeft: 28, topRight: 28, bottomLeft: 28, bottomRight: 28 })
     }
     .width('100%')
     .padding({ left: 16, right: 16, top: 8, bottom: 8 })
-    .backgroundColor(this.getSettingsSheetBackgroundColor())
+    .backgroundColor(Color.Transparent)
   }
 
   @Builder
@@ -4723,6 +4723,9 @@ struct Index {
     this.getUIContext().showAlertDialog({
       title: $r('app.string.delete_chat'),
       message: $r('app.string.delete_selected_conversations_confirm'),
+      systemMaterial: new uiMaterial.ImmersiveMaterial({
+        style: uiMaterial.ImmersiveStyle.REGULAR
+      }),
       primaryButton: {
         value: $r('app.string.cancel'),
         action: () => {

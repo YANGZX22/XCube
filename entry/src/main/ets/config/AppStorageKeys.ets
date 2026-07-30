@@ -63,4 +63,5 @@ export class AppStorageKeys {
   static readonly MATERIAL_TYPE: string = 'material_type'
   static readonly MATERIAL_LEVEL: string = 'material_level'
   static readonly LIGHT_COLOR_MODE: string = 'light_color_mode'
+  static readonly CHAT_LIST_IMMERSIVE_MATERIAL: string = 'chat_list_immersive_material'
 }

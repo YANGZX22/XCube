@@ -1,3 +1,4 @@
+import { uiMaterial } from '@kit.ArkUI'
 import { ToolPreviewEntry } from '../../utils/ToolPayloadSummaryUtils'
 import { getAppUiState } from '../../state/AppUiState'
 import { pickLocalizedText } from '../../utils/LocalizedTextUtils'
@@ -376,6 +377,8 @@ export struct ChatToolExecutionApprovalSheetContent {
         .width(56)
         .height(30)
         .selectedColor(this.themePrimary)
+        .systemMaterial(new uiMaterial.Material())
+        .switchPointColor(Color.White)
         .onChange((isOn: boolean) => {
           onChange(isOn)
         })

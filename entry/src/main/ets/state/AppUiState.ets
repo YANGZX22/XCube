@@ -26,34 +26,35 @@ export class AppUiState {
   @Trace layoutSizeClass: string = LayoutSizeClass.COMPACT
   @Trace settingsDetailPresentationMode: string = SettingsPagePresentationMode.PAGE
   @Trace settingsHandAdaptiveChangedAt: number = 0
-  @Trace colorTheme: string = ''
-  @Trace themePrimary: string = '#4E6F9E'
-  @Trace themePrimaryLight: string = '#D8E2EE'
-  @Trace themeBackground: string = '#FAF8F3'
-  @Trace themeSurface: string = '#FFFDF8'
-  @Trace themeDivider: string = '#DED8CC'
-  @Trace themeUserBubble: string = '#52688A'
+  @Trace colorTheme: string = 'lavender'
+  @Trace themePrimary: string = '#8576FF'
+  @Trace themePrimaryLight: string = '#E9E6FF'
+  @Trace themeBackground: string = '#F8F7FF'
+  @Trace themeSurface: string = '#FEFDFF'
+  @Trace themeDivider: string = '#E5E5E5'
+  @Trace themeUserBubble: string = '#7568DF'
   @Trace themeUserBubbleText: string = '#FFFFFF'
-  @Trace themeAiBubble: string = '#FFFDF8'
-  @Trace themeTextPrimary: string = '#24211C'
-  @Trace themeTextSecondary: string = '#6F6A60'
-  @Trace themeTextTertiary: string = '#8A8178'
-  @Trace themeMarkdownTitle: string = '#24211C'
-  @Trace themeMarkdownText: string = '#3D3830'
-  @Trace themeMarkdownLink: string = '#4E6F9E'
-  @Trace themeMarkdownLinkBg: string = '#D8E2EE'
-  @Trace themeMarkdownCodeBg: string = '#F3EFE8'
-  @Trace themeMarkdownCodeText: string = '#8F5E45'
-  @Trace themeMarkdownQuoteBg: string = '#F3EFE8'
-  @Trace themeMarkdownTableBg: string = '#FFFDF8'
-  @Trace themeMarkdownTableHeaderBg: string = '#F3EFE8'
-  @Trace themeMarkdownTableAltBg: string = '#FAF7F0'
-  @Trace themeMarkdownTableBorder: string = '#DED8CC'
+  @Trace themeAiBubble: string = '#FEFDFF'
+  @Trace themeTextPrimary: string = '#252238'
+  @Trace themeTextSecondary: string = '#686279'
+  @Trace themeTextTertiary: string = '#958FA5'
+  @Trace themeMarkdownTitle: string = '#252238'
+  @Trace themeMarkdownText: string = '#3E394F'
+  @Trace themeMarkdownLink: string = '#7568DF'
+  @Trace themeMarkdownLinkBg: string = '#E9E6FF'
+  @Trace themeMarkdownCodeBg: string = '#F0EEFF'
+  @Trace themeMarkdownCodeText: string = '#6559C7'
+  @Trace themeMarkdownQuoteBg: string = '#F0EEFF'
+  @Trace themeMarkdownTableBg: string = '#FEFDFF'
+  @Trace themeMarkdownTableHeaderBg: string = '#F0EEFF'
+  @Trace themeMarkdownTableAltBg: string = '#F8F7FF'
+  @Trace themeMarkdownTableBorder: string = '#E9E6FF'
   @Trace chatFontSize: number = 15
   @Trace chatInputEnterKeySend: boolean = false
   @Trace materialType: number = 100   // ADAPTIVE
   @Trace materialLevel: number = 10   // ADAPTIVE
   @Trace lightColorMode: string = 'default'
+  @Trace chatListImmersiveMaterial: boolean = false
 }
 
 function readStorageValue<T>(key: string, fallback: T): T {
@@ -204,6 +205,9 @@ function applyAppUiStateValue<T extends string | number | boolean>(state: AppUiS
     case AppStorageKeys.LIGHT_COLOR_MODE:
       state.lightColorMode = value as string
       return
+    case AppStorageKeys.CHAT_LIST_IMMERSIVE_MATERIAL:
+      state.chatListImmersiveMaterial = value as boolean
+      return
     default:
       return
   }
@@ -296,6 +300,8 @@ function createAppUiStateFromStorage(): AppUiState {
     readStorageValue<number>(AppStorageKeys.MATERIAL_LEVEL, 10))
   applyAppUiStateValue(state, AppStorageKeys.LIGHT_COLOR_MODE,
     readStorageValue<string>(AppStorageKeys.LIGHT_COLOR_MODE, 'default'))
+  applyAppUiStateValue(state, AppStorageKeys.CHAT_LIST_IMMERSIVE_MATERIAL,
+    readStorageValue<boolean>(AppStorageKeys.CHAT_LIST_IMMERSIVE_MATERIAL, false))
   return state
 }
 
@@ -357,6 +363,7 @@ export function syncAppUiStateFromStorage(): void {
   state.materialType = freshState.materialType
   state.materialLevel = freshState.materialLevel
   state.lightColorMode = freshState.lightColorMode
+  state.chatListImmersiveMaterial = freshState.chatListImmersiveMaterial
 }
 
 export function applyThemeToAppUiState(themeId: string, colors: ThemeColorConfig): void {
@@ -479,6 +486,8 @@ function resolveAppUiStatePath(path: string): string {
       return 'materialLevel'
     case AppStorageKeys.LIGHT_COLOR_MODE:
       return 'lightColorMode'
+    case AppStorageKeys.CHAT_LIST_IMMERSIVE_MATERIAL:
+      return 'chatListImmersiveMaterial'
     default:
       return path
   }

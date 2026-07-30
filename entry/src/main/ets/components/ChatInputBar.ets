@@ -9,7 +9,8 @@ import {
 } from '@kit.MediaLibraryKit'
 import { fileIo } from '@kit.CoreFileKit'
 import { util } from '@kit.ArkTS'
-import { hdsMaterial, HdsTabs } from '@kit.UIDesignKit'
+import { uiMaterial } from '@kit.ArkUI'
+import { hdsMaterial } from '@kit.UIDesignKit'
 import { getAttachmentStorageService } from '../services/AttachmentStorageService'
 import { getAppUiState } from '../state/AppUiState'
 import { withColorAlpha } from '../utils/ColorAlphaUtils'
@@ -22,10 +23,6 @@ export struct ChatInputBar {
   @Local attachIconTrigger: number = 0
   // pause 呼吸动效透明度
   @Local breathOpacity: number = 1
-  // 输入栏主体高度，驱动沉浸光感浮动栏的 barHeight/height（40 按钮 + 上下各 6 padding = 52）
-  @Local inputAreaHeight: number = 52
-  // 输入栏容器宽度，驱动沉浸光感浮动栏的 barWidth（百分比对 HdsTabs.barWidth 无效，需实测数值）
-  @Local inputAreaWidth: number = 0
   // 按钮按下状态
   @Local sendBtnPressed: boolean = false
   @Local sendBtnScale: number = 1
@@ -191,43 +188,20 @@ export struct ChatInputBar {
     .clip(false)
   }
 
-  // 整条输入栏作为单一 HdsTabs 浮动栏，承载沉浸光感材质；高度随主体内容动态跟随
+  // 整条输入栏作为单一沉浸光感浮动面（Row + systemMaterial）；高度随输入内容自适应展开
   @Builder
   ImmersiveBar() {
-    HdsTabs() {
-      TabContent()
-        .tabBar(this.InputRow())
+    Row() {
+      this.InputRow()
     }
-    .barHeight(this.inputAreaHeight)
-    .barOverlap(true)
-    .barPosition(BarPosition.End)
-    .vertical(false)
-    .barBackgroundColor(Color.Transparent)
     .width('100%')
-    .height(this.inputAreaHeight)
+    .constraintSize({ minHeight: 52, maxHeight: 132 })
     .backgroundColor(Color.Transparent)
     .borderRadius(24)
     .clip(false)
-    .barFloatingStyle({
-      barBottomMargin: 0,
-      barSideMargin: 0,
-      barWidth: {
-        smallWidth: this.inputAreaWidth,
-        mediumWidth: this.inputAreaWidth,
-        largeWidth: this.inputAreaWidth
-      },
-      gradientMask: { maskColor: Color.Transparent },
-      systemMaterialEffect: {
-        materialType: hdsMaterial.MaterialType.IMMERSIVE,
-        materialLevel: hdsMaterial.MaterialLevel.ADAPTIVE
-      }
-    })
-    .onAreaChange((_oldValue: Area, newValue: Area) => {
-      const w = Number(newValue.width)
-      if (w > 0 && w !== this.inputAreaWidth) {
-        this.inputAreaWidth = w
-      }
-    })
+    .systemMaterial(new uiMaterial.ImmersiveMaterial({
+      style: uiMaterial.ImmersiveStyle.REGULAR
+    }))
     .animation({ duration: 200, curve: Curve.EaseOut })
   }
 
@@ -412,13 +386,6 @@ export struct ChatInputBar {
         right: 6,
         top: 6,
         bottom: 6
-      })
-      .onAreaChange((_oldValue: Area, newValue: Area) => {
-        const h = Number(newValue.height)
-        const clamped = h < 52 ? 52 : (h > 132 ? 132 : h)
-        if (clamped !== this.inputAreaHeight) {
-          this.inputAreaHeight = clamped
-        }
       })
   }
 

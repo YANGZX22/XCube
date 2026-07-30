@@ -1,7 +1,8 @@
+import { uiMaterial } from '@kit.ArkUI'
 import { ToolConfig, ToolPermissionLevel, ToolSourceType } from '../../models/ChatModels'
 import { getAppUiState } from '../../state/AppUiState'
+import { withColorAlpha } from '../../utils/ColorAlphaUtils'
 import { pickLocalizedText } from '../../utils/LocalizedTextUtils'
-import { ChatFloatingImmersiveButton } from '../ChatFloatingImmersiveButton'
 
 class McpToolGroup {
   sourceId: string = ''
@@ -30,12 +31,12 @@ export struct ChatToolPickerSheetContent {
   @Event onToggleMcpGroup: (toolIds: string[], enabled: boolean) => void =
     (_toolIds: string[], _enabled: boolean): void => {}
 
-  private get themeBackground(): string {
-    return getAppUiState().themeBackground
-  }
-
   private get themeSurface(): string {
     return getAppUiState().themeSurface
+  }
+
+  private get themePrimaryLightHex(): string {
+    return getAppUiState().themePrimaryLight
   }
 
   private isMcpChatTool(tool: ToolConfig): boolean {
@@ -96,7 +97,9 @@ export struct ChatToolPickerSheetContent {
   }
 
   private getCardBackground(selected: boolean): ResourceColor {
-    return selected ? this.themePrimaryLight : this.themeSurface
+    return selected
+      ? withColorAlpha(this.themePrimaryLightHex, 'D9')
+      : withColorAlpha(this.themeSurface, 'CC')
   }
 
   private getCardBorderColor(): ResourceColor {
@@ -104,7 +107,7 @@ export struct ChatToolPickerSheetContent {
   }
 
   private getCardShadowColor(selected: boolean): string {
-    return selected ? 'rgba(0, 125, 255, 0.16)' : 'rgba(15, 23, 42, 0.06)'
+    return selected ? 'rgba(0, 125, 255, 0.10)' : 'rgba(15, 23, 42, 0.04)'
   }
 
   private getBuiltinDescription(tool: ToolConfig): string {
@@ -153,27 +156,24 @@ export struct ChatToolPickerSheetContent {
   private BuiltinToolGridCard(tool: ToolConfig) {
     Column({ space: 10 }) {
       Row({ space: 8 }) {
-        ChatFloatingImmersiveButton({
-          barWidth: 36,
-          barHeight: 36,
-          iconResource: this.getToolSymbolResource(tool.id),
-          iconSize: 17,
-          iconColor: [this.themePrimary],
-          iconOffsetY: -3,
-          responsePadding: 0
-        }) {
-          Stack({ alignContent: Alignment.Center }) {
-            SymbolGlyph(this.getToolSymbolResource(tool.id))
-              .fontSize(17)
-              .fontColor([this.themePrimary])
-          }
-          .width(36)
-          .height(36)
-          .translate({ y: -3 })
+        Stack({ alignContent: Alignment.Center }) {
+          SymbolGlyph(this.getToolSymbolResource(tool.id))
+            .fontSize(17)
+            .fontColor([this.themePrimary])
         }
+        .width(36)
+        .height(36)
+        .borderRadius(18)
+        .clip(true)
+        .backgroundColor(Color.Transparent)
+        .systemMaterial(new uiMaterial.ImmersiveMaterial({
+          style: uiMaterial.ImmersiveStyle.ULTRA_THIN
+        }))
 
         Toggle({ type: ToggleType.Switch, isOn: this.isToolSelected(tool.id) })
           .selectedColor(this.themePrimary)
+          .systemMaterial(new uiMaterial.Material())
+          .switchPointColor(Color.White)
           .onChange((value: boolean) => {
             this.onToggleTool(tool.id, value)
           })
@@ -234,27 +234,29 @@ export struct ChatToolPickerSheetContent {
   build() {
     Column() {
       Row({ space: 12 }) {
-        ChatFloatingImmersiveButton({
-          barWidth: 36,
-          barHeight: 36,
-          iconResource: $r('sys.symbol.xmark'),
-          iconSize: 18,
-          iconColor: [this.themePrimary],
-          iconOffsetY: -3,
-          responsePadding: 0,
-          onButtonClick: (): void => {
-            this.onClose()
-          }
-        }) {
+        Button({ type: ButtonType.Normal, stateEffect: false }) {
           Stack({ alignContent: Alignment.Center }) {
             SymbolGlyph($r('sys.symbol.xmark'))
               .fontSize(18)
               .fontColor([this.themePrimary])
           }
-          .width(36)
-          .height(36)
-          .translate({ y: -3 })
+          .width('100%')
+          .height('100%')
         }
+        .width(36)
+        .height(36)
+        .padding(0)
+        .borderRadius(18)
+        .clip(true)
+        .backgroundColor(Color.Transparent)
+        .systemMaterial(new uiMaterial.ImmersiveMaterial({
+          style: uiMaterial.ImmersiveStyle.REGULAR,
+          interactive: true,
+          lightEffect: { color: undefined }
+        }))
+        .onClick(() => {
+          this.onClose()
+        })
 
         Text(pickLocalizedText('选择工具', 'Choose Tools'))
           .fontSize(18)
@@ -263,20 +265,7 @@ export struct ChatToolPickerSheetContent {
           .layoutWeight(1)
           .textAlign(TextAlign.Start)
 
-        ChatFloatingImmersiveButton({
-          barWidth: 36,
-          barHeight: 36,
-          iconResource: $r('sys.symbol.arrow_clockwise'),
-          iconSize: 18,
-          iconColor: [this.themePrimary],
-          iconOffsetY: -3,
-          responsePadding: 0,
-          onButtonClick: (): void => {
-            if (!this.isRefreshingMcpToolAvailability) {
-              this.onRefresh()
-            }
-          }
-        }) {
+        Button({ type: ButtonType.Normal, stateEffect: false }) {
           Stack({ alignContent: Alignment.Center }) {
             if (this.isRefreshingMcpToolAvailability) {
               LoadingProgress()
@@ -289,10 +278,27 @@ export struct ChatToolPickerSheetContent {
                 .fontColor([this.themePrimary])
             }
           }
-          .width(36)
-          .height(36)
-          .translate({ y: -3 })
+          .width('100%')
+          .height('100%')
         }
+        .width(36)
+        .height(36)
+        .padding(0)
+        .borderRadius(18)
+        .clip(true)
+        .backgroundColor(Color.Transparent)
+        .enabled(!this.isRefreshingMcpToolAvailability)
+        .opacity(this.isRefreshingMcpToolAvailability ? 0.72 : 1)
+        .systemMaterial(new uiMaterial.ImmersiveMaterial({
+          style: uiMaterial.ImmersiveStyle.REGULAR,
+          interactive: true,
+          lightEffect: { color: undefined }
+        }))
+        .onClick(() => {
+          if (!this.isRefreshingMcpToolAvailability) {
+            this.onRefresh()
+          }
+        })
       }
       .width('100%')
       .padding({ left: 16, right: 16, top: 12, bottom: 8 })
@@ -332,12 +338,12 @@ export struct ChatToolPickerSheetContent {
             .width('100%')
             .padding({ left: 20, right: 20, top: 28, bottom: 28 })
             .borderRadius(20)
-            .backgroundColor(this.themeSurface)
+            .backgroundColor(withColorAlpha(this.themeSurface, 'CC'))
             .border({
               width: 0.5,
               color: $r('app.color.divider')
             })
-            .shadow({ radius: 12, color: 'rgba(15, 23, 42, 0.06)', offsetX: 0, offsetY: 4 })
+            .shadow({ radius: 12, color: 'rgba(15, 23, 42, 0.04)', offsetX: 0, offsetY: 4 })
             .alignItems(HorizontalAlign.Center)
           } else {
             if (this.getBuiltinChatTools().length > 0) {
@@ -383,24 +389,19 @@ export struct ChatToolPickerSheetContent {
 
                 ForEach(this.getMcpToolGroups(), (group: McpToolGroup) => {
                   Row({ space: 12 }) {
-                    ChatFloatingImmersiveButton({
-                      barWidth: 40,
-                      barHeight: 40,
-                      iconResource: $r('sys.symbol.link'),
-                      iconSize: 19,
-                      iconColor: [this.themePrimary],
-                      iconOffsetY: -4,
-                      responsePadding: 0
-                    }) {
-                      Stack({ alignContent: Alignment.Center }) {
-                        SymbolGlyph($r('sys.symbol.link'))
-                          .fontSize(19)
-                          .fontColor([this.themePrimary])
-                      }
-                      .width(40)
-                      .height(40)
-                      .translate({ y: -4 })
+                    Stack({ alignContent: Alignment.Center }) {
+                      SymbolGlyph($r('sys.symbol.link'))
+                        .fontSize(19)
+                        .fontColor([this.themePrimary])
                     }
+                    .width(40)
+                    .height(40)
+                    .borderRadius(20)
+                    .clip(true)
+                    .backgroundColor(Color.Transparent)
+                    .systemMaterial(new uiMaterial.ImmersiveMaterial({
+                      style: uiMaterial.ImmersiveStyle.ULTRA_THIN
+                    }))
 
                     Column({ space: 8 }) {
                       Row({ space: 8 }) {
@@ -429,6 +430,8 @@ export struct ChatToolPickerSheetContent {
 
                     Toggle({ type: ToggleType.Switch, isOn: this.isMcpToolGroupSelected(group) })
                       .selectedColor(this.themePrimary)
+                      .systemMaterial(new uiMaterial.Material())
+                      .switchPointColor(Color.White)
                       .onChange((value: boolean) => {
                         this.onToggleMcpGroup(group.toolIds, value)
                       })
@@ -463,6 +466,6 @@ export struct ChatToolPickerSheetContent {
       .scrollBar(BarState.Off)
     }
     .width('100%')
-    .backgroundColor(this.themeBackground)
+    .backgroundColor(Color.Transparent)
   }
 }

@@ -1,9 +1,11 @@
 import { ModelProvider } from '../../models/ChatModels'
 import { ModelSelectorContent } from '../ModelSelector'
 import { getAppUiState } from '../../state/AppUiState'
+import { uiMaterial } from '@kit.ArkUI'
 
 @ComponentV2
 export struct DefaultModelSelectSheetContent {
+  @Param title: string | Resource = ''
   @Param currentSelectionText: string | Resource = ''
   @Param isProvidersLoaded: boolean = false
   @Param providers: ModelProvider[] = []
@@ -14,9 +16,45 @@ export struct DefaultModelSelectSheetContent {
   @Event onSelectModel: (providerId: string, modelId: string, modelName: string) => void =
     (_providerId: string, _modelId: string, _modelName: string): void => {}
   @Event onClearSelection: () => void = (): void => {}
+  @Event onClose: () => void = (): void => {}
 
   build() {
     Column() {
+      Row() {
+        Button() {
+          SymbolGlyph($r('sys.symbol.xmark'))
+            .fontSize(16)
+            .fontColor([$r('app.color.text_primary')])
+        }
+        .type(ButtonType.Circle)
+        .width(36)
+        .height(36)
+        .backgroundColor(Color.Transparent)
+        .systemMaterial(new uiMaterial.ImmersiveMaterial({
+          style: uiMaterial.ImmersiveStyle.REGULAR,
+          materialColor: Color.Transparent,
+          applyShadow: false,
+          interactive: true,
+          lightEffect: { color: undefined }
+        }))
+        .onClick(() => {
+          this.onClose()
+        })
+
+        Text(this.title)
+          .fontSize(17)
+          .fontWeight(FontWeight.Bold)
+          .fontColor($r('app.color.text_primary'))
+          .layoutWeight(1)
+          .textAlign(TextAlign.Center)
+
+        Blank()
+          .width(36)
+      }
+      .width('100%')
+      .height(56)
+      .padding({ left: 16, right: 16 })
+
       Row() {
         Text($r('app.string.default_model_current_selection'))
           .fontSize(14)
@@ -26,15 +64,13 @@ export struct DefaultModelSelectSheetContent {
           .fontSize(14)
           .fontWeight(FontWeight.Medium)
           .fontColor(this.themePrimary)
-          .layoutWeight(1)
+          .constraintSize({ maxWidth: '60%' })
           .maxLines(1)
           .textOverflow({ overflow: TextOverflow.Ellipsis })
       }
       .width('100%')
-      .padding({ left: 16, right: 16, top: 12, bottom: 12 })
-      .backgroundColor(getAppUiState().themeSurface)
-      .borderRadius(12)
-      .margin({ left: 16, right: 16, top: 8 })
+      .justifyContent(FlexAlign.Center)
+      .padding({ left: 16, right: 16, top: 8, bottom: 12 })
 
       if (!this.isProvidersLoaded) {
         Column() {
@@ -62,6 +98,9 @@ export struct DefaultModelSelectSheetContent {
           searchPlaceholder: $r('app.string.filter_models_placeholder'),
           includeModelIdInSearch: true,
           emptyStateMode: 'default',
+          immersiveMaterial: true,
+          narrowSearchBar: true,
+          showImmersiveGroupBorder: true,
           onSelectModel: (providerId: string, modelId: string, modelName: string): void => {
             this.onSelectModel(providerId, modelId, modelName)
           },
@@ -76,4 +115,3 @@ export struct DefaultModelSelectSheetContent {
     .height('100%')
   }
 }
-

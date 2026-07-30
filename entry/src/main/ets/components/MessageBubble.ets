@@ -13,7 +13,7 @@ import { TypingDots } from './TypingDots'
 import { ChatMarkdownHybridRenderer } from './ChatMarkdownHybridRenderer'
 import { AssistantAvatarView } from './AssistantAvatar'
 import { hilog } from '@kit.PerformanceAnalysisKit'
-import { SymbolGlyphModifier } from '@kit.ArkUI'
+import { SymbolGlyphModifier, uiMaterial } from '@kit.ArkUI'
 import { getAppUiState } from '../state/AppUiState'
 import { withColorAlpha } from '../utils/ColorAlphaUtils'
 import { MATH_CHART_TOOL_ID } from '../config/BuiltinTools'
@@ -69,7 +69,7 @@ export struct MessageBubble {
   @Param showHeader: boolean = true  // 是否显示消息头部（模型信息）
   @Param currentModelId: string = ''  // 当前会话的模型 ID（用于图标匹配回退）
   @Param assistantAvatarSymbol: string = 'AI'
-  @Param assistantAvatarColor: string = '#4E6F9E'
+  @Param assistantAvatarColor: string = '#8576FF'
   @Param assistantAvatarCacheKey: number = 0
   @Param themeRenderKey: string = ''
   @Param isMultiSelectMode: boolean = false  // 是否处于多选模式
@@ -1024,6 +1024,14 @@ export struct MessageBubble {
     .backgroundColor(this.themePrimaryLight)
   }
 
+  private getMessageToolbarHeight(): number {
+    return 34
+  }
+
+  private getMessageToolbarButtonSize(): number {
+    return 28
+  }
+
   @Builder
   UserMessage() {
     Column() {
@@ -1074,6 +1082,12 @@ export struct MessageBubble {
               ? '#FFFFFF'
               : (this.isMultiSelectMode && this.isSelected ? withColorAlpha(this.themePrimary, '66') : 'rgba(255, 255, 255, 0.15)')
           })
+          .systemMaterial(new uiMaterial.ImmersiveMaterial({
+            style: uiMaterial.ImmersiveStyle.REGULAR,
+            materialColor: this.isMultiSelectMode && this.isSelected
+              ? this.lightenColor(this.themeUserBubble, 0.15)
+              : this.themeUserBubble
+          }))
 
           // 多选选中竖条
           if (this.isMultiSelectMode && this.isSelected) {
@@ -1096,41 +1110,121 @@ export struct MessageBubble {
         Row() {
           Blank()
 
-          if (this.shouldShowVersionSwitcher()) {
-            Row() {
-              this.VersionSwitcher()
+          Row({ space: 2 }) {
+            if (this.shouldShowVersionSwitcher()) {
+              Button({ type: ButtonType.Circle, stateEffect: false }) {
+                SymbolGlyph($r('sys.symbol.chevron_left'))
+                  .fontSize(13)
+                  .fontColor([this.canSwitchToPreviousVersion()
+                    ? $r('app.color.text_tertiary') : $r('app.color.divider')])
+              }
+              .width(this.getMessageToolbarButtonSize())
+              .height(this.getMessageToolbarButtonSize())
+              .padding(0)
+              .backgroundColor(Color.Transparent)
+              .onClick(() => {
+                if (this.canSwitchToPreviousVersion()) {
+                  this.onSwitchVersion(-1)
+                }
+              })
+
+              Text(`${this.message.versionIndex + 1}/${this.message.versionCount}`)
+                .fontSize(12)
+                .fontColor($r('app.color.text_tertiary'))
+                .width(this.getMessageToolbarButtonSize())
+                .textAlign(TextAlign.Center)
+
+              Button({ type: ButtonType.Circle, stateEffect: false }) {
+                SymbolGlyph($r('sys.symbol.chevron_right'))
+                  .fontSize(13)
+                  .fontColor([this.canSwitchToNextVersion()
+                    ? $r('app.color.text_tertiary') : $r('app.color.divider')])
+              }
+              .width(this.getMessageToolbarButtonSize())
+              .height(this.getMessageToolbarButtonSize())
+              .padding(0)
+              .backgroundColor(Color.Transparent)
+              .onClick(() => {
+                if (this.canSwitchToNextVersion()) {
+                  this.onSwitchVersion(1)
+                }
+              })
+
+              Divider()
+                .vertical(true)
+                .height(14)
+                .color($r('app.color.divider'))
+                .margin({ left: 3, right: 3 })
             }
-              .margin({ right: 14 })
+
+            // 复制
+            if (this.canCopyMessageContent()) {
+              Button({ type: ButtonType.Circle, stateEffect: false }) {
+                SymbolGlyph($r('sys.symbol.checkmark_square_on_square'))
+                  .fontSize(13)
+                  .fontColor([$r('app.color.text_tertiary')])
+              }
+              .width(this.getMessageToolbarButtonSize())
+              .height(this.getMessageToolbarButtonSize())
+              .padding(0)
+              .backgroundColor(Color.Transparent)
+              .onClick(() => {
+                this.handleCopy()
+              })
+            }
+
+            // 重新生成
+            Button({ type: ButtonType.Circle, stateEffect: false }) {
+              SymbolGlyph($r('sys.symbol.arrow_clockwise'))
+                .fontSize(13)
+                .fontColor([$r('app.color.text_tertiary')])
+            }
+            .width(this.getMessageToolbarButtonSize())
+            .height(this.getMessageToolbarButtonSize())
+            .padding(0)
+            .backgroundColor(Color.Transparent)
+            .onClick(() => {
+              this.onRegenerate()
+            })
+
+            // 编辑
+            Button({ type: ButtonType.Circle, stateEffect: false }) {
+              SymbolGlyph($r('sys.symbol.square_and_pencil'))
+                .fontSize(13)
+                .fontColor([$r('app.color.text_tertiary')])
+            }
+            .width(this.getMessageToolbarButtonSize())
+            .height(this.getMessageToolbarButtonSize())
+            .padding(0)
+            .backgroundColor(Color.Transparent)
+            .onClick(() => {
+              this.onEdit()
+            })
+
+            // 更多
+            Button({ type: ButtonType.Circle, stateEffect: false }) {
+              SymbolGlyph($r('sys.symbol.dot_grid_2x2'))
+                .fontSize(13)
+                .fontColor([$r('app.color.text_tertiary')])
+            }
+            .width(this.getMessageToolbarButtonSize())
+            .height(this.getMessageToolbarButtonSize())
+            .padding(0)
+            .backgroundColor(Color.Transparent)
+            .bindMenu(this.UserMoreMenu(), {
+              systemMaterial: new uiMaterial.ImmersiveMaterial({
+                style: uiMaterial.ImmersiveStyle.THICK
+              })
+            })
           }
-
-          // 复制
-          if (this.canCopyMessageContent()) {
-            SymbolGlyph($r('sys.symbol.checkmark_square_on_square'))
-              .fontSize(14)
-              .fontColor([$r('app.color.text_tertiary')])
-              .onClick(() => { this.handleCopy() })
-          }
-
-          // 重新生成
-          SymbolGlyph($r('sys.symbol.arrow_clockwise'))
-            .fontSize(14)
-            .fontColor([$r('app.color.text_tertiary')])
-            .margin({ left: this.canCopyMessageContent() ? 16 : 0 })
-            .onClick(() => { this.onRegenerate() })
-
-          // 编辑
-          SymbolGlyph($r('sys.symbol.square_and_pencil'))
-            .fontSize(14)
-            .fontColor([$r('app.color.text_tertiary')])
-            .margin({ left: 16 })
-            .onClick(() => { this.onEdit() })
-
-          // 更多
-          SymbolGlyph($r('sys.symbol.dot_grid_2x2'))
-            .fontSize(14)
-            .fontColor([$r('app.color.text_tertiary')])
-            .margin({ left: 16 })
-            .bindMenu(this.UserMoreMenu())
+          .height(this.getMessageToolbarHeight())
+          .padding({ left: 3, right: 3 })
+          .borderRadius(this.getMessageToolbarHeight() / 2)
+          .clip(true)
+          .alignItems(VerticalAlign.Center)
+          .systemMaterial(new uiMaterial.ImmersiveMaterial({
+            style: uiMaterial.ImmersiveStyle.REGULAR
+          }))
         }
         .width('100%')
         .margin({ top: 6 })
@@ -1417,12 +1511,11 @@ export struct MessageBubble {
       ForEach(this.translateLanguages, (lang: TranslateLanguage) => {
         MenuItem({ content: lang.nativeName })
           .contentFont({ size: 14 })
-          .contentFontColor(this.translationLightTextPrimary)
-          .backgroundColor(this.translationLightSurface)
+          .contentFontColor($r('app.color.text_primary'))
           .onClick(() => { this.handleTranslate(lang.name) })
       }, (lang: TranslateLanguage) => lang.code)
     }
-    .backgroundColor(this.translationLightSurface)
+    .backgroundColor(Color.Transparent)
     .borderRadius(12)
   }
 
@@ -1443,6 +1536,8 @@ export struct MessageBubble {
         .contentFontColor($r('app.color.status_error'))
         .onClick(() => { this.onDelete() })
     }
+    .backgroundColor(Color.Transparent)
+    .borderRadius(12)
   }
 
   // 用户消息更多菜单（分享/多选/删除）
@@ -1462,6 +1557,148 @@ export struct MessageBubble {
         .contentFontColor($r('app.color.status_error'))
         .onClick(() => { this.onDelete() })
     }
+    .backgroundColor(Color.Transparent)
+    .borderRadius(12)
+  }
+
+  @Builder
+  private AssistantActionToolbar() {
+    Row({ space: 2 }) {
+      if (this.shouldShowVersionSwitcher()) {
+        Button({ type: ButtonType.Circle, stateEffect: false }) {
+          SymbolGlyph($r('sys.symbol.chevron_left'))
+            .fontSize(13)
+            .fontColor([this.canSwitchToPreviousVersion()
+              ? $r('app.color.text_tertiary') : $r('app.color.divider')])
+        }
+        .width(this.getMessageToolbarButtonSize())
+        .height(this.getMessageToolbarButtonSize())
+        .padding(0)
+        .backgroundColor(Color.Transparent)
+        .onClick(() => {
+          if (this.canSwitchToPreviousVersion()) {
+            this.onSwitchVersion(-1)
+          }
+        })
+
+        Text(`${this.message.versionIndex + 1}/${this.message.versionCount}`)
+          .fontSize(12)
+          .fontColor($r('app.color.text_tertiary'))
+          .width(this.getMessageToolbarButtonSize())
+          .textAlign(TextAlign.Center)
+
+        Button({ type: ButtonType.Circle, stateEffect: false }) {
+          SymbolGlyph($r('sys.symbol.chevron_right'))
+            .fontSize(13)
+            .fontColor([this.canSwitchToNextVersion()
+              ? $r('app.color.text_tertiary') : $r('app.color.divider')])
+        }
+        .width(this.getMessageToolbarButtonSize())
+        .height(this.getMessageToolbarButtonSize())
+        .padding(0)
+        .backgroundColor(Color.Transparent)
+        .onClick(() => {
+          if (this.canSwitchToNextVersion()) {
+            this.onSwitchVersion(1)
+          }
+        })
+
+        Divider()
+          .vertical(true)
+          .height(14)
+          .color($r('app.color.divider'))
+          .margin({ left: 3, right: 3 })
+      }
+
+      if (this.canCopyMessageContent()) {
+        Button({ type: ButtonType.Circle, stateEffect: false }) {
+          SymbolGlyph($r('sys.symbol.checkmark_square_on_square'))
+            .fontSize(13)
+            .fontColor([$r('app.color.text_tertiary')])
+        }
+        .width(this.getMessageToolbarButtonSize())
+        .height(this.getMessageToolbarButtonSize())
+        .padding(0)
+        .backgroundColor(Color.Transparent)
+        .onClick(() => {
+          this.handleCopy()
+        })
+      }
+
+      Button({ type: ButtonType.Circle, stateEffect: false }) {
+        SymbolGlyph($r('sys.symbol.arrow_clockwise'))
+          .fontSize(13)
+          .fontColor([$r('app.color.text_tertiary')])
+      }
+      .width(this.getMessageToolbarButtonSize())
+      .height(this.getMessageToolbarButtonSize())
+      .padding(0)
+      .backgroundColor(Color.Transparent)
+      .onClick(() => {
+        this.onRegenerate()
+      })
+
+      if (this.canReadMessageContent()) {
+        Button({ type: ButtonType.Circle, stateEffect: false }) {
+          SymbolGlyph((this.speakingMessageId === this.message.id)
+            ? $r('sys.symbol.pause') : $r('sys.symbol.speaker_wave_2'))
+            .fontSize(13)
+            .fontColor([(this.speakingMessageId === this.message.id)
+              ? this.themePrimary : $r('app.color.text_tertiary')])
+        }
+        .width(this.getMessageToolbarButtonSize())
+        .height(this.getMessageToolbarButtonSize())
+        .padding(0)
+        .backgroundColor(Color.Transparent)
+        .onClick(() => {
+          if (this.speakingMessageId === this.message.id) {
+            this.onTTSStop()
+          } else {
+            this.onTTS(this.message.id, this.message.content)
+          }
+        })
+      }
+
+      if (this.canTranslateMessageContent()) {
+        Button({ type: ButtonType.Circle, stateEffect: false }) {
+          SymbolGlyph($r('sys.symbol.translate'))
+            .fontSize(13)
+            .fontColor([$r('app.color.text_tertiary')])
+        }
+        .width(this.getMessageToolbarButtonSize())
+        .height(this.getMessageToolbarButtonSize())
+        .padding(0)
+        .backgroundColor(Color.Transparent)
+        .bindMenu(this.TranslateSubMenu(), {
+          systemMaterial: new uiMaterial.ImmersiveMaterial({
+            style: uiMaterial.ImmersiveStyle.THICK
+          })
+        })
+      }
+
+      Button({ type: ButtonType.Circle, stateEffect: false }) {
+        SymbolGlyph($r('sys.symbol.dot_grid_2x2'))
+          .fontSize(13)
+          .fontColor([$r('app.color.text_tertiary')])
+      }
+      .width(this.getMessageToolbarButtonSize())
+      .height(this.getMessageToolbarButtonSize())
+      .padding(0)
+      .backgroundColor(Color.Transparent)
+      .bindMenu(this.AssistantMoreMenu(), {
+        systemMaterial: new uiMaterial.ImmersiveMaterial({
+          style: uiMaterial.ImmersiveStyle.THICK
+        })
+      })
+    }
+    .height(this.getMessageToolbarHeight())
+    .padding({ left: 3, right: 3 })
+    .borderRadius(this.getMessageToolbarHeight() / 2)
+    .clip(true)
+    .alignItems(VerticalAlign.Center)
+    .systemMaterial(new uiMaterial.ImmersiveMaterial({
+      style: uiMaterial.ImmersiveStyle.REGULAR
+    }))
   }
 
   @Builder
@@ -1619,64 +1856,6 @@ export struct MessageBubble {
               this.onTTSStop()
             }
           })
-          // ========== 工具栏 ==========
-          if (this.shouldShowAssistantToolbar()) {
-            Row() {
-              // 版本切换器（同一问题的多个 AI 答案版本）
-              if (this.shouldShowVersionSwitcher()) {
-                Row() {
-                  this.VersionSwitcher()
-                }
-                  .margin({ right: 16 })
-              }
-
-              // 复制
-              if (this.canCopyMessageContent()) {
-                SymbolGlyph($r('sys.symbol.checkmark_square_on_square'))
-                  .fontSize(14)
-                  .fontColor([$r('app.color.text_tertiary')])
-                  .onClick(() => { this.handleCopy() })
-              }
-
-              // 重新生成
-              SymbolGlyph($r('sys.symbol.arrow_clockwise'))
-                .fontSize(14)
-                .fontColor([$r('app.color.text_tertiary')])
-                .margin({ left: this.canCopyMessageContent() ? 16 : 0 })
-                .onClick(() => { this.onRegenerate() })
-
-              // 朗读
-              if (this.canReadMessageContent()) {
-                SymbolGlyph((this.speakingMessageId === this.message.id) ? $r('sys.symbol.pause') : $r('sys.symbol.speaker_wave_2'))
-                  .fontSize(14)
-                  .fontColor([(this.speakingMessageId === this.message.id) ? this.themePrimary : $r('app.color.text_tertiary')])
-                  .margin({ left: 16 })
-                  .onClick(() => {
-                    if ((this.speakingMessageId === this.message.id)) { this.onTTSStop() } else { this.onTTS(this.message.id, this.message.content) }
-                  })
-              }
-
-              // 翻译
-              if (this.canTranslateMessageContent()) {
-                SymbolGlyph($r('sys.symbol.translate'))
-                  .fontSize(14)
-                  .fontColor([$r('app.color.text_tertiary')])
-                  .margin({ left: 16 })
-                  .bindMenu(this.TranslateSubMenu())
-              }
-
-              // 更多
-              SymbolGlyph($r('sys.symbol.dot_grid_2x2'))
-                .fontSize(14)
-                .fontColor([$r('app.color.text_tertiary')])
-                .margin({ left: 16 })
-                .bindMenu(this.AssistantMoreMenu())
-
-              Blank()
-            }
-            .width('100%')
-            .margin({ top: 6 })
-          }
         }
         .width('100%')
         .margin({ top: this.showHeader ? 8 : 0 })
@@ -1691,6 +1870,21 @@ export struct MessageBubble {
               (this.hasAskUserToolCall() ? this.themePrimaryLight : $r('app.color.bubble_border'))
           })
           .clip(true)
+          .systemMaterial(new uiMaterial.ImmersiveMaterial({
+            style: uiMaterial.ImmersiveStyle.REGULAR,
+            materialColor: this.isMultiSelectMode && this.isSelected
+              ? this.themePrimaryLight
+              : this.themeAiBubble
+          }))
+
+        if (this.shouldShowAssistantToolbar()) {
+          Row() {
+            this.AssistantActionToolbar()
+          }
+          .width('100%')
+          .justifyContent(FlexAlign.Start)
+          .margin({ top: 6 })
+        }
       }
       .enabled(!this.isMultiSelectMode)
       .layoutWeight(1)

@@ -1,3 +1,4 @@
+import { uiMaterial } from '@kit.ArkUI'
 import { ToolConfig, SearchEngine, ToolSourceType } from '../models/ChatModels'
 import { McpAuthType, McpServerConfig } from '../models/McpModels'
 import { ToolRegistry } from '../services/ToolRegistry'
@@ -1501,6 +1502,8 @@ export struct ToolsCenterPanel {
 
                 Toggle({ type: ToggleType.Switch, isOn: this.searchQueryOptimizationEnabled })
                   .selectedColor(this.themePrimary)
+                  .systemMaterial(new uiMaterial.Material())
+                  .switchPointColor(Color.White)
                   .onChange((value: boolean) => {
                     this.searchQueryOptimizationEnabled = value
                   })
@@ -1852,6 +1855,8 @@ export struct ToolsCenterPanel {
 
               Toggle({ type: ToggleType.Switch, isOn: this.showMcpCustomHeadersEditor })
                 .selectedColor(this.themePrimary)
+                .systemMaterial(new uiMaterial.Material())
+                .switchPointColor(Color.White)
                 .onChange((isOn: boolean) => {
                   this.showMcpCustomHeadersEditor = isOn
                 })
@@ -2019,6 +2024,8 @@ export struct ToolsCenterPanel {
 
             Toggle({ type: ToggleType.Switch, isOn: this.mcpFormEnabled })
               .selectedColor(this.themePrimary)
+              .systemMaterial(new uiMaterial.Material())
+              .switchPointColor(Color.White)
               .onChange((value: boolean) => {
                 this.mcpFormEnabled = value
               })
@@ -2136,6 +2143,8 @@ export struct ToolsCenterPanel {
 
               Toggle({ type: ToggleType.Switch, isOn: this.skillFormEnabled })
                 .selectedColor(this.themePrimary)
+                .systemMaterial(new uiMaterial.Material())
+                .switchPointColor(Color.White)
                 .onChange((value: boolean) => {
                   this.skillFormEnabled = value
                 })
@@ -2600,6 +2609,8 @@ struct SearchServiceCardItem {
 
         Toggle({ type: ToggleType.Switch, isOn: this.searchEnabled })
           .selectedColor(this.themePrimary)
+          .systemMaterial(new uiMaterial.Material())
+          .switchPointColor(Color.White)
           .onChange((value: boolean) => {
             this.onToggle(value)
           })
@@ -2724,6 +2735,8 @@ struct SkillServiceCardItem {
 
         Toggle({ type: ToggleType.Switch, isOn: this.skillEnabled })
           .selectedColor(this.themePrimary)
+          .systemMaterial(new uiMaterial.Material())
+          .switchPointColor(Color.White)
           .onChange((value: boolean) => {
             this.onToggle(value)
           })
@@ -2918,6 +2931,8 @@ struct SkillListCardItem {
 
         Toggle({ type: ToggleType.Switch, isOn: this.skill.enabled })
           .selectedColor(this.themePrimary)
+          .systemMaterial(new uiMaterial.Material())
+          .switchPointColor(Color.White)
           .onChange((value: boolean) => {
             this.onToggleEnabled(value)
           })
@@ -3291,6 +3306,8 @@ struct McpServerCardItem {
 
         Toggle({ type: ToggleType.Switch, isOn: this.serverEnabled })
           .selectedColor(this.themePrimary)
+          .systemMaterial(new uiMaterial.Material())
+          .switchPointColor(Color.White)
           .onChange((value: boolean) => {
             this.onToggleEnabled(value)
           })

@@ -1,3 +1,4 @@
+import { uiMaterial } from '@kit.ArkUI'
 import { ServiceRegistry } from '../services/ServiceRegistry'
 import { PreferenceKeys } from '../services/PreferencesService'
 import { normalizeSystemPromptTemplate, SystemPromptTemplateDefaults } from '../utils/SystemPromptTemplateUtils'
@@ -147,6 +148,8 @@ struct SystemPromptSettingsPage {
             .layoutWeight(1)
 
           Toggle({ type: ToggleType.Switch, isOn: this.systemPromptEnabled })
+            .systemMaterial(new uiMaterial.Material())
+            .switchPointColor(Color.White)
             .onChange((isOn: boolean) => {
               this.systemPromptEnabled = isOn
               this.preferencesService.setBoolean(PreferenceKeys.SYSTEM_PROMPT_ENABLED, isOn)

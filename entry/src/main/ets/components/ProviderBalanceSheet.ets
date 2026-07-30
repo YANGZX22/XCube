@@ -4,12 +4,18 @@
  */
 import { getAppUiState } from '../state/AppUiState'
 import { BalanceResult } from '../services/ProviderBalanceService'
+import { withColorAlpha } from '../utils/ColorAlphaUtils'
 import { ChatFloatingImmersiveButton } from './ChatFloatingImmersiveButton'
+
+@ObservedV2
+export class BalanceSheetState {
+  @Trace results: BalanceResult[] = []
+  @Trace loading: boolean = false
+}
 
 @ComponentV2
 export struct ProviderBalanceSheet {
-  @Param results: BalanceResult[] = []
-  @Param loading: boolean = false
+  @Param state: BalanceSheetState = new BalanceSheetState()
   @Event onRefresh: () => void = (): void => {}
   @Event onClose: () => void = (): void => {}
 
@@ -63,13 +69,13 @@ export struct ProviderBalanceSheet {
           iconOffsetY: -4,
           responsePadding: 0,
           onButtonClick: (): void => {
-            if (!this.loading) {
+            if (!this.state.loading) {
               this.onRefresh()
             }
           }
         }) {
           Stack({ alignContent: Alignment.Center }) {
-            if (this.loading) {
+            if (this.state.loading) {
               LoadingProgress()
                 .width(20)
                 .height(20)
@@ -89,7 +95,7 @@ export struct ProviderBalanceSheet {
       .padding({ left: 20, right: 16, top: 8, bottom: 12 })
 
       // 列表 / 空态
-      if (this.results.length === 0 && this.loading) {
+      if (this.state.results.length === 0 && this.state.loading) {
         Column() {
           LoadingProgress()
             .width(32)
@@ -104,7 +110,7 @@ export struct ProviderBalanceSheet {
         .padding({ top: 34, bottom: 42, left: 24, right: 24 })
         .justifyContent(FlexAlign.Center)
         .alignItems(HorizontalAlign.Center)
-      } else if (this.results.length === 0) {
+      } else if (this.state.results.length === 0) {
         Column() {
           SymbolGlyph($r('sys.symbol.creditcard'))
             .fontSize(40)
@@ -121,7 +127,7 @@ export struct ProviderBalanceSheet {
         .alignItems(HorizontalAlign.Center)
       } else {
         Column() {
-          ForEach(this.results, (item: BalanceResult) => {
+          ForEach(this.state.results, (item: BalanceResult) => {
             this.BalanceRow(item)
           }, (item: BalanceResult) => item.providerId)
         }
@@ -175,7 +181,7 @@ export struct ProviderBalanceSheet {
     .width('100%')
     .padding(14)
     .borderRadius(14)
-    .backgroundColor(this.themeBackground)
+    .backgroundColor(withColorAlpha(this.themeBackground, 'CC'))
     .margin({ bottom: 10 })
     .alignItems(VerticalAlign.Center)
   }

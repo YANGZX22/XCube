@@ -4,6 +4,7 @@ import {
   getButtonAnimation
 } from '../../utils/ButtonAnimationUtils'
 import { getAppUiState } from '../../state/AppUiState'
+import { uiMaterial } from '@kit.ArkUI'
 
 @ComponentV2
 export struct ChatMultiSelectToolbar {
@@ -29,20 +30,12 @@ export struct ChatMultiSelectToolbar {
     return getAppUiState().isDarkMode
   }
 
-  private get panelBackground(): string {
-    return this.isDarkMode ? 'rgba(28, 28, 30, 0.92)' : 'rgba(255, 255, 255, 0.96)'
-  }
-
   private get panelBorderColor(): string {
     return this.isDarkMode ? 'rgba(255, 255, 255, 0.08)' : 'rgba(0, 0, 0, 0.06)'
   }
 
   private get panelShadowColor(): string {
     return this.isDarkMode ? 'rgba(0, 0, 0, 0.36)' : 'rgba(15, 23, 42, 0.14)'
-  }
-
-  private get iconButtonBackground(): ResourceColor {
-    return this.isDarkMode ? '#2A2C31' : '#F3F5F8'
   }
 
   private get destructiveButtonBackground(): string {
@@ -75,7 +68,12 @@ export struct ChatMultiSelectToolbar {
       }
       .width(42)
       .height(42)
-      .backgroundColor(this.iconButtonBackground)
+      .backgroundColor(Color.Transparent)
+      .systemMaterial(new uiMaterial.ImmersiveMaterial({
+        style: uiMaterial.ImmersiveStyle.REGULAR,
+        interactive: true,
+        lightEffect: { color: undefined }
+      }))
       .scale(getButtonScale(this.cancelPressed))
       .animation(getButtonAnimation())
       .onTouch(createButtonTouchHandler((pressed: boolean): void => {
@@ -105,7 +103,12 @@ export struct ChatMultiSelectToolbar {
       .height(42)
       .enabled(this.canToggleSelectAll())
       .opacity(this.canToggleSelectAll() ? 1 : 0.45)
-      .backgroundColor(this.iconButtonBackground)
+      .backgroundColor(Color.Transparent)
+      .systemMaterial(new uiMaterial.ImmersiveMaterial({
+        style: uiMaterial.ImmersiveStyle.REGULAR,
+        interactive: true,
+        lightEffect: { color: undefined }
+      }))
       .scale(getButtonScale(this.selectAllPressed))
       .animation(getButtonAnimation())
       .onTouch(createButtonTouchHandler((pressed: boolean): void => {
@@ -136,7 +139,12 @@ export struct ChatMultiSelectToolbar {
       .height(42)
       .enabled(this.hasSelection())
       .opacity(this.hasSelection() ? 1 : 0.45)
-      .backgroundColor(this.iconButtonBackground)
+      .backgroundColor(Color.Transparent)
+      .systemMaterial(new uiMaterial.ImmersiveMaterial({
+        style: uiMaterial.ImmersiveStyle.REGULAR,
+        interactive: true,
+        lightEffect: { color: undefined }
+      }))
       .scale(getButtonScale(this.sharePressed))
       .animation(getButtonAnimation())
       .onTouch(createButtonTouchHandler((pressed: boolean): void => {
@@ -167,7 +175,13 @@ export struct ChatMultiSelectToolbar {
       .height(42)
       .enabled(this.hasSelection())
       .opacity(this.hasSelection() ? 1 : 0.45)
-      .backgroundColor(this.hasSelection() ? this.destructiveButtonBackground : this.iconButtonBackground)
+      .backgroundColor(Color.Transparent)
+      .systemMaterial(new uiMaterial.ImmersiveMaterial({
+        style: uiMaterial.ImmersiveStyle.REGULAR,
+        materialColor: this.hasSelection() ? this.destructiveButtonBackground : undefined,
+        interactive: true,
+        lightEffect: { color: undefined }
+      }))
       .scale(getButtonScale(this.deletePressed))
       .animation(getButtonAnimation())
       .onTouch(createButtonTouchHandler((pressed: boolean): void => {
@@ -203,8 +217,12 @@ export struct ChatMultiSelectToolbar {
     }
     .alignItems(HorizontalAlign.Center)
     .padding({ left: 16, right: 16, top: 14, bottom: 14 })
-    .backgroundColor(this.panelBackground)
-    .backgroundBlurStyle(BlurStyle.COMPONENT_REGULAR)
+    .backgroundColor(Color.Transparent)
+    .systemMaterial(new uiMaterial.ImmersiveMaterial({
+      style: uiMaterial.ImmersiveStyle.REGULAR,
+      interactive: true,
+      lightEffect: { color: undefined }
+    }))
     .borderRadius(28)
     .border({ width: 1, color: this.panelBorderColor })
     .hitTestBehavior(HitTestMode.Default)

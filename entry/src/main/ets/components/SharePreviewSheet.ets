@@ -124,7 +124,7 @@ export struct SharePreviewSheet {
             Column() {
               ShareMessageCard({
                 messages: this.messages,
-                appName: 'ChatCube',
+                appName: 'XCube',
                 currentModelId: this.currentModelId,
                 iconRenderVersion: this.iconRenderVersion
               })
@@ -187,7 +187,7 @@ export struct SharePreviewSheet {
   private ShareSnapshotCard() {
     ShareMessageCard({
       messages: this.messages,
-      appName: 'ChatCube',
+      appName: 'XCube',
       currentModelId: this.currentModelId,
       iconRenderVersion: this.iconRenderVersion
     })
@@ -200,7 +200,7 @@ export struct SharePreviewSheet {
     Column() {
       ShareMessageCard({
         messages: this.messages,
-        appName: 'ChatCube',
+        appName: 'XCube',
         currentModelId: this.currentModelId,
         iconRenderVersion: this.iconRenderVersion
       })
@@ -394,4 +394,3 @@ export struct SharePreviewSheet {
     }
   }
 }
-

@@ -1,4 +1,4 @@
-import { DividerMode, HdsTabs, hdsMaterial } from '@kit.UIDesignKit'
+import { uiMaterial } from '@kit.ArkUI'
 import { ChatSession } from '../../models/ChatModels'
 import { SessionListGroupViewModel, SessionListItemData } from '../../pages/index/IndexSessionListDataSource'
 import { IndexSessionListItem } from './IndexSessionListItem'
@@ -27,10 +27,6 @@ export struct IndexSessionListSection {
       return $r('app.color.status_error')
     }
     return getAppUiState().themePrimary
-  }
-
-  private getSwipeButtonRadius(): number {
-    return this.getSwipeButtonHeight() / 2
   }
 
   private getSwipeButtonHeight(): number {
@@ -75,108 +71,82 @@ export struct IndexSessionListSection {
     .padding({ left: 4, right: 4 })
     .justifyContent(FlexAlign.Center)
     .alignItems(HorizontalAlign.Center)
-    .translate({ y: -3 })
   }
 
   @Builder
   private FavoriteSwipeButton(session: ChatSession) {
     Row() {
-      HdsTabs() {
-        TabContent() {
-        }
-        .tabBar(this.FavoriteSwipeContent(session))
+      Button({ type: ButtonType.Circle, stateEffect: false }) {
+        this.FavoriteSwipeContent(session)
       }
-      .barOverlap(true)
-      .barPosition(BarPosition.End)
-      .vertical(false)
-      .barBackgroundColor(Color.Transparent)
-      .width(72)
+      .width(this.getSwipeButtonHeight())
       .height(this.getSwipeButtonHeight())
       .backgroundColor(Color.Transparent)
-      .borderRadius(this.getSwipeButtonRadius())
-      .clip(false)
-      .divider({ mode: DividerMode.NONE })
-      .barFloatingStyle({
-        barBottomMargin: 0,
-        barSideMargin: 0,
-        barWidth: {
-          smallWidth: 72,
-          mediumWidth: 72,
-          largeWidth: 72
-        },
-        gradientMask: { maskColor: '#00000000', maskHeight: 1 },
-        systemMaterialEffect: {
-          materialType: hdsMaterial.MaterialType.IMMERSIVE,
-          materialLevel: hdsMaterial.MaterialLevel.ADAPTIVE
-        }
-      })
-      .onTabBarClick(() => {
+      .padding(0)
+      .onClick(() => {
         this.sessionListScroller.closeAllSwipeActions()
         this.onToggleFavorite(session)
       })
+      .systemMaterial(new uiMaterial.ImmersiveMaterial({
+        style: uiMaterial.ImmersiveStyle.REGULAR,
+        interactive: true,
+        lightEffect: { color: undefined }
+      }))
     }
     .width(72)
     .height('100%')
     .justifyContent(FlexAlign.Center)
     .alignItems(VerticalAlign.Center)
-    .translate({ y: -2 })
     .clip(false)
   }
 
   @Builder
   private DeleteSwipeContent() {
-    Stack({ alignContent: Alignment.Center }) {
+    Column() {
       SymbolGlyph($r('sys.symbol.trash'))
-        .fontSize(24)
+        .fontSize(18)
         .fontColor([$r('app.color.status_error')])
+
+      Text($r('app.string.delete'))
+        .fontSize(11)
+        .fontWeight(FontWeight.Medium)
+        .fontColor($r('app.color.status_error'))
+        .maxLines(1)
+        .textOverflow({ overflow: TextOverflow.Ellipsis })
+        .textAlign(TextAlign.Center)
+        .margin({ top: 2 })
     }
-      .width('100%')
-      .height(this.getSwipeButtonHeight())
-      .translate({ y: -3 })
+    .width('100%')
+    .height(this.getSwipeButtonHeight())
+    .padding({ left: 4, right: 4 })
+    .justifyContent(FlexAlign.Center)
+    .alignItems(HorizontalAlign.Center)
   }
 
   @Builder
   private DeleteSwipePanel(sessionId: string) {
     Row() {
-      HdsTabs() {
-        TabContent() {
-        }
-        .tabBar(this.DeleteSwipeContent())
+      Button({ type: ButtonType.Circle, stateEffect: false }) {
+        this.DeleteSwipeContent()
       }
-      .barOverlap(true)
-      .barPosition(BarPosition.End)
-      .vertical(false)
-      .barBackgroundColor(Color.Transparent)
-      .width(64)
+      .width(this.getSwipeButtonHeight())
       .height(this.getSwipeButtonHeight())
       .backgroundColor(Color.Transparent)
-      .borderRadius(this.getSwipeButtonRadius())
-      .clip(false)
-      .divider({ mode: DividerMode.NONE })
-      .barFloatingStyle({
-        barBottomMargin: 0,
-        barSideMargin: 0,
-        barWidth: {
-          smallWidth: 64,
-          mediumWidth: 64,
-          largeWidth: 64
-        },
-        gradientMask: { maskColor: '#00000000', maskHeight: 1 },
-        systemMaterialEffect: {
-          materialType: hdsMaterial.MaterialType.IMMERSIVE,
-          materialLevel: hdsMaterial.MaterialLevel.ADAPTIVE
-        }
-      })
-      .onTabBarClick(() => {
+      .padding(0)
+      .onClick(() => {
         this.sessionListScroller.closeAllSwipeActions()
         this.onDeleteSession(sessionId)
       })
+      .systemMaterial(new uiMaterial.ImmersiveMaterial({
+        style: uiMaterial.ImmersiveStyle.REGULAR,
+        interactive: true,
+        lightEffect: { color: undefined }
+      }))
     }
     .width(64)
     .height('100%')
     .justifyContent(FlexAlign.Center)
     .alignItems(VerticalAlign.Center)
-    .translate({ y: -2 })
     .clip(false)
   }
 

@@ -1,4 +1,5 @@
 import { HdsNavigation, HdsNavigationTitleBarOptions, HdsNavigationTitleMode } from '@kit.UIDesignKit'
+import { uiMaterial } from '@kit.ArkUI'
 import {
   ExportOptions,
   ImportOptions,
@@ -36,6 +37,7 @@ struct WebDAVSyncPage {
   private get topAvoidHeight(): number { return getAppUiState().topAvoidHeight }
   private get bottomAvoidHeight(): number { return getAppUiState().bottomAvoidHeight }
   private get themePrimary(): string { return getAppUiState().themePrimary }
+  private get themePrimaryLight(): string { return getAppUiState().themePrimaryLight }
   private get layoutSizeClass(): string { return getAppUiState().layoutSizeClass }
   private get windowWidthVp(): number { return getAppUiState().windowWidthVp }
   private get windowHeightVp(): number { return getAppUiState().windowHeightVp }
@@ -406,8 +408,9 @@ struct WebDAVSyncPage {
         .type(isPassword ? InputType.Password : InputType.Normal)
         .fontSize(15)
         .height(46)
-        .backgroundColor(getAppUiState().themeSurface)
+        .backgroundColor(this.themePrimaryLight)
         .borderRadius(10)
+        .border({ width: 1, color: this.themePrimaryLight })
         .padding({ left: 12, right: 12 })
         .onChange(onChange)
     }
@@ -439,10 +442,15 @@ struct WebDAVSyncPage {
           .layoutWeight(1)
           .height(42)
           .fontSize(14)
-          .backgroundColor(Color.Transparent)
-          .fontColor(this.themePrimary)
-          .borderRadius(10)
-          .border({ width: 1, color: this.themePrimary })
+          .backgroundColor(this.themePrimary)
+          .fontColor(Color.White)
+          .borderRadius(12)
+          .systemMaterial(new uiMaterial.ImmersiveMaterial({
+            style: uiMaterial.ImmersiveStyle.REGULAR,
+            materialColor: this.themePrimary,
+            interactive: true,
+            lightEffect: { color: undefined }
+          }))
           .enabled(!this.isTesting && !this.isSyncing)
           .onClick(() => { this.testConnection() })
         Button($r('app.string.webdav_save_config'))
@@ -450,7 +458,14 @@ struct WebDAVSyncPage {
           .height(42)
           .fontSize(14)
           .backgroundColor(this.themePrimary)
-          .borderRadius(10)
+          .fontColor(Color.White)
+          .borderRadius(12)
+          .systemMaterial(new uiMaterial.ImmersiveMaterial({
+            style: uiMaterial.ImmersiveStyle.REGULAR,
+            materialColor: this.themePrimary,
+            interactive: true,
+            lightEffect: { color: undefined }
+          }))
           .enabled(!this.isSyncing)
           .onClick(() => { this.saveConfig() })
       }
@@ -530,6 +545,13 @@ struct WebDAVSyncPage {
         .fontSize(14)
         .backgroundColor(Color.Transparent)
         .fontColor(this.themePrimary)
+        .borderRadius(12)
+        .systemMaterial(new uiMaterial.ImmersiveMaterial({
+          style: uiMaterial.ImmersiveStyle.REGULAR,
+          materialColor: Color.Transparent,
+          interactive: true,
+          lightEffect: { color: undefined }
+        }))
         .enabled(!this.refreshingStatus && !this.isSyncing)
         .onClick(() => { this.refreshRemoteStatus() })
     }
@@ -558,6 +580,12 @@ struct WebDAVSyncPage {
       .fontWeight(FontWeight.Medium)
       .backgroundColor(this.themePrimary)
       .borderRadius(12)
+      .systemMaterial(new uiMaterial.ImmersiveMaterial({
+        style: uiMaterial.ImmersiveStyle.REGULAR,
+        materialColor: this.themePrimary,
+        interactive: true,
+        lightEffect: { color: undefined }
+      }))
       .margin({ top: 16 })
       .enabled(!this.isSyncing)
       .onClick(() => { this.startUpload() })
@@ -585,6 +613,12 @@ struct WebDAVSyncPage {
       .fontWeight(FontWeight.Medium)
       .backgroundColor(this.themePrimary)
       .borderRadius(12)
+      .systemMaterial(new uiMaterial.ImmersiveMaterial({
+        style: uiMaterial.ImmersiveStyle.REGULAR,
+        materialColor: this.themePrimary,
+        interactive: true,
+        lightEffect: { color: undefined }
+      }))
       .margin({ top: 16 })
       .enabled(!this.isSyncing)
       .onClick(() => { this.startDownload() })
@@ -664,15 +698,27 @@ struct WebDAVSyncPage {
           .fontSize(15)
           .backgroundColor(Color.Transparent)
           .fontColor(this.themePrimary)
-          .borderRadius(10)
+          .borderRadius(12)
           .border({ width: 1, color: this.themePrimary })
+          .systemMaterial(new uiMaterial.ImmersiveMaterial({
+            style: uiMaterial.ImmersiveStyle.REGULAR,
+            materialColor: Color.Transparent,
+            interactive: true,
+            lightEffect: { color: undefined }
+          }))
           .onClick(() => { this.cleanupDownload() })
         Button($r('app.string.webdav_preview_confirm'))
           .layoutWeight(1)
           .height(44)
           .fontSize(15)
           .backgroundColor(this.themePrimary)
-          .borderRadius(10)
+          .borderRadius(12)
+          .systemMaterial(new uiMaterial.ImmersiveMaterial({
+            style: uiMaterial.ImmersiveStyle.REGULAR,
+            materialColor: this.themePrimary,
+            interactive: true,
+            lightEffect: { color: undefined }
+          }))
           .onClick(() => { this.confirmImport() })
       }
       .width('100%')

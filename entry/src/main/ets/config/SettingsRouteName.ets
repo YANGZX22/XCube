@@ -15,6 +15,5 @@ export enum SettingsRouteName {
   IMPORT_DATA = 'ImportDataPage',
   WEBDAV_SYNC = 'WebDAVSyncPage',
   USAGE_STATS = 'UsageStatsPage',
-  ABOUT = 'AboutPage',
-  PRIVACY_POLICY = 'PrivacyPolicyPage'
+  ABOUT = 'AboutPage'
 }

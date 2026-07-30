@@ -12,6 +12,17 @@ import { FavoriteModelsService, getFavoriteModelsService } from '../services/Fav
 import { ProviderIcon } from './ProviderIcon'
 import { buildModelIconRenderData, ModelIconRenderData } from '../utils/ModelIconRenderUtils'
 import { getAppUiState } from '../state/AppUiState'
+import { uiMaterial } from '@kit.ArkUI'
+import { withColorAlpha } from '../utils/ColorAlphaUtils'
+
+class ModelSelectorProviderGroup {
+  provider: ModelProvider
+  modelRows: ModelSelectorModelRow[] = []
+
+  constructor(provider: ModelProvider) {
+    this.provider = provider
+  }
+}
 
 @ComponentV2
 export struct ModelSelectorContent {
@@ -26,6 +37,9 @@ export struct ModelSelectorContent {
   @Param searchPlaceholder: string | Resource = $r('app.string.filter_models_placeholder')
   @Param includeModelIdInSearch: boolean = false
   @Param emptyStateMode: string = 'chat'
+  @Param immersiveMaterial: boolean = false
+  @Param narrowSearchBar: boolean = false
+  @Param showImmersiveGroupBorder: boolean = false
   @Local searchKeywords: string = ''
   @Local showFavoritesOnly: boolean = false
   @Local hasEnabledModels: boolean = false
@@ -40,11 +54,30 @@ export struct ModelSelectorContent {
   private get isDarkMode(): boolean {
     return getAppUiState().isDarkMode
   }
+  private get windowWidthVp(): number {
+    return getAppUiState().windowWidthVp
+  }
   private get favoriteAccentColor(): Resource {
     return $r('app.color.status_error')
   }
   private get favoriteFilterActiveBackground(): string {
     return this.isDarkMode ? 'rgba(239, 68, 68, 0.20)' : 'rgba(239, 68, 68, 0.10)'
+  }
+  private getImmersiveMaterial(
+    interactive: boolean,
+    materialColor: ResourceColor = Color.Transparent,
+    applyShadow: boolean = true
+  ): uiMaterial.Material | undefined {
+    if (!this.immersiveMaterial) {
+      return undefined
+    }
+    return new uiMaterial.ImmersiveMaterial({
+      style: uiMaterial.ImmersiveStyle.REGULAR,
+      materialColor: materialColor,
+      applyShadow: applyShadow,
+      interactive: interactive,
+      lightEffect: interactive ? { color: undefined } : undefined
+    })
   }
   @Event onSelectModel: (providerId: string, modelId: string, modelName: string) => void =
     (_providerId: string, _modelId: string, _modelName: string): void => {}
@@ -198,6 +231,29 @@ export struct ModelSelectorContent {
     return 4
   }
 
+  private getProviderGroups(): ModelSelectorProviderGroup[] {
+    const groups: ModelSelectorProviderGroup[] = []
+    let currentGroup: ModelSelectorProviderGroup | null = null
+    for (let i = 0; i < this.rows.length; i++) {
+      const row = this.rows[i]
+      if (row.type === ModelSelectorRowType.PROVIDER_HEADER) {
+        currentGroup = new ModelSelectorProviderGroup(row.provider)
+        groups.push(currentGroup)
+      } else if (currentGroup !== null) {
+        currentGroup.modelRows.push(row as ModelSelectorModelRow)
+      }
+    }
+    return groups
+  }
+
+  private getProviderGroupRenderKey(group: ModelSelectorProviderGroup): string {
+    let key = group.provider.id
+    for (let i = 0; i < group.modelRows.length; i++) {
+      key += `::${group.modelRows[i].key}`
+    }
+    return key
+  }
+
   build() {
     Column() {
       this.SearchBar()
@@ -213,7 +269,9 @@ export struct ModelSelectorContent {
       Search({ value: this.searchKeywords, placeholder: this.searchPlaceholder })
         .layoutWeight(1)
         .height(40)
-        .backgroundColor(getAppUiState().themeBackground)
+        .borderRadius(20)
+        .backgroundColor(this.immersiveMaterial ? Color.Transparent : getAppUiState().themeBackground)
+        .systemMaterial(this.getImmersiveMaterial(true))
         .onChange((value: string) => {
           this.searchKeywords = value
           this.rebuildRows()
@@ -235,18 +293,23 @@ export struct ModelSelectorContent {
         .height(32)
         .padding({ left: 10, right: 10 })
         .margin({ left: 8 })
-        .backgroundColor(this.showFavoritesOnly ? this.favoriteFilterActiveBackground : getAppUiState().themeSurface)
+        .backgroundColor(this.immersiveMaterial ? Color.Transparent :
+          (this.showFavoritesOnly ? this.favoriteFilterActiveBackground : getAppUiState().themeSurface))
         .border({
-          width: this.showFavoritesOnly ? 1 : 0.5,
+          width: this.immersiveMaterial ? 0 : (this.showFavoritesOnly ? 1 : 0.5),
           color: this.showFavoritesOnly ? this.favoriteAccentColor : $r('app.color.divider')
         })
+        .systemMaterial(this.getImmersiveMaterial(
+          true,
+          this.showFavoritesOnly ? this.favoriteFilterActiveBackground : Color.Transparent
+        ))
         .onClick(() => {
           this.showFavoritesOnly = !this.showFavoritesOnly
           this.rebuildRows()
         })
       }
     }
-    .width('100%')
+    .width(this.narrowSearchBar ? (this.windowWidthVp >= 600 ? 360 : '82%') : '100%')
     .padding({ left: 16, right: 16, top: 6, bottom: 6 })
   }
 
@@ -271,8 +334,13 @@ export struct ModelSelectorContent {
             }
             .width('100%')
             .padding(16)
-            .backgroundColor(getAppUiState().themeSurface)
-            .borderRadius(12)
+            .backgroundColor(this.immersiveMaterial ? Color.Transparent : getAppUiState().themeSurface)
+            .borderRadius(16)
+            .border({
+              width: this.immersiveMaterial ? 1 : 0,
+              color: this.immersiveMaterial ? this.themePrimaryLight : Color.Transparent
+            })
+            .systemMaterial(this.getImmersiveMaterial(true, Color.Transparent, false))
             .onClick(() => {
               this.onClearSelection()
             })
@@ -280,15 +348,38 @@ export struct ModelSelectorContent {
           .padding({ left: 16, right: 16, top: 6, bottom: 6 })
         }
 
-        ForEach(this.rows, (row: ModelSelectorRow) => {
-          ListItem() {
-            if (row.type === ModelSelectorRowType.PROVIDER_HEADER) {
-              this.ProviderHeader(row.provider)
-            } else {
-              this.ModelRow(row as ModelSelectorModelRow)
+        if (this.immersiveMaterial) {
+          ForEach(this.getProviderGroups(), (group: ModelSelectorProviderGroup) => {
+            ListItemGroup({
+              header: this.ProviderHeader(group.provider)
+            }) {
+              ForEach(group.modelRows, (row: ModelSelectorModelRow) => {
+                ListItem() {
+                  this.ModelRow(row)
+                }
+              }, (row: ModelSelectorModelRow) => row.key)
             }
-          }
-        }, (row: ModelSelectorRow) => row.key)
+            .divider(null)
+            .margin({ left: 16, right: 16, bottom: 8 })
+            .borderRadius(16)
+            .backgroundColor(Color.Transparent)
+            .border({
+              width: this.showImmersiveGroupBorder ? 1 : 0,
+              color: this.showImmersiveGroupBorder ? this.themePrimaryLight : Color.Transparent
+            })
+            .systemMaterial(this.getImmersiveMaterial(true, Color.Transparent, !this.showImmersiveGroupBorder))
+          }, (group: ModelSelectorProviderGroup) => this.getProviderGroupRenderKey(group))
+        } else {
+          ForEach(this.rows, (row: ModelSelectorRow) => {
+            ListItem() {
+              if (row.type === ModelSelectorRowType.PROVIDER_HEADER) {
+                this.ProviderHeader(row.provider)
+              } else {
+                this.ModelRow(row as ModelSelectorModelRow)
+              }
+            }
+          }, (row: ModelSelectorRow) => row.key)
+        }
 
         ListItem() {
           Column().height(20)
@@ -331,7 +422,12 @@ export struct ModelSelectorContent {
         .margin({ left: 8 })
     }
     .width('100%')
-    .padding({ left: 20, right: 20, top: 12, bottom: 6 })
+    .padding({
+      left: this.immersiveMaterial ? 12 : 20,
+      right: this.immersiveMaterial ? 12 : 20,
+      top: 12,
+      bottom: 6
+    })
   }
 
   @Builder
@@ -458,10 +554,13 @@ export struct ModelSelectorContent {
       }
       .width('100%')
       .padding({ left: 12, right: 12, top: 10, bottom: 10 })
-      .backgroundColor(this.isSelectedModel(row) ? this.themePrimaryLight : getAppUiState().themeSurface)
+      .backgroundColor(this.immersiveMaterial && this.isSelectedModel(row)
+        ? withColorAlpha(this.themePrimaryLight, '80') :
+        (this.immersiveMaterial ? Color.Transparent :
+          (this.isSelectedModel(row) ? this.themePrimaryLight : getAppUiState().themeSurface)))
       .borderRadius(this.buildRowRadius(row.groupPosition))
       .border({
-        width: this.isSelectedModel(row) ? 1 : 0,
+        width: this.immersiveMaterial ? 0 : (this.isSelectedModel(row) ? 1 : 0),
         color: this.isSelectedModel(row) ? this.themePrimaryLight : Color.Transparent
       })
 
@@ -472,7 +571,10 @@ export struct ModelSelectorContent {
       }
     }
     .width('100%')
-    .padding({ left: 16, right: 16 })
+    .padding({
+      left: this.immersiveMaterial ? 0 : 16,
+      right: this.immersiveMaterial ? 0 : 16
+    })
   }
 
   @Builder

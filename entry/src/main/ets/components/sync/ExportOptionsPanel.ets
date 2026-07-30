@@ -4,6 +4,7 @@
  * 仅承载 includeAttachments / includeProviders / includePreferences 三个开关。
  */
 
+import { uiMaterial } from '@kit.ArkUI'
 import { getAppUiState } from '../../state/AppUiState'
 
 @ComponentV2
@@ -53,6 +54,9 @@ export struct ExportOptionsPanel {
         .layoutWeight(1)
 
       Toggle({ type: ToggleType.Switch, isOn: checked })
+        .selectedColor(getAppUiState().themePrimary)
+        .systemMaterial(new uiMaterial.Material())
+        .switchPointColor(Color.White)
         .onChange(onChange)
     }
     .width('100%')

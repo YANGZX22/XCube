@@ -29,6 +29,7 @@ export class SettingsManager {
   private materialType: number = 100    // ADAPTIVE
   private materialLevel: number = 10    // ADAPTIVE
   private lightColorMode: string = 'default'
+  private chatListImmersiveMaterial: boolean = false
   private callbacks: SettingsChangeCallback[] = []
   private isInitialized: boolean = false
   private initPromise: Promise<void> | null = null
@@ -69,7 +70,9 @@ export class SettingsManager {
     this.materialType = await preferencesService.getMaterialType()
     this.materialLevel = await preferencesService.getMaterialLevel()
     this.lightColorMode = await preferencesService.getLightColorMode()
+    this.chatListImmersiveMaterial = await preferencesService.getChatListImmersiveMaterial()
     setAppUiStateValue(AppStorageKeys.CHAT_INPUT_ENTER_KEY_SEND, this.chatInputEnterKeySend)
+    setAppUiStateValue(AppStorageKeys.CHAT_LIST_IMMERSIVE_MATERIAL, this.chatListImmersiveMaterial)
     this.isInitialized = true
   }
 
@@ -86,7 +89,9 @@ export class SettingsManager {
     this.materialType = await preferencesService.getMaterialType()
     this.materialLevel = await preferencesService.getMaterialLevel()
     this.lightColorMode = await preferencesService.getLightColorMode()
+    this.chatListImmersiveMaterial = await preferencesService.getChatListImmersiveMaterial()
     setAppUiStateValue(AppStorageKeys.CHAT_INPUT_ENTER_KEY_SEND, this.chatInputEnterKeySend)
+    setAppUiStateValue(AppStorageKeys.CHAT_LIST_IMMERSIVE_MATERIAL, this.chatListImmersiveMaterial)
   }
 
   // 等待初始化完成
@@ -316,6 +321,20 @@ export class SettingsManager {
     return this.lightColorMode
   }
 
+  getChatListImmersiveMaterial(): boolean {
+    return this.chatListImmersiveMaterial
+  }
+
+  async setChatListImmersiveMaterial(enabled: boolean): Promise<void> {
+    if (this.chatListImmersiveMaterial === enabled) {
+      return
+    }
+
+    this.chatListImmersiveMaterial = enabled
+    await getPreferencesService().setChatListImmersiveMaterial(enabled)
+    setAppUiStateValue(AppStorageKeys.CHAT_LIST_IMMERSIVE_MATERIAL, enabled)
+  }
+
   async setMaterialType(materialType: number): Promise<void> {
     if (this.materialType === materialType) {
       return
@@ -381,7 +400,9 @@ export class SettingsManager {
 
   // 获取主题配色显示文本
   getColorThemeDisplayText(theme: ColorTheme): Resource {
-    if (theme === ColorTheme.DEFAULT) {
+    if (theme === ColorTheme.LAVENDER) {
+      return $r('app.string.theme_color_lavender')
+    } else if (theme === ColorTheme.DEFAULT) {
       return $r('app.string.theme_color_default')
     } else if (theme === ColorTheme.CLAUDE) {
       return $r('app.string.theme_color_claude')

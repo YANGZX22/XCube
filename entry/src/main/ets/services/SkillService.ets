@@ -240,7 +240,7 @@ export class SkillService {
     return new SkillConfig(
       'app_help',
       'app-help',
-      '基于应用内帮助中心回答 Cube Agent 的使用、配置和功能说明问题',
+      '基于应用内帮助中心回答 XCube 的使用、配置和功能说明问题',
       this.defaultAppHelpContent,
       true,
       now,

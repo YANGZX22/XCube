@@ -17,6 +17,8 @@ export struct ChatModelSelectorSheetContent {
   @Event onSaveEdit: (draft: ModelInfoExtendedJson) => Promise<void> =
     async (_draft: ModelInfoExtendedJson): Promise<void> => {}
   @Event onCancelEdit: () => void = (): void => {}
+  @Event onEditAdvancedExpandedChange: (expanded: boolean) => void =
+    (_expanded: boolean): void => {}
 
   @Builder
   private ModelEditSheetBuilder() {
@@ -28,13 +30,16 @@ export struct ChatModelSelectorSheetContent {
         },
         onCancel: () => {
           this.onCancelEdit()
+        },
+        onAdvancedExpandedChange: (expanded: boolean): void => {
+          this.onEditAdvancedExpandedChange(expanded)
         }
       })
     }
   }
 
   build() {
-    Stack() {
+    if (this.activePanel === 'selector') {
       Column() {
         // 自定义标题栏
         Row() {
@@ -54,12 +59,13 @@ export struct ChatModelSelectorSheetContent {
         .width('100%')
         .height(56)
         .padding({ left: 16, right: 16 })
-        .backgroundColor($r('app.color.background'))
+        .backgroundColor(Color.Transparent)
 
         ModelSelectorContent({
           providers: this.providers,
           currentModelId: this.currentModelId,
           currentProviderId: this.currentProviderId,
+          immersiveMaterial: true,
           onSelectModel: (providerId: string, modelId: string, modelName: string): void => {
             this.onSelectModel(providerId, modelId, modelName)
           },
@@ -69,17 +75,11 @@ export struct ChatModelSelectorSheetContent {
         })
       }
       .width('100%')
-      .height(this.activePanel === 'selector' ? '100%' : 0)
-      .visibility(this.activePanel === 'selector' ? Visibility.Visible : Visibility.Hidden)
-
-      Column() {
-        this.ModelEditSheetBuilder()
-      }
-      .width('100%')
-      .height(this.activePanel === 'edit' ? '100%' : 0)
-      .visibility(this.activePanel === 'edit' ? Visibility.Visible : Visibility.Hidden)
+      .height('100%')
+      .backgroundColor(Color.Transparent)
+    } else {
+      // 编辑页直接作为 Sheet 内容，避免无高度的中间容器截断内部 Scroll。
+      this.ModelEditSheetBuilder()
     }
-    .width('100%')
-    .height('100%')
   }
 }

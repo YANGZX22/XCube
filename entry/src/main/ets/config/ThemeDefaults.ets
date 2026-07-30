@@ -3,4 +3,4 @@
 // - resources/dark/element/color.json
 // - models/ThemeColors.ets DEFAULT_THEME 配置
 // - state/AppUiState.ets @Trace 默认值
-export const DEFAULT_PRIMARY_COLOR: string = '#4E6F9E'
+export const DEFAULT_PRIMARY_COLOR: string = '#8576FF'

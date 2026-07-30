@@ -11,7 +11,7 @@ export const PYODIDE_HOST_HTML: string = `<!DOCTYPE html>
 </head>
 <body>
 <script>
-  // ChatCube Pyodide 宿主页：在 ArkWeb(WebView) 里运行真正的 CPython(WASM)。
+  // XCube Pyodide 宿主页：在 ArkWeb(WebView) 里运行真正的 CPython(WASM)。
   // ArkTS 侧通过 runJavaScript 调用 window.__runPythonB64，结果经 PyodideBridge 回调。
   const PYODIDE_INDEX_URL = 'https://cdn.jsdelivr.net/pyodide/v0.26.4/full/';
 

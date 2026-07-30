@@ -66,7 +66,7 @@ export struct VChartCard {
 
   private get themePrimary(): string {
     const value = getAppUiState().themePrimary as string | null | undefined
-    return value !== undefined && value !== null && value !== '' ? value : '#4E6F9E'
+    return value !== undefined && value !== null && value !== '' ? value : '#8576FF'
   }
 
   private get isDarkMode(): boolean {

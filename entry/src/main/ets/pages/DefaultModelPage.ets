@@ -17,6 +17,7 @@ import {
   getHdsTopNavigationContentTopPadding,
   getHdsStatusBarContentColor
 } from '../utils/HdsVisualEffectUtil'
+import { uiMaterial } from '@kit.ArkUI'
 
 let defaultModelPagePathStack: NavPathStack | null = null
 
@@ -29,6 +30,9 @@ struct DefaultModelPage {
   }
   private get themePrimary(): string {
     return getAppUiState().themePrimary
+  }
+  private get themePrimaryLight(): string {
+    return getAppUiState().themePrimaryLight
   }
   private get layoutSizeClass(): string {
     return getAppUiState().layoutSizeClass
@@ -213,10 +217,13 @@ struct DefaultModelPage {
         .width(0)
         .height(0)
         .bindSheet($$this.showModelSheet, this.ModelSelectSheet(), {
-          height: SheetSize.MEDIUM,
+          height: SheetSize.LARGE,
           dragBar: true,
-          showClose: true,
-          title: { title: this.getSheetTitle() }
+          showClose: false,
+          backgroundColor: Color.Transparent,
+          systemMaterial: new uiMaterial.ImmersiveMaterial({
+            style: uiMaterial.ImmersiveStyle.REGULAR
+          })
         })
 
       Column()
@@ -225,7 +232,11 @@ struct DefaultModelPage {
         .bindSheet($$this.showPromptSheet, this.PromptEditSheet(), {
           height: SheetSize.LARGE,
           dragBar: true,
-          showClose: false
+          showClose: false,
+          backgroundColor: Color.Transparent,
+          systemMaterial: new uiMaterial.ImmersiveMaterial({
+            style: uiMaterial.ImmersiveStyle.REGULAR
+          })
         })
     }
     .width('100%')
@@ -392,6 +403,7 @@ struct DefaultModelPage {
   @Builder
   ModelSelectSheet() {
     DefaultModelSelectSheetContent({
+      title: this.getSheetTitle(),
       currentSelectionText: this.getCurrentModelDisplayName(),
       isProvidersLoaded: this.isProvidersLoaded,
       providers: this.providers,
@@ -401,6 +413,9 @@ struct DefaultModelPage {
       },
       onClearSelection: () => {
         this.clearModelSelection()
+      },
+      onClose: () => {
+        this.showModelSheet = false
       }
     })
   }
@@ -412,12 +427,19 @@ struct DefaultModelPage {
         Button() {
           SymbolGlyph($r('sys.symbol.xmark'))
             .fontSize(18)
-            .fontColor([$r('app.color.text_secondary')])
+            .fontColor([$r('app.color.text_primary')])
         }
         .type(ButtonType.Circle)
         .width(36)
         .height(36)
-        .backgroundColor($r('app.color.divider'))
+        .backgroundColor(Color.Transparent)
+        .systemMaterial(new uiMaterial.ImmersiveMaterial({
+          style: uiMaterial.ImmersiveStyle.REGULAR,
+          materialColor: Color.Transparent,
+          applyShadow: false,
+          interactive: true,
+          lightEffect: { color: undefined }
+        }))
         .onClick(() => {
           this.showPromptSheet = false
         })
@@ -434,12 +456,19 @@ struct DefaultModelPage {
         Button() {
           SymbolGlyph($r('sys.symbol.checkmark'))
             .fontSize(18)
-            .fontColor([Color.White])
+            .fontColor([this.themePrimary])
         }
         .type(ButtonType.Circle)
         .width(36)
         .height(36)
-        .backgroundColor(this.themePrimary)
+        .backgroundColor(Color.Transparent)
+        .systemMaterial(new uiMaterial.ImmersiveMaterial({
+          style: uiMaterial.ImmersiveStyle.REGULAR,
+          materialColor: Color.Transparent,
+          applyShadow: false,
+          interactive: true,
+          lightEffect: { color: undefined }
+        }))
         .onClick(() => {
           this.savePrompt()
         })
@@ -454,33 +483,40 @@ struct DefaultModelPage {
           .fontSize(13)
           .fontColor($r('app.color.text_secondary'))
           .width('100%')
+          .textAlign(TextAlign.Center)
 
         if (this.currentPromptRole === ModelRole.TITLE) {
           Text($r('app.string.default_model_prompt_title_variables_hint'))
             .fontSize(12)
-            .fontColor($r('app.color.text_tertiary'))
+            .fontColor(this.themePrimary)
             .width('100%')
+            .textAlign(TextAlign.Center)
             .margin({ top: 4 })
         } else {
           Text($r('app.string.default_model_prompt_translate_variables_hint'))
             .fontSize(12)
-            .fontColor($r('app.color.text_tertiary'))
+            .fontColor(this.themePrimary)
             .width('100%')
+            .textAlign(TextAlign.Center)
             .margin({ top: 4 })
         }
       }
       .width('100%')
-      .padding(16)
-      .backgroundColor(getAppUiState().themeSurface)
-      .borderRadius(12)
-      .margin({ left: 16, right: 16, top: 16 })
+      .padding({ left: 16, right: 16, top: 8, bottom: 4 })
 
       // 编辑区域
       TextArea({ text: this.currentPrompt })
         .fontSize(14)
         .fontColor($r('app.color.text_primary'))
-        .backgroundColor(getAppUiState().themeSurface)
-        .borderRadius(12)
+        .padding(16)
+        .backgroundColor(Color.Transparent)
+        .borderRadius(16)
+        .border({ width: 1, color: this.themePrimaryLight })
+        .systemMaterial(new uiMaterial.ImmersiveMaterial({
+          style: uiMaterial.ImmersiveStyle.ULTRA_THIN,
+          materialColor: Color.Transparent,
+          applyShadow: false
+        }))
         .margin({ left: 16, right: 16, top: 16 })
         .layoutWeight(1)
         .onChange((value: string) => {
@@ -491,9 +527,17 @@ struct DefaultModelPage {
       Row() {
         Button($r('app.string.default_model_reset_prompt'))
           .fontSize(15)
-          .fontColor($r('app.color.text_secondary'))
-          .backgroundColor(getAppUiState().themeSurface)
-          .borderRadius(24)
+          .fontColor(this.themePrimary)
+          .backgroundColor(Color.Transparent)
+          .borderRadius(22)
+          .border({ width: 1, color: this.themePrimaryLight })
+          .systemMaterial(new uiMaterial.ImmersiveMaterial({
+            style: uiMaterial.ImmersiveStyle.REGULAR,
+            materialColor: Color.Transparent,
+            applyShadow: false,
+            interactive: true,
+            lightEffect: { color: undefined }
+          }))
           .height(44)
           .width('100%')
           .onClick(() => {
@@ -640,6 +684,9 @@ struct ModelConfigCard {
   private get themePrimary(): string {
     return getAppUiState().themePrimary
   }
+  private get themePrimaryLight(): string {
+    return getAppUiState().themePrimaryLight
+  }
 
   @Event onCardClick: () => void = () => {}
   @Event onPromptClick: () => void = () => {}
@@ -720,6 +767,7 @@ struct ModelConfigCard {
     .width('100%')
     .backgroundColor(getAppUiState().themeSurface)
     .borderRadius(16)
+    .border({ width: 1, color: this.themePrimaryLight })
   }
 }
 

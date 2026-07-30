@@ -3,8 +3,51 @@
  * 单页滚动布局：核心信息 → 能力标签 → 可折叠高级参数
  */
 import { ModelInfo, InputMode, OutputMode, ModelInfoExtendedJson } from '../models/ChatModels'
-import { LengthMetrics } from '@kit.ArkUI'
+import { LengthMetrics, uiMaterial } from '@kit.ArkUI'
 import { getAppUiState } from '../state/AppUiState'
+
+@ComponentV2
+struct ModelCapabilityButton {
+  @Param icon: Resource = $r('sys.symbol.checkmark_circle')
+  @Param label: string = ''
+  @Param selected: boolean = false
+  @Event onTap: () => void = () => {}
+
+  private get themePrimary(): string {
+    return getAppUiState().themePrimary
+  }
+
+  build() {
+    Button({ type: ButtonType.Capsule, stateEffect: false }) {
+      Row({ space: 6 }) {
+        SymbolGlyph(this.icon)
+          .fontSize(16)
+          .fontColor([this.selected ? this.themePrimary : $r('app.color.text_primary')])
+
+        Text(this.label)
+          .fontSize(13)
+          .fontWeight(this.selected ? FontWeight.Medium : FontWeight.Regular)
+          .fontColor(this.selected ? this.themePrimary : $r('app.color.text_primary'))
+      }
+      .alignItems(VerticalAlign.Center)
+    }
+    .height(36)
+    .padding({ left: 12, right: 14 })
+    .backgroundColor(Color.Transparent)
+    .systemMaterial(new uiMaterial.ImmersiveMaterial({
+      style: uiMaterial.ImmersiveStyle.REGULAR,
+      interactive: true,
+      lightEffect: { color: undefined }
+    }))
+    .border({
+      width: this.selected ? 1.2 : 0.5,
+      color: this.selected ? this.themePrimary : $r('app.color.divider')
+    })
+    .onClick(() => {
+      this.onTap()
+    })
+  }
+}
 
 @ComponentV2
 export struct ModelEditSheet {
@@ -36,6 +79,8 @@ export struct ModelEditSheet {
   @Event onSave: (draft: ModelInfoExtendedJson) => Promise<void> = async (_draft: ModelInfoExtendedJson): Promise<void> => {
   }
   @Event onCancel: () => void = () => {
+  }
+  @Event onAdvancedExpandedChange: (expanded: boolean) => void = (_expanded: boolean): void => {
   }
 
   aboutToAppear(): void {
@@ -91,26 +136,45 @@ export struct ModelEditSheet {
     Column() {
       this.HeaderBar()
 
+      Divider()
+        .color($r('app.color.divider'))
+        .margin({ left: 20, right: 20 })
+
       Scroll() {
         Column() {
           // 核心信息区
           this.ModelIdSection()
+
+          Divider()
+            .color($r('app.color.divider'))
+            .margin({ left: 16, right: 16 })
+
           this.ModelNameSection()
+
+          Divider()
+            .color($r('app.color.divider'))
+            .margin({ left: 16, right: 16 })
+
           // 能力标签区
           this.CapabilityChipsSection()
+
+          Divider()
+            .color($r('app.color.divider'))
+            .margin({ left: 16, right: 16 })
+
           // 可折叠高级参数区
           this.AdvancedParametersSection()
         }
         .width('100%')
         .padding({ left: 20, right: 20, bottom: 34 })
       }
-      .layoutWeight(1)
       .scrollBar(BarState.Off)
       .edgeEffect(EdgeEffect.Spring)
+      .layoutWeight(this.isAdvancedExpanded ? 1 : 0)
     }
     .width('100%')
-    .height('100%')
-    .backgroundColor(getAppUiState().themeBackground)
+    .height(this.isAdvancedExpanded ? '100%' : 'auto')
+    .backgroundColor(Color.Transparent)
   }
 
   @Builder
@@ -119,12 +183,17 @@ export struct ModelEditSheet {
       Button() {
         SymbolGlyph($r('sys.symbol.xmark'))
           .fontSize(18)
-          .fontColor([$r('app.color.text_secondary')])
+          .fontColor([$r('app.color.text_primary')])
       }
       .type(ButtonType.Circle)
       .width(36)
       .height(36)
-      .backgroundColor($r('app.color.divider'))
+      .backgroundColor(Color.Transparent)
+      .systemMaterial(new uiMaterial.ImmersiveMaterial({
+        style: uiMaterial.ImmersiveStyle.REGULAR,
+        interactive: true,
+        lightEffect: { color: undefined }
+      }))
       .onClick(() => {
         this.onCancel()
       })
@@ -139,12 +208,17 @@ export struct ModelEditSheet {
       Button() {
         SymbolGlyph($r('sys.symbol.checkmark'))
           .fontSize(18)
-          .fontColor([Color.White])
+          .fontColor([this.themePrimary])
       }
       .type(ButtonType.Circle)
       .width(36)
       .height(36)
-      .backgroundColor(this.themePrimary)
+      .backgroundColor(Color.Transparent)
+      .systemMaterial(new uiMaterial.ImmersiveMaterial({
+        style: uiMaterial.ImmersiveStyle.REGULAR,
+        interactive: true,
+        lightEffect: { color: undefined }
+      }))
       .onClick(async () => {
         await this.onSave(this.buildDraft())
       })
@@ -160,7 +234,7 @@ export struct ModelEditSheet {
       Column() {
         Text('模型 ID')
           .fontSize(13)
-          .fontColor($r('app.color.text_tertiary'))
+          .fontColor($r('app.color.text_primary'))
           .margin({ bottom: 4 })
 
         Text(this.model.id)
@@ -175,7 +249,7 @@ export struct ModelEditSheet {
       Button() {
         SymbolGlyph($r('sys.symbol.rectangle_on_rectangle'))
           .fontSize(16)
-          .fontColor([$r('app.color.text_tertiary')])
+          .fontColor([$r('app.color.text_primary')])
       }
       .type(ButtonType.Circle)
       .width(32)
@@ -184,9 +258,7 @@ export struct ModelEditSheet {
     }
     .width('100%')
     .padding(16)
-    .backgroundColor(getAppUiState().themeSurface)
-    .borderRadius(16)
-    .margin({ bottom: 12 })
+    .backgroundColor(Color.Transparent)
   }
 
   @Builder
@@ -194,14 +266,17 @@ export struct ModelEditSheet {
     Column() {
       Text('模型名称')
         .fontSize(13)
-        .fontColor($r('app.color.text_tertiary'))
+        .fontColor($r('app.color.text_primary'))
         .margin({ bottom: 8 })
 
       TextInput({ text: this.tempName, placeholder: '输入模型显示名称' })
         .width('100%')
         .height(44)
-        .backgroundColor($r('app.color.divider'))
+        .backgroundColor(Color.Transparent)
+        .backgroundBlurStyle(BlurStyle.COMPONENT_REGULAR)
         .borderRadius(12)
+        .border({ width: 0.5, color: $r('app.color.divider') })
+        .clip(true)
         .padding({ left: 16, right: 16 })
         .onChange((value: string) => {
           this.tempName = value
@@ -210,9 +285,7 @@ export struct ModelEditSheet {
     .width('100%')
     .alignItems(HorizontalAlign.Start)
     .padding(16)
-    .backgroundColor(getAppUiState().themeSurface)
-    .borderRadius(16)
-    .margin({ bottom: 12 })
+    .backgroundColor(Color.Transparent)
   }
 
   @Builder
@@ -220,117 +293,57 @@ export struct ModelEditSheet {
     Column() {
       Text('模型能力')
         .fontSize(13)
-        .fontColor($r('app.color.text_tertiary'))
+        .fontColor($r('app.color.text_primary'))
         .margin({ bottom: 12 })
 
       Flex({ wrap: FlexWrap.Wrap, space: { main: LengthMetrics.vp(8), cross: LengthMetrics.vp(8) } }) {
-        // 工具调用
-        Row() {
-          SymbolGlyph($r('sys.symbol.wrench_and_screwdriver'))
-            .fontSize(16)
-            .fontColor([this.capSupportsTools ? this.themePrimary : $r('app.color.text_tertiary')])
-          Text('工具调用')
-            .fontSize(13)
-            .fontColor(this.capSupportsTools ? this.themePrimary : $r('app.color.text_secondary'))
-            .margin({ left: 6 })
-        }
-        .height(36)
-        .padding({ left: 12, right: 14 })
-        .backgroundColor(this.capSupportsTools ? this.themePrimaryLight : $r('app.color.divider'))
-        .borderRadius(18)
-        .onClick(() => {
-          this.capSupportsTools = !this.capSupportsTools
+        ModelCapabilityButton({
+          icon: $r('sys.symbol.wrench_and_screwdriver'),
+          label: '工具调用',
+          selected: this.capSupportsTools,
+          onTap: (): void => {
+            this.capSupportsTools = !this.capSupportsTools
+          }
         })
-
-        // 推理
-        Row() {
-          SymbolGlyph($r('sys.symbol.AI_deep_thinking'))
-            .fontSize(16)
-            .fontColor([this.capSupportsReasoning ? this.themePrimary : $r('app.color.text_tertiary')])
-          Text('推理')
-            .fontSize(13)
-            .fontColor(this.capSupportsReasoning ? this.themePrimary : $r('app.color.text_secondary'))
-            .margin({ left: 6 })
-        }
-        .height(36)
-        .padding({ left: 12, right: 14 })
-        .backgroundColor(this.capSupportsReasoning ? this.themePrimaryLight : $r('app.color.divider'))
-        .borderRadius(18)
-        .onClick(() => {
-          this.capSupportsReasoning = !this.capSupportsReasoning
+        ModelCapabilityButton({
+          icon: $r('sys.symbol.AI_deep_thinking'),
+          label: '推理',
+          selected: this.capSupportsReasoning,
+          onTap: (): void => {
+            this.capSupportsReasoning = !this.capSupportsReasoning
+          }
         })
-
-        // 联网搜索
-        Row() {
-          SymbolGlyph($r('sys.symbol.ohos_wifi'))
-            .fontSize(16)
-            .fontColor([this.capSupportsWebSearch ? this.themePrimary : $r('app.color.text_tertiary')])
-          Text('联网搜索')
-            .fontSize(13)
-            .fontColor(this.capSupportsWebSearch ? this.themePrimary : $r('app.color.text_secondary'))
-            .margin({ left: 6 })
-        }
-        .height(36)
-        .padding({ left: 12, right: 14 })
-
-        .backgroundColor(this.capSupportsWebSearch ? this.themePrimaryLight : $r('app.color.divider'))
-        .borderRadius(18)
-        .onClick(() => {
-          this.capSupportsWebSearch = !this.capSupportsWebSearch
+        ModelCapabilityButton({
+          icon: $r('sys.symbol.ohos_wifi'),
+          label: '联网搜索',
+          selected: this.capSupportsWebSearch,
+          onTap: (): void => {
+            this.capSupportsWebSearch = !this.capSupportsWebSearch
+          }
         })
-
-        // 文档阅读
-        Row() {
-          SymbolGlyph($r('sys.symbol.pdf_doc'))
-            .fontSize(16)
-            .fontColor([this.capSupportsDocuments ? this.themePrimary : $r('app.color.text_tertiary')])
-          Text('文档阅读')
-            .fontSize(13)
-            .fontColor(this.capSupportsDocuments ? this.themePrimary : $r('app.color.text_secondary'))
-            .margin({ left: 6 })
-        }
-        .height(36)
-        .padding({ left: 12, right: 14 })
-        .backgroundColor(this.capSupportsDocuments ? this.themePrimaryLight : $r('app.color.divider'))
-        .borderRadius(18)
-        .onClick(() => {
-          this.capSupportsDocuments = !this.capSupportsDocuments
+        ModelCapabilityButton({
+          icon: $r('sys.symbol.pdf_doc'),
+          label: '文档阅读',
+          selected: this.capSupportsDocuments,
+          onTap: (): void => {
+            this.capSupportsDocuments = !this.capSupportsDocuments
+          }
         })
-
-        // 视觉理解
-        Row() {
-          SymbolGlyph($r('sys.symbol.ohos_photo'))
-            .fontSize(16)
-            .fontColor([this.capSupportsVision ? this.themePrimary : $r('app.color.text_tertiary')])
-          Text('视觉理解')
-            .fontSize(13)
-            .fontColor(this.capSupportsVision ? this.themePrimary : $r('app.color.text_secondary'))
-            .margin({ left: 6 })
-        }
-        .height(36)
-        .padding({ left: 12, right: 14 })
-        .backgroundColor(this.capSupportsVision ? this.themePrimaryLight : $r('app.color.divider'))
-        .borderRadius(18)
-        .onClick(() => {
-          this.capSupportsVision = !this.capSupportsVision
+        ModelCapabilityButton({
+          icon: $r('sys.symbol.ohos_photo'),
+          label: '视觉理解',
+          selected: this.capSupportsVision,
+          onTap: (): void => {
+            this.capSupportsVision = !this.capSupportsVision
+          }
         })
-
-        // 图片生成
-        Row() {
-          SymbolGlyph($r('sys.symbol.picture'))
-            .fontSize(16)
-            .fontColor([this.capOutputImage ? this.themePrimary : $r('app.color.text_tertiary')])
-          Text('图片生成')
-            .fontSize(13)
-            .fontColor(this.capOutputImage ? this.themePrimary : $r('app.color.text_secondary'))
-            .margin({ left: 6 })
-        }
-        .height(36)
-        .padding({ left: 12, right: 14 })
-        .backgroundColor(this.capOutputImage ? this.themePrimaryLight : $r('app.color.divider'))
-        .borderRadius(18)
-        .onClick(() => {
-          this.capOutputImage = !this.capOutputImage
+        ModelCapabilityButton({
+          icon: $r('sys.symbol.picture'),
+          label: '图片生成',
+          selected: this.capOutputImage,
+          onTap: (): void => {
+            this.capOutputImage = !this.capOutputImage
+          }
         })
       }
       .width('100%')
@@ -338,9 +351,7 @@ export struct ModelEditSheet {
     .width('100%')
     .alignItems(HorizontalAlign.Start)
     .padding(16)
-    .backgroundColor(getAppUiState().themeSurface)
-    .borderRadius(16)
-    .margin({ bottom: 12 })
+    .backgroundColor(Color.Transparent)
   }
 
   @Builder
@@ -363,13 +374,18 @@ export struct ModelEditSheet {
       .width('100%')
       .height(48)
       .onClick(() => {
+        const expanded = !this.isAdvancedExpanded
         this.getUIContext().animateTo({ duration: 200, curve: Curve.EaseOut }, () => {
-          this.isAdvancedExpanded = !this.isAdvancedExpanded
+          this.isAdvancedExpanded = expanded
+          this.onAdvancedExpandedChange(expanded)
         })
       })
 
       // 展开内容
       if (this.isAdvancedExpanded) {
+        Divider()
+          .color($r('app.color.divider'))
+
         Column() {
           // 温度
           Column() {
@@ -399,11 +415,20 @@ export struct ModelEditSheet {
               value: this.paramTemperature,
               min: 0,
               max: 2,
-              step: 0.1
+              step: 0.1,
+              style: SliderStyle.InSet
             })
-              .selectedColor(this.themePrimary)
-              .trackColor($r('app.color.divider'))
-              .blockColor(Color.White)
+              .systemMaterial(new uiMaterial.ImmersiveMaterial({
+                style: uiMaterial.ImmersiveStyle.ULTRA_THIN,
+                materialColor: this.themePrimary,
+                interactive: true,
+                lightEffect: { color: undefined }
+              }))
+              .selectedColor(this.themePrimaryLight)
+              .trackColor(Color.White)
+              .blockColor(this.themePrimary)
+              .blockBorderColor(this.themePrimary)
+              .blockBorderWidth(1)
               .showSteps(false)
               .showTips(false)
               .margin({ top: 8 })
@@ -413,6 +438,9 @@ export struct ModelEditSheet {
           }
           .width('100%')
           .padding({ top: 12, bottom: 12 })
+
+          Divider()
+            .color($r('app.color.divider'))
 
           // Top P
           Column() {
@@ -442,11 +470,20 @@ export struct ModelEditSheet {
               value: this.paramTopP,
               min: 0,
               max: 1,
-              step: 0.05
+              step: 0.05,
+              style: SliderStyle.InSet
             })
-              .selectedColor(this.themePrimary)
-              .trackColor($r('app.color.divider'))
-              .blockColor(Color.White)
+              .systemMaterial(new uiMaterial.ImmersiveMaterial({
+                style: uiMaterial.ImmersiveStyle.ULTRA_THIN,
+                materialColor: this.themePrimary,
+                interactive: true,
+                lightEffect: { color: undefined }
+              }))
+              .selectedColor(this.themePrimaryLight)
+              .trackColor(Color.White)
+              .blockColor(this.themePrimary)
+              .blockBorderColor(this.themePrimary)
+              .blockBorderWidth(1)
               .showSteps(false)
               .showTips(false)
               .margin({ top: 8 })
@@ -456,6 +493,9 @@ export struct ModelEditSheet {
           }
           .width('100%')
           .padding({ top: 12, bottom: 12 })
+
+          Divider()
+            .color($r('app.color.divider'))
 
           // 存在惩罚
           Column() {
@@ -485,11 +525,20 @@ export struct ModelEditSheet {
               value: this.paramPresencePenalty,
               min: -2,
               max: 2,
-              step: 0.1
+              step: 0.1,
+              style: SliderStyle.InSet
             })
-              .selectedColor(this.themePrimary)
-              .trackColor($r('app.color.divider'))
-              .blockColor(Color.White)
+              .systemMaterial(new uiMaterial.ImmersiveMaterial({
+                style: uiMaterial.ImmersiveStyle.ULTRA_THIN,
+                materialColor: this.themePrimary,
+                interactive: true,
+                lightEffect: { color: undefined }
+              }))
+              .selectedColor(this.themePrimaryLight)
+              .trackColor(Color.White)
+              .blockColor(this.themePrimary)
+              .blockBorderColor(this.themePrimary)
+              .blockBorderWidth(1)
               .showSteps(false)
               .showTips(false)
               .margin({ top: 8 })
@@ -499,6 +548,9 @@ export struct ModelEditSheet {
           }
           .width('100%')
           .padding({ top: 12, bottom: 12 })
+
+          Divider()
+            .color($r('app.color.divider'))
 
           // 频率惩罚
           Column() {
@@ -528,11 +580,20 @@ export struct ModelEditSheet {
               value: this.paramFrequencyPenalty,
               min: -2,
               max: 2,
-              step: 0.1
+              step: 0.1,
+              style: SliderStyle.InSet
             })
-              .selectedColor(this.themePrimary)
-              .trackColor($r('app.color.divider'))
-              .blockColor(Color.White)
+              .systemMaterial(new uiMaterial.ImmersiveMaterial({
+                style: uiMaterial.ImmersiveStyle.ULTRA_THIN,
+                materialColor: this.themePrimary,
+                interactive: true,
+                lightEffect: { color: undefined }
+              }))
+              .selectedColor(this.themePrimaryLight)
+              .trackColor(Color.White)
+              .blockColor(this.themePrimary)
+              .blockBorderColor(this.themePrimary)
+              .blockBorderWidth(1)
               .showSteps(false)
               .showTips(false)
               .margin({ top: 8 })
@@ -543,12 +604,16 @@ export struct ModelEditSheet {
           .width('100%')
           .padding({ top: 12, bottom: 12 })
 
+          Divider()
+            .color($r('app.color.divider'))
+
           // 重置按钮
           Button('重置为默认值')
             .fontSize(14)
-            .fontColor($r('app.color.text_secondary'))
-            .backgroundColor($r('app.color.divider'))
+            .fontColor($r('app.color.text_primary'))
+            .backgroundColor(Color.Transparent)
             .borderRadius(12)
+            .border({ width: 0.5, color: $r('app.color.divider') })
             .height(44)
             .width('100%')
             .margin({ top: 12 })
@@ -569,7 +634,6 @@ export struct ModelEditSheet {
       top: 0,
       bottom: 16
     })
-    .backgroundColor(getAppUiState().themeSurface)
-    .borderRadius(16)
+    .backgroundColor(Color.Transparent)
   }
 }

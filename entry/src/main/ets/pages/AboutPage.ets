@@ -1,7 +1,7 @@
 import { Want, common } from '@kit.AbilityKit'
+import { uiMaterial } from '@kit.ArkUI'
 import { hilog } from '@kit.PerformanceAnalysisKit'
-import { HdsNavigation, HdsNavigationTitleBarOptions, HdsNavigationTitleMode, hdsMaterial } from '@kit.UIDesignKit'
-import { HdsMiniBarButton } from '../components/HdsMiniBarButton'
+import { HdsNavigation, HdsNavigationTitleBarOptions, HdsNavigationTitleMode } from '@kit.UIDesignKit'
 import { SettingsCompactTitleBarContent } from '../components/settings/SettingsCompactPageHeader'
 import { showToast } from '../utils/ToastUtil'
 import { SettingsPagePresentationMode } from '../config/SettingsDetailPresentation'
@@ -85,33 +85,24 @@ struct AboutPage {
 
   @Builder
   private AppLogoBuilder() {
-    Stack({ alignContent: Alignment.Center }) {
-      HdsMiniBarButton({
-        barWidth: 96,
-        barHeight: 96,
-        contentPadding: 0,
-        containerSize: { width: 96, height: 96 },
-        maskColor: Color.Transparent,
-        enableGradientMask: true,
-        barBottomMargin: 0,
-        materialType: hdsMaterial.MaterialType.IMMERSIVE,
-        materialLevel: hdsMaterial.MaterialLevel.ADAPTIVE,
-        barBackgroundColor: Color.Transparent,
-        clipToBarShape: false,
-        onButtonClick: (): void => {}
-      }) {
-        Stack({ alignContent: Alignment.Center }) {
-          Image($r('app.media.app_logo_transparent'))
-            .width(72)
-            .height(72)
-            .borderRadius(18)
-        }
+    Button({ type: ButtonType.Normal, stateEffect: false }) {
+      Image($r('app.media.foreground'))
         .width(96)
         .height(96)
-      }
     }
     .width(96)
     .height(96)
+    .padding(0)
+    .backgroundColor('#17132E')
+    .borderRadius(22)
+    .clip(true)
+    .systemMaterial(new uiMaterial.ImmersiveMaterial({
+      style: uiMaterial.ImmersiveStyle.REGULAR,
+      materialColor: '#17132E',
+      applyShadow: false,
+      interactive: true,
+      lightEffect: { color: undefined }
+    }))
   }
 
   @Builder
@@ -129,12 +120,12 @@ struct AboutPage {
           Column({ space: 8 }) {
             this.AppLogoBuilder()
 
-            Text('ChatCube')
+            Text('XCube')
               .fontSize(24)
               .fontWeight(FontWeight.Bold)
               .fontColor($r('app.color.text_primary'))
 
-            Text('分支版 v1.1.15')
+            Text('v1.1.16')
               .fontSize(13)
               .fontColor($r('app.color.text_secondary'))
 

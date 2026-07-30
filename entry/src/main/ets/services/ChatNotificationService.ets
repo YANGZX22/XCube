@@ -4,7 +4,7 @@ import { AppStorageKeys } from '../config/AppStorageKeys'
 import { setAppUiStateValue } from '../state/AppUiState'
 import { ChatTaskInfo, ChatTaskStatus, OpenSessionPayload } from '../models/ChatTaskModels'
 
-const DEFAULT_BUNDLE_NAME = 'com.longlive.chatcube'
+const DEFAULT_BUNDLE_NAME = 'com.zixiao.xcube'
 const DEFAULT_ABILITY_NAME = 'EntryAbility'
 
 interface NotificationBusinessError {
@@ -38,7 +38,7 @@ export class ChatNotificationService {
           normal: {
             title: task.status === ChatTaskStatus.FAILED ? '回复失败' : '回复完成',
             text: this.buildMessage(task),
-            additionalText: 'ChatCube'
+            additionalText: 'XCube'
           }
 
         },

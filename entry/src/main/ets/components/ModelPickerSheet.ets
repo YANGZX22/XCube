@@ -9,6 +9,7 @@ import {
 import { PickerModelGroup } from '../config/ProviderDetailShared'
 import { buildModelIconRenderData, ModelIconRenderData } from '../utils/ModelIconRenderUtils'
 import { getAppUiState } from '../state/AppUiState'
+import { uiMaterial } from '@kit.ArkUI'
 
 @ComponentV2
 export struct ModelPickerSheet {
@@ -23,6 +24,9 @@ export struct ModelPickerSheet {
   }
   private get isDarkMode(): boolean {
     return getAppUiState().isDarkMode
+  }
+  private get windowWidthVp(): number {
+    return getAppUiState().windowWidthVp
   }
 
   @Local searchKeywords: string = ''
@@ -240,7 +244,7 @@ export struct ModelPickerSheet {
     }
     .width('100%')
     .height('100%')
-    .backgroundColor(getAppUiState().themeBackground)
+    .backgroundColor(Color.Transparent)
   }
 
   @Builder
@@ -254,7 +258,14 @@ export struct ModelPickerSheet {
       .type(ButtonType.Circle)
       .width(32)
       .height(32)
-      .backgroundColor($r('app.color.divider'))
+      .backgroundColor(Color.Transparent)
+      .systemMaterial(new uiMaterial.ImmersiveMaterial({
+        style: uiMaterial.ImmersiveStyle.REGULAR,
+        materialColor: Color.Transparent,
+        applyShadow: false,
+        interactive: true,
+        lightEffect: { color: undefined }
+      }))
       .onClick(() => {
         this.onCancel()
       })
@@ -271,12 +282,19 @@ export struct ModelPickerSheet {
       Button() {
         SymbolGlyph($r('sys.symbol.checkmark'))
           .fontSize(16)
-          .fontColor([Color.White])
+          .fontColor([this.themePrimary])
       }
       .type(ButtonType.Circle)
       .width(32)
       .height(32)
-      .backgroundColor(this.themePrimary)
+      .backgroundColor(Color.Transparent)
+      .systemMaterial(new uiMaterial.ImmersiveMaterial({
+        style: uiMaterial.ImmersiveStyle.REGULAR,
+        materialColor: Color.Transparent,
+        applyShadow: false,
+        interactive: true,
+        lightEffect: { color: undefined }
+      }))
       .onClick(() => {
         this.confirmSelection()
       })
@@ -289,10 +307,17 @@ export struct ModelPickerSheet {
   @Builder
   SearchBar() {
     Search({ value: this.searchKeywords, placeholder: $r('app.string.filter_models_placeholder') })
-      .width('100%')
+      .width(this.windowWidthVp >= 600 ? 360 : '82%')
       .height(40)
-      .backgroundColor(getAppUiState().themeSurface)
-      .margin({ left: 16, right: 16 })
+      .borderRadius(20)
+      .backgroundColor(Color.Transparent)
+      .systemMaterial(new uiMaterial.ImmersiveMaterial({
+        style: uiMaterial.ImmersiveStyle.ULTRA_THIN,
+        materialColor: Color.Transparent,
+        applyShadow: false,
+        interactive: true,
+        lightEffect: { color: undefined }
+      }))
       .padding({ left: 16, right: 16 })
       .onChange((value: string) => {
         this.searchKeywords = value
@@ -398,7 +423,7 @@ export struct ModelPickerSheet {
       }
       .width('100%')
       .height(40)
-      .backgroundColor(getAppUiState().themeBackground)
+      .backgroundColor(Color.Transparent)
       .zIndex(1)
     }
   }
@@ -558,4 +583,3 @@ export struct ModelPickerSheet {
     return groupPosition === ModelRowGroupPosition.FIRST || groupPosition === ModelRowGroupPosition.MIDDLE
   }
 }
-

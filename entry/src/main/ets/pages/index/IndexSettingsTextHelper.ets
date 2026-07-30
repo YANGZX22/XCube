@@ -21,6 +21,9 @@ export function getSettingsSheetTitleText(sheetType: SettingsSheetType): Resourc
 }
 
 export function getColorThemeDisplayTextForIndex(theme: ColorTheme): Resource {
+  if (theme === ColorTheme.LAVENDER) {
+    return $r('app.string.theme_color_lavender')
+  }
   if (theme === ColorTheme.DEFAULT) {
     return $r('app.string.theme_color_default')
   }

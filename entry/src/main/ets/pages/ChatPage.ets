@@ -1,4 +1,4 @@
-import { KeyboardAvoidMode, SymbolGlyphModifier } from '@kit.ArkUI'
+import { KeyboardAvoidMode, SymbolGlyphModifier, uiMaterial } from '@kit.ArkUI'
 import { common } from '@kit.AbilityKit'
 import {
   HdsNavDestination,
@@ -180,6 +180,7 @@ export struct ChatPage {
   @Local modelSheetActivePanel: string = 'selector'
   @Local editingModel: ModelInfo | null = null
   @Local editingModelProvider: ModelProvider | null = null
+  @Local isModelEditAdvancedExpanded: boolean = false
   @Local isLoading: boolean = false
   @Local isSending: boolean = false
   // 应用是否退到后台（用于处理生成中返回桌面/关闭应用）
@@ -369,6 +370,7 @@ export struct ChatPage {
   private scroller: Scroller = new Scroller()
   private maxScrollOffset: number = 0
   private readonly floatingScrollButtonBottomOffsetVp: number = 128
+  private readonly floatingButtonInputGapVp: number = 12
   private readonly scrollOffsetUiSyncStepVp: number = 96
   private mcpToolAvailabilityRefreshTask: Promise<void> | null = null
   private chatViewModel: ChatViewModel = ServiceRegistry.chat()
@@ -953,7 +955,7 @@ export struct ChatPage {
   }
 
   private getCanvasButtonTranslateY(): number {
-    return -(this.floatingScrollButtonBottomOffsetVp + this.getFloatingOverlayBottomAvoidHeightVp()) +
+    return -this.getFloatingRightButtonBottomOffsetVp() +
       this.getHistoryPreviewButtonExtraOffsetY() - 48
   }
 
@@ -1155,6 +1157,7 @@ export struct ChatPage {
           x: 0,
           y: this.getCanvasButtonTranslateY()
         })
+        .animation({ duration: 200, curve: Curve.EaseOut })
         .zIndex(12)
         .transition(
           TransitionEffect.OPACITY.combine(
@@ -3053,6 +3056,7 @@ export struct ChatPage {
         this.safeStopInputSession()
         this.isModelSelectorVisible = true
         this.modelSheetActivePanel = 'selector'
+        this.isModelEditAdvancedExpanded = false
       },
       onRegenerateTitle: (): void => {
         void this.handleRegenerateTitle()
@@ -3190,8 +3194,8 @@ export struct ChatPage {
         // 快速到顶部按钮
         ScrollToBottomButton({
           isVisible: this.shouldShowScrollToTopButton(),
-          bottomAvoidHeight: this.getFloatingOverlayBottomAvoidHeightVp(),
-          fixedBottomOffset: this.floatingScrollButtonBottomOffsetVp,
+          bottomAvoidHeight: 0,
+          fixedBottomOffset: this.getFloatingRightButtonBottomOffsetVp(),
           buttonDirection: 1,
           progress: this.scrollProgress,
           extraOffsetY: this.shouldShowStandardScrollToBottomButton() ? -48 : 0,
@@ -3203,8 +3207,8 @@ export struct ChatPage {
         // 回到底部按钮（非 AI 生成状态时显示）
         ScrollToBottomButton({
           isVisible: this.shouldShowStandardScrollToBottomButton(),
-          bottomAvoidHeight: this.getFloatingOverlayBottomAvoidHeightVp(),
-          fixedBottomOffset: this.floatingScrollButtonBottomOffsetVp,
+          bottomAvoidHeight: 0,
+          fixedBottomOffset: this.getFloatingRightButtonBottomOffsetVp(),
           buttonDirection: 0,
           onScrollToBottom: () => {
             this.scrollToBottomWithAnimation()
@@ -3301,6 +3305,7 @@ export struct ChatPage {
               onModelIconClick: (): void => {
                 this.isModelSelectorVisible = true
                 this.modelSheetActivePanel = 'selector'
+                this.isModelEditAdvancedExpanded = false
               },
               onAttachmentClick: (): void => {
                 this.toggleAttachmentPanel()
@@ -3353,16 +3358,22 @@ export struct ChatPage {
         .width(0)
         .height(0)
         .bindSheet($$this.isModelSelectorVisible, this.ModelSelectorSheetBuilder(), {
-          height: SheetSize.LARGE,
+          height: this.modelSheetActivePanel === 'edit'
+            ? (this.isModelEditAdvancedExpanded ? SheetSize.LARGE : SheetSize.FIT_CONTENT)
+            : SheetSize.LARGE,
           dragBar: true,
           showClose: false,
-          blurStyle: BlurStyle.Thick,
+          backgroundColor: Color.Transparent,
+          systemMaterial: new uiMaterial.ImmersiveMaterial({
+            style: uiMaterial.ImmersiveStyle.REGULAR
+          }),
           preferType: SheetType.BOTTOM,
           onDisappear: () => {
             this.isModelSelectorVisible = false
             this.modelSheetActivePanel = 'selector'
             this.editingModel = null
             this.editingModelProvider = null
+            this.isModelEditAdvancedExpanded = false
           }
         })
 
@@ -3416,8 +3427,10 @@ export struct ChatPage {
             height: SheetSize.FIT_CONTENT,
             dragBar: true,
             showClose: false,
-            backgroundColor: this.themeBackground,
-            blurStyle: BlurStyle.Thick,
+            backgroundColor: Color.Transparent,
+            systemMaterial: new uiMaterial.ImmersiveMaterial({
+              style: uiMaterial.ImmersiveStyle.REGULAR
+            }),
             preferType: SheetType.BOTTOM,
             onDisappear: () => {
               this.showToolPickerSheet = false
@@ -3625,6 +3638,7 @@ export struct ChatPage {
       onStartEdit: (model: ModelInfo, provider: ModelProvider): void => {
         this.editingModel = model
         this.editingModelProvider = provider
+        this.isModelEditAdvancedExpanded = false
         this.modelSheetActivePanel = 'edit'
       },
       onSaveEdit: async (draft: ModelInfoExtendedJson): Promise<void> => {
@@ -3634,6 +3648,10 @@ export struct ChatPage {
         this.modelSheetActivePanel = 'selector'
         this.editingModel = null
         this.editingModelProvider = null
+        this.isModelEditAdvancedExpanded = false
+      },
+      onEditAdvancedExpandedChange: (expanded: boolean): void => {
+        this.isModelEditAdvancedExpanded = expanded
       }
     })
   }
@@ -3667,6 +3685,7 @@ export struct ChatPage {
     this.modelSheetActivePanel = 'selector'
     this.editingModel = null
     this.editingModelProvider = null
+    this.isModelEditAdvancedExpanded = false
   }
 
   @Builder
@@ -3967,6 +3986,13 @@ export struct ChatPage {
     return this.px2vp(this.bottomAvoidHeight) + this.attachmentPanelHeightVp
   }
 
+  private getFloatingRightButtonBottomOffsetVp(): number {
+    if (this.inputAreaHeightVp > 0) {
+      return this.inputAreaHeightVp + this.floatingButtonInputGapVp
+    }
+    return this.floatingScrollButtonBottomOffsetVp + this.getFloatingOverlayBottomAvoidHeightVp()
+  }
+
   private getScrollToTopButtonExtraOffsetY(): number {
     return this.shouldShowStandardScrollToBottomButton() ? -48 : 0
   }
@@ -3979,7 +4005,7 @@ export struct ChatPage {
   }
 
   private getHistoryPreviewButtonTranslateY(): number {
-    return -(this.floatingScrollButtonBottomOffsetVp + this.getFloatingOverlayBottomAvoidHeightVp()) +
+    return -this.getFloatingRightButtonBottomOffsetVp() +
       this.getHistoryPreviewButtonExtraOffsetY()
   }
 
@@ -4032,14 +4058,6 @@ export struct ChatPage {
 
   private getHistoryPreviewSurfaceTranslateY(): number {
     return this.getHistoryPreviewButtonTranslateY() + 40 - this.getHistoryPreviewSurfaceHeightVp()
-  }
-
-  private getHistoryPreviewBackgroundColor(): string {
-    return this.isDarkMode ? 'rgba(30, 30, 30, 0.78)' : 'rgba(255, 255, 255, 0.82)'
-  }
-
-  private getHistoryPreviewBorderColor(): string {
-    return this.isDarkMode ? 'rgba(255, 255, 255, 0.08)' : 'rgba(0, 0, 0, 0.06)'
   }
 
   private resolveMessageIndexFromListIndex(listIndex: number): number {
@@ -4297,20 +4315,12 @@ export struct ChatPage {
           }
           .width(this.getHistoryPreviewSurfaceWidthVp())
           .height(this.getHistoryPreviewSurfaceHeightVp())
-          .backgroundColor(this.getHistoryPreviewBackgroundColor())
-          .backgroundBlurStyle(BlurStyle.COMPONENT_REGULAR)
-          .border({
-            width: 0.5,
-            color: this.getHistoryPreviewBorderColor()
-          })
+          .backgroundColor(Color.Transparent)
           .borderRadius(this.getHistoryPreviewSurfaceRadiusVp())
           .clip(true)
-          .shadow({
-            radius: 16,
-            color: this.isDarkMode ? 'rgba(0, 0, 0, 0.42)' : 'rgba(0, 0, 0, 0.14)',
-            offsetX: 0,
-            offsetY: 5
-          })
+          .systemMaterial(new uiMaterial.ImmersiveMaterial({
+            style: uiMaterial.ImmersiveStyle.REGULAR
+          }))
           .animation({ duration: 260, curve: Curve.FastOutSlowIn })
         } else {
           ChatFloatingImmersiveButton({

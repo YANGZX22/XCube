@@ -1,6 +1,5 @@
 import { ModelInfo } from '../models/ChatModels'
 import { ModelPickerSheet } from './ModelPickerSheet'
-import { getAppUiState } from '../state/AppUiState'
 
 @ComponentV2
 export struct ModelPickerSheetHost {
@@ -27,7 +26,7 @@ export struct ModelPickerSheetHost {
       Column()
         .width('100%')
         .height('100%')
-        .backgroundColor(getAppUiState().themeBackground)
+        .backgroundColor(Color.Transparent)
     }
   }
 }

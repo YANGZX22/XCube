@@ -5,6 +5,7 @@
  * 冲突策略仅在父级提供 hasConflicts=true 时显示。
  */
 
+import { uiMaterial } from '@kit.ArkUI'
 import { getAppUiState } from '../../state/AppUiState'
 
 export type ImportConflictStrategy = 'skip' | 'overwrite' | 'ask'
@@ -96,6 +97,9 @@ export struct ImportOptionsPanel {
         .layoutWeight(1)
 
       Toggle({ type: ToggleType.Switch, isOn: checked })
+        .selectedColor(getAppUiState().themePrimary)
+        .systemMaterial(new uiMaterial.Material())
+        .switchPointColor(Color.White)
         .onChange(onChange)
     }
     .width('100%')

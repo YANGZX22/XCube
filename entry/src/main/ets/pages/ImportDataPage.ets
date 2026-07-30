@@ -1,4 +1,5 @@
 import { picker, fileIo } from '@kit.CoreFileKit'
+import { uiMaterial } from '@kit.ArkUI'
 import { getImportExportService, ImportOptions, ImportPreview } from '../services/ImportExportService'
 import { showSnackBar, SnackBarDisplayOptions, SnackBarTone } from '../utils/ToastUtil'
 import { SettingsPagePresentationMode } from '../config/SettingsDetailPresentation'
@@ -291,6 +292,12 @@ struct ImportDataPage {
               .fontWeight(FontWeight.Medium)
               .backgroundColor(this.themePrimary)
               .borderRadius(12)
+              .systemMaterial(new uiMaterial.ImmersiveMaterial({
+                style: uiMaterial.ImmersiveStyle.REGULAR,
+                materialColor: this.themePrimary,
+                interactive: true,
+                lightEffect: { color: undefined }
+              }))
               .onClick(() => {
                 this.selectFile()
               })
@@ -386,6 +393,12 @@ struct ImportDataPage {
               .fontWeight(FontWeight.Medium)
               .backgroundColor(this.themePrimary)
               .borderRadius(12)
+              .systemMaterial(new uiMaterial.ImmersiveMaterial({
+                style: uiMaterial.ImmersiveStyle.REGULAR,
+                materialColor: this.themePrimary,
+                interactive: true,
+                lightEffect: { color: undefined }
+              }))
               .onClick(() => {
                 this.startImport()
               })

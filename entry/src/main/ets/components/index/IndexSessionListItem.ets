@@ -48,7 +48,7 @@ export struct IndexSessionListItem {
       }
     })
       .borderRadius(12)
-      .clip(true)
+      .clip(false)
       .border({
         width: 2,
         color: this.item.isSelected || this.item.isActive ? this.themePrimary : Color.Transparent

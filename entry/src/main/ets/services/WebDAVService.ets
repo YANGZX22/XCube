@@ -56,7 +56,7 @@ export interface DeleteResult {
 }
 
 // 默认远端文件名
-export const DEFAULT_WEBDAV_FILE_NAME: string = 'chatcube_backup.zip'
+export const DEFAULT_WEBDAV_FILE_NAME: string = 'xcube_backup.zip'
 
 export class WebDAVService {
   private static instance: WebDAVService | null = null
@@ -134,7 +134,7 @@ export class WebDAVService {
   private buildHeaders(config: WebDAVConfig, extra?: Record<string, string>): Record<string, string> {
     const headers: Record<string, string> = {
       'Authorization': this.buildAuthHeader(config.username, config.password),
-      'User-Agent': 'ChatCube-WebDAV/1.0',
+      'User-Agent': 'XCube-WebDAV/1.0',
       'Accept': '*/*'
     }
     if (extra !== undefined) {
@@ -304,7 +304,7 @@ export class WebDAVService {
       controller: controller
     })
 
-    const localPath = `${this.context.cacheDir}/chatcube_webdav_${Date.now()}.zip`
+    const localPath = `${this.context.cacheDir}/xcube_webdav_${Date.now()}.zip`
     const file = fileIo.openSync(
       localPath,
       fileIo.OpenMode.READ_WRITE | fileIo.OpenMode.CREATE | fileIo.OpenMode.TRUNC

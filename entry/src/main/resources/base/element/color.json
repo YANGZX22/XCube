@@ -2,39 +2,39 @@
   "color": [
     {
       "name": "start_window_background",
-      "value": "#FAF8F3"
+      "value": "#F8F7FF"
     },
     {
       "name": "primary",
-      "value": "#4E6F9E"
+      "value": "#8576FF"
     },
     {
       "name": "primary_light",
-      "value": "#D8E2EE"
+      "value": "#E9E6FF"
     },
     {
       "name": "background",
-      "value": "#FAF8F3"
+      "value": "#F8F7FF"
     },
     {
       "name": "surface",
-      "value": "#FFFDF8"
+      "value": "#FEFDFF"
     },
     {
       "name": "text_primary",
-      "value": "#24211C"
+      "value": "#252238"
     },
     {
       "name": "text_secondary",
-      "value": "#6F6A60"
+      "value": "#686279"
     },
     {
       "name": "text_tertiary",
-      "value": "#8A8178"
+      "value": "#958FA5"
     },
     {
       "name": "divider",
-      "value": "#DED8CC"
+      "value": "#E5E5E5"
     },
     {
       "name": "brand_openai",
@@ -70,59 +70,59 @@
     },
     {
       "name": "chat_user_bubble",
-      "value": "#52688A"
+      "value": "#7568DF"
     },
     {
       "name": "chat_ai_bubble",
-      "value": "#FFFDF8"
+      "value": "#FEFDFF"
     },
     {
       "name": "code_background",
-      "value": "#F3EFE8"
+      "value": "#F0EEFF"
     },
     {
       "name": "markdown_title",
-      "value": "#24211C"
+      "value": "#252238"
     },
     {
       "name": "markdown_text",
-      "value": "#3D3830"
+      "value": "#3E394F"
     },
     {
       "name": "markdown_quote_bg",
-      "value": "#F3EFE8"
+      "value": "#F0EEFF"
     },
     {
       "name": "markdown_link",
-      "value": "#4E6F9E"
+      "value": "#7568DF"
     },
     {
       "name": "markdown_link_bg",
-      "value": "#D8E2EE"
+      "value": "#E9E6FF"
     },
     {
       "name": "markdown_code_bg",
-      "value": "#F3EFE8"
+      "value": "#F0EEFF"
     },
     {
       "name": "markdown_code_text",
-      "value": "#8F5E45"
+      "value": "#6559C7"
     },
     {
       "name": "markdown_table_bg",
-      "value": "#FFFDF8"
+      "value": "#FEFDFF"
     },
     {
       "name": "markdown_table_header_bg",
-      "value": "#F3EFE8"
+      "value": "#F0EEFF"
     },
     {
       "name": "markdown_table_alt_bg",
-      "value": "#FAF7F0"
+      "value": "#F8F7FF"
     },
     {
       "name": "markdown_table_border",
-      "value": "#DED8CC"
+      "value": "#E9E6FF"
     },
     {
       "name": "toolbar_btn_bg",
@@ -134,11 +134,11 @@
     },
     {
       "name": "top_navigation_blur_origin",
-      "value": "#00FAF8F3"
+      "value": "#00F8F7FF"
     },
     {
       "name": "top_navigation_blur_scrolled",
-      "value": "#E6FAF8F3"
+      "value": "#E6F8F7FF"
     },
     {
       "name": "model_icon_bg",

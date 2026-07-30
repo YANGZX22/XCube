@@ -89,6 +89,7 @@ export class PreferenceKeys {
   static readonly MATERIAL_TYPE: string = 'material_type'
   static readonly MATERIAL_LEVEL: string = 'material_level'
   static readonly LIGHT_COLOR_MODE: string = 'light_color_mode'
+  static readonly CHAT_LIST_IMMERSIVE_MATERIAL: string = 'chat_list_immersive_material'
 
   // WebDAV 同步配置
   static readonly WEBDAV_SERVER_URL: string = 'webdav_server_url'
@@ -487,6 +488,16 @@ export class PreferencesService {
   // 设置光效颜色模式
   async setLightColorMode(mode: string): Promise<void> {
     await this.setString(PreferenceKeys.LIGHT_COLOR_MODE, mode)
+  }
+
+  // 获取对话列表页是否使用沉浸材质，默认关闭
+  async getChatListImmersiveMaterial(): Promise<boolean> {
+    return await this.getBoolean(PreferenceKeys.CHAT_LIST_IMMERSIVE_MATERIAL, false)
+  }
+
+  // 设置对话列表页是否使用沉浸材质
+  async setChatListImmersiveMaterial(enabled: boolean): Promise<void> {
+    await this.setBoolean(PreferenceKeys.CHAT_LIST_IMMERSIVE_MATERIAL, enabled)
   }
 }
 

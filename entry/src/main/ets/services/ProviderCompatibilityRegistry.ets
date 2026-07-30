@@ -171,7 +171,8 @@ function isDashScopeThinkingModelId(modelId: string): boolean {
 function isKimiThinkingModelId(modelId: string): boolean {
   const modelLower = modelId.trim().toLowerCase()
   return modelLower.includes('kimi-k2-thinking') ||
-    modelLower.includes('kimi-k2.5')
+    modelLower.includes('kimi-k2.5') ||
+    modelLower.includes('kimi-k3')
 }
 
 function supportsOpenAIReasoningEffortModel(modelId: string): boolean {

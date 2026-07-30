@@ -10,7 +10,7 @@
     },
     {
       "name": "EntryAbility_label",
-      "value": "ChatCube"
+      "value": "XCube"
     },
     {
       "name": "model_manage_title",
@@ -301,6 +301,14 @@
       "value": "材质"
     },
     {
+      "name": "chat_list_immersive_material_title",
+      "value": "对话列表页沉浸材质"
+    },
+    {
+      "name": "chat_list_immersive_material_desc",
+      "value": "开启后对话栏使用沉浸光感材质；关闭时使用高斯模糊。"
+    },
+    {
       "name": "settings_language",
       "value": "语言"
     },
@@ -425,12 +433,8 @@
       "value": "关于"
     },
     {
-      "name": "settings_about_chatcube",
-      "value": "关于 ChatCube"
-    },
-    {
-      "name": "settings_privacy_policy",
-      "value": "隐私政策"
+      "name": "settings_about_xcube",
+      "value": "关于 XCube"
     },
     {
       "name": "settings_data_management",
@@ -965,8 +969,16 @@
       "value": "主题配色"
     },
     {
+      "name": "theme_color_lavender",
+      "value": "XCube"
+    },
+    {
+      "name": "theme_color_lavender_desc",
+      "value": "轻柔通透浅紫"
+    },
+    {
       "name": "theme_color_default",
-      "value": "默认暖纸"
+      "value": "暖纸"
     },
     {
       "name": "theme_color_default_desc",
@@ -1582,11 +1594,11 @@
     },
     {
       "name": "default_model_prompt_title_variables_hint",
-      "value": "{content} - 对话内容\\n{locale} - 语言"
+      "value": "{content} 对话内容 | {locale} 语言"
     },
     {
       "name": "default_model_prompt_translate_variables_hint",
-      "value": "{source_text} - 原文\\n{target_lang} - 目标语言"
+      "value": "{source_text} 原文 | {target_lang} 目标语言"
     },
     {
       "name": "default_model_reset_prompt",
@@ -1730,7 +1742,7 @@
     },
     {
       "name": "about_github_repo",
-      "value": "ChatCube 开源仓库"
+      "value": "XCube 开源仓库"
     },
     {
       "name": "about_save_qrcode",
@@ -1758,7 +1770,7 @@
     },
     {
       "name": "about_copyright",
-      "value": "© 2026 ChatCube. 保留所有权利。"
+      "value": "© 2026 XCube. 保留所有权利。"
     },
     {
       "name": "provider_tab_config",
@@ -2162,7 +2174,7 @@
     },
     {
       "name": "webdav_remote_dir_placeholder",
-      "value": "chatcube"
+      "value": "xcube"
     },
     {
       "name": "webdav_remote_file_name",

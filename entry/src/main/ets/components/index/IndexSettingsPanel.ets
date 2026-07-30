@@ -1,7 +1,7 @@
 import { bundleManager } from '@kit.AbilityKit'
+import { uiMaterial } from '@kit.ArkUI'
 import { SettingsRouteName } from '../../config/SettingsRouteName'
 import { getAppUiState } from '../../state/AppUiState'
-import { buildPointLightBorderEffect } from '../../utils/HdsVisualEffectUtil'
 
 class SettingsListItemModel {
   key: string = ''
@@ -28,9 +28,6 @@ export struct IndexSettingsPanel {
   private get themeBackground(): string {
     return getAppUiState().themeBackground
   }
-  private get themeSurface(): string {
-    return getAppUiState().themeSurface
-  }
   private get themeDivider(): string {
     return getAppUiState().themeDivider
   }
@@ -53,7 +50,6 @@ export struct IndexSettingsPanel {
   @Event onOpenWebDAVSync: () => void = () => {}
   @Event onOpenUsageStats: () => void = () => {}
   @Event onOpenAbout: () => void = () => {}
-  @Event onOpenPrivacy: () => void = () => {}
 
   aboutToAppear(): void {
     try {
@@ -193,15 +189,9 @@ export struct IndexSettingsPanel {
           {
             key: SettingsRouteName.ABOUT,
             icon: $r('sys.symbol.exclamationmark_message'),
-            title: $r('app.string.settings_about_chatcube'),
+            title: $r('app.string.settings_about_xcube'),
             subtitle: `v${this.versionName}`,
             action: (): void => { this.onOpenAbout() }
-          } as SettingsListItemModel,
-          {
-            key: SettingsRouteName.PRIVACY_POLICY,
-            icon: $r('sys.symbol.doc_text'),
-            title: $r('app.string.settings_privacy_policy'),
-            action: (): void => { this.onOpenPrivacy() }
           } as SettingsListItemModel
         ]
       } as SettingsGroupModel
@@ -320,14 +310,14 @@ export struct IndexSettingsPanel {
       }, (item: SettingsListItemModel) => item.key)
     }
     .width('100%')
-    .backgroundColor(this.themeSurface)
+    .backgroundColor(Color.Transparent)
     .borderRadius(this.sidebarMode ? 20 : 22)
     .clip(true)
-    .border({
-      width: 1,
-      color: this.themeDivider
-    })
-    .visualEffect(buildPointLightBorderEffect())
+    .systemMaterial(new uiMaterial.ImmersiveMaterial({
+      style: uiMaterial.ImmersiveStyle.REGULAR,
+      interactive: true,
+      lightEffect: { color: undefined }
+    }))
   }
 
   build() {

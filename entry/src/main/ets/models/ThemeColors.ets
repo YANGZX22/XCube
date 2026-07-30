@@ -1,5 +1,6 @@
 // 主题类型枚举
 export enum ColorTheme {
+  LAVENDER = 'lavender',    // XCube 浅紫
   DEFAULT = 'default',      // 默认暖纸
   CLAUDE = 'claude',        // Claude 暖棕
   CHATGPT = 'chatgpt',      // 清爽蓝
@@ -52,6 +53,62 @@ export interface ThemeInfo {
   dark: ThemeColorConfig
 }
 
+// XCube 浅紫主题：以品牌紫为强调色，整体保持轻盈、通透和低饱和。
+const LAVENDER_THEME: ThemeInfo = {
+  id: ColorTheme.LAVENDER,
+  nameKey: 'theme_color_lavender',
+  descriptionKey: 'theme_color_lavender_desc',
+  previewColors: ['#F8F7FF', '#E9E6FF', '#8576FF', '#7568DF'],
+  light: {
+    primary: '#8576FF',
+    primaryLight: '#E9E6FF',
+    background: '#F8F7FF',
+    surface: '#FEFDFF',
+    divider: '#E5E5E5',
+    userBubble: '#7568DF',
+    userBubbleText: '#FFFFFF',
+    aiBubble: '#FEFDFF',
+    textPrimary: '#252238',
+    textSecondary: '#686279',
+    textTertiary: '#958FA5',
+    markdownTitle: '#252238',
+    markdownText: '#3E394F',
+    markdownLink: '#7568DF',
+    markdownLinkBg: '#E9E6FF',
+    markdownCodeBg: '#F0EEFF',
+    markdownCodeText: '#6559C7',
+    markdownQuoteBg: '#F0EEFF',
+    markdownTableBg: '#FEFDFF',
+    markdownTableHeaderBg: '#F0EEFF',
+    markdownTableAltBg: '#F8F7FF',
+    markdownTableBorder: '#E9E6FF'
+  },
+  dark: {
+    primary: '#A99FFF',
+    primaryLight: '#373251',
+    background: '#191725',
+    surface: '#242132',
+    divider: '#4A4A4A',
+    userBubble: '#7468D7',
+    userBubbleText: '#FFFFFF',
+    aiBubble: '#242132',
+    textPrimary: '#F3F0FF',
+    textSecondary: '#B9B3C9',
+    textTertiary: '#847E94',
+    markdownTitle: '#F3F0FF',
+    markdownText: '#E5E0F2',
+    markdownLink: '#B8AFFF',
+    markdownLinkBg: '#373251',
+    markdownCodeBg: '#211E2D',
+    markdownCodeText: '#C8C0FF',
+    markdownQuoteBg: '#211E2D',
+    markdownTableBg: '#242132',
+    markdownTableHeaderBg: '#2F2B40',
+    markdownTableAltBg: '#292638',
+    markdownTableBorder: '#373251'
+  }
+}
+
 // 默认暖纸主题：中性色底盘，蓝灰只做小面积强调。
 const DEFAULT_THEME: ThemeInfo = {
   id: ColorTheme.DEFAULT,
@@ -63,7 +120,7 @@ const DEFAULT_THEME: ThemeInfo = {
     primaryLight: '#D8E2EE',
     background: '#FAF8F3',
     surface: '#FFFDF8',
-    divider: '#DED8CC',
+    divider: '#D8E2EE',
     userBubble: '#52688A',
     userBubbleText: '#FFFFFF',
     aiBubble: '#FFFDF8',
@@ -80,14 +137,14 @@ const DEFAULT_THEME: ThemeInfo = {
     markdownTableBg: '#FFFDF8',
     markdownTableHeaderBg: '#F3EFE8',
     markdownTableAltBg: '#FAF7F0',
-    markdownTableBorder: '#DED8CC'
+    markdownTableBorder: '#D8E2EE'
   },
   dark: {
     primary: '#7FA2CC',
     primaryLight: '#273646',
     background: '#1F1E1A',
     surface: '#292722',
-    divider: '#403C34',
+    divider: '#273646',
     userBubble: '#4F6886',
     userBubbleText: '#F7FAFD',
     aiBubble: '#292722',
@@ -104,7 +161,7 @@ const DEFAULT_THEME: ThemeInfo = {
     markdownTableBg: '#292722',
     markdownTableHeaderBg: '#332F28',
     markdownTableAltBg: '#2E2B25',
-    markdownTableBorder: '#403C34'
+    markdownTableBorder: '#273646'
   }
 }
 
@@ -119,7 +176,7 @@ const CLAUDE_THEME: ThemeInfo = {
     primaryLight: '#F1E8E0',
     background: '#FAF7F0',
     surface: '#FFFDF8',
-    divider: '#DED6CA',
+    divider: '#F1E8E0',
     userBubble: '#8F5E45',
     userBubbleText: '#FFFFFF',
     aiBubble: '#FFFDF8',
@@ -136,14 +193,14 @@ const CLAUDE_THEME: ThemeInfo = {
     markdownTableBg: '#FFFDF8',
     markdownTableHeaderBg: '#F3EDE5',
     markdownTableAltBg: '#FAF4EC',
-    markdownTableBorder: '#DED6CA'
+    markdownTableBorder: '#F1E8E0'
   },
   dark: {
     primary: '#C87552',
     primaryLight: '#3A2C25',
     background: '#251F1A',
     surface: '#292722',
-    divider: '#403C34',
+    divider: '#3A2C25',
     userBubble: '#7A4E3D',
     userBubbleText: '#FFF8F2',
     aiBubble: '#292722',
@@ -160,7 +217,7 @@ const CLAUDE_THEME: ThemeInfo = {
     markdownTableBg: '#292722',
     markdownTableHeaderBg: '#332F28',
     markdownTableAltBg: '#2E2B25',
-    markdownTableBorder: '#403C34'
+    markdownTableBorder: '#3A2C25'
   }
 }
 
@@ -175,7 +232,7 @@ const CHATGPT_THEME: ThemeInfo = {
     primaryLight: '#E4EDF6',
     background: '#F7FAFC',
     surface: '#FCFEFF',
-    divider: '#D9E0E7',
+    divider: '#E4EDF6',
     userBubble: '#4D719C',
     userBubbleText: '#FFFFFF',
     aiBubble: '#FCFEFF',
@@ -192,14 +249,14 @@ const CHATGPT_THEME: ThemeInfo = {
     markdownTableBg: '#FCFEFF',
     markdownTableHeaderBg: '#EDF3F7',
     markdownTableAltBg: '#F4F8FA',
-    markdownTableBorder: '#D9E0E7'
+    markdownTableBorder: '#E4EDF6'
   },
   dark: {
     primary: '#82A9D4',
     primaryLight: '#24374A',
     background: '#182027',
     surface: '#202932',
-    divider: '#34404A',
+    divider: '#24374A',
     userBubble: '#4D6F91',
     userBubbleText: '#F6FAFF',
     aiBubble: '#202932',
@@ -216,7 +273,7 @@ const CHATGPT_THEME: ThemeInfo = {
     markdownTableBg: '#202932',
     markdownTableHeaderBg: '#2A3540',
     markdownTableAltBg: '#242E38',
-    markdownTableBorder: '#34404A'
+    markdownTableBorder: '#24374A'
   }
 }
 
@@ -231,7 +288,7 @@ const VIOLET_THEME: ThemeInfo = {
     primaryLight: '#ECE8F2',
     background: '#FAF8FC',
     surface: '#FFFDFF',
-    divider: '#DED8E5',
+    divider: '#ECE8F2',
     userBubble: '#675F82',
     userBubbleText: '#FFFFFF',
     aiBubble: '#FFFDFF',
@@ -248,14 +305,14 @@ const VIOLET_THEME: ThemeInfo = {
     markdownTableBg: '#FFFDFF',
     markdownTableHeaderBg: '#F1EDF5',
     markdownTableAltBg: '#FAF6FC',
-    markdownTableBorder: '#DED8E5'
+    markdownTableBorder: '#ECE8F2'
   },
   dark: {
     primary: '#A897C5',
     primaryLight: '#342D42',
     background: '#1F1D24',
     surface: '#2A2630',
-    divider: '#40394A',
+    divider: '#342D42',
     userBubble: '#5F5476',
     userBubbleText: '#FBF8FF',
     aiBubble: '#2A2630',
@@ -272,7 +329,7 @@ const VIOLET_THEME: ThemeInfo = {
     markdownTableBg: '#2A2630',
     markdownTableHeaderBg: '#352F3D',
     markdownTableAltBg: '#302B37',
-    markdownTableBorder: '#40394A'
+    markdownTableBorder: '#342D42'
   }
 }
 
@@ -287,7 +344,7 @@ const MINT_THEME: ThemeInfo = {
     primaryLight: '#E5EFE9',
     background: '#F7FAF6',
     surface: '#FEFFFC',
-    divider: '#D8E2D9',
+    divider: '#E5EFE9',
     userBubble: '#587A68',
     userBubbleText: '#FFFFFF',
     aiBubble: '#FEFFFC',
@@ -304,14 +361,14 @@ const MINT_THEME: ThemeInfo = {
     markdownTableBg: '#FEFFFC',
     markdownTableHeaderBg: '#EEF4EF',
     markdownTableAltBg: '#F5F9F5',
-    markdownTableBorder: '#D8E2D9'
+    markdownTableBorder: '#E5EFE9'
   },
   dark: {
     primary: '#79A88F',
     primaryLight: '#25372D',
     background: '#1B211D',
     surface: '#242C26',
-    divider: '#3A453C',
+    divider: '#25372D',
     userBubble: '#4E6F5C',
     userBubbleText: '#F6FFF9',
     aiBubble: '#242C26',
@@ -328,7 +385,7 @@ const MINT_THEME: ThemeInfo = {
     markdownTableBg: '#242C26',
     markdownTableHeaderBg: '#2E3730',
     markdownTableAltBg: '#29322B',
-    markdownTableBorder: '#3A453C'
+    markdownTableBorder: '#25372D'
   }
 }
 
@@ -343,7 +400,7 @@ const NOTION_THEME: ThemeInfo = {
     primaryLight: '#E3E8EF',
     background: '#FFFFFF',
     surface: '#FBFBFA',
-    divider: '#E3E5E8',
+    divider: '#E3E8EF',
     userBubble: '#1F6AB3',
     userBubbleText: '#FFFFFF',
     aiBubble: '#F7F6F3',
@@ -360,14 +417,14 @@ const NOTION_THEME: ThemeInfo = {
     markdownTableBg: '#FBFBFA',
     markdownTableHeaderBg: '#F7F6F3',
     markdownTableAltBg: '#FAFAF8',
-    markdownTableBorder: '#E3E5E8'
+    markdownTableBorder: '#E3E8EF'
   },
   dark: {
     primary: '#5B9DD9',
     primaryLight: '#2C3E50',
     background: '#191919',
     surface: '#202020',
-    divider: '#373737',
+    divider: '#2C3E50',
     userBubble: '#3D6A99',
     userBubbleText: '#FFFFFF',
     aiBubble: '#202020',
@@ -384,12 +441,13 @@ const NOTION_THEME: ThemeInfo = {
     markdownTableBg: '#202020',
     markdownTableHeaderBg: '#2A2A2A',
     markdownTableAltBg: '#252525',
-    markdownTableBorder: '#373737'
+    markdownTableBorder: '#2C3E50'
   }
 }
 
 // 精简后的可选主题列表
 export const ALL_THEMES: ThemeInfo[] = [
+  LAVENDER_THEME,
   DEFAULT_THEME,
   CLAUDE_THEME,
   CHATGPT_THEME,
@@ -405,7 +463,7 @@ export function getThemeById(themeId: ColorTheme): ThemeInfo {
       return ALL_THEMES[i]
     }
   }
-  return DEFAULT_THEME
+  return LAVENDER_THEME
 }
 
 // 根据主题 ID 和深浅模式获取颜色配置

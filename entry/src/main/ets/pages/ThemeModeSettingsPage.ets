@@ -5,6 +5,7 @@ import {
   HdsTabs,
   HdsTabsFloatingStyle
 } from '@kit.UIDesignKit'
+import { uiMaterial } from '@kit.ArkUI'
 import { ALL_THEMES, ColorTheme, getThemeColors, ThemeColorConfig, ThemeInfo } from '../models/ThemeColors'
 import { ThemeMode } from '../services/PreferencesService'
 import { ServiceRegistry } from '../services/ServiceRegistry'
@@ -28,8 +29,6 @@ import { IndexBottomTabItem } from '../components/index/IndexBottomTabItem'
 let themeModeSettingsPathStack: NavPathStack | null = null
 
 const TAB_INDEX_THEME = 0
-const TAB_INDEX_FONT = 1
-const TAB_INDEX_MATERIAL = 2
 
 const PREVIEW_TAB_INDEX_ASSISTANTS = 0
 const PREVIEW_TAB_INDEX_CHAT = 1
@@ -67,9 +66,6 @@ export struct ThemeAppearanceSettingsView {
   private get themeSurface(): string {
     return getAppUiState().themeSurface
   }
-  private get themeDivider(): string {
-    return getAppUiState().themeDivider
-  }
   private get themeAiBubble(): string {
     return getAppUiState().themeAiBubble
   }
@@ -90,19 +86,20 @@ export struct ThemeAppearanceSettingsView {
   @Event onCompactBack: () => void = () => {}
 
   @Local currentThemeMode: ThemeMode = ThemeMode.SYSTEM
-  @Local currentColorTheme: ColorTheme = ColorTheme.DEFAULT
+  @Local currentColorTheme: ColorTheme = ColorTheme.LAVENDER
   @Local chatFontSize: number = 15
   @Local materialType: number = 100
   @Local materialLevel: number = 10
   @Local lightColorMode: string = 'default'
+  @Local chatListImmersiveMaterial: boolean = false
 
   @Local currentTabIndex: number = TAB_INDEX_THEME
   @Local previewTabIndex: number = PREVIEW_TAB_INDEX_CHAT
 
   private settingsManager = ServiceRegistry.settings()
+  private appearanceTabsController: TabsController = new TabsController()
   private themeScroller: Scroller = new Scroller()
   private fontScroller: Scroller = new Scroller()
-  private materialScroller: Scroller = new Scroller()
 
   private px2vp(px: number): number {
     return px / (this.getUIContext().getHostContext()?.resourceManager.getDeviceCapabilitySync().screenDensity ?? 3) * 160
@@ -115,6 +112,7 @@ export struct ThemeAppearanceSettingsView {
     this.materialType = this.settingsManager.getMaterialType()
     this.materialLevel = this.settingsManager.getMaterialLevel()
     this.lightColorMode = this.settingsManager.getLightColorMode()
+    this.chatListImmersiveMaterial = this.settingsManager.getChatListImmersiveMaterial()
   }
 
   private getContentMaxWidth(): number {
@@ -127,7 +125,7 @@ export struct ThemeAppearanceSettingsView {
   }
 
   private getScrollBottomPadding(): number {
-    return 24 + getSettingsPageCompactTabsTotalInset(this.px2vp(this.bottomAvoidHeight),
+    return 96 + getSettingsPageCompactTabsTotalInset(this.px2vp(this.bottomAvoidHeight),
       this.settingsDetailPresentationMode)
   }
 
@@ -167,6 +165,9 @@ export struct ThemeAppearanceSettingsView {
   }
 
   private getThemeName(themeId: ColorTheme): Resource {
+    if (themeId === ColorTheme.LAVENDER) {
+      return $r('app.string.theme_color_lavender')
+    }
     if (themeId === ColorTheme.CLAUDE) {
       return $r('app.string.theme_color_claude')
     }
@@ -186,6 +187,9 @@ export struct ThemeAppearanceSettingsView {
   }
 
   private getThemeDescription(themeId: ColorTheme): Resource {
+    if (themeId === ColorTheme.LAVENDER) {
+      return $r('app.string.theme_color_lavender_desc')
+    }
     if (themeId === ColorTheme.CLAUDE) {
       return $r('app.string.theme_color_claude_desc')
     }
@@ -257,36 +261,15 @@ export struct ThemeAppearanceSettingsView {
     })
   }
 
-  private async handleMaterialTypeSelected(type: number): Promise<void> {
-    const previous = this.materialType
-    this.materialType = type
+  private async handleChatListImmersiveMaterialChanged(enabled: boolean): Promise<void> {
+    const previous = this.chatListImmersiveMaterial
+    this.chatListImmersiveMaterial = enabled
     try {
-      await this.settingsManager.setMaterialType(type)
+      await this.settingsManager.setChatListImmersiveMaterial(enabled)
     } catch (error) {
-      console.error('ThemeAppearanceSettingsView', `Failed to set material type: ${JSON.stringify(error)}`)
-      this.materialType = previous
-    }
-  }
-
-  private async handleMaterialLevelSelected(level: number): Promise<void> {
-    const previous = this.materialLevel
-    this.materialLevel = level
-    try {
-      await this.settingsManager.setMaterialLevel(level)
-    } catch (error) {
-      console.error('ThemeAppearanceSettingsView', `Failed to set material level: ${JSON.stringify(error)}`)
-      this.materialLevel = previous
-    }
-  }
-
-  private async handleLightColorModeSelected(mode: string): Promise<void> {
-    const previous = this.lightColorMode
-    this.lightColorMode = mode
-    try {
-      await this.settingsManager.setLightColorMode(mode)
-    } catch (error) {
-      console.error('ThemeAppearanceSettingsView', `Failed to set light color mode: ${JSON.stringify(error)}`)
-      this.lightColorMode = previous
+      console.error('ThemeAppearanceSettingsView',
+        `Failed to set chat list immersive material: ${JSON.stringify(error)}`)
+      this.chatListImmersiveMaterial = previous
     }
   }
 
@@ -370,124 +353,16 @@ export struct ThemeAppearanceSettingsView {
   private ModeRadioGroup() {
     Column() {
       this.ModeRadioRow(ThemeMode.SYSTEM, $r('app.string.theme_system'))
-      Divider().color($r('app.color.divider')).margin({ left: 16, right: 16 })
+      Divider().color(this.themePrimaryLight).margin({ left: 16, right: 16 })
       this.ModeRadioRow(ThemeMode.LIGHT, $r('app.string.theme_light'))
-      Divider().color($r('app.color.divider')).margin({ left: 16, right: 16 })
+      Divider().color(this.themePrimaryLight).margin({ left: 16, right: 16 })
       this.ModeRadioRow(ThemeMode.DARK, $r('app.string.theme_dark'))
     }
     .width('100%')
     .backgroundColor(this.themeSurface)
     .borderRadius(24)
-    .border({ width: 1, color: $r('app.color.divider') })
+    .border({ width: 1, color: this.themePrimaryLight })
     .padding({ top: 6, bottom: 6 })
-  }
-
-  @Builder
-  private MaterialTypeRadioRow(type: number, title: Resource) {
-    Row({ space: 12 }) {
-      Column({ space: 2 }) {
-        Text(title)
-          .fontSize(15)
-          .fontWeight(FontWeight.Regular)
-          .fontColor($r('app.color.text_primary'))
-          .maxLines(1)
-          .textOverflow({ overflow: TextOverflow.Ellipsis })
-      }
-      .layoutWeight(1)
-      .alignItems(HorizontalAlign.Start)
-
-      Radio({ value: `${type}`, group: 'materialType' })
-        .checked(this.materialType === type)
-        .radioStyle({
-          checkedBackgroundColor: this.themePrimary,
-          indicatorColor: Color.White
-        })
-        .onChange((isChecked: boolean) => {
-          if (isChecked && this.materialType !== type) {
-            this.handleMaterialTypeSelected(type)
-          }
-        })
-    }
-    .width('100%')
-    .padding({ left: 16, right: 16, top: 14, bottom: 14 })
-    .backgroundColor(Color.Transparent)
-    .onClick(() => {
-      if (this.materialType !== type) {
-        this.handleMaterialTypeSelected(type)
-      }
-    })
-  }
-
-  @Builder
-  private MaterialLevelRadioRow(level: number, title: Resource) {
-    Row({ space: 12 }) {
-      Column({ space: 2 }) {
-        Text(title)
-          .fontSize(15)
-          .fontWeight(FontWeight.Regular)
-          .fontColor($r('app.color.text_primary'))
-          .maxLines(1)
-          .textOverflow({ overflow: TextOverflow.Ellipsis })
-      }
-      .layoutWeight(1)
-      .alignItems(HorizontalAlign.Start)
-
-      Radio({ value: `${level}`, group: 'materialLevel' })
-        .checked(this.materialLevel === level)
-        .radioStyle({
-          checkedBackgroundColor: this.themePrimary,
-          indicatorColor: Color.White
-        })
-        .onChange((isChecked: boolean) => {
-          if (isChecked && this.materialLevel !== level) {
-            this.handleMaterialLevelSelected(level)
-          }
-        })
-    }
-    .width('100%')
-    .padding({ left: 16, right: 16, top: 14, bottom: 14 })
-    .backgroundColor(Color.Transparent)
-    .onClick(() => {
-      if (this.materialLevel !== level) {
-        this.handleMaterialLevelSelected(level)
-      }
-    })
-  }
-
-  @Builder
-  private LightColorModeRadioRow(mode: string, title: Resource) {
-    Row({ space: 12 }) {
-      Column({ space: 2 }) {
-        Text(title)
-          .fontSize(15)
-          .fontWeight(FontWeight.Regular)
-          .fontColor($r('app.color.text_primary'))
-          .maxLines(1)
-          .textOverflow({ overflow: TextOverflow.Ellipsis })
-      }
-      .layoutWeight(1)
-      .alignItems(HorizontalAlign.Start)
-
-      Radio({ value: mode, group: 'lightColorMode' })
-        .checked(this.lightColorMode === mode)
-        .radioStyle({
-          checkedBackgroundColor: this.themePrimary,
-          indicatorColor: Color.White
-        })
-        .onChange((isChecked: boolean) => {
-          if (isChecked && this.lightColorMode !== mode) {
-            this.handleLightColorModeSelected(mode)
-          }
-        })
-    }
-    .width('100%')
-    .padding({ left: 16, right: 16, top: 14, bottom: 14 })
-    .backgroundColor(Color.Transparent)
-    .onClick(() => {
-      if (this.lightColorMode !== mode) {
-        this.handleLightColorModeSelected(mode)
-      }
-    })
   }
 
   @Builder
@@ -501,7 +376,7 @@ export struct ThemeAppearanceSettingsView {
               .height(16)
               .borderRadius(8)
               .backgroundColor(this.getThemePreviewSwatch(theme, 0))
-              .border({ width: 1, color: this.getPreviewColors(theme.id).divider })
+              .border({ width: 1, color: this.getPreviewColors(theme.id).primaryLight })
 
             Column()
               .layoutWeight(1)
@@ -538,7 +413,7 @@ export struct ThemeAppearanceSettingsView {
         .padding(14)
         .backgroundColor(this.getPreviewColors(theme.id).background)
         .borderRadius(18)
-        .border({ width: 1, color: this.getPreviewColors(theme.id).divider })
+        .border({ width: 1, color: this.getPreviewColors(theme.id).primaryLight })
 
         Row({ space: 8 }) {
           Column({ space: 2 }) {
@@ -574,7 +449,7 @@ export struct ThemeAppearanceSettingsView {
     .padding(2)
     .backgroundColor(this.currentColorTheme === theme.id ? this.themePrimary : this.themeSurface)
     .borderRadius(22)
-    .border({ width: 1, color: $r('app.color.divider') })
+    .border({ width: 1, color: this.themePrimaryLight })
     .clip(true)
     .onClick(() => {
       this.handleColorThemeSelected(theme.id)
@@ -662,7 +537,7 @@ export struct ThemeAppearanceSettingsView {
     .borderRadius(18)
     .clip(true)
     .backgroundColor(this.themeBackground)
-    .border({ width: 1, color: this.themeDivider })
+    .border({ width: 1, color: this.themePrimaryLight })
   }
 
   @Builder
@@ -678,7 +553,7 @@ export struct ThemeAppearanceSettingsView {
         .padding({ left: 14, right: 14, top: 10, bottom: 10 })
         .backgroundColor(this.themeAiBubble)
         .borderRadius({ topLeft: 18, topRight: 18, bottomLeft: 6, bottomRight: 18 })
-        .border({ width: 1, color: this.themeDivider })
+        .border({ width: 1, color: this.themePrimaryLight })
         .constraintSize({ maxWidth: '76%' })
 
         Blank()
@@ -718,29 +593,56 @@ export struct ThemeAppearanceSettingsView {
       .padding(12)
       .backgroundColor(this.themeSurface)
       .borderRadius(24)
-      .border({ width: 1, color: $r('app.color.divider') })
+      .border({ width: 1, color: this.themePrimaryLight })
     }
     .width('100%')
   }
 
   @Builder
-  private TopTabBarBuilder(label: Resource, index: number) {
-    Column() {
-      Text(label)
-        .fontSize(15)
-        .fontWeight(this.currentTabIndex === index ? FontWeight.Bold : FontWeight.Medium)
-        .fontColor(this.currentTabIndex === index ? this.themePrimary : $r('app.color.text_secondary'))
-
-      Column()
-        .width(20)
-        .height(2)
-        .margin({ top: 6 })
-        .borderRadius(1)
-        .backgroundColor(this.currentTabIndex === index ? this.themePrimary : Color.Transparent)
+  private AppearanceTabBar(label: Resource, index: number) {
+    Button({ type: ButtonType.Normal, stateEffect: false }) {
+      Row() {
+        Text(label)
+          .fontSize(14)
+          .fontWeight(this.currentTabIndex === index ? FontWeight.Bold : FontWeight.Medium)
+          .fontColor(this.currentTabIndex === index ? this.themeUserBubbleText : $r('app.color.text_secondary'))
+      }
+      .width('100%')
+      .height('100%')
+      .justifyContent(FlexAlign.Center)
+      .borderRadius(20)
+      .backgroundColor(this.currentTabIndex === index ? this.themePrimary : Color.Transparent)
     }
-    .height(44)
-    .padding({ left: 14, right: 14 })
-    .justifyContent(FlexAlign.Center)
+    .layoutWeight(1)
+    .height(40)
+    .padding(0)
+    .borderRadius(20)
+    .clip(true)
+    .backgroundColor(Color.Transparent)
+    .systemMaterial(new uiMaterial.ImmersiveMaterial({
+      style: uiMaterial.ImmersiveStyle.ULTRA_THIN,
+      applyShadow: true,
+      interactive: true,
+      lightEffect: { color: Color.White }
+    }))
+    .onClick(() => {
+      if (this.currentTabIndex !== index) {
+        this.appearanceTabsController.changeIndex(index)
+      }
+    })
+  }
+
+  @Builder
+  private AppearanceFloatingTabs() {
+    Row({ space: 8 }) {
+      this.AppearanceTabBar($r('app.string.appearance_tab_theme'), 0)
+      this.AppearanceTabBar($r('app.string.appearance_tab_font'), 1)
+      this.AppearanceTabBar($r('app.string.appearance_tab_material'), 2)
+    }
+    .width(this.windowWidthVp >= 600 ? 272 : 248)
+    .height(40)
+    .margin({ bottom: 28 })
+    .backgroundColor(Color.Transparent)
   }
 
   @Builder
@@ -859,58 +761,39 @@ export struct ThemeAppearanceSettingsView {
 
   @Builder
   private MaterialTabContent() {
-    Scroll(this.materialScroller) {
+    Scroll() {
       Row() {
-        Column({ space: 22 }) {
-          this.SectionHeader($r('app.string.material_effect_title'),
-            $r('app.string.material_effect_desc'))
+        Row({ space: 16 }) {
+          Column({ space: 4 }) {
+            Text($r('app.string.chat_list_immersive_material_title'))
+              .fontSize(16)
+              .fontWeight(FontWeight.Medium)
+              .fontColor($r('app.color.text_primary'))
+              .width('100%')
 
-          Column() {
-            this.MaterialTypeRadioRow(0, $r('app.string.material_type_none'))
-            Divider().color($r('app.color.divider')).margin({ left: 16, right: 16 })
-            this.MaterialTypeRadioRow(100, $r('app.string.material_type_adaptive'))
-            Divider().color($r('app.color.divider')).margin({ left: 16, right: 16 })
-            this.MaterialTypeRadioRow(101, $r('app.string.material_type_immersive'))
+            Text($r('app.string.chat_list_immersive_material_desc'))
+              .fontSize(12)
+              .fontColor($r('app.color.text_secondary'))
+              .lineHeight(18)
+              .width('100%')
           }
-          .width('100%')
-          .backgroundColor(this.themeSurface)
-          .borderRadius(24)
-          .border({ width: 1, color: $r('app.color.divider') })
-          .padding({ top: 6, bottom: 6 })
+          .layoutWeight(1)
+          .alignItems(HorizontalAlign.Start)
 
-          this.SectionHeader($r('app.string.material_level_title'),
-            $r('app.string.material_level_desc'))
-
-          Column() {
-            this.MaterialLevelRadioRow(0, $r('app.string.material_level_exquisite'))
-            Divider().color($r('app.color.divider')).margin({ left: 16, right: 16 })
-            this.MaterialLevelRadioRow(1, $r('app.string.material_level_gentle'))
-            Divider().color($r('app.color.divider')).margin({ left: 16, right: 16 })
-            this.MaterialLevelRadioRow(2, $r('app.string.material_level_smooth'))
-            Divider().color($r('app.color.divider')).margin({ left: 16, right: 16 })
-            this.MaterialLevelRadioRow(10, $r('app.string.material_level_adaptive'))
-          }
-          .width('100%')
-          .backgroundColor(this.themeSurface)
-          .borderRadius(24)
-          .border({ width: 1, color: $r('app.color.divider') })
-          .padding({ top: 6, bottom: 6 })
-
-          this.SectionHeader($r('app.string.light_color_mode_title'),
-            $r('app.string.light_color_mode_desc'))
-
-          Column() {
-            this.LightColorModeRadioRow('default', $r('app.string.light_color_mode_default'))
-            Divider().color($r('app.color.divider')).margin({ left: 16, right: 16 })
-            this.LightColorModeRadioRow('theme', $r('app.string.light_color_mode_theme'))
-          }
-          .width('100%')
-          .backgroundColor(this.themeSurface)
-          .borderRadius(24)
-          .border({ width: 1, color: $r('app.color.divider') })
-          .padding({ top: 6, bottom: 6 })
+          Toggle({ type: ToggleType.Switch, isOn: this.chatListImmersiveMaterial })
+            .selectedColor(this.themePrimary)
+            .systemMaterial(new uiMaterial.Material())
+            .switchPointColor(Color.White)
+            .onChange((enabled: boolean) => {
+              this.handleChatListImmersiveMaterialChanged(enabled)
+            })
         }
         .width('100%')
+        .padding(18)
+        .alignItems(VerticalAlign.Center)
+        .backgroundColor(this.themeSurface)
+        .borderRadius(24)
+        .border({ width: 1, color: this.themePrimaryLight })
         .constraintSize({ maxWidth: this.getContentMaxWidth() })
       }
       .width('100%')
@@ -936,34 +819,38 @@ export struct ThemeAppearanceSettingsView {
       .justifyContent(FlexAlign.Center)
       .padding({ left: 16, right: 16, top: 8 })
 
-      HdsTabs({ barPosition: BarPosition.Start, index: this.currentTabIndex }) {
-        TabContent() {
-          this.ThemeTabContent()
-        }
-        .tabBar(this.TopTabBarBuilder($r('app.string.appearance_tab_theme'), TAB_INDEX_THEME))
+      Stack({ alignContent: Alignment.Bottom }) {
+        Tabs({ index: this.currentTabIndex, controller: this.appearanceTabsController }) {
+          TabContent() {
+            this.ThemeTabContent()
+          }
 
-        TabContent() {
-          this.FontTabContent()
-        }
-        .tabBar(this.TopTabBarBuilder($r('app.string.appearance_tab_font'), TAB_INDEX_FONT))
+          TabContent() {
+            this.FontTabContent()
+          }
 
-        TabContent() {
-          this.MaterialTabContent()
+          TabContent() {
+            this.MaterialTabContent()
+          }
         }
-        .tabBar(this.TopTabBarBuilder($r('app.string.appearance_tab_material'), TAB_INDEX_MATERIAL))
+        .barHeight(0)
+        .backgroundColor(Color.Transparent)
+        .scrollable(true)
+        .width('100%')
+        .height('100%')
+        .animationDuration(280)
+        .onChange((idx: number) => {
+          if (this.currentTabIndex !== idx) {
+            animateTo({ duration: 220, curve: Curve.EaseInOut }, () => {
+              this.currentTabIndex = idx
+            })
+          }
+        })
+
+        this.AppearanceFloatingTabs()
       }
-      .barMode(BarMode.Fixed)
-      .barHeight(48)
-      .scrollable(true)
+      .width('100%')
       .layoutWeight(1)
-      .animationDuration(280)
-      .onChange((idx: number) => {
-        if (this.currentTabIndex !== idx) {
-          animateTo({ duration: 220, curve: Curve.EaseInOut }, () => {
-            this.currentTabIndex = idx
-          })
-        }
-      })
     }
     .width('100%')
     .layoutWeight(1)
@@ -1007,7 +894,7 @@ export struct ThemeAppearanceSettingsView {
     }
     .width('100%')
     .backgroundColor(this.themeBackground)
-    .border({ width: { bottom: 1 }, color: $r('app.color.divider') })
+    .border({ width: { bottom: 1 }, color: this.themePrimaryLight })
   }
 
   build() {
