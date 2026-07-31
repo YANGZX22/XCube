@@ -28,7 +28,7 @@
 ### Release Identity
 
 - App name: XCube
-- Current version: `1.1.17` (versionCode `1001017`)
+- Current version: `1.1.18` (versionCode `1001018`)
 
 ## Latest Screens
 
