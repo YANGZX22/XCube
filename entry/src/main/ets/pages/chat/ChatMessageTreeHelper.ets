@@ -28,6 +28,16 @@ export interface LegacyChainResult {
   leafId: string
 }
 
+/**
+ * 判断会话是否仍需要旧数据线性建链。
+ *
+ * activeLeafId 是对话树已初始化的明确标记。多个根节点不能作为旧数据判据，
+ * 因为编辑首条用户消息时，新旧版本会合法地共享空 parentId。
+ */
+export function shouldBuildLegacyChain(allMessages: ChatMessage[], activeLeafId: string): boolean {
+  return allMessages.length > 0 && activeLeafId === ''
+}
+
 function buildMessageMap(allMessages: ChatMessage[]): Map<string, ChatMessage> {
   const map = new Map<string, ChatMessage>()
   for (let i = 0; i < allMessages.length; i++) {

@@ -130,11 +130,6 @@ class ProviderModelSelection {
   }
 }
 
-class EditedMessageToolContext {
-  webSearchEnabled: boolean = false
-  selectedToolIds: string[] = []
-}
-
 class DocumentFallbackSendResult {
   requestContent: string = ''
   userHintText: string = ''
@@ -368,8 +363,6 @@ export struct ChatPage {
   @Local editingOriginalContent: string = '' // 原始内容（用于取消编辑）
   @Local editingOriginalAttachments: MessageAttachment[] = [] // 原始附件
   @Local editingMessageIsUser: boolean = true // 是否为用户消息（决定是否显示"保存并发送"）
-  @Local editingWebSearchEnabled: boolean = false
-  @Local editingSelectedToolIds: string[] = []
   @Local editingReasoningLevel: ReasoningLevel = ReasoningLevel.OFF
   @Local messageListSyncVersion: number = 0
   private scroller: Scroller = new Scroller()
@@ -2192,61 +2185,7 @@ export struct ChatPage {
     return pickerToolIds
   }
 
-  private isWebSearchFunctionName(functionName: string): boolean {
-    const normalizedName = functionName.trim().toLowerCase().replace(/[\s\-]+/g, '_')
-    return normalizedName === 'web_search' ||
-      normalizedName === 'exa_search' ||
-      normalizedName === 'websearch' ||
-      normalizedName === 'search_web' ||
-      normalizedName === 'internet_search' ||
-      normalizedName === 'web_search_exa'
-  }
-
-  private isWebSearchToolCall(toolCall: ToolCall): boolean {
-    if (toolCall.toolId.trim() === 'web_search') {
-      return true
-    }
-    return this.isWebSearchFunctionName(toolCall.functionName)
-  }
-
-  private resolveEditedMessageToolContext(messageIndex: number): EditedMessageToolContext {
-    const selectedToolIds: string[] = []
-    let webSearchEnabled = false
-    for (let i = messageIndex + 1; i < this.messages.length; i++) {
-      const followupMessage = this.messages[i]
-      if (followupMessage.role === MessageRole.USER) {
-        break
-      }
-      if (followupMessage.searchQuery.trim() !== '') {
-        webSearchEnabled = true
-      }
-      for (let j = 0; j < followupMessage.toolCalls.length; j++) {
-        const toolCall = followupMessage.toolCalls[j]
-        if (this.isWebSearchToolCall(toolCall)) {
-          webSearchEnabled = true
-          if (!selectedToolIds.includes('web_search')) {
-            selectedToolIds.push('web_search')
-          }
-          continue
-        }
-        const resolvedToolId = toolCall.toolId.trim() !== '' ?
-          toolCall.toolId.trim() :
-          (this.toolRegistry.getToolIdByFunctionName(toolCall.functionName.trim()) || '')
-        if (resolvedToolId !== '' && !selectedToolIds.includes(resolvedToolId)) {
-          selectedToolIds.push(resolvedToolId)
-        }
-      }
-    }
-    const context = new EditedMessageToolContext()
-    context.webSearchEnabled = this.webSearchAvailable && webSearchEnabled
-    context.selectedToolIds = this.normalizeSelectedToolIdsForPicker(selectedToolIds)
-    return context
-  }
-
   private getActiveComposerSelectedToolIds(): string[] {
-    if (this.isEditingMessage) {
-      return this.editingSelectedToolIds
-    }
     return this.selectedToolIds
   }
 
@@ -2256,11 +2195,6 @@ export struct ChatPage {
 
   private updateActiveComposerSelectedToolIds(toolIds: string[]): Promise<void> {
     const normalizedToolIds = this.normalizeSelectedToolIdsForPicker(toolIds)
-    if (this.isEditingMessage) {
-      this.editingSelectedToolIds = [...normalizedToolIds]
-      this.editingWebSearchEnabled = normalizedToolIds.includes('web_search')
-      return Promise.resolve()
-    }
     return this.setSelectedToolIds(normalizedToolIds)
   }
 
@@ -2605,8 +2539,6 @@ export struct ChatPage {
         this.editingMessageId = ''
         this.editingOriginalContent = ''
         this.editingOriginalAttachments = []
-        this.editingWebSearchEnabled = false
-        this.editingSelectedToolIds = []
         this.editingReasoningLevel = ReasoningLevel.OFF
       },
       onApplySavedDraft: (
@@ -5217,11 +5149,6 @@ export struct ChatPage {
     this.inputText = message.content
     this.pendingAttachments = [...message.attachments]
     const messageIndex = findMessageIndexById(this.messages, message.id)
-    const toolContext = messageIndex >= 0 ?
-      this.resolveEditedMessageToolContext(messageIndex) :
-      new EditedMessageToolContext()
-    this.editingWebSearchEnabled = toolContext.webSearchEnabled
-    this.editingSelectedToolIds = [...toolContext.selectedToolIds]
     this.editingReasoningLevel = this.reasoningLevel
     this.isEditingMessage = true
     this.getScrollUiFlow().setInputBarVisible(true)
@@ -5253,8 +5180,6 @@ export struct ChatPage {
     this.editingMessageId = ''
     this.editingOriginalContent = ''
     this.editingOriginalAttachments = []
-    this.editingWebSearchEnabled = false
-    this.editingSelectedToolIds = []
     this.editingReasoningLevel = ReasoningLevel.OFF
   }
 
@@ -5264,8 +5189,8 @@ export struct ChatPage {
       this.editingMessageId,
       this.inputText,
       this.pendingAttachments,
-      this.editingWebSearchEnabled,
-      this.editingSelectedToolIds,
+      this.webSearchConversationEnabled,
+      this.selectedToolIds,
       this.editingReasoningLevel
     )
   }
