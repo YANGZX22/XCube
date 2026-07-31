@@ -2,6 +2,7 @@ import { ToolCall, ToolResult } from '../models/ChatModels'
 import { getAppUiState } from '../state/AppUiState'
 import { buildToolArgumentsPreview, buildToolResultPreview, ToolPayloadPreview } from '../utils/ToolPayloadSummaryUtils'
 import { withColorAlpha } from '../utils/ColorAlphaUtils'
+import { uiMaterial } from '@kit.ArkUI'
 
 // 获取工具显示名称
 function getToolDisplayName(toolCall: ToolCall): string | Resource {
@@ -284,10 +285,23 @@ export struct ToolCallCard {
       }
     }
     .width('100%')
-    .backgroundColor(this.themeAiBubble)
+    .backgroundColor(Color.Transparent)
     .borderRadius(12)
     .border({ width: 0.5, color: this.getTimelineRailColor() })
-    .clip(true)
+    .clip(false)
+    .systemMaterial(new uiMaterial.ImmersiveMaterial({
+      style: uiMaterial.ImmersiveStyle.REGULAR,
+      materialColor: this.themeAiBubble,
+      applyShadow: false,
+      interactive: false,
+      lightEffect: { color: undefined }
+    }))
+    .shadow({
+      radius: 12,
+      color: this.isDarkMode ? 'rgba(0, 0, 0, 0.32)' : 'rgba(15, 23, 42, 0.14)',
+      offsetX: 0,
+      offsetY: 0
+    })
   }
 
   private getArgumentPreview(): ToolPayloadPreview {

@@ -62,8 +62,8 @@ export struct AttachmentPicker {
         })
       }
       .width('100%')
-      .justifyContent(FlexAlign.SpaceEvenly)
-      .padding({ left: 10, right: 10, top: this.showDragBar ? 0 : 10, bottom: 10 })
+      .justifyContent(FlexAlign.SpaceBetween)
+      .padding({ top: this.showDragBar ? 0 : 10, bottom: 10 })
     }
     .width('100%')
     .backgroundColor(Color.Transparent)
@@ -78,14 +78,14 @@ export struct AttachmentPicker {
   }
 
   private getOptionButtonRadius(): number {
-    return 18
+    return 24
   }
 
   @Builder
   OptionButton(icon: Resource, label: string, action: () => void) {
     Button({ type: ButtonType.Normal, stateEffect: false }) {
       Column() {
-        SymbolGlyph(icgiton)
+        SymbolGlyph(icon)
           .fontSize(22)
           .fontColor([this.themePrimary])
 

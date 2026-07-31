@@ -206,7 +206,9 @@ export struct ChatInputBar {
       color: this.isEditing ? this.themePrimary : Color.Transparent
     })
     .systemMaterial(new uiMaterial.ImmersiveMaterial({
-      style: uiMaterial.ImmersiveStyle.REGULAR
+      style: uiMaterial.ImmersiveStyle.REGULAR,
+      interactive: true,
+      lightEffect: { color: undefined }
     }))
     .shadow({
       radius: this.isEditing ? 16 : 32,

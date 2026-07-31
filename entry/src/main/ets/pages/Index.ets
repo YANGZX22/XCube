@@ -4499,7 +4499,8 @@ struct Index {
       interactive: false,
       lightEffect: { color: undefined }
     }))
-    .position({ x: 12, y: this.getFloatingSearchPanelTop() })
+    .position({ x: '50%', y: this.getFloatingSearchPanelTop() })
+    .translate({ x: '-50%' })
     .transition(TransitionEffect.asymmetric(
       TransitionEffect.OPACITY.combine(TransitionEffect.translate({ y: -12 }))
         .animation({ duration: 180, curve: Curve.EaseOut }),

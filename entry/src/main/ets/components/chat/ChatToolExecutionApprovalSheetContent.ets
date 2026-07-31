@@ -31,10 +31,6 @@ export struct ChatToolExecutionApprovalSheetContent {
   @Event onCancel: () => void = (): void => {}
   @Event onApprove: () => void = (): void => {}
 
-  private get themeBackground(): string {
-    return getAppUiState().themeBackground
-  }
-
   private get themeSurface(): string {
     return getAppUiState().themeSurface
   }
@@ -201,7 +197,14 @@ export struct ChatToolExecutionApprovalSheetContent {
         .width('100%')
         .padding(14)
         .borderRadius(16)
-        .backgroundColor(this.themeSurface)
+        .backgroundColor(Color.Transparent)
+        .systemMaterial(new uiMaterial.ImmersiveMaterial({
+          style: uiMaterial.ImmersiveStyle.ULTRA_THIN,
+          materialColor: Color.Transparent,
+          applyShadow: false,
+          interactive: false,
+          lightEffect: { color: undefined }
+        }))
       }
 
       Column({ space: 8 }) {
@@ -328,7 +331,7 @@ export struct ChatToolExecutionApprovalSheetContent {
     }
     .width('100%')
     .padding({ left: 20, right: 20, top: 12, bottom: 24 })
-    .backgroundColor(this.themeBackground)
+    .backgroundColor(Color.Transparent)
   }
 
   @Builder
@@ -351,8 +354,15 @@ export struct ChatToolExecutionApprovalSheetContent {
         .fontSize(14)
         .fontColor($r('app.color.text_primary'))
         .placeholderColor($r('app.color.text_tertiary'))
-        .backgroundColor(this.themeBackground)
+        .backgroundColor(Color.Transparent)
         .borderRadius(10)
+        .systemMaterial(new uiMaterial.ImmersiveMaterial({
+          style: uiMaterial.ImmersiveStyle.ULTRA_THIN,
+          materialColor: Color.Transparent,
+          applyShadow: false,
+          interactive: true,
+          lightEffect: { color: undefined }
+        }))
         .textAlign(TextAlign.Center)
         .onChange((input: string) => {
           onChange(input)
@@ -387,7 +397,14 @@ export struct ChatToolExecutionApprovalSheetContent {
     .height(44)
     .padding({ left: 12, right: 10 })
     .borderRadius(12)
-    .backgroundColor(this.themeBackground)
+    .backgroundColor(Color.Transparent)
+    .systemMaterial(new uiMaterial.ImmersiveMaterial({
+      style: uiMaterial.ImmersiveStyle.ULTRA_THIN,
+      materialColor: Color.Transparent,
+      applyShadow: false,
+      interactive: false,
+      lightEffect: { color: undefined }
+    }))
     .alignItems(VerticalAlign.Center)
   }
 

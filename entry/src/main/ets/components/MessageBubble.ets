@@ -1923,7 +1923,7 @@ export struct MessageBubble {
             color: this.isMultiSelectMode && this.isSelected ? this.themePrimary :
               (this.hasAskUserToolCall() ? this.themePrimaryLight : $r('app.color.bubble_border'))
           })
-          .clip(true)
+          .clip(false)
           .systemMaterial(new uiMaterial.ImmersiveMaterial({
             style: uiMaterial.ImmersiveStyle.REGULAR,
             materialColor: this.isMultiSelectMode && this.isSelected
@@ -2054,9 +2054,22 @@ export struct MessageBubble {
     .width('100%')
     .margin({ top: 8 })
     .backgroundColor(Color.Transparent)
-    .border({ width: 0.6, color: this.translationLightBorder })
+    .border({ width: 0.5, color: this.getTimelineRailColor() })
     .borderRadius(12)
-    .clip(true)
+    .clip(false)
+    .systemMaterial(new uiMaterial.ImmersiveMaterial({
+      style: uiMaterial.ImmersiveStyle.REGULAR,
+      materialColor: this.getTimelineBackgroundColor(),
+      applyShadow: false,
+      interactive: false,
+      lightEffect: { color: undefined }
+    }))
+    .shadow({
+      radius: 12,
+      color: this.isDarkMode ? 'rgba(0, 0, 0, 0.32)' : 'rgba(15, 23, 42, 0.14)',
+      offsetX: 0,
+      offsetY: 0
+    })
   }
 
   // ===== Timeline 主题色 helper（与设计稿一致：底色跟随 AI 气泡，竖线/边框用主题色半透明） =====
@@ -2141,9 +2154,22 @@ export struct MessageBubble {
     }
     .width('100%')
     .padding({ left: 10, right: 10, top: 6, bottom: 6 })
-    .backgroundColor(this.getTimelineBackgroundColor())
+    .backgroundColor(Color.Transparent)
     .borderRadius(12)
     .border({ width: 0.5, color: this.getTimelineRailColor() })
+    .systemMaterial(new uiMaterial.ImmersiveMaterial({
+      style: uiMaterial.ImmersiveStyle.REGULAR,
+      materialColor: this.getTimelineBackgroundColor(),
+      applyShadow: false,
+      interactive: false,
+      lightEffect: { color: undefined }
+    }))
+    .shadow({
+      radius: 12,
+      color: this.isDarkMode ? 'rgba(0, 0, 0, 0.32)' : 'rgba(15, 23, 42, 0.14)',
+      offsetX: 0,
+      offsetY: 0
+    })
     .margin({ bottom: 8 })
     .onClick(() => {
       this.toggleReasoningExpansion()

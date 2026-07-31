@@ -3449,8 +3449,10 @@ export struct ChatPage {
             height: SheetSize.FIT_CONTENT,
             dragBar: true,
             showClose: false,
-            backgroundColor: this.themeBackground,
-            blurStyle: BlurStyle.Thick,
+            backgroundColor: Color.Transparent,
+            systemMaterial: new uiMaterial.ImmersiveMaterial({
+              style: uiMaterial.ImmersiveStyle.REGULAR
+            }),
             preferType: SheetType.BOTTOM,
             maskColor: '#66000000',
             onDisappear: () => {
@@ -3465,8 +3467,10 @@ export struct ChatPage {
             height: SheetSize.FIT_CONTENT,
             dragBar: true,
             showClose: false,
-            backgroundColor: this.themeBackground,
-            blurStyle: BlurStyle.Thick,
+            backgroundColor: Color.Transparent,
+            systemMaterial: new uiMaterial.ImmersiveMaterial({
+              style: uiMaterial.ImmersiveStyle.REGULAR
+            }),
             preferType: SheetType.BOTTOM,
             title: { title: $r('app.string.voice_input') },
             onDisappear: () => {

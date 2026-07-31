@@ -1,6 +1,7 @@
 import { ToolCall } from '../models/ChatModels'
 import { getAppUiState } from '../state/AppUiState'
 import { withColorAlpha } from '../utils/ColorAlphaUtils'
+import { uiMaterial } from '@kit.ArkUI'
 
 interface AskUserQuestion {
   id: string
@@ -336,9 +337,22 @@ export struct AskUserCard {
     }
     .width('100%')
     .padding(12)
-    .backgroundColor(this.themeAiBubble)
+    .backgroundColor(Color.Transparent)
     .borderRadius(12)
     .border({ width: 1, color: this.themePrimaryLight })
+    .systemMaterial(new uiMaterial.ImmersiveMaterial({
+      style: uiMaterial.ImmersiveStyle.REGULAR,
+      materialColor: this.themeAiBubble,
+      applyShadow: false,
+      interactive: false,
+      lightEffect: { color: undefined }
+    }))
+    .shadow({
+      radius: 12,
+      color: this.isDarkMode ? 'rgba(0, 0, 0, 0.32)' : 'rgba(15, 23, 42, 0.14)',
+      offsetX: 0,
+      offsetY: 0
+    })
   }
 
   @Builder
