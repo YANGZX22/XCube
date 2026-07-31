@@ -12,6 +12,7 @@
     "pages/FontSizeSettingsPage",
     "pages/SystemPromptSettingsPage",
     "pages/ChatInputSettingsPage",
+    "pages/TTSSettingsPage",
     "pages/ProviderDetailPage",
     "pages/ExportDataPage",
     "pages/ImportDataPage",

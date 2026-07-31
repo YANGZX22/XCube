@@ -4255,11 +4255,7 @@ struct Index {
           Slider({ value: this.assistantFormTemperature, min: 0, max: 2, step: 0.1, style: SliderStyle.InSet })
             .layoutWeight(1)
             .systemMaterial(new uiMaterial.ImmersiveMaterial({
-              style: uiMaterial.ImmersiveStyle.ULTRA_THIN,
-              materialColor: this.themePrimary,
-              applyShadow: false,
-              interactive: true,
-              lightEffect: { color: undefined }
+              style: uiMaterial.ImmersiveStyle.ULTRA_THIN
             }))
             .selectedColor(this.themePrimaryLight)
             .trackColor(Color.White)
@@ -4925,6 +4921,9 @@ struct Index {
       },
       onOpenChatInput: (): void => {
         this.openSettingsPanelEntry(SettingsRouteName.CHAT_INPUT, SettingsSheetType.CHAT_INPUT)
+      },
+      onOpenTTS: (): void => {
+        this.openSettingsDestination(SettingsRouteName.TTS)
       },
       onOpenHandAdaptive: (): void => {
         this.openSettingsPanelEntry(SettingsRouteName.HAND_ADAPTIVE, SettingsSheetType.HAND_ADAPTIVE)

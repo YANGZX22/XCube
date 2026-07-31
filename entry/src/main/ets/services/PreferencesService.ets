@@ -86,6 +86,17 @@ export class PreferenceKeys {
   static readonly CHAT_INPUT_ENTER_KEY_SEND: string = 'chat_input_enter_key_send'
   static readonly CANVAS_DOCUMENT_JSON: string = 'canvas_document_json'
 
+  // 播报 / TTS 设置
+  static readonly TTS_ENABLED: string = 'tts_enabled'
+  static readonly TTS_ENGINE: string = 'tts_engine'
+  static readonly ELEVENLABS_BASE_URL: string = 'elevenlabs_base_url'
+  static readonly ELEVENLABS_API_KEY: string = 'elevenlabs_api_key'
+  static readonly ELEVENLABS_VOICE_ID: string = 'elevenlabs_voice_id'
+  static readonly ELEVENLABS_MODEL_ID: string = 'elevenlabs_model_id'
+  static readonly ELEVENLABS_STABILITY: string = 'elevenlabs_stability'
+  static readonly ELEVENLABS_SIMILARITY_BOOST: string = 'elevenlabs_similarity_boost'
+  static readonly ELEVENLABS_SPEED: string = 'elevenlabs_speed'
+
   // 材质效果
   static readonly MATERIAL_TYPE: string = 'material_type'
   static readonly MATERIAL_LEVEL: string = 'material_level'

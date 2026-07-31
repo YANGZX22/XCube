@@ -594,10 +594,7 @@ export struct ModelEditSheet {
               style: SliderStyle.InSet
             })
               .systemMaterial(new uiMaterial.ImmersiveMaterial({
-                style: uiMaterial.ImmersiveStyle.ULTRA_THIN,
-                materialColor: this.themePrimary,
-                interactive: true,
-                lightEffect: { color: undefined }
+                style: uiMaterial.ImmersiveStyle.ULTRA_THIN
               }))
               .selectedColor(this.themePrimaryLight)
               .trackColor(Color.White)
@@ -649,10 +646,7 @@ export struct ModelEditSheet {
               style: SliderStyle.InSet
             })
               .systemMaterial(new uiMaterial.ImmersiveMaterial({
-                style: uiMaterial.ImmersiveStyle.ULTRA_THIN,
-                materialColor: this.themePrimary,
-                interactive: true,
-                lightEffect: { color: undefined }
+                style: uiMaterial.ImmersiveStyle.ULTRA_THIN
               }))
               .selectedColor(this.themePrimaryLight)
               .trackColor(Color.White)
@@ -704,10 +698,7 @@ export struct ModelEditSheet {
               style: SliderStyle.InSet
             })
               .systemMaterial(new uiMaterial.ImmersiveMaterial({
-                style: uiMaterial.ImmersiveStyle.ULTRA_THIN,
-                materialColor: this.themePrimary,
-                interactive: true,
-                lightEffect: { color: undefined }
+                style: uiMaterial.ImmersiveStyle.ULTRA_THIN
               }))
               .selectedColor(this.themePrimaryLight)
               .trackColor(Color.White)
@@ -759,10 +750,7 @@ export struct ModelEditSheet {
               style: SliderStyle.InSet
             })
               .systemMaterial(new uiMaterial.ImmersiveMaterial({
-                style: uiMaterial.ImmersiveStyle.ULTRA_THIN,
-                materialColor: this.themePrimary,
-                interactive: true,
-                lightEffect: { color: undefined }
+                style: uiMaterial.ImmersiveStyle.ULTRA_THIN
               }))
               .selectedColor(this.themePrimaryLight)
               .trackColor(Color.White)

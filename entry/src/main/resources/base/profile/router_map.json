@@ -66,6 +66,11 @@
       "buildFunction": "ChatInputSettingsPageBuilder"
     },
     {
+      "name": "TTSSettingsPage",
+      "pageSourceFile": "src/main/ets/pages/TTSSettingsPage.ets",
+      "buildFunction": "TTSSettingsPageBuilder"
+    },
+    {
       "name": "ProviderDetailPage",
       "pageSourceFile": "src/main/ets/pages/ProviderDetailPage.ets",
       "buildFunction": "ProviderDetailPageBuilder"

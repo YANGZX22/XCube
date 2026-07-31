@@ -51,6 +51,7 @@ export class AppUiState {
   @Trace themeMarkdownTableBorder: string = '#E9E6FF'
   @Trace chatFontSize: number = 15
   @Trace chatInputEnterKeySend: boolean = false
+  @Trace ttsEnabled: boolean = true
   @Trace materialType: number = 100   // ADAPTIVE
   @Trace materialLevel: number = 10   // ADAPTIVE
   @Trace lightColorMode: string = 'default'
@@ -106,6 +107,9 @@ function applyAppUiStateValue<T extends string | number | boolean>(state: AppUiS
       return
     case AppStorageKeys.SPEAKING_MESSAGE_ID:
       state.speakingMessageId = value as string
+      return
+    case AppStorageKeys.TTS_ENABLED:
+      state.ttsEnabled = value as boolean
       return
     case AppStorageKeys.WINDOW_WIDTH_VP:
       state.windowWidthVp = value as number
@@ -241,6 +245,8 @@ function createAppUiStateFromStorage(): AppUiState {
     readStorageValue<number>(AppStorageKeys.BOTTOM_AVOID_HEIGHT, 0))
   applyAppUiStateValue(state, AppStorageKeys.SPEAKING_MESSAGE_ID,
     readStorageValue<string>(AppStorageKeys.SPEAKING_MESSAGE_ID, ''))
+  applyAppUiStateValue(state, AppStorageKeys.TTS_ENABLED,
+    readStorageValue<boolean>(AppStorageKeys.TTS_ENABLED, true))
   applyAppUiStateValue(state, AppStorageKeys.WINDOW_WIDTH_VP, readStorageValue<number>(AppStorageKeys.WINDOW_WIDTH_VP, 0))
   applyAppUiStateValue(state, AppStorageKeys.WINDOW_HEIGHT_VP,
     readStorageValue<number>(AppStorageKeys.WINDOW_HEIGHT_VP, 0))
@@ -336,6 +342,7 @@ export function syncAppUiStateFromStorage(): void {
   state.topAvoidHeight = freshState.topAvoidHeight
   state.bottomAvoidHeight = freshState.bottomAvoidHeight
   state.speakingMessageId = freshState.speakingMessageId
+  state.ttsEnabled = freshState.ttsEnabled
   state.windowWidthVp = freshState.windowWidthVp
   state.windowHeightVp = freshState.windowHeightVp
   state.layoutSizeClass = freshState.layoutSizeClass
@@ -426,6 +433,8 @@ function resolveAppUiStatePath(path: string): string {
       return 'bottomAvoidHeight'
     case AppStorageKeys.SPEAKING_MESSAGE_ID:
       return 'speakingMessageId'
+    case AppStorageKeys.TTS_ENABLED:
+      return 'ttsEnabled'
     case AppStorageKeys.WINDOW_WIDTH_VP:
       return 'windowWidthVp'
     case AppStorageKeys.WINDOW_HEIGHT_VP:

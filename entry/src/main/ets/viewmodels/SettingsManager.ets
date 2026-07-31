@@ -1,5 +1,5 @@
 import { ConfigurationConstant } from '@kit.AbilityKit'
-import { getPreferencesService, ThemeMode, AppLanguage } from '../services/PreferencesService'
+import { getPreferencesService, ThemeMode, AppLanguage, PreferenceKeys } from '../services/PreferencesService'
 import { ColorTheme, ThemeColorConfig } from '../models/ThemeColors'
 import { getThemeService } from '../services/ThemeService'
 import { setAppUiStateValue } from '../state/AppUiState'
@@ -26,6 +26,7 @@ export class SettingsManager {
   private notifyOnFailed: boolean = true
   private chatFontSize: number = 15
   private chatInputEnterKeySend: boolean = false
+  private ttsEnabled: boolean = true
   private materialType: number = 100    // ADAPTIVE
   private materialLevel: number = 10    // ADAPTIVE
   private lightColorMode: string = 'default'
@@ -68,12 +69,14 @@ export class SettingsManager {
     this.notifyOnFailed = await preferencesService.getNotifyOnFailed()
     this.chatFontSize = await preferencesService.getChatFontSize()
     this.chatInputEnterKeySend = await preferencesService.getChatInputEnterKeySend()
+    this.ttsEnabled = await preferencesService.getBoolean(PreferenceKeys.TTS_ENABLED, true)
     this.materialType = await preferencesService.getMaterialType()
     this.materialLevel = await preferencesService.getMaterialLevel()
     this.lightColorMode = await preferencesService.getLightColorMode()
     this.chatListImmersiveMaterial = await preferencesService.getChatListImmersiveMaterial()
     this.knowledgeListImmersiveMaterial = await preferencesService.getKnowledgeListImmersiveMaterial()
     setAppUiStateValue(AppStorageKeys.CHAT_INPUT_ENTER_KEY_SEND, this.chatInputEnterKeySend)
+    setAppUiStateValue(AppStorageKeys.TTS_ENABLED, this.ttsEnabled)
     setAppUiStateValue(AppStorageKeys.CHAT_LIST_IMMERSIVE_MATERIAL, this.chatListImmersiveMaterial)
     setAppUiStateValue(AppStorageKeys.KNOWLEDGE_LIST_IMMERSIVE_MATERIAL, this.knowledgeListImmersiveMaterial)
     this.isInitialized = true
@@ -89,12 +92,14 @@ export class SettingsManager {
     this.notifyOnFailed = await preferencesService.getNotifyOnFailed()
     this.chatFontSize = await preferencesService.getChatFontSize()
     this.chatInputEnterKeySend = await preferencesService.getChatInputEnterKeySend()
+    this.ttsEnabled = await preferencesService.getBoolean(PreferenceKeys.TTS_ENABLED, true)
     this.materialType = await preferencesService.getMaterialType()
     this.materialLevel = await preferencesService.getMaterialLevel()
     this.lightColorMode = await preferencesService.getLightColorMode()
     this.chatListImmersiveMaterial = await preferencesService.getChatListImmersiveMaterial()
     this.knowledgeListImmersiveMaterial = await preferencesService.getKnowledgeListImmersiveMaterial()
     setAppUiStateValue(AppStorageKeys.CHAT_INPUT_ENTER_KEY_SEND, this.chatInputEnterKeySend)
+    setAppUiStateValue(AppStorageKeys.TTS_ENABLED, this.ttsEnabled)
     setAppUiStateValue(AppStorageKeys.CHAT_LIST_IMMERSIVE_MATERIAL, this.chatListImmersiveMaterial)
     setAppUiStateValue(AppStorageKeys.KNOWLEDGE_LIST_IMMERSIVE_MATERIAL, this.knowledgeListImmersiveMaterial)
   }

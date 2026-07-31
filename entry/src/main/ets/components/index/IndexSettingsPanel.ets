@@ -41,6 +41,7 @@ export struct IndexSettingsPanel {
   @Event onOpenToolsCenter: () => void = () => {}
   @Event onOpenSystemPrompt: () => void = () => {}
   @Event onOpenChatInput: () => void = () => {}
+  @Event onOpenTTS: () => void = () => {}
   @Event onOpenHandAdaptive: () => void = () => {}
   @Event onOpenTheme: () => void = () => {}
   @Event onOpenLanguage: () => void = () => {}
@@ -121,6 +122,13 @@ export struct IndexSettingsPanel {
             title: $r('app.string.settings_chat_input'),
             subtitle: $r('app.string.settings_chat_input_desc'),
             action: (): void => { this.onOpenChatInput() }
+          } as SettingsListItemModel,
+          {
+            key: SettingsRouteName.TTS,
+            icon: $r('sys.symbol.speaker_wave_2'),
+            title: $r('app.string.settings_tts'),
+            subtitle: $r('app.string.settings_tts_desc'),
+            action: (): void => { this.onOpenTTS() }
           } as SettingsListItemModel,
           {
             key: SettingsRouteName.HAND_ADAPTIVE,

@@ -733,6 +733,9 @@ export struct ThemeAppearanceSettingsView {
                 .fontColor($r('app.color.text_secondary'))
 
               Slider({ value: this.chatFontSize, min: 12, max: 22, step: 1, style: SliderStyle.InSet })
+                .systemMaterial(new uiMaterial.ImmersiveMaterial({
+                  style: uiMaterial.ImmersiveStyle.ULTRA_THIN
+                }))
                 .selectedColor(this.themePrimary)
                 .trackThickness(20)
                 .layoutWeight(1)

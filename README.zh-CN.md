@@ -52,6 +52,15 @@
 
 内置联网搜索，支持 博查、Bing (local)、Tavily、Exa。支持 Function Calling 的模型可以自主调用工具获取实时信息。支持接入远端 streamable MCP Server。
 
+### 本地 TTS 与 ElevenLabs 播报
+
+AI 回复可通过消息工具栏直接播报。进入 **设置 → 播报** 开启功能，并选择需要的语音引擎：
+
+- **本地 TTS**：使用 HarmonyOS 系统离线文字转语音引擎，无需 API Key，也不会将回复文本发送给 ElevenLabs。
+- **[ElevenLabs API](https://elevenlabs.io/docs/overview/capabilities/text-to-speech)**：支持自定义 API 基础地址与 API Key，可加载账号下的语音并通过 Voice ID 选择器切换，同时支持 `eleven_multilingual_v2`、`eleven_flash_v2_5` 和 `eleven_v3` 模型。
+- **语音参数**：ElevenLabs 模式可调整稳定性、相似度和语速；较长的回复会按自然语句分段并依次播放。
+- **隐私说明**：ElevenLabs API Key 保存在应用本地偏好设置中。使用 ElevenLabs 模式时，回复文本会发送到所配置的 API 地址进行语音合成。
+
 ### 向量知识库与 RAG
 
 XCube 内置独立的“知识库”页，可在一处上传、管理和预览资料，并通过

@@ -52,6 +52,15 @@ Includes 15+ AI providers out of the box. You can also add any OpenAI / Anthropi
 
 Built-in web search supports Bocha, Bing (local), Tavily, and Exa. Models with function-calling support can invoke tools autonomously to retrieve real-time information. Remote streamable MCP servers are also supported.
 
+### Read aloud with local TTS or ElevenLabs
+
+AI replies can be played directly from the message toolbar. Open **Settings → Read Aloud** to enable the feature and choose either speech engine:
+
+- **Local TTS**: uses the HarmonyOS system offline text-to-speech engine. It does not require an API key and does not send reply text to ElevenLabs.
+- **[ElevenLabs API](https://elevenlabs.io/docs/overview/capabilities/text-to-speech)**: supports a custom API Base URL and API Key, loads the voices available to the account into a Voice ID selector, and provides `eleven_multilingual_v2`, `eleven_flash_v2_5`, and `eleven_v3` model choices.
+- **Voice controls**: ElevenLabs mode exposes stability, similarity, and speed settings. Long replies are split at natural sentence boundaries and played in sequence.
+- **Privacy**: the ElevenLabs API Key is stored in the app's local preferences. When ElevenLabs mode is used, the reply text is sent to the configured API endpoint for speech synthesis.
+
 ### Vector knowledge base and RAG
 
 XCube includes a dedicated Knowledge Base tab for uploading, managing, and previewing reference material in one place. Models retrieve it on demand through the

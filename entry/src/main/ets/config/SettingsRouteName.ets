@@ -5,6 +5,7 @@ export enum SettingsRouteName {
   TOOLS_CENTER = 'ToolsCenterPage',
   SYSTEM_PROMPT = 'SystemPromptSettingsPage',
   CHAT_INPUT = 'ChatInputSettingsPage',
+  TTS = 'TTSSettingsPage',
   HAND_ADAPTIVE = 'HandAdaptiveSettingsPage',
   THEME_MODE = 'ThemeModeSettingsPage',
   COLOR_THEME = 'ColorThemeSettingsPage',

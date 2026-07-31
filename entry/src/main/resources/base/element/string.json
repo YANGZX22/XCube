@@ -1766,7 +1766,7 @@
     },
     {
       "name": "about_page_slogan",
-      "value": "Your Smart AI Chat Companion"
+      "value": ""
     },
     {
       "name": "about_contact_section",
@@ -2339,6 +2339,150 @@
     {
       "name": "webdav_preview_cancel",
       "value": "Cancel"
+    },
+    {
+      "name": "settings_tts",
+      "value": "Read Aloud"
+    },
+    {
+      "name": "settings_tts_desc",
+      "value": "System offline TTS or ElevenLabs API"
+    },
+    {
+      "name": "tts_enabled_title",
+      "value": "Enable read aloud"
+    },
+    {
+      "name": "tts_enabled_desc",
+      "value": "Show the speaker action under messages and play AI replies aloud."
+    },
+    {
+      "name": "tts_engine_title",
+      "value": "Speech engine"
+    },
+    {
+      "name": "tts_engine_local",
+      "value": "Local TTS"
+    },
+    {
+      "name": "tts_engine_local_desc",
+      "value": "System offline synthesis"
+    },
+    {
+      "name": "tts_engine_elevenlabs",
+      "value": "ElevenLabs"
+    },
+    {
+      "name": "tts_engine_elevenlabs_desc",
+      "value": "Cloud API synthesis"
+    },
+    {
+      "name": "tts_local_ready",
+      "value": "Local engine ready"
+    },
+    {
+      "name": "tts_local_note",
+      "value": "Uses the system offline text-to-speech engine. No third-party API key is required, and message text is not sent to ElevenLabs."
+    },
+    {
+      "name": "tts_elevenlabs_config",
+      "value": "ElevenLabs API"
+    },
+    {
+      "name": "tts_api_base_url",
+      "value": "API Base URL"
+    },
+    {
+      "name": "tts_api_key",
+      "value": "API Key"
+    },
+    {
+      "name": "tts_voice_id",
+      "value": "Voice ID"
+    },
+    {
+      "name": "tts_voice_id_placeholder",
+      "value": "Enter a voice ID from ElevenLabs"
+    },
+    {
+      "name": "tts_load_voices",
+      "value": "Get voices"
+    },
+    {
+      "name": "tts_loading_voices",
+      "value": "Loading"
+    },
+    {
+      "name": "tts_voice_fetch_first",
+      "value": "Get voices to choose a Voice ID"
+    },
+    {
+      "name": "tts_voice_api_key_required",
+      "value": "Enter the ElevenLabs API Key first"
+    },
+    {
+      "name": "tts_voices_loaded",
+      "value": "Voice list updated"
+    },
+    {
+      "name": "tts_voices_empty",
+      "value": "No available voices were returned"
+    },
+    {
+      "name": "tts_model",
+      "value": "Model"
+    },
+    {
+      "name": "tts_stability",
+      "value": "Stability"
+    },
+    {
+      "name": "tts_similarity_boost",
+      "value": "Similarity"
+    },
+    {
+      "name": "tts_speed",
+      "value": "Speed"
+    },
+    {
+      "name": "tts_output_format_note",
+      "value": "Audio is generated as MP3 at 44.1 kHz / 128 kbps. Long replies are split at natural sentence boundaries and played continuously."
+    },
+    {
+      "name": "tts_security_note",
+      "value": "The API key is stored in local app preferences. ElevenLabs mode sends the reply text to the configured API endpoint."
+    },
+    {
+      "name": "tts_save",
+      "value": "Save"
+    },
+    {
+      "name": "tts_test",
+      "value": "Test voice"
+    },
+    {
+      "name": "tts_stop_test",
+      "value": "Stop test"
+    },
+    {
+      "name": "tts_saved",
+      "value": "Read-aloud settings saved"
+    },
+    {
+      "name": "tts_enable_before_test",
+      "value": "Enable read aloud before testing"
+    },
+    {
+      "name": "tts_elevenlabs_required",
+      "value": "Enter both the ElevenLabs API Key and Voice ID"
+    },
+    {
+      "name": "tts_test_started",
+      "value": "Test playback started"
+    },
+    {
+      "name": "tts_test_failed",
+      "value": "Unable to start test playback"
     }
   ]
 }

@@ -861,7 +861,7 @@ export struct MessageBubble {
   }
 
   private canReadMessageContent(): boolean {
-    return this.hasMessageTextContent()
+    return getAppUiState().ttsEnabled && this.hasMessageTextContent()
   }
 
   private shouldShowVersionSwitcher(): boolean {

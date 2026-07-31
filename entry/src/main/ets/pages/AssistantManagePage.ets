@@ -1003,6 +1003,9 @@ struct AssistantManagePage {
         Row({ space: 10 }) {
           Slider({ value: this.formTemperature, min: 0, max: 2, step: 0.1, style: SliderStyle.InSet })
             .layoutWeight(1)
+            .systemMaterial(new uiMaterial.ImmersiveMaterial({
+              style: uiMaterial.ImmersiveStyle.ULTRA_THIN
+            }))
             .selectedColor(this.themePrimary)
             .onChange((value: number, _mode: SliderChangeMode) => {
               this.formTemperature = Math.round(value * 10) / 10

@@ -2339,6 +2339,150 @@
     {
       "name": "webdav_preview_cancel",
       "value": "取消"
+    },
+    {
+      "name": "settings_tts",
+      "value": "播报"
+    },
+    {
+      "name": "settings_tts_desc",
+      "value": "系统本地 TTS 或 ElevenLabs API"
+    },
+    {
+      "name": "tts_enabled_title",
+      "value": "启用播报"
+    },
+    {
+      "name": "tts_enabled_desc",
+      "value": "在消息下方显示播报按钮，并可朗读 AI 回复。"
+    },
+    {
+      "name": "tts_engine_title",
+      "value": "语音引擎"
+    },
+    {
+      "name": "tts_engine_local",
+      "value": "本地 TTS"
+    },
+    {
+      "name": "tts_engine_local_desc",
+      "value": "系统离线语音合成"
+    },
+    {
+      "name": "tts_engine_elevenlabs",
+      "value": "ElevenLabs"
+    },
+    {
+      "name": "tts_engine_elevenlabs_desc",
+      "value": "云端 API 语音合成"
+    },
+    {
+      "name": "tts_local_ready",
+      "value": "本地引擎已就绪"
+    },
+    {
+      "name": "tts_local_note",
+      "value": "使用系统离线文字转语音引擎，无需第三方 API Key，消息文本也不会发送给 ElevenLabs。"
+    },
+    {
+      "name": "tts_elevenlabs_config",
+      "value": "ElevenLabs API"
+    },
+    {
+      "name": "tts_api_base_url",
+      "value": "API 基础地址"
+    },
+    {
+      "name": "tts_api_key",
+      "value": "API Key"
+    },
+    {
+      "name": "tts_voice_id",
+      "value": "Voice ID"
+    },
+    {
+      "name": "tts_voice_id_placeholder",
+      "value": "填写 ElevenLabs 中的语音 ID"
+    },
+    {
+      "name": "tts_load_voices",
+      "value": "获取语音"
+    },
+    {
+      "name": "tts_loading_voices",
+      "value": "加载中"
+    },
+    {
+      "name": "tts_voice_fetch_first",
+      "value": "请先获取语音并选择 Voice ID"
+    },
+    {
+      "name": "tts_voice_api_key_required",
+      "value": "请先填写 ElevenLabs API Key"
+    },
+    {
+      "name": "tts_voices_loaded",
+      "value": "语音列表已更新"
+    },
+    {
+      "name": "tts_voices_empty",
+      "value": "未获取到可用语音"
+    },
+    {
+      "name": "tts_model",
+      "value": "模型"
+    },
+    {
+      "name": "tts_stability",
+      "value": "稳定性"
+    },
+    {
+      "name": "tts_similarity_boost",
+      "value": "相似度"
+    },
+    {
+      "name": "tts_speed",
+      "value": "语速"
+    },
+    {
+      "name": "tts_output_format_note",
+      "value": "音频以 44.1 kHz / 128 kbps 的 MP3 生成；长回复会按自然语句分段并连续播放。"
+    },
+    {
+      "name": "tts_security_note",
+      "value": "API Key 保存在应用本地偏好设置中。使用 ElevenLabs 时，回复文本会发送到所配置的 API 地址。"
+    },
+    {
+      "name": "tts_save",
+      "value": "保存"
+    },
+    {
+      "name": "tts_test",
+      "value": "测试语音"
+    },
+    {
+      "name": "tts_stop_test",
+      "value": "停止测试"
+    },
+    {
+      "name": "tts_saved",
+      "value": "播报设置已保存"
+    },
+    {
+      "name": "tts_enable_before_test",
+      "value": "请先开启播报功能"
+    },
+    {
+      "name": "tts_elevenlabs_required",
+      "value": "请同时填写 ElevenLabs API Key 和 Voice ID"
+    },
+    {
+      "name": "tts_test_started",
+      "value": "测试播报已开始"
+    },
+    {
+      "name": "tts_test_failed",
+      "value": "无法启动测试播报"
     }
   ]
 }

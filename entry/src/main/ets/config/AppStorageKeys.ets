@@ -59,6 +59,9 @@ export class AppStorageKeys {
   // 聊天输入设置
   static readonly CHAT_INPUT_ENTER_KEY_SEND: string = 'chat_input_enter_key_send'
 
+  // 播报设置
+  static readonly TTS_ENABLED: string = 'tts_enabled'
+
   // 材质效果
   static readonly MATERIAL_TYPE: string = 'material_type'
   static readonly MATERIAL_LEVEL: string = 'material_level'
