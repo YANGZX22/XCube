@@ -38,6 +38,7 @@ These screenshots reflect the current HarmonyOS 7 (API 26.0.0) build:
   <tr>
     <td align="center"><img src="docs/screenshots/IMAGE1.jpg" width="200" /><br/><sub>Chat</sub></td>
     <td align="center"><img src="docs/screenshots/IMAGE2.jpg" width="200" /><br/><sub>Conversations</sub></td>
+    <td align="center"><img src="docs/screenshots/IMAGE3.jpg" width="200" /><br/><sub>Knowledge Base</sub></td>
   </tr>
 </table>
 

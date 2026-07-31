@@ -38,6 +38,7 @@
   <tr>
     <td align="center"><img src="docs/screenshots/IMAGE1.jpg" width="200" /><br/><sub>对话</sub></td>
     <td align="center"><img src="docs/screenshots/IMAGE2.jpg" width="200" /><br/><sub>会话</sub></td>
+    <td align="center"><img src="docs/screenshots/IMAGE3.jpg" width="200" /><br/><sub>知识库</sub></td>
   </tr>
 </table>
 
