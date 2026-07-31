@@ -5,7 +5,6 @@ import { motion } from '@kit.MultimodalAwarenessKit'
 import { BusinessError } from '@kit.BasicServicesKit'
 import abilityAccessCtrl, { Permissions, PermissionRequestResult } from '@ohos.abilityAccessCtrl'
 import {
-  DividerMode,
   HdsNavigation,
   HdsNavigationMenuItemOptions,
   HdsNavigationTitleBarOptions,
@@ -3361,47 +3360,14 @@ struct Index {
 
   @Builder
   private AssistantHeaderPill(value: string, label: ResourceStr) {
-    HdsTabs() {
-      TabContent() {
-      }
-      .tabBar(this.AssistantHeaderPillContent(value, label))
-    }
-    .barOverlap(true)
-    .barPosition(BarPosition.End)
-    .barHeight(this.getAssistantHeaderPillHeight())
-    .vertical(false)
-    .barBackgroundColor(Color.Transparent)
-    .width(this.getAssistantHeaderPillWidth(value))
-    .height(this.getAssistantHeaderPillHeight())
-    .backgroundColor(Color.Transparent)
-    .borderRadius(this.getAssistantHeaderPillHeight() / 2)
-    .clip(false)
-    .divider({ mode: DividerMode.NONE })
-    .barFloatingStyle({
-      barBottomMargin: 0,
-      barSideMargin: 0,
-      barWidth: {
-        smallWidth: this.getAssistantHeaderPillWidth(value),
-        mediumWidth: this.getAssistantHeaderPillWidth(value),
-        largeWidth: this.getAssistantHeaderPillWidth(value)
-      },
-      gradientMask: { maskColor: '#00000000', maskHeight: 1 },
-      systemMaterialEffect: {
-        materialType: hdsMaterial.MaterialType.IMMERSIVE,
-        materialLevel: hdsMaterial.MaterialLevel.ADAPTIVE
-      }
-    })
-  }
-
-  @Builder
-  private AssistantHeaderPillContent(value: string, label: ResourceStr) {
-    Stack({ alignContent: Alignment.Center }) {
+    Button({ type: ButtonType.Capsule, stateEffect: false }) {
       Row({ space: 4 }) {
         Text(value)
           .fontSize(11)
           .fontWeight(FontWeight.Bold)
           .fontColor($r('app.color.text_primary'))
           .textAlign(TextAlign.Center)
+
         Text(label)
           .fontSize(10)
           .fontColor($r('app.color.text_secondary'))
@@ -3409,11 +3375,19 @@ struct Index {
       }
       .justifyContent(FlexAlign.Center)
       .alignItems(VerticalAlign.Center)
-      .translate({ y: -4 })
     }
     .width(this.getAssistantHeaderPillWidth(value))
     .height(this.getAssistantHeaderPillHeight())
     .padding({ left: 8, right: 8 })
+    .backgroundColor(Color.Transparent)
+    .borderRadius(this.getAssistantHeaderPillHeight() / 2)
+    .systemMaterial(new uiMaterial.ImmersiveMaterial({
+      style: uiMaterial.ImmersiveStyle.REGULAR,
+      materialColor: Color.Transparent,
+      applyShadow: false,
+      interactive: false,
+      lightEffect: { color: undefined }
+    }))
   }
 
   private getAssistantHeaderPillHeight(): number {
@@ -4472,54 +4446,6 @@ struct Index {
 
   @Builder
   private FloatingSearchPanel() {
-    Row() {
-      HdsTabs() {
-        TabContent() {
-        }
-        .tabBar(this.FloatingSearchBarBuilder())
-      }
-      .barHeight(this.getFloatingSearchPanelHeight())
-      .barOverlap(true)
-      .barPosition(BarPosition.End)
-      .vertical(false)
-      .width(this.getFloatingSearchPanelWidth())
-      .height(this.getFloatingSearchPanelHeight())
-      .backgroundColor(Color.Transparent)
-      .borderRadius(this.getFloatingSearchPanelHeight() / 2)
-      .clip(false)
-      .divider({ mode: DividerMode.NONE })
-      .barBackgroundColor(Color.Transparent)
-      .barFloatingStyle({
-        barBottomMargin: 0,
-        barSideMargin: 0,
-        barWidth: {
-          smallWidth: this.getFloatingSearchPanelWidth(),
-          mediumWidth: this.getFloatingSearchPanelWidth(),
-          largeWidth: this.getFloatingSearchPanelWidth()
-        },
-        gradientMask: { maskColor: Color.Transparent },
-        systemMaterialEffect: {
-          materialType: hdsMaterial.MaterialType.IMMERSIVE,
-          materialLevel: hdsMaterial.MaterialLevel.ADAPTIVE
-        }
-      })
-    }
-    .width('100%')
-    .height(this.getFloatingSearchPanelHeight())
-    .justifyContent(FlexAlign.Center)
-    .alignItems(VerticalAlign.Center)
-    .position({ x: 0, y: this.getFloatingSearchPanelTop() })
-    .transition(TransitionEffect.asymmetric(
-      TransitionEffect.OPACITY.combine(TransitionEffect.translate({ y: -12 }))
-        .animation({ duration: 180, curve: Curve.EaseOut }),
-      TransitionEffect.OPACITY.combine(TransitionEffect.translate({ y: -8 }))
-        .animation({ duration: 120, curve: Curve.EaseIn })
-    ))
-    .zIndex(10)
-  }
-
-  @Builder
-  private FloatingSearchBarBuilder() {
     Row({ space: 8 }) {
       Search({ value: this.searchText, placeholder: $r('app.string.search_sessions_placeholder') })
         .id(this.searchInputFocusId)
@@ -4558,13 +4484,29 @@ struct Index {
         }
       })
     }
-    .width('100%')
-    .height('100%')
+    .width(this.getFloatingSearchPanelWidth())
+    .height(this.getFloatingSearchPanelHeight())
     .borderRadius(this.getFloatingSearchPanelHeight() / 2)
     .clip(false)
     .padding({ left: 14, right: 10, top: 4, bottom: 4 })
     .justifyContent(FlexAlign.Center)
     .alignItems(VerticalAlign.Center)
+    .backgroundColor(Color.Transparent)
+    .systemMaterial(new uiMaterial.ImmersiveMaterial({
+      style: uiMaterial.ImmersiveStyle.REGULAR,
+      materialColor: Color.Transparent,
+      applyShadow: false,
+      interactive: false,
+      lightEffect: { color: undefined }
+    }))
+    .position({ x: 12, y: this.getFloatingSearchPanelTop() })
+    .transition(TransitionEffect.asymmetric(
+      TransitionEffect.OPACITY.combine(TransitionEffect.translate({ y: -12 }))
+        .animation({ duration: 180, curve: Curve.EaseOut }),
+      TransitionEffect.OPACITY.combine(TransitionEffect.translate({ y: -8 }))
+        .animation({ duration: 120, curve: Curve.EaseIn })
+    ))
+    .zIndex(10)
   }
 
   @Builder

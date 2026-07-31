@@ -12,14 +12,7 @@ import { util } from '@kit.ArkTS'
 import { BusinessError } from '@kit.BasicServicesKit'
 import { getAttachmentStorageService, AttachmentStorageService } from '../services/AttachmentStorageService'
 import { getAppUiState } from '../state/AppUiState'
-import { DividerMode, HdsTabs, hdsMaterial } from '@kit.UIDesignKit'
-
-// 附件选项
-interface AttachmentOption {
-  icon: Resource
-  label: string
-  action: () => void
-}
+import { uiMaterial } from '@kit.ArkUI'
 
 @ComponentV2
 export struct AttachmentPicker {
@@ -76,26 +69,6 @@ export struct AttachmentPicker {
     .backgroundColor(Color.Transparent)
   }
 
-  @Builder
-  private OptionButtonContent(icon: Resource, label: string) {
-    Column() {
-      SymbolGlyph(icon)
-        .fontSize(22)
-        .fontColor([this.themePrimary])
-
-      Text(label)
-        .fontSize(12)
-        .fontWeight(FontWeight.Medium)
-        .fontColor(this.themePrimary)
-        .maxLines(1)
-        .margin({ top: 4 })
-    }
-    .width('100%')
-    .height('100%')
-    .justifyContent(FlexAlign.Center)
-    .alignItems(HorizontalAlign.Center)
-  }
-
   private getOptionButtonWidth(): number {
     return 76
   }
@@ -109,62 +82,40 @@ export struct AttachmentPicker {
   }
 
   @Builder
-  private OptionMaterialButton(icon: Resource, label: string, action: () => void) {
-    Stack({ alignContent: Alignment.Center }) {
-      HdsTabs() {
-        TabContent() {
-        }
-        .tabBar(this.OptionButtonContent(icon, label))
-      }
-      .barOverlap(true)
-      .barPosition(BarPosition.End)
-      .vertical(false)
-      .barWidth(this.getOptionButtonWidth())
-      .barHeight(this.getOptionButtonHeight())
-      .width(this.getOptionButtonWidth())
-      .height(this.getOptionButtonHeight())
-      .barBackgroundColor(Color.Transparent)
-      .backgroundColor(Color.Transparent)
-      .borderRadius(this.getOptionButtonRadius())
-      .clip(false)
-      .divider({ mode: DividerMode.NONE })
-      .barFloatingStyle({
-        barBottomMargin: 0,
-        barSideMargin: 0,
-        barWidth: {
-          smallWidth: this.getOptionButtonWidth(),
-          mediumWidth: this.getOptionButtonWidth(),
-          largeWidth: this.getOptionButtonWidth()
-        },
-        gradientMask: { maskColor: '#00000000', maskHeight: 1 },
-        systemMaterialEffect: {
-          materialType: hdsMaterial.MaterialType.IMMERSIVE,
-          materialLevel: hdsMaterial.MaterialLevel.ADAPTIVE
-        }
-      })
-      .onTabBarClick(() => {
-        action()
-      })
+  OptionButton(icon: Resource, label: string, action: () => void) {
+    Button({ type: ButtonType.Normal, stateEffect: false }) {
+      Column() {
+        SymbolGlyph(icgiton)
+          .fontSize(22)
+          .fontColor([this.themePrimary])
 
-      Row() {
+        Text(label)
+          .fontSize(12)
+          .fontWeight(FontWeight.Medium)
+          .fontColor(this.themePrimary)
+          .maxLines(1)
+          .margin({ top: 4 })
       }
-      .width(this.getOptionButtonWidth())
-      .height(this.getOptionButtonHeight())
-      .borderRadius(this.getOptionButtonRadius())
-      .backgroundColor(Color.Transparent)
-      .hitTestBehavior(HitTestMode.Transparent)
-      .onClick(() => {
-        action()
-      })
+      .width('100%')
+      .height('100%')
+      .justifyContent(FlexAlign.Center)
+      .alignItems(HorizontalAlign.Center)
     }
     .width(this.getOptionButtonWidth())
     .height(this.getOptionButtonHeight())
+    .padding(0)
     .backgroundColor(Color.Transparent)
-  }
-
-  @Builder
-  OptionButton(icon: Resource, label: string, action: () => void) {
-    this.OptionMaterialButton(icon, label, action)
+    .borderRadius(this.getOptionButtonRadius())
+    .systemMaterial(new uiMaterial.ImmersiveMaterial({
+      style: uiMaterial.ImmersiveStyle.REGULAR,
+      materialColor: Color.Transparent,
+      applyShadow: false,
+      interactive: true,
+      lightEffect: { color: undefined }
+    }))
+    .onClick(() => {
+      action()
+    })
   }
 
   // 打开相机拍照
