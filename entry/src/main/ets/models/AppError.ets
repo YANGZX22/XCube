@@ -53,10 +53,12 @@ export function toErrorDetail(error: Object | null): string {
   if (error === null) {
     return ''
   }
+  if (error instanceof Error && error.message.trim() !== '') {
+    return error.message
+  }
   const jsonText = JSON.stringify(error)
-  if (jsonText !== undefined && jsonText !== null && jsonText !== '') {
+  if (jsonText !== undefined && jsonText !== null && jsonText !== '' && jsonText !== '{}') {
     return jsonText
   }
   return error.toString()
 }
-

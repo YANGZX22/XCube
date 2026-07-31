@@ -19,6 +19,7 @@ import {
   applyEstimatedBilling,
   ModelBillingSnapshot
 } from '../../utils/ModelBillingUtils'
+import { toErrorDetail } from '../../models/AppError'
 
 export class ChatSendPrepareResult {
   shouldSend: boolean = false
@@ -469,7 +470,8 @@ export class ChatSendFlow {
         currentProvider.customHeadersJson || undefined
       )
     } catch (error) {
-      const message = `发送失败: ${JSON.stringify(error)}`
+      const message = `发送失败: ${toErrorDetail(error as Object)}`
+      console.error('ChatSendFlow', `[sendPlainMessage] ${message}`)
       this.handleTaskFailed(taskId, message, true)
     }
   }
@@ -559,7 +561,8 @@ export class ChatSendFlow {
         currentProvider.customHeadersJson || undefined
       )
     } catch (error) {
-      const message = `发送失败: ${JSON.stringify(error)}`
+      const message = `发送失败: ${toErrorDetail(error as Object)}`
+      console.error('ChatSendFlow', `[sendMessageWithTools] ${message}`)
       this.handleTaskFailed(taskId, message, true)
     }
   }

@@ -17,6 +17,7 @@ import { getSkillService, SkillConfig } from '../services/SkillService'
 import { ChatMessage, ChatSession, MessageRole, ProviderType, ApiStyle, MessageAttachment, AttachmentType, ReasoningLevel, ToolDefinition, ToolCall, ToolResult, SearchReference, ModelParameters } from '../models/ChatModels'
 import { WebSearchResult, SearchResult, getWebSearchService } from '../services/WebSearchService'
 import { http } from '@kit.NetworkKit'
+import { HttpRequestController } from '../services/HttpService'
 import { getEffectiveApiKey } from '../config/PresetProviders'
 import { getPreferencesService } from '../services/PreferencesService'
 import { PreferenceKeys } from '../services/PreferencesService'
@@ -722,6 +723,37 @@ export class ChatViewModel {
     this.activeRequests.delete(requestId)
   }
 
+  private async prepareProviderDocumentsForRequest(
+    apiConfig: AIApiConfig,
+    requestMessages: RequestMessage[],
+    cancelSnapshot: number
+  ): Promise<void> {
+    const controller = new HttpRequestController()
+    const requestId = `document_prepare_${this.generateId()}`
+    const placeholderHttp = http.createHttp()
+    this.registerActiveRequest(requestId, placeholderHttp, (): void => {
+      controller.cancelAll()
+    })
+
+    try {
+      await this.aiApiService.prepareProviderDocumentMessages(apiConfig, requestMessages, controller)
+    } catch (error) {
+      if (this.isCancelled(cancelSnapshot) || controller.isCancelled()) {
+        console.info('ChatViewModel', 'Provider document preparation cancelled')
+        return
+      }
+      if (error instanceof Error) {
+        throw error
+      }
+      throw new Error(JSON.stringify(error))
+    } finally {
+      this.unregisterActiveRequest(requestId)
+      try {
+        placeholderHttp.destroy()
+      } catch (_error) {}
+    }
+  }
+
   // 创建新会话
 	  async createNewSession(
 	    title: string = '',
@@ -974,6 +1006,7 @@ export class ChatViewModel {
     }
     apiConfig.modelReasoningStrategyOverride = this.getCurrentModelReasoningStrategyOverride(providerId, modelId)
     apiConfig.modelSupportsReasoning = this.getCurrentModelSupportsReasoning(providerId, modelId)
+    await this.prepareProviderDocumentsForRequest(apiConfig, requestMessages, cancelSnapshot)
 
     if (this.isCancelled(cancelSnapshot)) {
       return
@@ -1276,6 +1309,7 @@ ${webContext.content}
     }
     apiConfig.modelReasoningStrategyOverride = this.getCurrentModelReasoningStrategyOverride(providerId, modelId)
     apiConfig.modelSupportsReasoning = this.getCurrentModelSupportsReasoning(providerId, modelId)
+    await this.prepareProviderDocumentsForRequest(apiConfig, requestMessages, cancelSnapshot)
 
     if (this.isCancelled(cancelSnapshot)) {
       return
@@ -1603,6 +1637,7 @@ ${limitedSearchContext}
     }
     apiConfig.modelReasoningStrategyOverride = this.getCurrentModelReasoningStrategyOverride(providerId, modelId)
     apiConfig.modelSupportsReasoning = this.getCurrentModelSupportsReasoning(providerId, modelId)
+    await this.prepareProviderDocumentsForRequest(apiConfig, requestMessages, cancelSnapshot)
 
     if (this.isCancelled(cancelSnapshot)) {
       return
@@ -1983,6 +2018,7 @@ ${limitedSearchContext}
     }
     apiConfig.modelReasoningStrategyOverride = this.getCurrentModelReasoningStrategyOverride(providerId, modelId)
     apiConfig.modelSupportsReasoning = this.getCurrentModelSupportsReasoning(providerId, modelId)
+    await this.prepareProviderDocumentsForRequest(apiConfig, requestMessages, cancelSnapshot)
 
     if (this.isCancelled(cancelSnapshot)) {
       return

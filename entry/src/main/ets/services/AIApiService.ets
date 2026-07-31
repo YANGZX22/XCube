@@ -1,4 +1,11 @@
-import { getHttpService, HttpResponse, HttpService } from './HttpService'
+import {
+  getHttpService,
+  HttpMethod,
+  HttpRequestController,
+  HttpRequestRuntimeOptions,
+  HttpResponse,
+  HttpService
+} from './HttpService'
 import { util } from '@kit.ArkTS'
 import { http } from '@kit.NetworkKit'
 import {
@@ -140,6 +147,12 @@ interface ImageUrl {
 interface FileInput {
   filename: string
   file_data: string
+}
+
+interface MoonshotFileUploadResponse {
+  id?: string
+  status?: string
+  status_details?: string
 }
 
 // 多模态消息内容接口
@@ -936,6 +949,8 @@ export class AIApiService {
   private minimaxContentBuffer: string = ''
   // 部分标签缓冲区（处理跨 chunk 的标签）
   private partialTagBuffer: string = ''
+  // Moonshot Files API 的解析结果仅缓存在当前进程，避免工具循环和后续轮次重复上传同一附件。
+  private moonshotDocumentTextCache: Map<string, string> = new Map()
 
   private constructor() {
     this.httpService = getHttpService()
@@ -1065,6 +1080,210 @@ export class AIApiService {
       console.warn('AIApiService', `Failed to decode text attachment ${attachment.name}: ${JSON.stringify(error)}`)
       return ''
     }
+  }
+
+  /**
+   * Moonshot Chat Completions 不接受 OpenAI 的 type=file 消息块。
+   * 对已开启文档能力的官方 Moonshot 接口，先按 Files API 提取文档内容，
+   * 再作为与原用户消息相邻的 system 上下文发送；图片附件保持原样，继续由视觉能力独立控制。
+   */
+  async prepareProviderDocumentMessages(
+    config: AIApiConfig,
+    messages: RequestMessage[],
+    controller?: HttpRequestController
+  ): Promise<void> {
+    if (!this.shouldUseMoonshotFileExtraction(config)) {
+      return
+    }
+
+    const preparedMessages: RequestMessage[] = []
+    for (let i = 0; i < messages.length; i++) {
+      const message = messages[i]
+      if (message.attachments.length === 0) {
+        preparedMessages.push(message)
+        continue
+      }
+
+      const retainedAttachments: MessageAttachment[] = []
+      const documentContexts: string[] = []
+      for (let j = 0; j < message.attachments.length; j++) {
+        const attachment = message.attachments[j]
+        if (attachment.type !== AttachmentType.FILE || this.isTextFileAttachment(attachment)) {
+          retainedAttachments.push(attachment)
+          continue
+        }
+        const extractedText = await this.extractMoonshotDocumentText(config, attachment, controller)
+        documentContexts.push(this.buildMoonshotDocumentContext(attachment, extractedText))
+      }
+
+      message.attachments = retainedAttachments
+      for (let j = 0; j < documentContexts.length; j++) {
+        preparedMessages.push(new RequestMessage('system', documentContexts[j]))
+      }
+      preparedMessages.push(message)
+    }
+
+    messages.length = 0
+    for (let i = 0; i < preparedMessages.length; i++) {
+      messages.push(preparedMessages[i])
+    }
+  }
+
+  private shouldUseMoonshotFileExtraction(config: AIApiConfig): boolean {
+    if (config.apiStyle !== ApiStyle.OPENAI) {
+      return false
+    }
+    const normalizedBaseUrl = config.baseUrl.trim().toLowerCase()
+    return normalizedBaseUrl.includes('api.moonshot.cn') ||
+      normalizedBaseUrl.includes('api.moonshot.ai')
+  }
+
+  private buildMoonshotDocumentCacheKey(config: AIApiConfig, attachment: MessageAttachment): string {
+    return `${config.baseUrl.trim().toLowerCase()}|${attachment.id}|${attachment.size}|${attachment.filePath}`
+  }
+
+  private buildMoonshotFileUrl(config: AIApiConfig, suffix: string = ''): string {
+    return ApiUrlResolver.buildUrl(config.baseUrl, `/v1/files${suffix}`)
+  }
+
+  private buildMoonshotFileHeaders(config: AIApiConfig, accept: string): Record<string, string> {
+    const providerHeaders = this.buildHeaders(config)
+    const headers: Record<string, string> = {}
+    const headerNames = Object.keys(providerHeaders)
+    for (let i = 0; i < headerNames.length; i++) {
+      const headerName = headerNames[i]
+      if (normalizeCustomHeaderName(headerName) === 'content-type') {
+        continue
+      }
+      headers[headerName] = providerHeaders[headerName]
+    }
+    headers['Accept'] = accept
+    return headers
+  }
+
+  private buildMoonshotFilePart(attachment: MessageAttachment): http.MultiFormData {
+    const filePart: http.MultiFormData = {
+      name: 'file',
+      contentType: attachment.mimeType !== '' ? attachment.mimeType : 'application/octet-stream',
+      remoteFileName: attachment.name !== '' ? attachment.name : 'attachment'
+    }
+    if (attachment.filePath.trim() !== '') {
+      filePart.filePath = attachment.filePath
+      return filePart
+    }
+    if (attachment.base64Data === '') {
+      throw new Error(`附件 ${attachment.name} 没有可上传的文件数据`)
+    }
+    const base64Helper = new util.Base64Helper()
+    const bytes = base64Helper.decodeSync(attachment.base64Data)
+    filePart.data = bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer
+    return filePart
+  }
+
+  private async extractMoonshotDocumentText(
+    config: AIApiConfig,
+    attachment: MessageAttachment,
+    controller?: HttpRequestController
+  ): Promise<string> {
+    const cacheKey = this.buildMoonshotDocumentCacheKey(config, attachment)
+    const cachedText = this.moonshotDocumentTextCache.get(cacheKey)
+    if (cachedText !== undefined) {
+      return cachedText
+    }
+
+    const formData: Array<http.MultiFormData> = [
+      {
+        name: 'purpose',
+        contentType: 'text/plain',
+        data: 'file-extract'
+      },
+      this.buildMoonshotFilePart(attachment)
+    ]
+    const runtimeOptions: HttpRequestRuntimeOptions = { timeout: 120000 }
+    if (controller !== undefined) {
+      runtimeOptions.controller = controller
+    }
+    console.info('AIApiService', `Uploading document through Moonshot Files API: ${attachment.name}`)
+    const uploadResponse = await this.httpService.postMultipart(
+      this.buildMoonshotFileUrl(config),
+      formData,
+      this.buildMoonshotFileHeaders(config, 'application/json'),
+      runtimeOptions
+    )
+    if (!uploadResponse.success) {
+      throw new Error(this.extractHttpErrorMessage(uploadResponse, 'Moonshot 文档上传失败'))
+    }
+
+    let uploadResult: MoonshotFileUploadResponse
+    try {
+      uploadResult = JSON.parse(uploadResponse.data) as MoonshotFileUploadResponse
+    } catch (_error) {
+      throw new Error('Moonshot 文档上传响应格式无效')
+    }
+    const fileId = uploadResult.id !== undefined ? uploadResult.id.trim() : ''
+    if (fileId === '') {
+      throw new Error('Moonshot 文档上传成功，但未返回 file_id')
+    }
+
+    try {
+      const contentResponse = await this.httpService.get(
+        this.buildMoonshotFileUrl(config, `/${encodeURIComponent(fileId)}/content`),
+        this.buildMoonshotFileHeaders(config, 'text/plain'),
+        runtimeOptions
+      )
+      if (!contentResponse.success) {
+        throw new Error(this.extractHttpErrorMessage(contentResponse, 'Moonshot 文档解析失败'))
+      }
+      const extractedText = this.normalizeMoonshotFileContent(contentResponse.data)
+      if (extractedText === '') {
+        throw new Error(`Moonshot 未能从附件 ${attachment.name} 提取出文本`)
+      }
+      this.moonshotDocumentTextCache.set(cacheKey, extractedText)
+      console.info('AIApiService', `Moonshot document ready: ${attachment.name}, chars=${extractedText.length}`)
+      return extractedText
+    } finally {
+      this.deleteMoonshotFileBestEffort(config, fileId)
+    }
+  }
+
+  private normalizeMoonshotFileContent(rawContent: string): string {
+    const trimmed = rawContent.trim()
+    if (trimmed.startsWith('"') && trimmed.endsWith('"')) {
+      try {
+        const parsed = JSON.parse(trimmed) as string
+        if (typeof parsed === 'string') {
+          return parsed.trim()
+        }
+      } catch (_error) {
+        // text/plain 内容本身也可能以引号开头和结尾，解析失败时保留原文。
+      }
+    }
+    return trimmed
+  }
+
+  private deleteMoonshotFileBestEffort(config: AIApiConfig, fileId: string): void {
+    this.httpService.request({
+      url: this.buildMoonshotFileUrl(config, `/${encodeURIComponent(fileId)}`),
+      method: HttpMethod.DELETE,
+      headers: this.buildMoonshotFileHeaders(config, 'application/json'),
+      body: '',
+      timeout: 30000
+    }).then((response: HttpResponse): void => {
+      if (!response.success) {
+        console.warn(
+          'AIApiService',
+          `Failed to delete temporary Moonshot file: status=${response.statusCode}, error=${response.errorMessage}`
+        )
+      }
+    }).catch((error: Object): void => {
+      console.warn('AIApiService', `Failed to delete temporary Moonshot file: ${JSON.stringify(error)}`)
+    })
+  }
+
+  private buildMoonshotDocumentContext(attachment: MessageAttachment, extractedText: string): string {
+    const fileName = attachment.name !== '' ? attachment.name : 'attachment'
+    return `用户上传了文档附件「${fileName}」。以下内容由 Moonshot Files API 从该附件提取，` +
+      `请把它视为本轮对话中的原始文档内容：\n\n${extractedText}`
   }
 
   private buildResponsesUsageInfo(usage?: OpenAIResponsesUsageInfo): UsageInfo | null {

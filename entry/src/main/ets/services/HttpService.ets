@@ -209,9 +209,13 @@ export class HttpService {
       const options: http.HttpRequestOptions = {
         method: this.convertMethod(config.method),
         header: config.headers,
-        extraData: config.body,
         connectTimeout: config.timeout,
         readTimeout: config.timeout
+      }
+      const hasEmptyDeleteBody = config.method === HttpMethod.DELETE &&
+        typeof config.body === 'string' && config.body === ''
+      if (!hasEmptyDeleteBody) {
+        options.extraData = config.body
       }
 
       const response = await httpRequest.request(config.url, options)
@@ -322,6 +326,84 @@ export class HttpService {
       timeout: timeout
     }
     return await this.requestWithController(config, options?.controller)
+  }
+
+  // multipart/form-data POST 请求（用于服务商原生文件上传）
+  async postMultipart(
+    url: string,
+    formData: Array<http.MultiFormData>,
+    headers: Record<string, string> = {},
+    options?: HttpRequestRuntimeOptions
+  ): Promise<HttpResponse> {
+    const httpRequest = http.createHttp()
+    const controller = options?.controller
+    let requestId = ''
+    const multipartHeaders: Record<string, string> = {}
+    const headerNames = Object.keys(headers)
+    for (let i = 0; i < headerNames.length; i++) {
+      const headerName = headerNames[i]
+      if (headerName.toLowerCase() !== 'content-type') {
+        multipartHeaders[headerName] = headers[headerName]
+      }
+    }
+    // Network Kit only enables multiFormDataList when this header is explicitly set.
+    // It appends the multipart boundary while encoding the form fields.
+    multipartHeaders['Content-Type'] = 'multipart/form-data'
+
+    if (controller !== undefined) {
+      if (controller.isCancelled()) {
+        this.destroyRequestSafely(httpRequest)
+        return this.buildCancelledResponse()
+      }
+      requestId = controller.registerRequest(httpRequest)
+      if (requestId === '') {
+        this.destroyRequestSafely(httpRequest)
+        return this.buildCancelledResponse()
+      }
+    }
+
+    try {
+      const timeout = options?.timeout !== undefined && options.timeout > 0 ? options.timeout : 120000
+      const requestOptions: http.HttpRequestOptions = {
+        method: http.RequestMethod.POST,
+        header: multipartHeaders,
+        multiFormDataList: formData,
+        connectTimeout: 15000,
+        readTimeout: timeout,
+        expectDataType: http.HttpDataType.STRING,
+        maxLimit: 100 * 1024 * 1024
+      }
+      const response = await httpRequest.request(url, requestOptions)
+      if (controller !== undefined && controller.isCancelled()) {
+        return this.buildCancelledResponse()
+      }
+
+      const success = response.responseCode >= 200 && response.responseCode < 300
+      const responseData = typeof response.result === 'string'
+        ? response.result as string
+        : JSON.stringify(response.result)
+      return {
+        success: success,
+        statusCode: response.responseCode,
+        data: responseData,
+        errorMessage: success ? '' : `HTTP Error: ${response.responseCode}`
+      } as HttpResponse
+    } catch (error) {
+      if (controller !== undefined && controller.isCancelled()) {
+        return this.buildCancelledResponse()
+      }
+      return {
+        success: false,
+        statusCode: 0,
+        data: '',
+        errorMessage: HttpService.formatHttpError(error)
+      } as HttpResponse
+    } finally {
+      if (controller !== undefined) {
+        controller.unregisterRequest(requestId)
+      }
+      this.destroyRequestSafely(httpRequest)
+    }
   }
 
   // HEAD 请求

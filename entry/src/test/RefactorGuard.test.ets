@@ -46,7 +46,7 @@ import {
   getProviderDetailPaneBottomInset,
   ProviderDetailPresentationMode
 } from '../main/ets/components/ProviderDetailSheet'
-import { AppError, AppErrorCode, Result } from '../main/ets/models/AppError'
+import { AppError, AppErrorCode, Result, toErrorDetail } from '../main/ets/models/AppError'
 import {
   setAllModelsEnabled,
   isAllModelsEnabled,
@@ -402,6 +402,10 @@ export default function refactorGuardTest() {
       if (result.error !== null) {
         expect(result.error.code).assertEqual(AppErrorCode.DATABASE_INIT_FAILED)
       }
+    })
+
+    it('toErrorDetail_should_preserve_native_error_message', 0, () => {
+      expect(toErrorDetail(new Error('文档上传失败'))).assertEqual('文档上传失败')
     })
 
     it('providerModelActions_should_toggle_and_filter_models', 0, () => {

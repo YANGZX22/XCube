@@ -62,6 +62,7 @@ interface CapabilitiesJsonData {
   supportsReasoning: boolean
   supportsWebSearch: boolean
   supportsVision: boolean
+  supportsDocuments: boolean
   supportsStreaming: boolean
 }
 
@@ -2166,6 +2167,7 @@ export class DatabaseService {
         supportsReasoning: model.capabilities.supportsReasoning,
         supportsWebSearch: model.capabilities.supportsWebSearch,
         supportsVision: model.capabilities.supportsVision,
+        supportsDocuments: model.capabilities.supportsDocuments,
         supportsStreaming: model.capabilities.supportsStreaming
       }
 
