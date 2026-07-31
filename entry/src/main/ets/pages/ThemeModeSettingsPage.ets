@@ -14,10 +14,8 @@ import { getSettingsPageContentMaxWidth, getSettingsPageCompactTabsTotalInset } 
 import { SettingsPagePresentationMode } from '../config/SettingsDetailPresentation'
 import { getAppUiState } from '../state/AppUiState'
 import {
-  buildHdsTopNavigationTitleBarOptions,
-  getHdsTopNavigationBlurEffectiveEndOffset,
+  buildHdsTopNavigationTitleBarOptionsForPage,
   getHdsTopNavigationMaskExtraHeight,
-  HdsTopNavigationBlurOptions,
   getHdsStatusBarContentColor
 } from '../utils/HdsVisualEffectUtil'
 import {
@@ -140,16 +138,13 @@ export struct ThemeAppearanceSettingsView {
   }
 
   private getCompactTitleBarOptions(): HdsNavigationTitleBarOptions {
-    const options = new HdsTopNavigationBlurOptions()
-    options.materialType = this.materialType
-    options.materialLevel = this.materialLevel
-    options.windowWidthVp = this.windowWidthVp
-    options.windowHeightVp = this.windowHeightVp
-    options.maskExtraHeightVp = this.getCompactTitleBarMaskExtraHeight()
-    options.blurEffectiveEndOffsetVp = getHdsTopNavigationBlurEffectiveEndOffset(this.windowWidthVp,
-      this.windowHeightVp)
-    options.stackBuilder = (): void => this.CompactTitleStackBuilder()
-    return buildHdsTopNavigationTitleBarOptions(options)
+    return buildHdsTopNavigationTitleBarOptionsForPage(
+      this.materialType,
+      this.materialLevel,
+      this.windowWidthVp,
+      this.windowHeightVp,
+      (): void => this.CompactTitleStackBuilder()
+    )
   }
 
   private getResolvedDarkMode(mode: ThemeMode = this.currentThemeMode): boolean {

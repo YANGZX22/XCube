@@ -238,7 +238,7 @@ struct Index {
     return getAppUiState().isDarkMode
   }
   private get fabShadowColor(): string {
-    return this.isDarkMode ? 'rgba(0, 0, 0, 0.38)' : 'rgba(15, 23, 42, 0.18)'
+    return this.isDarkMode ? 'rgba(0, 0, 0, 0.8)' : 'rgba(15, 23, 42, 0.8)'
   }
   private get sessionListThemeRenderKey(): string {
     const uiState = getAppUiState()
@@ -2095,6 +2095,7 @@ struct Index {
     }
     .width('100%')
     .height(Index.COMPACT_TABS_BAR_HEIGHT)
+    .clip(false)
     .position({ x: 0, y: '100%' })
     .translate({
       x: 0,
@@ -2117,6 +2118,10 @@ struct Index {
       iconColor: [this.themePrimary],
       iconOffsetY: 0,
       responsePadding: 0,
+      enableShadow: true,
+      shadowRadius: 18,
+      shadowColor: this.fabShadowColor,
+      shadowOffsetY: 7,
       onButtonClick: (): void => {
         this.handleCompactBottomMiniBarClick()
       }
@@ -3285,6 +3290,7 @@ struct Index {
     .type(ButtonType.Circle)
     .stateEffect(false)
     .padding(0)
+    .clip(false)
     .position({ x: this.shouldPlaceFabOnLeft() ? 0 : '100%', y: '100%' })
     .translate({ x: this.getFabOffsetX(), y: this.getFabOffsetY() })
     .scale(getButtonScale(this.fabPressed))
@@ -3595,10 +3601,11 @@ struct Index {
     .type(ButtonType.Circle)
     .stateEffect(false)
     .padding(0)
+    .clip(false)
     .systemMaterial(new uiMaterial.ImmersiveMaterial({
       style: uiMaterial.ImmersiveStyle.REGULAR,
       materialColor: this.themePrimary,
-      applyShadow: false,
+      applyShadow: true,
       interactive: true,
       lightEffect: { color: undefined }
     }))
@@ -4860,6 +4867,7 @@ struct Index {
     .type(ButtonType.Circle)
     .stateEffect(false)
     .padding(0)
+    .clip(false)
     .position({ x: this.shouldPlaceFabOnLeft() ? 0 : '100%', y: '100%' })
     .translate({ x: this.getFabOffsetX(), y: this.getFabOffsetY() })
     .scale(getButtonScale(this.fabPressed))

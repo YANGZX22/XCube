@@ -10,6 +10,10 @@ export struct ChatFloatingImmersiveButton {
   @Param iconColor: ResourceColor[] = [Color.Gray]
   @Param iconOffsetY: number = 0
   @Param responsePadding: number = 8
+  @Param enableShadow: boolean = false
+  @Param shadowRadius: number = 18
+  @Param shadowColor: ResourceColor = 'rgba(15, 23, 42, 0.18)'
+  @Param shadowOffsetY: number = 6
   @Event onButtonClick: () => void = () => {}
   private lastClickAt: number = 0
 
@@ -45,13 +49,20 @@ export struct ChatFloatingImmersiveButton {
     .padding(this.contentPadding)
     .backgroundColor(Color.Transparent)
     .borderRadius(Math.min(this.barWidth, this.barHeight) / 2)
+    .clip(false)
     .systemMaterial(new uiMaterial.ImmersiveMaterial({
       style: uiMaterial.ImmersiveStyle.REGULAR,
       materialColor: Color.Transparent,
-      applyShadow: false,
+      applyShadow: this.enableShadow,
       interactive: true,
       lightEffect: { color: undefined }
     }))
+    .shadow({
+      radius: this.enableShadow ? this.shadowRadius : 0,
+      color: this.enableShadow ? this.shadowColor : Color.Transparent,
+      offsetX: 0,
+      offsetY: this.shadowOffsetY
+    })
     .responseRegion({
       x: -this.responsePadding,
       y: -this.responsePadding,
