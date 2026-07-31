@@ -14,8 +14,12 @@ const ARKDATA_INNER_ERROR_CODE: number = 31300000
 const API_EMBEDDING_REQUEST_TIMEOUT_MS: number = 60000
 const API_EMBEDDING_MODEL_KEY_PREFIX: string = 'api:openai-compatible'
 const API_EMBEDDING_MAX_BATCH_SIZE: number = 64
-const API_EMBEDDING_MAX_VECTOR_DIMENSION: number = 65535
+// 常见文本 Embedding 维度远低于此值。限制异常/恶意响应，避免在主线程
+// 为单个向量执行数万次转换和后处理。
+const API_EMBEDDING_MAX_VECTOR_DIMENSION: number = 8192
 const API_EMBEDDING_MAX_RESPONSE_CHARACTERS: number = 32 * 1024 * 1024
+const API_EMBEDDING_UI_YIELD_MS: number = 16
+const API_EMBEDDING_VECTOR_YIELD_INTERVAL: number = 4
 
 export enum KnowledgeEmbeddingBackend {
   LOCAL = 'local',
@@ -741,6 +745,10 @@ export class OpenAICompatibleKnowledgeEmbeddingProvider implements KnowledgeEmbe
       }
       vectors[item.index] = this.toFloat32Vector(item.embedding)
       assigned[item.index] = true
+      if (index + 1 < payload.data.length &&
+        (index + 1) % API_EMBEDDING_VECTOR_YIELD_INTERVAL === 0) {
+        await this.yieldToUiFrame()
+      }
     }
     for (let index = 0; index < assigned.length; index++) {
       if (!assigned[index]) {
@@ -832,6 +840,12 @@ export class OpenAICompatibleKnowledgeEmbeddingProvider implements KnowledgeEmbe
       throw new Error('向量 API 返回的向量维度发生变化')
     }
     this.vectorDimension = dimension
+  }
+
+  private async yieldToUiFrame(): Promise<void> {
+    await new Promise<void>((resolve): void => {
+      setTimeout(resolve, API_EMBEDDING_UI_YIELD_MS)
+    })
   }
 }
 

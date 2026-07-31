@@ -11,6 +11,13 @@ const DEFAULT_SEMANTIC_DEVIATION_FACTOR: number = 0.75
 const DEFAULT_SEMANTIC_MIN_THRESHOLD: number = 0.28
 const DEFAULT_SEMANTIC_MAX_THRESHOLD: number = 0.82
 const SEMANTIC_EMBEDDING_BATCH_SIZE: number = 16
+// 大文档若先对每个结构单元做 Embedding，会在 UI 线程连续处理大量网络响应。
+// 超过此规模时保留结构分块，并由持久化阶段只对最终 Chunk 建向量。
+const SEMANTIC_BOUNDARY_MAX_UNIT_COUNT: number = 128
+const SEMANTIC_CPU_TIME_SLICE_MS: number = 8
+const SEMANTIC_CPU_CLOCK_CHECK_INTERVAL: number = 256
+const SEMANTIC_UI_YIELD_MS: number = 16
+const SEMANTIC_OUTPUT_YIELD_INTERVAL: number = 4
 
 const UNIT_KIND_HEADING: string = 'heading'
 const UNIT_KIND_PARAGRAPH: string = 'paragraph'
@@ -279,7 +286,7 @@ export class KnowledgeSemanticChunker {
     const baseDrafts = this.buildBaseDrafts(units, embeddingState.breakBefore)
     this.mergeShortTails(baseDrafts)
     const drafts = this.addWholeUnitOverlap(baseDrafts)
-    const chunks = this.buildOutputChunks(request, drafts)
+    const chunks = await this.buildOutputChunks(request, drafts)
 
     return new KnowledgeSemanticChunkingResult(
       chunks,
@@ -553,12 +560,19 @@ export class KnowledgeSemanticChunker {
   private findSafeBoundary(text: string, start: number, proposedEnd: number): number {
     const minimumBoundary = start + Math.floor(this.options.maxCharacters * 0.55)
     const candidates: string[] = ['\n', '。', '！', '？', '. ', '! ', '? ', '；', '; ', '，', ', ']
+    // 只搜索当前候选窗口。直接对全文 lastIndexOf 会随着 cursor 增长反复扫描
+    // 整个前缀，使超长单行（JSON、OCR 连续文本等）退化为近似 O(n²)。
+    const searchWindow = text.substring(minimumBoundary, proposedEnd)
     let best = -1
     for (let index = 0; index < candidates.length; index++) {
       const candidate = candidates[index]
-      const found = text.lastIndexOf(candidate, proposedEnd - 1)
-      if (found >= minimumBoundary && found > best) {
-        best = found + candidate.length
+      const foundInWindow = searchWindow.lastIndexOf(candidate)
+      if (foundInWindow < 0) {
+        continue
+      }
+      const found = minimumBoundary + foundInWindow + candidate.length
+      if (found > best) {
+        best = found
       }
     }
     return best > start ? best : proposedEnd
@@ -576,6 +590,14 @@ export class KnowledgeSemanticChunker {
     if (provider === null || !provider.isAvailable() || units.length === 0) {
       return state
     }
+    if (units.length > SEMANTIC_BOUNDARY_MAX_UNIT_COUNT) {
+      console.info(
+        'KnowledgeSemanticChunker',
+        `Skipped boundary embeddings for large document: units=${units.length}, ` +
+        `limit=${SEMANTIC_BOUNDARY_MAX_UNIT_COUNT}`
+      )
+      return state
+    }
 
     try {
       const maximumInput = Math.max(
@@ -586,30 +608,43 @@ export class KnowledgeSemanticChunker {
       for (let index = 0; index < units.length; index++) {
         texts.push(this.limitEmbeddingText(units[index].embeddingText, maximumInput))
       }
-      const vectors: Float32Array[] = []
+      let expectedDimension = 0
       for (let start = 0; start < texts.length; start += SEMANTIC_EMBEDDING_BATCH_SIZE) {
         const end = Math.min(start + SEMANTIC_EMBEDDING_BATCH_SIZE, texts.length)
         const batch = texts.slice(start, end)
         const batchVectors = await provider.embedDocuments(batch)
-        for (let vectorIndex = 0; vectorIndex < batchVectors.length; vectorIndex++) {
-          vectors.push(batchVectors[vectorIndex])
+        if (batchVectors.length !== batch.length) {
+          state.failed = true
+          this.clearRawEmbeddings(units)
+          return state
         }
-      }
-      if (!this.validateVectors(vectors, units.length)) {
-        state.failed = true
-        return state
-      }
-      for (let index = 0; index < units.length; index++) {
-        units[index].rawEmbedding = this.normalizedVectorCopy(vectors[index])
+        for (let vectorIndex = 0; vectorIndex < batchVectors.length; vectorIndex++) {
+          const source = batchVectors[vectorIndex]
+          if (expectedDimension === 0) {
+            expectedDimension = source.length
+          }
+          if (source.length === 0 || source.length !== expectedDimension) {
+            state.failed = true
+            this.clearRawEmbeddings(units)
+            return state
+          }
+          const normalized = await this.normalizedVectorCopy(source)
+          if (normalized === null) {
+            state.failed = true
+            this.clearRawEmbeddings(units)
+            return state
+          }
+          units[start + vectorIndex].rawEmbedding = normalized
+        }
+        // 即使单个向量很短，也在每批结束后交还一次 EventHandler。
+        await this.yieldToEventLoop()
       }
       state.used = true
-      this.applyAdaptiveSemanticBreaks(units, state)
+      await this.applyAdaptiveSemanticBreaks(units, state)
       return state
     } catch (_error) {
       state.failed = true
-      for (let index = 0; index < units.length; index++) {
-        units[index].rawEmbedding = null
-      }
+      this.clearRawEmbeddings(units)
       return state
     }
   }
@@ -621,60 +656,51 @@ export class KnowledgeSemanticChunker {
     return value.substring(0, maximumCharacters).trim()
   }
 
-  private validateVectors(vectors: Float32Array[], expectedCount: number): boolean {
-    if (vectors.length !== expectedCount || vectors.length === 0) {
-      return false
+  private clearRawEmbeddings(units: KnowledgeSemanticUnit[]): void {
+    for (let index = 0; index < units.length; index++) {
+      units[index].rawEmbedding = null
     }
-    const dimension = vectors[0].length
-    if (dimension <= 0) {
-      return false
-    }
-    for (let vectorIndex = 0; vectorIndex < vectors.length; vectorIndex++) {
-      const vector = vectors[vectorIndex]
-      if (vector.length !== dimension) {
-        return false
-      }
-      let hasMagnitude = false
-      for (let valueIndex = 0; valueIndex < vector.length; valueIndex++) {
-        if (!Number.isFinite(vector[valueIndex])) {
-          return false
-        }
-        if (vector[valueIndex] !== 0) {
-          hasMagnitude = true
-        }
-      }
-      if (!hasMagnitude) {
-        return false
-      }
-    }
-    return true
   }
 
-  private normalizedVectorCopy(source: Float32Array): Float32Array {
+  private async normalizedVectorCopy(source: Float32Array): Promise<Float32Array | null> {
     let sumSquares = 0
+    let sliceStartedAt = Date.now()
     for (let index = 0; index < source.length; index++) {
-      sumSquares += source[index] * source[index]
+      const value = source[index]
+      if (!Number.isFinite(value)) {
+        return null
+      }
+      sumSquares += value * value
+      if (this.shouldYieldCpuSlice(index, sliceStartedAt)) {
+        await this.yieldToEventLoop()
+        sliceStartedAt = Date.now()
+      }
     }
     const magnitude = Math.sqrt(sumSquares)
-    const result = new Float32Array(source.length)
-    if (magnitude <= 0) {
-      return result
+    if (!Number.isFinite(magnitude) || magnitude <= 0) {
+      return null
     }
+    const result = new Float32Array(source.length)
     for (let index = 0; index < source.length; index++) {
       result[index] = source[index] / magnitude
+      if (this.shouldYieldCpuSlice(index, sliceStartedAt)) {
+        await this.yieldToEventLoop()
+        sliceStartedAt = Date.now()
+      }
     }
     return result
   }
 
-  private applyAdaptiveSemanticBreaks(
+  private async applyAdaptiveSemanticBreaks(
     units: KnowledgeSemanticUnit[],
     state: KnowledgeSemanticEmbeddingState
-  ): void {
+  ): Promise<void> {
     const similarities: number[] = []
     const similarityByBoundary = new Array<number>(units.length)
     for (let index = 0; index < similarityByBoundary.length; index++) {
       similarityByBoundary[index] = 1.0
     }
+    let sliceStartedAt = Date.now()
     for (let index = 1; index < units.length; index++) {
       if (units[index - 1].parentId !== units[index].parentId) {
         continue
@@ -684,7 +710,18 @@ export class KnowledgeSemanticChunker {
       if (previous === null || current === null) {
         continue
       }
-      const similarity = this.cosineForNormalizedVectors(previous, current)
+      if (previous.length !== current.length || previous.length === 0) {
+        continue
+      }
+      let dot = 0
+      for (let valueIndex = 0; valueIndex < previous.length; valueIndex++) {
+        dot += previous[valueIndex] * current[valueIndex]
+        if (this.shouldYieldCpuSlice(valueIndex, sliceStartedAt)) {
+          await this.yieldToEventLoop()
+          sliceStartedAt = Date.now()
+        }
+      }
+      const similarity = Math.max(-1, Math.min(dot, 1))
       similarityByBoundary[index] = similarity
       similarities.push(similarity)
     }
@@ -721,15 +758,16 @@ export class KnowledgeSemanticChunker {
     }
   }
 
-  private cosineForNormalizedVectors(left: Float32Array, right: Float32Array): number {
-    if (left.length !== right.length || left.length === 0) {
-      return 0
-    }
-    let dot = 0
-    for (let index = 0; index < left.length; index++) {
-      dot += left[index] * right[index]
-    }
-    return Math.max(-1, Math.min(dot, 1))
+  private shouldYieldCpuSlice(index: number, sliceStartedAt: number): boolean {
+    return index > 0 &&
+      index % SEMANTIC_CPU_CLOCK_CHECK_INTERVAL === 0 &&
+      Date.now() - sliceStartedAt >= SEMANTIC_CPU_TIME_SLICE_MS
+  }
+
+  private async yieldToEventLoop(): Promise<void> {
+    await new Promise<void>((resolve): void => {
+      setTimeout(resolve, SEMANTIC_UI_YIELD_MS)
+    })
   }
 
   private buildBaseDrafts(
@@ -819,10 +857,10 @@ export class KnowledgeSemanticChunker {
     return result
   }
 
-  private buildOutputChunks(
+  private async buildOutputChunks(
     request: KnowledgeSemanticChunkRequest,
     drafts: KnowledgeSemanticChunkDraft[]
-  ): KnowledgeSemanticChunk[] {
+  ): Promise<KnowledgeSemanticChunk[]> {
     const chunks: KnowledgeSemanticChunk[] = []
     for (let index = 0; index < drafts.length; index++) {
       const draft = drafts[index]
@@ -846,6 +884,7 @@ export class KnowledgeSemanticChunker {
         pageEnd,
         content
       )
+      const rawEmbedding = await this.buildWeightedChunkEmbedding(draft.units)
       chunks.push(new KnowledgeSemanticChunk(
         `${request.documentId}_semantic_v3_chunk_${index + 1}`,
         request.documentId,
@@ -862,8 +901,11 @@ export class KnowledgeSemanticChunker {
         draft.parentId(),
         firstUnit.startOffset,
         lastUnit.endOffset,
-        this.buildWeightedChunkEmbedding(draft.units)
+        rawEmbedding
       ))
+      if ((index + 1) % SEMANTIC_OUTPUT_YIELD_INTERVAL === 0 && index + 1 < drafts.length) {
+        await this.yieldToEventLoop()
+      }
     }
     return chunks
   }
@@ -903,7 +945,9 @@ export class KnowledgeSemanticChunker {
     return `${metadata.join('\n')}\n\n${content}`
   }
 
-  private buildWeightedChunkEmbedding(units: KnowledgeSemanticUnit[]): Float32Array | null {
+  private async buildWeightedChunkEmbedding(
+    units: KnowledgeSemanticUnit[]
+  ): Promise<Float32Array | null> {
     let dimension = 0
     for (let index = 0; index < units.length; index++) {
       const unitVector = units[index].rawEmbedding
@@ -918,6 +962,7 @@ export class KnowledgeSemanticChunker {
 
     const accumulated = new Float32Array(dimension)
     let totalWeight = 0
+    let sliceStartedAt = Date.now()
     for (let unitIndex = 0; unitIndex < units.length; unitIndex++) {
       const vector = units[unitIndex].rawEmbedding
       if (vector === null || vector.length !== dimension) {
@@ -927,6 +972,10 @@ export class KnowledgeSemanticChunker {
       totalWeight += weight
       for (let valueIndex = 0; valueIndex < dimension; valueIndex++) {
         accumulated[valueIndex] += vector[valueIndex] * weight
+        if (this.shouldYieldCpuSlice(valueIndex, sliceStartedAt)) {
+          await this.yieldToEventLoop()
+          sliceStartedAt = Date.now()
+        }
       }
     }
     if (totalWeight <= 0) {
@@ -934,8 +983,12 @@ export class KnowledgeSemanticChunker {
     }
     for (let index = 0; index < accumulated.length; index++) {
       accumulated[index] /= totalWeight
+      if (this.shouldYieldCpuSlice(index, sliceStartedAt)) {
+        await this.yieldToEventLoop()
+        sliceStartedAt = Date.now()
+      }
     }
-    return this.normalizedVectorCopy(accumulated)
+    return await this.normalizedVectorCopy(accumulated)
   }
 
   private findFirstPage(units: KnowledgeSemanticUnit[]): number {

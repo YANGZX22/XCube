@@ -55,6 +55,8 @@ export const KNOWLEDGE_CHUNK_MAX_CHARACTERS: number = 480
 const KNOWLEDGE_CHUNKER_VERSION: string = KNOWLEDGE_SEMANTIC_CHUNKER_VERSION
 const EMBEDDING_BATCH_SIZE: number = 16
 const FILE_IO_CHUNK_BYTES: number = 256 * 1024
+const KNOWLEDGE_UI_YIELD_MS: number = 16
+const KNOWLEDGE_CHUNK_YIELD_INTERVAL: number = 4
 
 export enum KnowledgeDocumentStatus {
   INDEXING = 'indexing',
@@ -341,9 +343,12 @@ export class KnowledgeDocumentService implements
     )
     quickVectorStartup.then(
       (plan: KnowledgeVectorStartupPlan): void => {
-        this.runVectorStartupMigrations(plan).catch((_error: Object): void => {
-          console.warn('KnowledgeDocumentService', 'Knowledge vector startup migration stopped')
-        })
+        if (plan.documentIds.length > 0) {
+          console.info(
+            'KnowledgeDocumentService',
+            `Deferred startup vector migrations: documents=${plan.documentIds.length}`
+          )
+        }
       },
       (_error: Object): void => {
         console.warn('KnowledgeDocumentService', 'Knowledge vector startup recovery stopped')
@@ -752,18 +757,6 @@ export class KnowledgeDocumentService implements
       return plan
     } finally {
       releaseLock()
-    }
-  }
-
-  private async runVectorStartupMigrations(plan: KnowledgeVectorStartupPlan): Promise<void> {
-    for (let index = 0; index < plan.documentIds.length; index++) {
-      if (getKnowledgeEmbeddingService().modelKey() !== plan.modelKey) {
-        break
-      }
-      const migrated = await this.migrateReadyDocument(plan.documentIds[index], plan.modelKey)
-      if (!migrated.keywordReady || !migrated.vectorReady) {
-        console.warn('KnowledgeDocumentService', 'A background knowledge vector migration failed')
-      }
     }
   }
 
@@ -1210,21 +1203,31 @@ export class KnowledgeDocumentService implements
       }
 
       const vectors: Float32Array[] = []
-      const reusableRawVectors = this.collectReusableRawChunkVectors(chunks)
+      const reusableRawVectors = await this.collectReusableRawChunkVectors(chunks)
       if (reusableRawVectors !== null) {
         for (let index = 0; index < reusableRawVectors.length; index++) {
           vectors.push(projectKnowledgeVector(reusableRawVectors[index]))
+          if (this.shouldYieldChunkWork(index, reusableRawVectors.length)) {
+            await this.yieldToUiFrame()
+          }
         }
       } else {
+        const maximumInputCharacters = Math.max(64, embeddingService.maxInputCharacters())
         for (let start = 0; start < chunks.length; start += EMBEDDING_BATCH_SIZE) {
           const end = Math.min(chunks.length, start + EMBEDDING_BATCH_SIZE)
           const texts: string[] = []
           for (let index = start; index < end; index++) {
-            texts.push(chunks[index].embeddingText)
+            texts.push(this.limitEmbeddingText(
+              chunks[index].embeddingText,
+              maximumInputCharacters
+            ))
           }
           const batchVectors = await embeddingService.embedDocuments(texts)
           for (let index = 0; index < batchVectors.length; index++) {
             vectors.push(projectKnowledgeVector(batchVectors[index]))
+          }
+          if (end < chunks.length) {
+            await this.yieldToUiFrame()
           }
         }
       }
@@ -1281,6 +1284,9 @@ export class KnowledgeDocumentService implements
           chunk.content,
           vectors[index]
         ))
+        if (this.shouldYieldChunkWork(index, chunks.length)) {
+          await this.yieldToUiFrame()
+        }
       }
       const vectorCount = await vectorStore.replaceDocumentGeneration(
         document.id,
@@ -1320,13 +1326,16 @@ export class KnowledgeDocumentService implements
       )
       console.warn(
         'KnowledgeDocumentService',
-        `Vector indexing unavailable; BM25 remains active: status=${vectorStore.getStatus()}`
+        `Vector indexing unavailable; BM25 remains active: ` +
+        `status=${vectorStore.getStatus()}, error=${failureMessage}`
       )
       return new KnowledgeVectorBuildResult(false, failureMessage)
     }
   }
 
-  private collectReusableRawChunkVectors(chunks: KnowledgeChunk[]): Float32Array[] | null {
+  private async collectReusableRawChunkVectors(
+    chunks: KnowledgeChunk[]
+  ): Promise<Float32Array[] | null> {
     if (chunks.length === 0) {
       return null
     }
@@ -1354,8 +1363,18 @@ export class KnowledgeDocumentService implements
         return null
       }
       vectors.push(vector)
+      if (this.shouldYieldChunkWork(chunkIndex, chunks.length)) {
+        await this.yieldToUiFrame()
+      }
     }
     return vectors
+  }
+
+  private limitEmbeddingText(value: string, maximumCharacters: number): string {
+    if (value.length <= maximumCharacters) {
+      return value
+    }
+    return value.substring(0, maximumCharacters).trim()
   }
 
   private async upsertVectorIndexState(
@@ -1506,6 +1525,16 @@ export class KnowledgeDocumentService implements
       return error.message.substring(0, 512)
     }
     return '语义向量索引失败，将继续使用关键词检索'
+  }
+
+  private shouldYieldChunkWork(index: number, total: number): boolean {
+    return index + 1 < total && (index + 1) % KNOWLEDGE_CHUNK_YIELD_INTERVAL === 0
+  }
+
+  private async yieldToUiFrame(): Promise<void> {
+    await new Promise<void>((resolve): void => {
+      setTimeout(resolve, KNOWLEDGE_UI_YIELD_MS)
+    })
   }
 
   isReady(): boolean {
@@ -2272,6 +2301,9 @@ export class KnowledgeDocumentService implements
         semanticChunk.continuesAfter,
         semanticChunk.rawEmbedding
       ))
+      if (this.shouldYieldChunkWork(index, result.chunks.length)) {
+        await this.yieldToUiFrame()
+      }
     }
     console.info(
       'KnowledgeDocumentService',
@@ -2315,6 +2347,9 @@ export class KnowledgeDocumentService implements
             chunk.continuesAfter ? 1 : 0
           ]
         )
+        if (this.shouldYieldChunkWork(i, chunks.length)) {
+          await this.yieldToUiFrame()
+        }
       }
       store.commit()
     } catch (error) {

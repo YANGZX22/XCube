@@ -411,7 +411,15 @@ class PdfToTextExecutor implements ToolExecutor {
       if (request.attachmentId === '') {
         return JSON.stringify(new ErrorOutput('attachmentId 不能为空。请使用用户上传 PDF 附件的 id。'))
       }
-      const result = await getPdfTextExtractionService().extractForCurrentSession(request)
+      const service = getPdfTextExtractionService()
+      let result = await service.extractForCurrentSession(request)
+      // A scan usually has no PDF text layer. Keep that implementation detail
+      // inside the tool instead of relying on the model to notice the empty
+      // result and issue a second call with a different argument.
+      if (!request.useOcr && !result.ok && result.fileName !== '') {
+        request.useOcr = true
+        result = await service.extractForCurrentSession(request)
+      }
       return JSON.stringify(result)
     } catch (error) {
       return JSON.stringify(new ErrorOutput(`PDF 转文本失败: ${this.stringifyError(error)}`))
@@ -1877,7 +1885,7 @@ function createPdfToTextToolDefinition(): ToolDefinition {
       },
       "useOcr": {
         "type": "boolean",
-        "description": "是否直接将 PDF 页面转为图片并使用本地 CoreVisionKit OCR 识别扫描件。默认 false；仅在判断 PDF 可能是扫描件、拍照件，或上一次返回未提取到文本时启用。"
+        "description": "是否跳过文本层并直接将 PDF 页面转为图片，再使用本地 CoreVisionKit OCR。默认 false；即使不传，文本层为空时工具也会自动回退 OCR。"
       },
       "use_ocr": {
         "type": "boolean",
@@ -1894,7 +1902,7 @@ function createPdfToTextToolDefinition(): ToolDefinition {
 
   const func = new ToolFunction(
     PDF_TO_TEXT_TOOL_ID,
-    '将用户上传的 PDF 附件转换为文本。仅能读取当前会话已登记的 PDF 附件；调用时传 attachmentId。默认读取 PDF 文本层；当模型判断 PDF 可能是扫描件，或普通提取返回未提取到文本时，可设置 useOcr=true 直接将页面转图片并通过本地 CoreVisionKit OCR 识别。',
+    '将用户上传的 PDF 附件转换为文本。仅能读取当前会话已登记的 PDF 附件；调用时传 attachmentId。工具默认先读取 PDF 文本层，文本层为空时会自动将页面转图片并通过本地 CoreVisionKit OCR 识别扫描件；useOcr=true 可跳过文本层并直接 OCR。',
     parameters
   )
 
@@ -1905,7 +1913,7 @@ function createPdfToTextToolConfig(): ToolConfig {
   return new ToolConfig(
     PDF_TO_TEXT_TOOL_ID,
     'PDF 转文本',
-    '当模型不可直接读取 PDF 时，可使用此工具读取 PDF 文本；扫描件 OCR 由模型按需启用',
+    '当模型不可直接读取 PDF 时读取其文本；扫描件会自动回退本地 OCR',
     null,
     true,
     false,

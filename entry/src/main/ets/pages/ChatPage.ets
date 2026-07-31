@@ -1724,7 +1724,7 @@ export struct ChatPage {
 
   private buildPdfToTextToolInstruction(pdfAttachments: MessageAttachment[]): string {
     const lines: string[] = [
-      '当前模型未开启原生文档阅读。用户上传的 PDF 已暂存到本地沙箱，不能直接读取原始 PDF；需要阅读 PDF 内容时请调用 pdf_to_text 工具。默认先读取 PDF 文本层；如果判断 PDF 是扫描件、拍照件，或工具返回未提取到文本，可再次调用并设置 useOcr=true。可用 PDF 附件：'
+      '当前模型未开启原生文档阅读。用户上传的 PDF 已暂存到本地沙箱，不能直接读取原始 PDF；回答文档内容前必须先调用 pdf_to_text 工具。工具会先读取 PDF 文本层，并在文本层为空时自动将页面转图片后进行本地 OCR；不要猜测文档内容。可用 PDF 附件：'
     ]
     for (let i = 0; i < pdfAttachments.length; i++) {
       lines.push(`- attachmentId: ${pdfAttachments[i].id}, 文件名: ${pdfAttachments[i].name}`)
@@ -1813,9 +1813,12 @@ export struct ChatPage {
       if (registered === null) {
         continue
       }
-      const result = await getPdfTextExtractionService().extractAttachment(registered, 12000)
+      const service = getPdfTextExtractionService()
+      let result = await service.extractAttachment(registered, 12000)
       if (!result.ok) {
-        sections.push(`\n[${pdfAttachments[i].name}]\n${result.message}`)
+        result = await service.extractAttachment(registered, 12000, true)
+      }
+      if (!result.ok) {
         continue
       }
       sections.push(`\n[${result.fileName} / attachmentId: ${result.attachmentId}]\n${result.text}`)

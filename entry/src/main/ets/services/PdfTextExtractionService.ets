@@ -1,4 +1,3 @@
-import { fileIo } from '@kit.CoreFileKit'
 import { image } from '@kit.ImageKit'
 import { pdfService } from '@kit.PDFKit'
 import { textRecognition } from '@kit.CoreVisionKit'
@@ -93,7 +92,7 @@ export class PdfTextExtractionService {
     maxChars: number,
     useOcr: boolean = false
   ): Promise<PdfTextExtractionResult> {
-    const cacheKey = `${attachment.filePath}:${attachment.size}:${useOcr ? 'ocr-v3' : 'text'}`
+    const cacheKey = `${attachment.filePath}:${attachment.size}:${useOcr ? 'ocr-v7' : 'text'}`
     let output = this.cache.get(cacheKey)
     if (output === undefined) {
       output = await this.extractTextFromPdfPath(attachment.filePath, useOcr)
@@ -131,15 +130,9 @@ export class PdfTextExtractionService {
         return new PdfTextExtractionOutput(this.normalizeText(pdfKitText), 'text')
       }
 
-      const bytes = this.readFileBytes(filePath)
-      const latin1 = this.decodeLatin1(bytes)
-      const streamTexts = this.extractStreamTexts(latin1)
-      const directText = this.extractPdfTextOperators(latin1)
-      const operatorText = this.normalizeText(`${streamTexts}\n${directText}`)
-      if (operatorText.trim() !== '') {
-        return new PdfTextExtractionOutput(operatorText, 'text')
-      }
-
+      // PDFKit 无法返回文本时交给显式 OCR 回退。不要在主线程把整份 PDF
+      // 解码成字符串后用正则扫描：二进制里的大量 '[' 会让 TJ 匹配产生
+      // 超线性回溯，并触发 THREAD_BLOCK_6S。
       return new PdfTextExtractionOutput('', 'none')
     } catch (error) {
       console.error('PdfTextExtractionService', `Failed to extract PDF text: ${JSON.stringify(error)}`)
@@ -202,16 +195,21 @@ export class PdfTextExtractionService {
         let pixelMap: image.PixelMap | null = null
         try {
           renderedPixelMap = this.createPagePixelMapForOcr(page)
-          pixelMap = await this.normalizePixelMapForOcr(renderedPixelMap)
+          pixelMap = await this.createRgbaPixelMap(renderedPixelMap)
           if (pixelMap !== renderedPixelMap) {
             renderedPixelMap.release()
-            renderedPixelMap = null
           }
+          // From here on pixelMap is the sole owner, whether conversion happened
+          // in place or a new decoded PixelMap was created.
+          renderedPixelMap = null
           const pageText = await this.recognizePixelMapText(pixelMap)
           const imageInfo = pixelMap.getImageInfoSync()
-          diagnostics.push(`p${i + 1}:${imageInfo.size.width}x${imageInfo.size.height}/${pageText.length}`)
+          diagnostics.push(
+            `p${i + 1}:${imageInfo.size.width}x${imageInfo.size.height}/fmt=${imageInfo.pixelFormat}` +
+            `/alpha=${imageInfo.alphaType}/${pageText.length}`)
           console.info('PdfTextExtractionService',
-            `PDF page OCR result: page=${i + 1}, width=${imageInfo.size.width}, height=${imageInfo.size.height}, chars=${pageText.length}`)
+            `PDF page OCR result: page=${i + 1}, width=${imageInfo.size.width}, height=${imageInfo.size.height}, ` +
+            `pixelFormat=${imageInfo.pixelFormat}, alphaType=${imageInfo.alphaType}, chars=${pageText.length}`)
           if (pageText.trim() !== '') {
             pageTexts.push(`[第 ${i + 1} 页]\n${pageText}`)
           }
@@ -242,11 +240,46 @@ export class PdfTextExtractionService {
   }
 
   private createPagePixelMapForOcr(page: pdfService.PdfPage): image.PixelMap {
+    try {
+      const graphicsObjects = page.getGraphicsObjects()
+      let largestImage: pdfService.ImageObject | null = null
+      let largestArea = 0
+      for (let i = 0; i < graphicsObjects.length; i++) {
+        if (graphicsObjects[i].type !== pdfService.GraphicsObjectType.OBJECT_IMAGE) {
+          continue
+        }
+        const imageObject = graphicsObjects[i] as pdfService.ImageObject
+        const area = Math.max(0, imageObject.width) * Math.max(0, imageObject.height)
+        if (area > largestArea) {
+          largestArea = area
+          largestImage = imageObject
+        }
+      }
+      const pageArea = Math.max(1, page.getWidth() * page.getHeight())
+      if (largestImage !== null && largestArea >= pageArea * 0.25) {
+        const embeddedPixelMap = largestImage.pixelMap
+        const embeddedInfo = embeddedPixelMap.getImageInfoSync()
+        console.info('PdfTextExtractionService',
+          `Using embedded scan image: width=${embeddedInfo.size.width}, height=${embeddedInfo.size.height}, ` +
+          `pixelFormat=${embeddedInfo.pixelFormat}, coverage=${(largestArea / pageArea).toFixed(2)}`)
+        return embeddedPixelMap
+      }
+    } catch (error) {
+      console.warn('PdfTextExtractionService',
+        `Failed to read embedded PDF image, fallback to page render: ${JSON.stringify(error)}`)
+    }
+
+    return this.renderPagePixelMapForOcr(page)
+  }
+
+  private renderPagePixelMapForOcr(page: pdfService.PdfPage): image.PixelMap {
     const pageWidth = Math.max(1, page.getWidth())
     const pageHeight = Math.max(1, page.getHeight())
     const longEdge = Math.max(pageWidth, pageHeight)
+    // Upscale ordinary pages for OCR, but also allow unusually large pages to
+    // shrink instead of forcing a potentially huge full-resolution PixelMap.
     const scale = Math.min(PdfTextExtractionService.OCR_MAX_SCALE,
-      Math.max(1, PdfTextExtractionService.OCR_TARGET_LONG_EDGE / longEdge))
+      PdfTextExtractionService.OCR_TARGET_LONG_EDGE / longEdge)
     const bitmapWidth = Math.max(1, Math.round(pageWidth * scale))
     const bitmapHeight = Math.max(1, Math.round(pageHeight * scale))
 
@@ -271,30 +304,55 @@ export class PdfTextExtractionService {
     }
   }
 
-  private async normalizePixelMapForOcr(source: image.PixelMap): Promise<image.PixelMap> {
+  private async createRgbaPixelMap(pixelMap: image.PixelMap): Promise<image.PixelMap> {
     let packer: image.ImagePacker | null = null
     let imageSource: image.ImageSource | null = null
-    try {
-      packer = image.createImagePacker()
-      const packOpts: image.PackingOption = {
-        format: 'image/jpeg',
-        quality: 95
-      }
-      const imageData = await packer.packToData(source, packOpts)
-      imageSource = image.createImageSource(imageData)
-      return await imageSource.createPixelMap()
-    } catch (error) {
-      console.warn('PdfTextExtractionService',
-        `PDF OCR image normalization failed, use rendered pixelmap directly: ${JSON.stringify(error)}`)
-      return source
-    } finally {
-      if (imageSource !== null) {
-        imageSource.release()
-      }
-      if (packer !== null) {
-        packer.release()
+    const currentInfo = pixelMap.getImageInfoSync()
+    if (currentInfo.pixelFormat !== image.PixelMapFormat.RGBA_8888) {
+      // PDFKit only promises a PixelMap, while CoreVision OCR strictly requires
+      // RGBA_8888. Prefer a cheap in-place conversion when the PDFKit source
+      // format supports it.
+      try {
+        await pixelMap.convertPixelFormat(image.PixelMapFormat.RGBA_8888)
+      } catch (error) {
+        // Some PDFKit PixelMap formats reject in-place conversion with
+        // ImageKit 62980115. A lossless PNG round-trip creates a regular
+        // ImageKit PixelMap whose output format can be requested explicitly.
+        console.warn('PdfTextExtractionService',
+          `In-place RGBA conversion failed: sourceFormat=${currentInfo.pixelFormat}, error=${JSON.stringify(error)}`)
+        try {
+          packer = image.createImagePacker()
+          const packOptions: image.PackingOption = {
+            format: 'image/png',
+            quality: 100
+          }
+          const encoded = await packer.packToData(pixelMap, packOptions)
+          imageSource = image.createImageSource(encoded)
+          const decodingOptions: image.DecodingOptions = {
+            desiredPixelFormat: image.PixelMapFormat.RGBA_8888
+          }
+          const decoded = await imageSource.createPixelMap(decodingOptions)
+          const decodedInfo = decoded.getImageInfoSync()
+          if (decodedInfo.pixelFormat !== image.PixelMapFormat.RGBA_8888) {
+            decoded.release()
+            throw new Error(`Decoded OCR pixel format is ${decodedInfo.pixelFormat}`)
+          }
+          return decoded
+        } finally {
+          if (imageSource !== null) {
+            imageSource.release()
+          }
+          if (packer !== null) {
+            packer.release()
+          }
+        }
       }
     }
+    const convertedInfo = pixelMap.getImageInfoSync()
+    if (convertedInfo.pixelFormat !== image.PixelMapFormat.RGBA_8888) {
+      throw new Error(`Unsupported OCR pixel format: ${convertedInfo.pixelFormat}`)
+    }
+    return pixelMap
   }
 
   private async recognizePixelMapText(pixelMap: image.PixelMap): Promise<string> {
@@ -305,6 +363,8 @@ export class PdfTextExtractionService {
       isDirectionDetectionSupported: true
     }
     const result = await textRecognition.recognizeText(visionInfo, configuration)
+    console.info('PdfTextExtractionService',
+      `CoreVision OCR completed: chars=${result.value.length}, blocks=${result.blocks.length}`)
     return this.normalizeText(result.value)
   }
 
@@ -312,90 +372,11 @@ export class PdfTextExtractionService {
     if (this.ocrInitialized) {
       return
     }
-    await textRecognition.init()
+    const initialized = await textRecognition.init()
+    if (!initialized) {
+      throw new Error('CoreVision OCR initialization returned false')
+    }
     this.ocrInitialized = true
-  }
-
-  private readFileBytes(filePath: string): Uint8Array {
-    const file = fileIo.openSync(filePath, fileIo.OpenMode.READ_ONLY)
-    const stat = fileIo.statSync(file.fd)
-    const buffer = new ArrayBuffer(stat.size)
-    fileIo.readSync(file.fd, buffer)
-    fileIo.closeSync(file)
-    return new Uint8Array(buffer)
-  }
-
-  private decodeLatin1(bytes: Uint8Array): string {
-    let result = ''
-    const chunkSize = 4096
-    for (let i = 0; i < bytes.length; i += chunkSize) {
-      const chunk = bytes.subarray(i, Math.min(bytes.length, i + chunkSize))
-      let chunkText = ''
-      for (let j = 0; j < chunk.length; j++) {
-        chunkText += String.fromCharCode(chunk[j])
-      }
-      result += chunkText
-    }
-    return result
-  }
-
-  private extractStreamTexts(pdfText: string): string {
-    const texts: string[] = []
-    const streamPattern = /<<(?![\s\S]*?\/FlateDecode)[\s\S]*?>>\s*stream\r?\n([\s\S]*?)\r?\nendstream/g
-    let match: RegExpExecArray | null = streamPattern.exec(pdfText)
-    while (match !== null) {
-      texts.push(this.extractPdfTextOperators(match[1]))
-      match = streamPattern.exec(pdfText)
-    }
-    return texts.join('\n')
-  }
-
-  private extractPdfTextOperators(content: string): string {
-    const texts: string[] = []
-    const arrayTextPattern = /\[((?:.|\n|\r)*?)\]\s*TJ/g
-    let arrayMatch: RegExpExecArray | null = arrayTextPattern.exec(content)
-    while (arrayMatch !== null) {
-      texts.push(this.extractLiteralStrings(arrayMatch[1]))
-      arrayMatch = arrayTextPattern.exec(content)
-    }
-
-    const singleTextPattern = /\(([^()]*(?:\\.[^()]*)*)\)\s*Tj/g
-    let singleMatch: RegExpExecArray | null = singleTextPattern.exec(content)
-    while (singleMatch !== null) {
-      texts.push(this.unescapePdfString(singleMatch[1]))
-      singleMatch = singleTextPattern.exec(content)
-    }
-
-    const quoteTextPattern = /\(([^()]*(?:\\.[^()]*)*)\)\s*'/g
-    let quoteMatch: RegExpExecArray | null = quoteTextPattern.exec(content)
-    while (quoteMatch !== null) {
-      texts.push(this.unescapePdfString(quoteMatch[1]))
-      quoteMatch = quoteTextPattern.exec(content)
-    }
-    return texts.join('\n')
-  }
-
-  private extractLiteralStrings(value: string): string {
-    const parts: string[] = []
-    const literalPattern = /\(([^()]*(?:\\.[^()]*)*)\)/g
-    let match: RegExpExecArray | null = literalPattern.exec(value)
-    while (match !== null) {
-      parts.push(this.unescapePdfString(match[1]))
-      match = literalPattern.exec(value)
-    }
-    return parts.join('')
-  }
-
-  private unescapePdfString(value: string): string {
-    return value
-      .replace(/\\n/g, '\n')
-      .replace(/\\r/g, '\r')
-      .replace(/\\t/g, '\t')
-      .replace(/\\b/g, '\b')
-      .replace(/\\f/g, '\f')
-      .replace(/\\\(/g, '(')
-      .replace(/\\\)/g, ')')
-      .replace(/\\\\/g, '\\')
   }
 
   private normalizeText(value: string): string {
