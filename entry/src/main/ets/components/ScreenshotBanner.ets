@@ -2,6 +2,7 @@ import { MessageAttachment, AttachmentType } from '../models/ChatModels'
 import { BaseItemInfo, PhotoSource, RecentPhotoComponent, RecentPhotoOptions, photoAccessHelper } from '@kit.MediaLibraryKit'
 import { fileIo } from '@kit.CoreFileKit'
 import { util } from '@kit.ArkTS'
+import { uiMaterial } from '@kit.ArkUI'
 import { getAttachmentStorageService } from '../services/AttachmentStorageService'
 import { AppStorageKeys } from '../config/AppStorageKeys'
 
@@ -43,7 +44,17 @@ export struct ScreenshotBanner {
           }
           .width(20)
           .height(20)
-          .backgroundColor($r('app.color.divider'))
+          .padding(0)
+          .backgroundColor(Color.Transparent)
+          .borderRadius(10)
+          .stateEffect(false)
+          .systemMaterial(new uiMaterial.ImmersiveMaterial({
+            style: uiMaterial.ImmersiveStyle.ULTRA_THIN,
+            materialColor: Color.Transparent,
+            applyShadow: false,
+            interactive: true,
+            lightEffect: { color: undefined }
+          }))
           .onClick(() => {
             this.dismiss()
           })
@@ -62,7 +73,8 @@ export struct ScreenshotBanner {
         })
           .width(48)
           .height(48)
-          .borderRadius(8)
+          .borderRadius(12)
+          .clip(true)
           .margin({ top: 8 })
 
         Text($r('app.string.screenshot_banner_subtitle'))
@@ -73,8 +85,16 @@ export struct ScreenshotBanner {
       .padding({ left: 12, right: 12, top: 10, bottom: 10 })
       .width(140)
       .alignItems(HorizontalAlign.Center)
-      .backgroundColor($r('app.color.surface'))
+      .backgroundColor(Color.Transparent)
       .borderRadius(14)
+      .clip(false)
+      .systemMaterial(new uiMaterial.ImmersiveMaterial({
+        style: uiMaterial.ImmersiveStyle.REGULAR,
+        materialColor: Color.Transparent,
+        applyShadow: false,
+        interactive: false,
+        lightEffect: { color: undefined }
+      }))
       .shadow({ radius: 20, color: 'rgba(0, 0, 0, 0.12)', offsetX: 0, offsetY: 6 })
       .onAreaChange((_oldArea: Area, newArea: Area) => {
         let h = newArea.height

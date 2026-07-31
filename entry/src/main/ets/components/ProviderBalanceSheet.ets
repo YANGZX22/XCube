@@ -31,39 +31,39 @@ export struct ProviderBalanceSheet {
       // 顶部标题与操作
       Row() {
         ChatFloatingImmersiveButton({
-          barWidth: 40,
-          barHeight: 40,
+          barWidth: 34,
+          barHeight: 34,
           iconResource: $r('sys.symbol.xmark'),
-          iconSize: 17,
+          iconSize: 15,
           iconColor: [this.themePrimary],
-          responsePadding: 0,
+          responsePadding: 3,
           onButtonClick: (): void => {
             this.onClose()
           }
         }) {
           Stack({ alignContent: Alignment.Center }) {
             SymbolGlyph($r('sys.symbol.xmark'))
-              .fontSize(17)
+              .fontSize(15)
               .fontColor([this.themePrimary])
           }
-          .width(40)
-          .height(40)
+          .width(34)
+          .height(34)
         }
 
         Text($r('app.string.balance_query'))
-          .fontSize(17)
+          .fontSize(16)
           .fontWeight(FontWeight.Bold)
           .fontColor($r('app.color.text_primary'))
           .layoutWeight(1)
           .textAlign(TextAlign.Center)
 
         ChatFloatingImmersiveButton({
-          barWidth: 40,
-          barHeight: 40,
+          barWidth: 34,
+          barHeight: 34,
           iconResource: $r('sys.symbol.arrow_clockwise'),
-          iconSize: 18,
+          iconSize: 16,
           iconColor: [this.themePrimary],
-          responsePadding: 0,
+          responsePadding: 3,
           onButtonClick: (): void => {
             if (!this.state.loading) {
               this.onRefresh()
@@ -73,79 +73,79 @@ export struct ProviderBalanceSheet {
           Stack({ alignContent: Alignment.Center }) {
             if (this.state.loading) {
               LoadingProgress()
-                .width(20)
-                .height(20)
+                .width(16)
+                .height(16)
                 .color(this.themePrimary)
             } else {
               SymbolGlyph($r('sys.symbol.arrow_clockwise'))
-                .fontSize(18)
+                .fontSize(16)
                 .fontColor([this.themePrimary])
             }
           }
-          .width(40)
-          .height(40)
+          .width(34)
+          .height(34)
         }
       }
       .width('100%')
-      .padding({ left: 16, right: 16, top: 8, bottom: 14 })
+      .padding({ left: 14, right: 14, top: 6, bottom: 10 })
       .alignItems(VerticalAlign.Center)
 
       // 列表 / 空态
       if (this.state.results.length === 0 && this.state.loading) {
         Column() {
           LoadingProgress()
-            .width(32)
-            .height(32)
+            .width(28)
+            .height(28)
             .color(this.themePrimary)
-            .margin({ bottom: 14 })
+            .margin({ bottom: 10 })
           Text($r('app.string.loading'))
             .fontSize(14)
             .fontColor($r('app.color.text_tertiary'))
         }
         .width('100%')
-        .padding({ top: 34, bottom: 42, left: 24, right: 24 })
+        .padding({ top: 28, bottom: 34, left: 20, right: 20 })
         .justifyContent(FlexAlign.Center)
         .alignItems(HorizontalAlign.Center)
       } else if (this.state.results.length === 0) {
         Column() {
           SymbolGlyph($r('sys.symbol.creditcard'))
-            .fontSize(40)
+            .fontSize(34)
             .fontColor([$r('app.color.text_tertiary')])
-            .margin({ bottom: 12 })
+            .margin({ bottom: 10 })
           Text($r('app.string.balance_query_empty'))
             .fontSize(14)
             .fontColor($r('app.color.text_tertiary'))
             .textAlign(TextAlign.Center)
         }
         .width('100%')
-        .padding({ top: 32, bottom: 40, left: 24, right: 24 })
+        .padding({ top: 26, bottom: 32, left: 20, right: 20 })
         .justifyContent(FlexAlign.Center)
         .alignItems(HorizontalAlign.Center)
       } else {
-        Column({ space: 10 }) {
+        Column({ space: 8 }) {
           ForEach(this.state.results, (item: BalanceResult) => {
             this.BalanceRow(item)
           }, (item: BalanceResult) => `${this.state.revision}:${item.providerId}`)
         }
         .width('100%')
-        .padding({ left: 16, right: 16, bottom: 18 })
+        .padding({ left: 14, right: 14, bottom: 14 })
       }
     }
     .width('100%')
-    .padding({ bottom: 8 })
+    .padding({ bottom: 6 })
   }
 
   @Builder
   BalanceRow(item: BalanceResult) {
-    Row({ space: 12 }) {
+    Row({ space: 10 }) {
       ProviderIcon({
         iconType: item.providerIconType,
         iconPath: item.providerIconPath,
         textIcon: item.providerTextIcon,
         textIconBgColor: item.providerTextIconBgColor,
         customImagePath: item.providerCustomImagePath,
-        iconSize: 42,
-        radius: 11,
+        iconSize: 36,
+        radius: 10,
         bgColor: $r('app.color.divider'),
         brandColor: item.providerBrandColor,
         fallbackSymbol: $r('sys.symbol.cloud'),
@@ -154,7 +154,7 @@ export struct ProviderBalanceSheet {
 
       Column() {
         Text(item.providerName)
-          .fontSize(16)
+          .fontSize(14)
           .fontWeight(FontWeight.Bold)
           .fontColor($r('app.color.text_primary'))
           .maxLines(1)
@@ -163,11 +163,11 @@ export struct ProviderBalanceSheet {
         if (!item.success) {
           Row({ space: 4 }) {
             SymbolGlyph($r('sys.symbol.exclamationmark_circle'))
-              .fontSize(12)
+              .fontSize(11)
               .fontColor([$r('app.color.status_error')])
 
             Text(item.error !== '' ? item.error : $r('app.string.balance_query_failed'))
-              .fontSize(12)
+              .fontSize(11)
               .fontColor($r('app.color.status_error'))
               .maxLines(1)
               .textOverflow({ overflow: TextOverflow.Ellipsis })
@@ -182,13 +182,13 @@ export struct ProviderBalanceSheet {
       if (item.success) {
         Row({ space: 5 }) {
           Text(item.balance)
-            .fontSize(20)
+            .fontSize(18)
             .fontWeight(FontWeight.Bold)
             .fontColor(this.themePrimary)
 
           if (item.currency !== '') {
             Text(item.currency)
-              .fontSize(11)
+              .fontSize(10)
               .fontWeight(FontWeight.Medium)
               .fontColor($r('app.color.text_secondary'))
               .margin({ bottom: 2 })
@@ -198,8 +198,8 @@ export struct ProviderBalanceSheet {
       }
     }
     .width('100%')
-    .padding({ left: 14, right: 14, top: 13, bottom: 13 })
-    .borderRadius(18)
+    .padding({ left: 12, right: 12, top: 10, bottom: 10 })
+    .borderRadius(16)
     .border({
       width: 1,
       color: withColorAlpha(this.themePrimary, '38')

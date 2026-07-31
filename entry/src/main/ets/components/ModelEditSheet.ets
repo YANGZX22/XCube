@@ -514,7 +514,6 @@ export struct ModelEditSheet {
         .placeholderColor($r('app.color.text_tertiary'))
         .backgroundColor(Color.Transparent)
         .borderRadius(14)
-        .border({ width: 0.8, color: this.themePrimaryLight })
         .padding({ left: 12, right: 12 })
         .systemMaterial(new uiMaterial.ImmersiveMaterial({
           style: uiMaterial.ImmersiveStyle.ULTRA_THIN,

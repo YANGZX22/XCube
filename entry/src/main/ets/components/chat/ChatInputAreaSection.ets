@@ -77,8 +77,8 @@ export struct ChatInputAreaSection {
           })
         }
         .width('100%')
-        .justifyContent(FlexAlign.End)
-        .padding({ right: 4, bottom: 8 })
+        .justifyContent(FlexAlign.Center)
+        .padding({ bottom: 8 })
 
         ChatToolbar({
           toolSelectionAvailable: this.toolSelectionAvailable,
