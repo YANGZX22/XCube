@@ -164,7 +164,7 @@ export class PdfTextExtractionService {
         try {
           const pageText = page.getTextContent()
           if (pageText.trim() !== '') {
-            pageTexts.push(pageText)
+            pageTexts.push(`[第 ${i + 1} 页]\n${pageText}`)
           }
         } finally {
           page.release()

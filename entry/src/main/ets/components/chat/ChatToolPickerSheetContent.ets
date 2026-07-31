@@ -35,10 +35,6 @@ export struct ChatToolPickerSheetContent {
     return getAppUiState().themeSurface
   }
 
-  private get themePrimaryLightHex(): string {
-    return getAppUiState().themePrimaryLight
-  }
-
   private isMcpChatTool(tool: ToolConfig): boolean {
     return tool.sourceType === ToolSourceType.MCP && tool.sourceId.trim() !== ''
   }
@@ -100,18 +96,8 @@ export struct ChatToolPickerSheetContent {
     return true
   }
 
-  private getCardBackground(selected: boolean): ResourceColor {
-    return selected
-      ? withColorAlpha(this.themePrimaryLightHex, 'D9')
-      : withColorAlpha(this.themeSurface, 'CC')
-  }
-
   private getCardBorderColor(): ResourceColor {
     return $r('app.color.divider')
-  }
-
-  private getCardShadowColor(selected: boolean): string {
-    return selected ? 'rgba(0, 125, 255, 0.10)' : 'rgba(15, 23, 42, 0.04)'
   }
 
   private getBuiltinDescription(tool: ToolConfig): string {
@@ -160,19 +146,25 @@ export struct ChatToolPickerSheetContent {
   private BuiltinToolGridCard(tool: ToolConfig) {
     Column({ space: 10 }) {
       Row({ space: 8 }) {
-        Stack({ alignContent: Alignment.Center }) {
+        Button({ type: ButtonType.Circle, stateEffect: false }) {
           SymbolGlyph(this.getToolSymbolResource(tool.id))
             .fontSize(17)
             .fontColor([this.themePrimary])
         }
         .width(36)
         .height(36)
-        .borderRadius(18)
-        .clip(true)
+        .padding(0)
         .backgroundColor(Color.Transparent)
         .systemMaterial(new uiMaterial.ImmersiveMaterial({
-          style: uiMaterial.ImmersiveStyle.ULTRA_THIN
+          style: uiMaterial.ImmersiveStyle.ULTRA_THIN,
+          materialColor: Color.Transparent,
+          applyShadow: false,
+          interactive: true,
+          lightEffect: { color: undefined }
         }))
+        .onClick(() => {
+          this.onToggleTool(tool.id, !this.isToolSelected(tool.id))
+        })
 
         Toggle({ type: ToggleType.Switch, isOn: this.isToolSelected(tool.id) })
           .selectedColor(this.themePrimary)
@@ -222,17 +214,18 @@ export struct ChatToolPickerSheetContent {
     .height(138)
     .padding(12)
     .borderRadius(18)
-    .backgroundColor(this.getCardBackground(this.isToolSelected(tool.id)))
+    .backgroundColor(Color.Transparent)
     .border({
       width: 0.8,
       color: this.getCardBorderColor()
     })
-    .shadow({
-      radius: this.isToolSelected(tool.id) ? 14 : 10,
-      color: this.getCardShadowColor(this.isToolSelected(tool.id)),
-      offsetX: 0,
-      offsetY: this.isToolSelected(tool.id) ? 6 : 4
-    })
+    .systemMaterial(new uiMaterial.ImmersiveMaterial({
+      style: uiMaterial.ImmersiveStyle.REGULAR,
+      materialColor: Color.Transparent,
+      applyShadow: false,
+      interactive: true,
+      lightEffect: { color: undefined }
+    }))
   }
 
   build() {
@@ -393,19 +386,25 @@ export struct ChatToolPickerSheetContent {
 
                 ForEach(this.getMcpToolGroups(), (group: McpToolGroup) => {
                   Row({ space: 12 }) {
-                    Stack({ alignContent: Alignment.Center }) {
+                    Button({ type: ButtonType.Circle, stateEffect: false }) {
                       SymbolGlyph($r('sys.symbol.link'))
                         .fontSize(19)
                         .fontColor([this.themePrimary])
                     }
                     .width(40)
                     .height(40)
-                    .borderRadius(20)
-                    .clip(true)
+                    .padding(0)
                     .backgroundColor(Color.Transparent)
                     .systemMaterial(new uiMaterial.ImmersiveMaterial({
-                      style: uiMaterial.ImmersiveStyle.ULTRA_THIN
+                      style: uiMaterial.ImmersiveStyle.ULTRA_THIN,
+                      materialColor: Color.Transparent,
+                      applyShadow: false,
+                      interactive: true,
+                      lightEffect: { color: undefined }
                     }))
+                    .onClick(() => {
+                      this.onToggleMcpGroup(group.toolIds, !this.isMcpToolGroupSelected(group))
+                    })
 
                     Column({ space: 8 }) {
                       Row({ space: 8 }) {
@@ -443,17 +442,18 @@ export struct ChatToolPickerSheetContent {
                   .width('100%')
                   .padding(14)
                   .borderRadius(18)
-                  .backgroundColor(this.getCardBackground(this.isMcpToolGroupSelected(group)))
+                  .backgroundColor(Color.Transparent)
                   .border({
                     width: 0.8,
                     color: this.getCardBorderColor()
                   })
-                  .shadow({
-                    radius: this.isMcpToolGroupSelected(group) ? 14 : 10,
-                    color: this.getCardShadowColor(this.isMcpToolGroupSelected(group)),
-                    offsetX: 0,
-                    offsetY: this.isMcpToolGroupSelected(group) ? 6 : 4
-                  })
+                  .systemMaterial(new uiMaterial.ImmersiveMaterial({
+                    style: uiMaterial.ImmersiveStyle.REGULAR,
+                    materialColor: Color.Transparent,
+                    applyShadow: false,
+                    interactive: true,
+                    lightEffect: { color: undefined }
+                  }))
                 }, (group: McpToolGroup) => group.sourceId)
               }
               .width('100%')

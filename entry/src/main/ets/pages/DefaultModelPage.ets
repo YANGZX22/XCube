@@ -511,7 +511,6 @@ struct DefaultModelPage {
         .padding(16)
         .backgroundColor(Color.Transparent)
         .borderRadius(16)
-        .border({ width: 1, color: this.themePrimaryLight })
         .systemMaterial(new uiMaterial.ImmersiveMaterial({
           style: uiMaterial.ImmersiveStyle.ULTRA_THIN,
           materialColor: Color.Transparent,

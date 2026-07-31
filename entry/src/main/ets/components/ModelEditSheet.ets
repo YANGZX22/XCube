@@ -273,10 +273,12 @@ export struct ModelEditSheet {
         .width('100%')
         .height(44)
         .backgroundColor(Color.Transparent)
-        .backgroundBlurStyle(BlurStyle.COMPONENT_REGULAR)
-        .borderRadius(12)
-        .border({ width: 0.5, color: $r('app.color.divider') })
-        .clip(true)
+        .borderRadius(16)
+        .systemMaterial(new uiMaterial.ImmersiveMaterial({
+          style: uiMaterial.ImmersiveStyle.ULTRA_THIN,
+          materialColor: Color.Transparent,
+          applyShadow: false
+        }))
         .padding({ left: 16, right: 16 })
         .onChange((value: string) => {
           this.tempName = value

@@ -76,6 +76,7 @@ export struct ScrollToBottomButton {
                   shadow: false,
                   enableScanEffect: false
                 })
+                .hitTestBehavior(HitTestMode.None)
             }
 
             SymbolGlyph(this.buttonDirection === 1 ? $r('sys.symbol.arrow_up_to_line') : $r('sys.symbol.chevron_down'))
@@ -84,7 +85,6 @@ export struct ScrollToBottomButton {
           }
           .width(40)
           .height(40)
-          .translate({ y: -4 })
         }
       }
       .width(40)

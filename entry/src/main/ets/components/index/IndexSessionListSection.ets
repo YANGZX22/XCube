@@ -6,6 +6,7 @@ import { getAppUiState } from '../../state/AppUiState'
 
 @ComponentV2
 export struct IndexSessionListSection {
+  @Param horizontalPadding: number = 16
   @Param sessionGroups: SessionListGroupViewModel[] = []
   @Param sessionListScroller: ListScroller = new ListScroller()
   @Param isMultiSelectMode: boolean = false
@@ -47,7 +48,7 @@ export struct IndexSessionListSection {
         .margin({ left: 8 })
     }
     .width('100%')
-    .padding({ left: 8, right: 8, top: 6, bottom: 2 })
+    .padding({ left: this.horizontalPadding, right: this.horizontalPadding, top: 6, bottom: 2 })
   }
 
   @Builder
@@ -182,7 +183,7 @@ export struct IndexSessionListSection {
     }
     .width('100%')
     .height(32)
-    .padding({ left: 16, right: 16 })
+    .padding({ left: this.horizontalPadding, right: this.horizontalPadding })
     .alignItems(VerticalAlign.Center)
   }
 
@@ -193,30 +194,37 @@ export struct IndexSessionListSection {
     }) {
       LazyForEach(group.dataSource, (item: SessionListItemData, index: number) => {
         ListItem({ style: ListItemStyle.NONE }) {
-          IndexSessionListItem({
-            item: item,
-            isMultiSelectMode: this.isMultiSelectMode,
-            onToggleSelection: (sessionId: string): void => {
-              this.onToggleSelection(sessionId)
-            },
-            onOpenSession: (session: ChatSession): void => {
-              this.onOpenSession(session)
-            },
-            onDeleteSession: (sessionId: string): void => {
-              this.onDeleteSession(sessionId)
-            },
-            onEnterMultiSelect: (sessionId: string): void => {
-              this.onEnterMultiSelect(sessionId)
-            },
-            onShareSession: (session: ChatSession): void => {
-              this.onShareSession(session)
-            },
-            onToggleFavorite: (session: ChatSession): void => {
-              this.onToggleFavorite(session)
-            }
-          })
+          Column() {
+            IndexSessionListItem({
+              item: item,
+              isMultiSelectMode: this.isMultiSelectMode,
+              onToggleSelection: (sessionId: string): void => {
+                this.onToggleSelection(sessionId)
+              },
+              onOpenSession: (session: ChatSession): void => {
+                this.onOpenSession(session)
+              },
+              onDeleteSession: (sessionId: string): void => {
+                this.onDeleteSession(sessionId)
+              },
+              onEnterMultiSelect: (sessionId: string): void => {
+                this.onEnterMultiSelect(sessionId)
+              },
+              onShareSession: (session: ChatSession): void => {
+                this.onShareSession(session)
+              },
+              onToggleFavorite: (session: ChatSession): void => {
+                this.onToggleFavorite(session)
+              }
+            })
+          }
+          .width('100%')
+          .padding({ left: this.horizontalPadding, right: this.horizontalPadding })
         }
-        .margin({ left: 8, right: 8, top: index === 0 ? 4 : 0, bottom: 6 })
+        .margin({
+          top: index === 0 ? 4 : 0,
+          bottom: 6
+        })
         .swipeAction(this.isMultiSelectMode ? undefined : {
           start: this.FavoriteSwipeButton(item.session),
           end: this.DeleteSwipePanel(item.session.id)

@@ -9,7 +9,9 @@ import {
   DataAugmentationInvertedIndexConfiguration,
   DataAugmentationVectorIndexConfiguration,
   getKnowledgeRetrievalService,
+  KnowledgeHitContextProvider,
   KnowledgeReadyDocumentProvider,
+  KnowledgeSearchHit,
   KnowledgeVectorHealthObserver,
   KnowledgeVectorReadyDocumentProvider
 } from './KnowledgeRetrievalService'
@@ -22,6 +24,17 @@ import {
   KnowledgeVectorRecord,
   KnowledgeVectorStoreStatus
 } from './KnowledgeVectorStore'
+import {
+  KnowledgeVectorBootstrapCompletion,
+  KnowledgeVectorBootstrapGate,
+  KnowledgeVectorBootstrapResult
+} from './KnowledgeVectorBootstrapGate'
+import {
+  KNOWLEDGE_SEMANTIC_CHUNKER_VERSION,
+  KnowledgeSemanticChunk,
+  KnowledgeSemanticChunker,
+  KnowledgeSemanticChunkRequest
+} from './KnowledgeSemanticChunker'
 import { projectKnowledgeVector } from './KnowledgeVectorProjection'
 import { RegisteredDocumentAttachment } from './DocumentAttachmentRegistryService'
 import { getPdfTextExtractionService } from './PdfTextExtractionService'
@@ -30,6 +43,7 @@ import { getImageTextRecognitionService } from './ImageTextRecognitionService'
 export const KNOWLEDGE_DATABASE_NAME: string = 'chatcube_knowledge.db'
 export const KNOWLEDGE_DOCUMENTS_TABLE: string = 'knowledge_documents'
 export const KNOWLEDGE_CHUNKS_FTS_TABLE: string = 'knowledge_chunks_fts'
+export const KNOWLEDGE_CHUNK_METADATA_TABLE: string = 'knowledge_chunk_metadata'
 export const KNOWLEDGE_VECTOR_INDEX_STATE_TABLE: string = 'knowledge_vector_index_state'
 export const KNOWLEDGE_VECTOR_DELETE_QUEUE_TABLE: string = 'knowledge_vector_delete_queue'
 
@@ -38,9 +52,7 @@ const MAX_FILE_BYTES: number = 20 * 1024 * 1024
 const MAX_DOCUMENT_TEXT_CHARACTERS: number = 2 * 1024 * 1024
 const MIN_PDF_TEXT_CHARACTERS_BEFORE_OCR: number = 120
 export const KNOWLEDGE_CHUNK_MAX_CHARACTERS: number = 480
-const CHUNK_OVERLAP_CHARACTERS: number = 72
-const CHUNK_BOUNDARY_LOOKBACK: number = 120
-const KNOWLEDGE_CHUNKER_VERSION: string = 'semantic-v2-480-72'
+const KNOWLEDGE_CHUNKER_VERSION: string = KNOWLEDGE_SEMANTIC_CHUNKER_VERSION
 const EMBEDDING_BATCH_SIZE: number = 16
 const FILE_IO_CHUNK_BYTES: number = 256 * 1024
 
@@ -169,26 +181,81 @@ class KnowledgeDocumentMigrationResult {
   }
 }
 
+class KnowledgeVectorStartupPlan {
+  modelKey: string = ''
+  documentIds: string[] = []
+  vectorReady: boolean = false
+  message: string = ''
+}
+
 class KnowledgeChunk {
   id: string = ''
   documentId: string = ''
   title: string = ''
   locator: string = ''
   content: string = ''
+  embeddingText: string = ''
+  chunkIndex: number = 0
+  parentId: string = ''
+  headingPath: string = ''
+  pageStart: number = 0
+  pageEnd: number = 0
+  continuesBefore: boolean = false
+  continuesAfter: boolean = false
+  rawEmbedding: Float32Array | null = null
 
-  constructor(id: string, documentId: string, title: string, locator: string, content: string) {
+  constructor(
+    id: string,
+    documentId: string,
+    title: string,
+    locator: string,
+    content: string,
+    embeddingText: string,
+    chunkIndex: number,
+    parentId: string,
+    headingPath: string,
+    pageStart: number,
+    pageEnd: number,
+    continuesBefore: boolean,
+    continuesAfter: boolean,
+    rawEmbedding: Float32Array | null
+  ) {
     this.id = id
     this.documentId = documentId
     this.title = title
     this.locator = locator
     this.content = content
+    this.embeddingText = embeddingText
+    this.chunkIndex = chunkIndex
+    this.parentId = parentId
+    this.headingPath = headingPath
+    this.pageStart = pageStart
+    this.pageEnd = pageEnd
+    this.continuesBefore = continuesBefore
+    this.continuesAfter = continuesAfter
+    this.rawEmbedding = rawEmbedding
   }
+}
+
+class KnowledgeChunkContextMetadata {
+  documentId: string = ''
+  chunkIndex: number = 0
+  parentId: string = ''
+  continuesBefore: boolean = false
+  continuesAfter: boolean = false
+}
+
+class KnowledgeStoredChunkContext {
+  chunkId: string = ''
+  locator: string = ''
+  content: string = ''
 }
 
 export class KnowledgeDocumentService implements
   KnowledgeReadyDocumentProvider,
   KnowledgeVectorReadyDocumentProvider,
-  KnowledgeVectorHealthObserver {
+  KnowledgeVectorHealthObserver,
+  KnowledgeHitContextProvider {
   private static instance: KnowledgeDocumentService | null = null
   private context: Context | null = null
   private store: relationalStore.RdbStore | null = null
@@ -199,6 +266,8 @@ export class KnowledgeDocumentService implements
   private mutationTail: Promise<void> = Promise.resolve()
   private vectorRecoveryScheduled: boolean = false
   private embeddingMigrationGeneration: number = 0
+  private vectorBootstrapGate: KnowledgeVectorBootstrapGate = new KnowledgeVectorBootstrapGate()
+  private semanticChunker: KnowledgeSemanticChunker = new KnowledgeSemanticChunker()
   private retrievalAdapter: DataAugmentationHybridAdapter =
     new DataAugmentationHybridAdapter()
 
@@ -260,9 +329,26 @@ export class KnowledgeDocumentService implements
       'KnowledgeDocumentService',
       `Initialized: readyDocuments=${this.readyDocumentCount}`
     )
-    this.restoreVectorRetrievalAndMigrate().catch((_error: Object): void => {
-      console.warn('KnowledgeDocumentService', 'Knowledge vector startup migration stopped')
-    })
+    const quickVectorStartup = this.prepareVectorStartup()
+    this.vectorBootstrapGate.track(
+      quickVectorStartup.then(
+        (plan: KnowledgeVectorStartupPlan): KnowledgeVectorBootstrapCompletion => {
+          return plan.vectorReady
+            ? KnowledgeVectorBootstrapCompletion.readyResult(plan.message)
+            : KnowledgeVectorBootstrapCompletion.failedResult(plan.message)
+        }
+      )
+    )
+    quickVectorStartup.then(
+      (plan: KnowledgeVectorStartupPlan): void => {
+        this.runVectorStartupMigrations(plan).catch((_error: Object): void => {
+          console.warn('KnowledgeDocumentService', 'Knowledge vector startup migration stopped')
+        })
+      },
+      (_error: Object): void => {
+        console.warn('KnowledgeDocumentService', 'Knowledge vector startup recovery stopped')
+      }
+    )
   }
 
   private async recoverInterruptedDocuments(store: relationalStore.RdbStore): Promise<void> {
@@ -286,6 +372,13 @@ export class KnowledgeDocumentService implements
     try {
       await store.executeSql(
         `DELETE FROM ${KNOWLEDGE_CHUNKS_FTS_TABLE}
+         WHERE document_id IN (
+           SELECT id FROM ${KNOWLEDGE_DOCUMENTS_TABLE} WHERE status <> ?
+         )`,
+        [KnowledgeDocumentStatus.READY]
+      )
+      await store.executeSql(
+        `DELETE FROM ${KNOWLEDGE_CHUNK_METADATA_TABLE}
          WHERE document_id IN (
            SELECT id FROM ${KNOWLEDGE_DOCUMENTS_TABLE} WHERE status <> ?
          )`,
@@ -404,6 +497,23 @@ export class KnowledgeDocumentService implements
         created_at INTEGER NOT NULL
       )
     `)
+    await store.executeSql(`
+      CREATE TABLE IF NOT EXISTS ${KNOWLEDGE_CHUNK_METADATA_TABLE} (
+        chunk_id TEXT PRIMARY KEY,
+        document_id TEXT NOT NULL,
+        chunk_index INTEGER NOT NULL,
+        parent_id TEXT NOT NULL,
+        heading_path TEXT NOT NULL DEFAULT '',
+        page_start INTEGER NOT NULL DEFAULT 0,
+        page_end INTEGER NOT NULL DEFAULT 0,
+        continues_before INTEGER NOT NULL DEFAULT 0,
+        continues_after INTEGER NOT NULL DEFAULT 0
+      )
+    `)
+    await store.executeSql(`
+      CREATE INDEX IF NOT EXISTS knowledge_chunk_metadata_document_index
+      ON ${KNOWLEDGE_CHUNK_METADATA_TABLE}(document_id, chunk_index)
+    `)
 
     const tokenizer = config.tokenizer
     let createFtsSql = `
@@ -449,6 +559,7 @@ export class KnowledgeDocumentService implements
     this.retrievalAdapter.setVectorHealthObserver(this)
     const retrievalService = getKnowledgeRetrievalService()
     retrievalService.setReadyDocumentProvider(this)
+    retrievalService.setHitContextProvider(this)
     retrievalService.setAdapter(this.retrievalAdapter)
   }
 
@@ -569,28 +680,27 @@ export class KnowledgeDocumentService implements
     return true
   }
 
-  private async restoreVectorRetrievalAndMigrate(): Promise<void> {
+  private async prepareVectorStartup(): Promise<KnowledgeVectorStartupPlan> {
     const releaseLock = await this.acquireMutationLock()
-    const embeddingService = getKnowledgeEmbeddingService()
-    let migrationModelKey = ''
-    let documentIds: string[] = []
+    const plan = new KnowledgeVectorStartupPlan()
     try {
       const store = this.store
       const context = this.context
       if (store === null || context === null) {
-        return
+        plan.message = '知识库上下文不可用，首次查询使用关键词检索'
+        return plan
       }
 
       const vectorStore = getKnowledgeVectorStore()
-      migrationModelKey = embeddingService.modelKey()
+      plan.modelKey = getKnowledgeEmbeddingService().modelKey()
       const existingState = await this.findVectorStoreSeed(
         store,
-        migrationModelKey
+        plan.modelKey
       )
       if (existingState !== null && existingState.dimension > 0) {
         let openResult = await vectorStore.initialize(
           context,
-          migrationModelKey,
+          plan.modelKey,
           existingState.dimension
         )
         if (openResult.status === KnowledgeVectorStoreStatus.REBUILD_REQUIRED) {
@@ -608,13 +718,19 @@ export class KnowledgeDocumentService implements
           )
           openResult = await vectorStore.rebuild(
             context,
-            migrationModelKey,
+            plan.modelKey,
             existingState.dimension
           )
         }
         if (openResult.isReady()) {
           await this.flushPendingVectorDeletions(store)
           this.configureVectorRetrieval(context, existingState.dimension)
+          plan.vectorReady = true
+          plan.message = '向量 sidecar 已恢复，混合检索可用'
+        } else {
+          plan.message = openResult.message.trim() === ''
+            ? '向量 sidecar 暂不可用，首次查询使用关键词检索'
+            : openResult.message
         }
       } else if (await this.hasPendingVectorDeletions(store)) {
         this.retrievalAdapter.configureVector(null)
@@ -623,20 +739,28 @@ export class KnowledgeDocumentService implements
         }
       }
 
-      documentIds = await this.listDocumentsNeedingVectorMigration(
+      plan.documentIds = await this.listDocumentsNeedingVectorMigration(
         store,
-        migrationModelKey,
+        plan.modelKey,
         vectorStore.isVectorSupported()
       )
+      if (plan.message === '') {
+        plan.message = vectorStore.isVectorSupported()
+          ? '尚无可直接恢复的语义向量，首次查询使用关键词检索'
+          : '当前设备不支持向量 sidecar，使用关键词检索'
+      }
+      return plan
     } finally {
       releaseLock()
     }
+  }
 
-    for (let index = 0; index < documentIds.length; index++) {
-      if (embeddingService.modelKey() !== migrationModelKey) {
+  private async runVectorStartupMigrations(plan: KnowledgeVectorStartupPlan): Promise<void> {
+    for (let index = 0; index < plan.documentIds.length; index++) {
+      if (getKnowledgeEmbeddingService().modelKey() !== plan.modelKey) {
         break
       }
-      const migrated = await this.migrateReadyDocument(documentIds[index], migrationModelKey)
+      const migrated = await this.migrateReadyDocument(plan.documentIds[index], plan.modelKey)
       if (!migrated.keywordReady || !migrated.vectorReady) {
         console.warn('KnowledgeDocumentService', 'A background knowledge vector migration failed')
       }
@@ -721,6 +845,8 @@ export class KnowledgeDocumentService implements
       `SELECT d.id, d.content_hash, d.chunk_count,
         (SELECT COUNT(*) FROM ${KNOWLEDGE_CHUNKS_FTS_TABLE} f
           WHERE f.document_id = d.id) AS stored_chunk_count,
+        (SELECT COUNT(*) FROM ${KNOWLEDGE_CHUNK_METADATA_TABLE} m
+          WHERE m.document_id = d.id) AS stored_metadata_count,
         CASE WHEN v.document_id IS NULL THEN 0 ELSE 1 END AS has_vector_state,
         COALESCE(v.generation, '') AS generation,
         COALESCE(v.status, '') AS vector_status,
@@ -756,9 +882,12 @@ export class KnowledgeDocumentService implements
         const vectorCount = resultSet.getLong(resultSet.getColumnIndex('vector_count'))
         const chunkCount = resultSet.getLong(resultSet.getColumnIndex('chunk_count'))
         const storedChunkCount = resultSet.getLong(resultSet.getColumnIndex('stored_chunk_count'))
+        const storedMetadataCount =
+          resultSet.getLong(resultSet.getColumnIndex('stored_metadata_count'))
         const ftsIndexIsComplete =
           chunkCount > 0 &&
-          storedChunkCount === chunkCount
+          storedChunkCount === chunkCount &&
+          storedMetadataCount === chunkCount
         const identityMatches =
           generation === this.buildIndexGenerationFromHash(contentHash) &&
           chunkerVersion === KNOWLEDGE_CHUNKER_VERSION &&
@@ -826,7 +955,7 @@ export class KnowledgeDocumentService implements
         ''
       )
       const text = await this.extractDocumentText(document, extension)
-      const chunks = this.buildChunks(document, text, generation)
+      const chunks = await this.buildChunks(document, text, generation)
       if (chunks.length === 0) {
         throw new Error('文件中没有可建立索引的文字')
       }
@@ -1081,15 +1210,22 @@ export class KnowledgeDocumentService implements
       }
 
       const vectors: Float32Array[] = []
-      for (let start = 0; start < chunks.length; start += EMBEDDING_BATCH_SIZE) {
-        const end = Math.min(chunks.length, start + EMBEDDING_BATCH_SIZE)
-        const texts: string[] = []
-        for (let index = start; index < end; index++) {
-          texts.push(chunks[index].content)
+      const reusableRawVectors = this.collectReusableRawChunkVectors(chunks)
+      if (reusableRawVectors !== null) {
+        for (let index = 0; index < reusableRawVectors.length; index++) {
+          vectors.push(projectKnowledgeVector(reusableRawVectors[index]))
         }
-        const batchVectors = await embeddingService.embedDocuments(texts)
-        for (let index = 0; index < batchVectors.length; index++) {
-          vectors.push(projectKnowledgeVector(batchVectors[index]))
+      } else {
+        for (let start = 0; start < chunks.length; start += EMBEDDING_BATCH_SIZE) {
+          const end = Math.min(chunks.length, start + EMBEDDING_BATCH_SIZE)
+          const texts: string[] = []
+          for (let index = start; index < end; index++) {
+            texts.push(chunks[index].embeddingText)
+          }
+          const batchVectors = await embeddingService.embedDocuments(texts)
+          for (let index = 0; index < batchVectors.length; index++) {
+            vectors.push(projectKnowledgeVector(batchVectors[index]))
+          }
         }
       }
       if (vectors.length !== chunks.length || vectors.length === 0) {
@@ -1188,6 +1324,38 @@ export class KnowledgeDocumentService implements
       )
       return new KnowledgeVectorBuildResult(false, failureMessage)
     }
+  }
+
+  private collectReusableRawChunkVectors(chunks: KnowledgeChunk[]): Float32Array[] | null {
+    if (chunks.length === 0) {
+      return null
+    }
+    const first = chunks[0].rawEmbedding
+    if (first === null || first.length === 0) {
+      return null
+    }
+    const dimension = first.length
+    const vectors: Float32Array[] = []
+    for (let chunkIndex = 0; chunkIndex < chunks.length; chunkIndex++) {
+      const vector = chunks[chunkIndex].rawEmbedding
+      if (vector === null || vector.length !== dimension) {
+        return null
+      }
+      let hasMagnitude = false
+      for (let valueIndex = 0; valueIndex < vector.length; valueIndex++) {
+        if (!Number.isFinite(vector[valueIndex])) {
+          return null
+        }
+        if (vector[valueIndex] !== 0) {
+          hasMagnitude = true
+        }
+      }
+      if (!hasMagnitude) {
+        return null
+      }
+      vectors.push(vector)
+    }
+    return vectors
   }
 
   private async upsertVectorIndexState(
@@ -1438,6 +1606,14 @@ export class KnowledgeDocumentService implements
       getKnowledgeRetrievalService().isAvailable()
   }
 
+  /**
+   * 只允许真实 knowledge_search executor 调用。工具曝光、提示词构建和页面状态
+   * 查询不得等待该 gate，避免在模型调用工具前触发任何检索链路。
+   */
+  async awaitVectorBootstrapForKnowledgeSearch(): Promise<KnowledgeVectorBootstrapResult> {
+    return await this.vectorBootstrapGate.waitForFirstKnowledgeSearch()
+  }
+
   shouldExposeKnowledgeTool(): boolean {
     // 输入区的“利用知识库”开关决定本轮是否向模型曝光工具。
     // 服务层只校验索引是否真实可检索，避免旧版全局偏好阻断新入口。
@@ -1487,6 +1663,170 @@ export class KnowledgeDocumentService implements
       resultSet.close()
     }
     return documentIds
+  }
+
+  /**
+   * 在纯检索命中之后按父块关系补齐最多一个前后相邻块。
+   * 该方法只由 KnowledgeRetrievalService 在真实工具检索完成后调用；
+   * 不生成 query、不再次召回，也不向提示词直接注入内容。
+   */
+  async expandHitContexts(hits: KnowledgeSearchHit[]): Promise<KnowledgeSearchHit[]> {
+    const store = this.store
+    if (store === null || hits.length === 0) {
+      return hits
+    }
+    const preciseChunkIds: string[] = []
+    for (let index = 0; index < hits.length; index++) {
+      if (preciseChunkIds.indexOf(hits[index].chunkId) < 0) {
+        preciseChunkIds.push(hits[index].chunkId)
+      }
+    }
+    const expanded: KnowledgeSearchHit[] = []
+    for (let index = 0; index < hits.length; index++) {
+      expanded.push(await this.expandSingleHitContext(
+        store,
+        hits[index],
+        preciseChunkIds
+      ))
+    }
+    return expanded
+  }
+
+  private async expandSingleHitContext(
+    store: relationalStore.RdbStore,
+    hit: KnowledgeSearchHit,
+    preciseChunkIds: string[]
+  ): Promise<KnowledgeSearchHit> {
+    const metadata = await this.findChunkContextMetadata(store, hit.chunkId)
+    if (metadata === null || metadata.parentId === '') {
+      return hit
+    }
+
+    let previous: KnowledgeStoredChunkContext | null = null
+    let next: KnowledgeStoredChunkContext | null = null
+    if (metadata.continuesBefore && metadata.chunkIndex > 0) {
+      previous = await this.findStoredChunkContext(
+        store,
+        metadata.documentId,
+        metadata.parentId,
+        metadata.chunkIndex - 1
+      )
+    }
+    if (metadata.continuesAfter) {
+      next = await this.findStoredChunkContext(
+        store,
+        metadata.documentId,
+        metadata.parentId,
+        metadata.chunkIndex + 1
+      )
+    }
+    if (previous !== null && preciseChunkIds.indexOf(previous.chunkId) >= 0) {
+      previous = null
+    }
+    if (next !== null && preciseChunkIds.indexOf(next.chunkId) >= 0) {
+      next = null
+    }
+    if (previous === null && next === null) {
+      return hit
+    }
+
+    const contentBlocks: string[] = []
+    const locatorParts: string[] = []
+    if (previous !== null) {
+      this.appendUniqueContentBlocks(contentBlocks, previous.content)
+      this.appendUniqueString(locatorParts, previous.locator)
+    }
+    this.appendUniqueContentBlocks(contentBlocks, hit.content)
+    this.appendUniqueString(locatorParts, hit.locator)
+    if (next !== null) {
+      this.appendUniqueContentBlocks(contentBlocks, next.content)
+      this.appendUniqueString(locatorParts, next.locator)
+    }
+    return new KnowledgeSearchHit(
+      hit.documentId,
+      hit.chunkId,
+      hit.title,
+      locatorParts.join(' → '),
+      hit.score,
+      contentBlocks.join('\n\n')
+    )
+  }
+
+  private async findChunkContextMetadata(
+    store: relationalStore.RdbStore,
+    chunkId: string
+  ): Promise<KnowledgeChunkContextMetadata | null> {
+    const resultSet = await store.querySql(
+      `SELECT document_id, chunk_index, parent_id, continues_before, continues_after
+       FROM ${KNOWLEDGE_CHUNK_METADATA_TABLE}
+       WHERE chunk_id = ?
+       LIMIT 1`,
+      [chunkId]
+    )
+    try {
+      if (!resultSet.goToNextRow()) {
+        return null
+      }
+      const metadata = new KnowledgeChunkContextMetadata()
+      metadata.documentId =
+        resultSet.getString(resultSet.getColumnIndex('document_id'))
+      metadata.chunkIndex =
+        resultSet.getLong(resultSet.getColumnIndex('chunk_index'))
+      metadata.parentId =
+        resultSet.getString(resultSet.getColumnIndex('parent_id'))
+      metadata.continuesBefore =
+        resultSet.getLong(resultSet.getColumnIndex('continues_before')) > 0
+      metadata.continuesAfter =
+        resultSet.getLong(resultSet.getColumnIndex('continues_after')) > 0
+      return metadata
+    } finally {
+      resultSet.close()
+    }
+  }
+
+  private async findStoredChunkContext(
+    store: relationalStore.RdbStore,
+    documentId: string,
+    parentId: string,
+    chunkIndex: number
+  ): Promise<KnowledgeStoredChunkContext | null> {
+    const resultSet = await store.querySql(
+      `SELECT f.chunk_id, f.locator, f.content
+       FROM ${KNOWLEDGE_CHUNK_METADATA_TABLE} m
+       INNER JOIN ${KNOWLEDGE_CHUNKS_FTS_TABLE} f ON f.chunk_id = m.chunk_id
+       WHERE m.document_id = ? AND m.parent_id = ? AND m.chunk_index = ?
+       LIMIT 1`,
+      [documentId, parentId, chunkIndex]
+    )
+    try {
+      if (!resultSet.goToNextRow()) {
+        return null
+      }
+      const context = new KnowledgeStoredChunkContext()
+      context.chunkId = resultSet.getString(resultSet.getColumnIndex('chunk_id')).trim()
+      context.locator = resultSet.getString(resultSet.getColumnIndex('locator')).trim()
+      context.content = resultSet.getString(resultSet.getColumnIndex('content')).trim()
+      return context.content === '' ? null : context
+    } finally {
+      resultSet.close()
+    }
+  }
+
+  private appendUniqueContentBlocks(target: string[], value: string): void {
+    const blocks = value.split('\n\n')
+    for (let index = 0; index < blocks.length; index++) {
+      const block = blocks[index].trim()
+      if (block !== '' && target.indexOf(block) < 0) {
+        target.push(block)
+      }
+    }
+  }
+
+  private appendUniqueString(target: string[], value: string): void {
+    const normalized = value.trim()
+    if (normalized !== '' && target.indexOf(normalized) < 0) {
+      target.push(normalized)
+    }
   }
 
   async loadTextPreview(documentId: string): Promise<KnowledgeTextPreview> {
@@ -1555,9 +1895,12 @@ export class KnowledgeDocumentService implements
       const duplicate = await this.findDocumentByHash(store, contentHash)
       if (duplicate !== null) {
         const storedChunkCount = await this.countStoredDocumentChunks(store, duplicate.id)
+        const storedMetadataCount =
+          await this.countStoredDocumentChunkMetadata(store, duplicate.id)
         if (duplicate.status === KnowledgeDocumentStatus.READY &&
           duplicate.chunkCount > 0 &&
-          storedChunkCount === duplicate.chunkCount) {
+          storedChunkCount === duplicate.chunkCount &&
+          storedMetadataCount === duplicate.chunkCount) {
           return new KnowledgeImportResult(true, '该文件已在知识库中', duplicate, true)
         }
         const rebuilt = await this.rebuildDocumentLocked(duplicate.id)
@@ -1590,7 +1933,7 @@ export class KnowledgeDocumentService implements
       try {
         const text = await this.extractDocumentText(document, extension)
         const generation = this.buildIndexGeneration(document)
-        const chunks = this.buildChunks(document, text, generation)
+        const chunks = await this.buildChunks(document, text, generation)
         if (chunks.length === 0) {
           throw new Error('文件中没有可建立索引的文字')
         }
@@ -1696,7 +2039,7 @@ export class KnowledgeDocumentService implements
         ''
       )
       const text = await this.extractDocumentText(document, extension)
-      const chunks = this.buildChunks(document, text, generation)
+      const chunks = await this.buildChunks(document, text, generation)
       if (chunks.length === 0) {
         throw new Error('文件中没有可建立索引的文字')
       }
@@ -1894,55 +2237,49 @@ export class KnowledgeDocumentService implements
     return value.replace(/\s/g, '').length
   }
 
-  private buildChunks(
+  private async buildChunks(
     document: KnowledgeDocument,
     text: string,
     generation: string
-  ): KnowledgeChunk[] {
+  ): Promise<KnowledgeChunk[]> {
     const normalized = this.normalizeText(text)
     if (normalized === '') {
       return []
     }
+    const result = await this.semanticChunker.chunk(
+      new KnowledgeSemanticChunkRequest(document.id, document.title, normalized),
+      getKnowledgeEmbeddingService()
+    )
     const chunks: KnowledgeChunk[] = []
-    let start = 0
-    while (start < normalized.length) {
-      let end = Math.min(normalized.length, start + KNOWLEDGE_CHUNK_MAX_CHARACTERS)
-      if (end < normalized.length) {
-        end = this.findChunkBoundary(normalized, start, end)
-      }
-      if (end <= start) {
-        end = Math.min(normalized.length, start + KNOWLEDGE_CHUNK_MAX_CHARACTERS)
-      }
-      const content = normalized.substring(start, end).trim()
-      if (content !== '') {
-        const index = chunks.length
-        chunks.push(new KnowledgeChunk(
-          `${document.id}_${generation}_chunk_${index + 1}`,
-          document.id,
-          document.title,
-          `片段 ${index + 1}`,
-          content
-        ))
-      }
-      if (end >= normalized.length) {
-        break
-      }
-      start = Math.max(start + 1, end - CHUNK_OVERLAP_CHARACTERS)
+    for (let index = 0; index < result.chunks.length; index++) {
+      const semanticChunk: KnowledgeSemanticChunk = result.chunks[index]
+      const title = semanticChunk.headingPath === ''
+        ? document.title
+        : `${document.title} · ${semanticChunk.headingPath}`
+      chunks.push(new KnowledgeChunk(
+        `${document.id}_${generation}_chunk_${index + 1}`,
+        document.id,
+        title,
+        semanticChunk.locator,
+        semanticChunk.content,
+        semanticChunk.embeddingText,
+        index,
+        semanticChunk.parentId,
+        semanticChunk.headingPath,
+        semanticChunk.pageStart,
+        semanticChunk.pageEnd,
+        semanticChunk.continuesBefore,
+        semanticChunk.continuesAfter,
+        semanticChunk.rawEmbedding
+      ))
     }
+    console.info(
+      'KnowledgeDocumentService',
+      `Chunked document: chunks=${chunks.length}, units=${result.structuralUnitCount}, ` +
+      `semantic=${result.semanticEmbeddingUsed}, semanticBreaks=${result.semanticBreakCount}, ` +
+      `embeddingFallback=${result.semanticEmbeddingFailed}`
+    )
     return chunks
-  }
-
-  private findChunkBoundary(text: string, start: number, proposedEnd: number): number {
-    const minEnd = Math.max(start + 1, proposedEnd - CHUNK_BOUNDARY_LOOKBACK)
-    const candidates: string[] = ['\n\n', '\n', '。', '！', '？', '. ', '! ', '? ', '；', '; ']
-    let best = -1
-    for (let i = 0; i < candidates.length; i++) {
-      const position = text.lastIndexOf(candidates[i], proposedEnd)
-      if (position >= minEnd && position > best) {
-        best = position + candidates[i].length
-      }
-    }
-    return best > start ? best : proposedEnd
   }
 
   private async replaceDocumentChunks(
@@ -1960,6 +2297,23 @@ export class KnowledgeDocumentService implements
             (chunk_id, document_id, title, locator, content)
            VALUES (?, ?, ?, ?, ?)`,
           [chunk.id, chunk.documentId, chunk.title, chunk.locator, chunk.content]
+        )
+        await store.executeSql(
+          `INSERT INTO ${KNOWLEDGE_CHUNK_METADATA_TABLE}
+            (chunk_id, document_id, chunk_index, parent_id, heading_path,
+             page_start, page_end, continues_before, continues_after)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          [
+            chunk.id,
+            chunk.documentId,
+            chunk.chunkIndex,
+            chunk.parentId,
+            chunk.headingPath,
+            chunk.pageStart,
+            chunk.pageEnd,
+            chunk.continuesBefore ? 1 : 0,
+            chunk.continuesAfter ? 1 : 0
+          ]
         )
       }
       store.commit()
@@ -1989,18 +2343,49 @@ export class KnowledgeDocumentService implements
     }
   }
 
+  private async countStoredDocumentChunkMetadata(
+    store: relationalStore.RdbStore,
+    documentId: string
+  ): Promise<number> {
+    const resultSet = await store.querySql(
+      `SELECT COUNT(*) AS stored_metadata_count
+       FROM ${KNOWLEDGE_CHUNK_METADATA_TABLE}
+       WHERE document_id = ?`,
+      [documentId]
+    )
+    try {
+      if (!resultSet.goToNextRow()) {
+        return 0
+      }
+      return resultSet.getLong(resultSet.getColumnIndex('stored_metadata_count'))
+    } finally {
+      resultSet.close()
+    }
+  }
+
   private async verifyStoredDocumentChunks(
     store: relationalStore.RdbStore,
     documentId: string,
     expectedCount: number
   ): Promise<void> {
     const storedCount = await this.countStoredDocumentChunks(store, documentId)
-    if (expectedCount <= 0 || storedCount !== expectedCount) {
-      throw new Error(`知识片段写入不完整：期望 ${expectedCount} 条，实际 ${storedCount} 条`)
+    const storedMetadataCount =
+      await this.countStoredDocumentChunkMetadata(store, documentId)
+    if (expectedCount <= 0 ||
+      storedCount !== expectedCount ||
+      storedMetadataCount !== expectedCount) {
+      throw new Error(
+        `知识片段写入不完整：期望 ${expectedCount} 条，` +
+        `正文 ${storedCount} 条，元数据 ${storedMetadataCount} 条`
+      )
     }
   }
 
   private async deleteDocumentChunks(store: relationalStore.RdbStore, documentId: string): Promise<void> {
+    await store.executeSql(
+      `DELETE FROM ${KNOWLEDGE_CHUNK_METADATA_TABLE} WHERE document_id = ?`,
+      [documentId]
+    )
     await store.executeSql(
       `DELETE FROM ${KNOWLEDGE_CHUNKS_FTS_TABLE} WHERE document_id = ?`,
       [documentId]

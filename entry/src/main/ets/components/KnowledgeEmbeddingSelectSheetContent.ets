@@ -100,59 +100,57 @@ export struct KnowledgeEmbeddingSelectSheetContent {
 
   @Builder
   private LocalModelRow() {
-    Button({ type: ButtonType.Normal, stateEffect: false }) {
-      Row() {
-        Column() {
-          SymbolGlyph($r('sys.symbol.square_stack_3d'))
-            .fontSize(20)
-            .fontColor([this.currentSelection.isApi()
-              ? this.themePrimary
-              : Color.White])
-        }
-        .width(36)
-        .height(36)
-        .borderRadius(10)
-        .backgroundColor(this.currentSelection.isApi()
-          ? withColorAlpha(this.themePrimary, this.isDarkMode ? '2E' : '16')
-          : '#24FFFFFF')
-        .justifyContent(FlexAlign.Center)
-        .alignItems(HorizontalAlign.Center)
-
-        Column({ space: 3 }) {
-          Text(pickLocalizedText('本地 ArkData', 'Local ArkData'))
-            .fontSize(15)
-            .fontWeight(FontWeight.Medium)
-            .fontColor(this.currentSelection.isApi() ? $r('app.color.text_primary') : Color.White)
-
-          Text(pickLocalizedText(
-            this.isLocalEmbeddingSupported
-              ? '在设备侧生成向量，不上传文档片段'
-              : 'ArkData 文本向量仅支持 2in1；当前设备请使用 API',
-            this.isLocalEmbeddingSupported
-              ? 'Generate vectors on device without uploading document chunks'
-              : 'ArkData text embeddings require a 2-in-1 device; use an API here'
-          ))
-            .fontSize(11)
-            .fontColor(this.currentSelection.isApi() ? $r('app.color.text_secondary') : Color.White)
-            .opacity(this.currentSelection.isApi() ? 1 : 0.82)
-            .maxLines(2)
-        }
-        .layoutWeight(1)
-        .alignItems(HorizontalAlign.Start)
-        .margin({ left: 10 })
-
-        if (!this.currentSelection.isApi()) {
-          SymbolGlyph($r('sys.symbol.checkmark_circle_fill'))
-            .fontSize(20)
-            .fontColor([Color.White])
-        }
+    Row() {
+      Column() {
+        SymbolGlyph($r('sys.symbol.square_stack_3d'))
+          .fontSize(20)
+          .fontColor([this.currentSelection.isApi()
+            ? this.themePrimary
+            : Color.White])
       }
-      .width('100%')
-      .alignItems(VerticalAlign.Center)
+      .width(36)
+      .height(36)
+      .borderRadius(10)
+      .backgroundColor(this.currentSelection.isApi()
+        ? withColorAlpha(this.themePrimary, this.isDarkMode ? '2E' : '16')
+        : '#24FFFFFF')
+      .justifyContent(FlexAlign.Center)
+      .alignItems(HorizontalAlign.Center)
+
+      Column({ space: 3 }) {
+        Text(pickLocalizedText('本地 ArkData', 'Local ArkData'))
+          .fontSize(15)
+          .fontWeight(FontWeight.Medium)
+          .fontColor(this.currentSelection.isApi() ? $r('app.color.text_primary') : Color.White)
+
+        Text(pickLocalizedText(
+          this.isLocalEmbeddingSupported
+            ? '在设备侧生成向量，不上传文档片段'
+            : 'ArkData 文本向量仅支持 PC/2in1；当前设备不可用。',
+          this.isLocalEmbeddingSupported
+            ? 'Generate vectors on device without uploading document chunks'
+            : 'ArkData text embeddings require a 2-in-1 device; use an API here'
+        ))
+          .fontSize(11)
+          .fontColor(this.currentSelection.isApi() ? $r('app.color.text_secondary') : Color.White)
+          .opacity(this.currentSelection.isApi() ? 1 : 0.82)
+          .maxLines(2)
+      }
+      .layoutWeight(1)
+      .alignItems(HorizontalAlign.Start)
+      .margin({ left: 10 })
+
+      if (!this.currentSelection.isApi()) {
+        SymbolGlyph($r('sys.symbol.checkmark_circle_fill'))
+          .fontSize(20)
+          .fontColor([Color.White])
+      }
     }
     .width('100%')
+    .alignItems(VerticalAlign.Center)
     .padding({ left: 12, right: 12, top: 11, bottom: 11 })
     .borderRadius(EMBEDDING_OPTION_CORNER_RADIUS)
+    .clip(true)
     .backgroundColor(this.currentSelection.isApi() ? Color.Transparent : this.themePrimary)
     .border({
       width: !this.currentSelection.isApi() ? 1 : 0.5,
@@ -165,13 +163,38 @@ export struct KnowledgeEmbeddingSelectSheetContent {
       interactive: true,
       lightEffect: { color: undefined }
     }))
-    .enabled(!this.isApplying && this.isLocalEmbeddingSupported)
+    .hitTestBehavior(this.isApplying || !this.isLocalEmbeddingSupported
+      ? HitTestMode.None
+      : HitTestMode.Block)
     .opacity(this.isApplying || !this.isLocalEmbeddingSupported ? 0.55 : 1)
     .onClick(() => {
-      if (this.isLocalEmbeddingSupported) {
+      if (!this.isApplying && this.isLocalEmbeddingSupported) {
         this.onSelectLocal()
       }
     })
+  }
+
+  @Builder
+  private ProviderSectionDivider() {
+    Row({ space: 10 }) {
+      Divider()
+        .layoutWeight(1)
+        .strokeWidth(1.5)
+        .color(this.themePrimary)
+
+      Text(pickLocalizedText('服务商模型', 'Provider models'))
+        .fontSize(12)
+        .fontWeight(FontWeight.Medium)
+        .fontColor(this.themePrimary)
+
+      Divider()
+        .layoutWeight(1)
+        .strokeWidth(1.5)
+        .color(this.themePrimary)
+    }
+    .width('100%')
+    .padding({ top: 4, bottom: 2 })
+    .alignItems(VerticalAlign.Center)
   }
 
   @Builder
@@ -273,6 +296,7 @@ export struct KnowledgeEmbeddingSelectSheetContent {
 
         Column({ space: 10 }) {
           this.LocalModelRow()
+          this.ProviderSectionDivider()
           this.ApiNotice()
         }
         .width('100%')

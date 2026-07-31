@@ -10,12 +10,14 @@ import {
 } from '../main/ets/config/KnowledgeSearchTool'
 import {
   getKnowledgeRetrievalService,
+  KnowledgeHitContextProvider,
   KnowledgeReadyDocumentProvider,
   KnowledgeRetrievalAdapter,
   KnowledgeSearchHit,
   KnowledgeSearchRequest,
   KnowledgeSearchResponse,
-  KnowledgeSearchStatus
+  KnowledgeSearchStatus,
+  shouldRetryKnowledgeRetrieverAttempt
 } from '../main/ets/services/KnowledgeRetrievalService'
 import {
   KNOWLEDGE_SEARCH_TOOL_ID,
@@ -72,6 +74,62 @@ class CapturingKnowledgeAdapter implements KnowledgeRetrievalAdapter {
       new KnowledgeSearchHit('kb_doc_indexing', 'chunk_indexing', 'Indexing', '片段 1', 0.8, 'indexing content')
     ]
     return response
+  }
+}
+
+class NoHitsKnowledgeAdapter implements KnowledgeRetrievalAdapter {
+  isAvailable(): boolean {
+    return true
+  }
+
+  async search(request: KnowledgeSearchRequest): Promise<KnowledgeSearchResponse> {
+    return new KnowledgeSearchResponse(
+      KnowledgeSearchStatus.NO_HITS,
+      request.query,
+      request.topK,
+      'no_hits',
+      '没有检索到相关知识库内容'
+    )
+  }
+}
+
+class ExpandingHitContextProvider implements KnowledgeHitContextProvider {
+  callCount: number = 0
+  receivedDocumentIds: string[] = []
+
+  async expandHitContexts(hits: KnowledgeSearchHit[]): Promise<KnowledgeSearchHit[]> {
+    this.callCount += 1
+    const expanded: KnowledgeSearchHit[] = []
+    for (let index = 0; index < hits.length; index++) {
+      const hit = hits[index]
+      this.receivedDocumentIds.push(hit.documentId)
+      expanded.push(new KnowledgeSearchHit(
+        hit.documentId,
+        hit.chunkId,
+        hit.title,
+        hit.locator,
+        hit.score,
+        `${hit.content} with adjacent context`
+      ))
+    }
+    expanded.push(new KnowledgeSearchHit(
+      'kb_doc_indexing',
+      'chunk_context_not_ready',
+      'Indexing',
+      '片段 2',
+      0.7,
+      'context from a document that is no longer ready'
+    ))
+    return expanded
+  }
+}
+
+class FailingHitContextProvider implements KnowledgeHitContextProvider {
+  callCount: number = 0
+
+  async expandHitContexts(hits: KnowledgeSearchHit[]): Promise<KnowledgeSearchHit[]> {
+    this.callCount += 1
+    throw new Error(`Failed to expand ${hits.length.toString()} hit contexts`)
   }
 }
 
@@ -223,6 +281,21 @@ export default function knowledgeSearchGuardTest() {
       expect(gateway.searchCount).assertEqual(1)
     })
 
+    it('retries_only_for_a_cold_or_invalid_retriever_and_only_once', 0, () => {
+      expect(shouldRetryKnowledgeRetrieverAttempt(0, true, false, false, true))
+        .assertEqual(true)
+      expect(shouldRetryKnowledgeRetrieverAttempt(0, false, true, false, false))
+        .assertEqual(true)
+      expect(shouldRetryKnowledgeRetrieverAttempt(0, false, false, true, false))
+        .assertEqual(true)
+      expect(shouldRetryKnowledgeRetrieverAttempt(0, false, false, false, true))
+        .assertEqual(false)
+      expect(shouldRetryKnowledgeRetrieverAttempt(0, true, false, false, false))
+        .assertEqual(false)
+      expect(shouldRetryKnowledgeRetrieverAttempt(1, true, true, true, true))
+        .assertEqual(false)
+    })
+
     it('rejects_invalid_runtime_argument_shapes_without_retrieval', 0, async () => {
       const gateway = new CountingKnowledgeGateway()
       const executor = new KnowledgeSearchExecutor(gateway, new FixedKnowledgeExecutionGuard(true))
@@ -300,6 +373,79 @@ export default function knowledgeSearchGuardTest() {
         expect(response.hits.length).assertEqual(1)
         expect(response.hits[0].documentId).assertEqual('kb_doc_ready')
       } finally {
+        service.setAdapter(null)
+        service.setReadyDocumentProvider(null)
+      }
+    })
+
+    it('expands_only_still_ready_precise_hits_before_result_budgeting', 0, async () => {
+      const service = getKnowledgeRetrievalService()
+      const adapter = new CapturingKnowledgeAdapter()
+      const contextProvider = new ExpandingHitContextProvider()
+      service.setAdapter(adapter)
+      service.setReadyDocumentProvider(new SequencedReadyDocumentProvider([
+        ['kb_doc_ready'],
+        ['kb_doc_ready']
+      ]))
+      service.setHitContextProvider(contextProvider)
+      try {
+        const response = await service.search(new KnowledgeSearchRequest('项目发布流程'))
+
+        expect(adapter.searchCount).assertEqual(1)
+        expect(contextProvider.callCount).assertEqual(1)
+        expect(contextProvider.receivedDocumentIds.length).assertEqual(1)
+        expect(contextProvider.receivedDocumentIds[0]).assertEqual('kb_doc_ready')
+        expect(response.hits.length).assertEqual(1)
+        expect(response.hits[0].documentId).assertEqual('kb_doc_ready')
+        expect(response.hits[0].content).assertEqual('ready content with adjacent context')
+      } finally {
+        service.setHitContextProvider(null)
+        service.setAdapter(null)
+        service.setReadyDocumentProvider(null)
+      }
+    })
+
+    it('falls_back_to_precise_hits_when_context_expansion_fails', 0, async () => {
+      const service = getKnowledgeRetrievalService()
+      const adapter = new CapturingKnowledgeAdapter()
+      const contextProvider = new FailingHitContextProvider()
+      service.setAdapter(adapter)
+      service.setReadyDocumentProvider(new SequencedReadyDocumentProvider([
+        ['kb_doc_ready'],
+        ['kb_doc_ready']
+      ]))
+      service.setHitContextProvider(contextProvider)
+      try {
+        const response = await service.search(new KnowledgeSearchRequest('项目发布流程'))
+
+        expect(contextProvider.callCount).assertEqual(1)
+        expect(response.hits.length).assertEqual(1)
+        expect(response.hits[0].documentId).assertEqual('kb_doc_ready')
+        expect(response.hits[0].content).assertEqual('ready content')
+      } finally {
+        service.setHitContextProvider(null)
+        service.setAdapter(null)
+        service.setReadyDocumentProvider(null)
+      }
+    })
+
+    it('does_not_expand_context_for_a_non_ok_adapter_response', 0, async () => {
+      const service = getKnowledgeRetrievalService()
+      const contextProvider = new ExpandingHitContextProvider()
+      service.setAdapter(new NoHitsKnowledgeAdapter())
+      service.setReadyDocumentProvider(new SequencedReadyDocumentProvider([
+        ['kb_doc_ready'],
+        ['kb_doc_ready']
+      ]))
+      service.setHitContextProvider(contextProvider)
+      try {
+        const response = await service.search(new KnowledgeSearchRequest('不存在的流程'))
+
+        expect(contextProvider.callCount).assertEqual(0)
+        expect(response.status).assertEqual(KnowledgeSearchStatus.NO_HITS)
+        expect(response.hits.length).assertEqual(0)
+      } finally {
+        service.setHitContextProvider(null)
         service.setAdapter(null)
         service.setReadyDocumentProvider(null)
       }

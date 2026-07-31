@@ -57,9 +57,11 @@ XCube 内置独立的“知识库”页，可在一处上传、管理和预览�
 [`knowledge_search`](entry/src/main/ets/config/KnowledgeSearchTool.ets) 工具让模型按需检索：
 
 - **统一文件入口**：支持 PDF、TXT、Markdown，以及 JPG、JPEG、PNG、WebP、BMP 图片；图片会通过 OCR 建立索引，PDF 提取文字过少时会自动转为图片 OCR。
-- **混合召回**：文档按语义分块，同时建立关键词索引和 ArkData 向量 sidecar；检索时融合关键词与向量结果。向量不可用或生成失败时，关键词检索仍可继续工作。
+- **结构感知语义分块**：分块器会保留 PDF/OCR 页边界、Markdown 标题、段落、列表、表格和 FAQ 问答对，再根据相邻内容单元的向量加入自适应语义断点。每个向量都会补充文件名、标题路径和页码作为上下文；若 Embedding 失败，则回退到确定性的结构感知分块，不会阻断关键词索引。
+- **带相邻上下文的混合检索**：文档片段会同时写入关键词索引和 ArkData 向量 sidecar。检索会融合关键词与向量召回结果，并在精确命中后向两侧各扩展至多一个相关父级或相邻片段，减少跨边界答案被截断的情况。向量生成或向量 sidecar 不可用时，关键词检索仍可继续工作。
 - **两种向量来源**：[PC/2in1](https://developer.huawei.com/consumer/cn/doc/harmonyos-releases/support-device#section36331990919) 设备可使用本地 ArkData Embedding，文档片段不离开设备；也可选择已配置的 OpenAI-compatible Embedding API。API 模式会把文档片段发送给所选服务商，请根据资料敏感程度选择。
 - **严格的工具调用边界**：输入区开启“知识库”后，应用只向模型提供知识库工具；不会预先检索，也不会把知识片段直接塞入系统提示词。只有模型实际调用 `knowledge_search` 后，应用才执行检索并在需要时为本次 query 请求 API Embedding。
+- **首次查询恢复**：模型实际调用工具后，首次查询会短暂等待已有向量 sidecar 重新打开。对于新建或已过期的 Data Augmentation Kit 检索器，冷启动返回空结果时可重试一次；普通的缓存未命中不会重复查询。
 - **智能续查**：一次用户提问最多允许 5 次知识库查询；完整命中后应提前结束。若结果被截断且存在明确缺口，模型可以使用更聚焦、非重复的 query 继续查询。
 - **本地管理**：原文件、OCR/文本结果、关键词索引和向量 sidecar 均保存在应用沙箱中。列表支持预览、更新和删除，更新会使用当前选中的向量后端重建索引。
 
@@ -70,7 +72,7 @@ XCube 内置独立的“知识库”页，可在一处上传、管理和预览�
 3. 回到对话，在输入区将“知识库”切换为开启状态后提问；模型会自行判断查询次数和关键词。
 
 > [!NOTE]
-> ArkData 应用数据向量化目前仅支持 2in1 设备。手机和平板请使用 API Embedding；未配置 API 时仍可使用关键词知识检索。向量数据库持久化本身仍由设备侧 ArkData 完成。
+> ArkData 应用数据向量化目前仅支持 2-in-1 设备。手机和平板请使用 API Embedding；未配置 API 时仍可使用关键词知识检索。向量数据库持久化本身仍由设备侧 ArkData 完成。
 
 ### 内置智能工具
 
@@ -130,17 +132,15 @@ cp build-profile.json5.example build-profile.json5
 # 编辑 build-profile.json5 填入你的签名配置
 ```
 
-## 部署 Hap
+## 部署 HAP
 
-使用 [Auto-installer](https://github.com/likuai2010/auto-installer/) 或者 [DevEcho Testing](https://developer.huawei.com/consumer/cn/deveco-testing/) 直接在设备上安装 Hap 文件。
+使用 [Auto-installer](https://github.com/likuai2010/auto-installer/) 或 [DevEco Testing](https://developer.huawei.com/consumer/cn/deveco-testing/) 直接在设备上安装 HAP 文件。
 
 > [!IMPORTANT]
 > 华为的签名服务器会屏蔽中国大陆以外的IP地址。若要在中国大陆以外的国家/地区为HarmonyOS NEXT侧载软件，请注意。
-<!-- > Huawei's signing servers block IP addresses outside mainland China. To sideload software for HarmonyOS NEXT in countries/regions outside mainland China. -->
 
 > [!NOTE]
 > 在 HarmonyOS NEXT 上通过自签名侧载的应用，其默认有效期为 14 天。完成 [开发者实名认证](https://developer.huawei.com/consumer/cn/verified/enrollment) 后，该有效期将延长至 180 天。
-<!-- > Apps sideloaded via self-signing on HarmonyOS NEXT have a default validity period of 14 days. Completing [Developer Real-Name Authentication](https://developer.huawei.com/consumer/cn/verified/enrollment) extends this period to 180 days. -->
 
 ## 许可证
 

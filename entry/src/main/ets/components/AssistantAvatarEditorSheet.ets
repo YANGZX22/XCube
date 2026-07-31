@@ -1,5 +1,6 @@
 import { fileIo, fileUri } from '@kit.CoreFileKit'
 import { photoAccessHelper } from '@kit.MediaLibraryKit'
+import { uiMaterial } from '@kit.ArkUI'
 import {
   ASSISTANT_AVATAR_MODE_MODEL,
   ASSISTANT_AVATAR_MODE_IMAGE,
@@ -43,6 +44,10 @@ export struct AssistantAvatarEditorSheet {
 
   private get themePrimary(): string {
     return getAppUiState().themePrimary
+  }
+
+  private get themePrimaryLight(): string {
+    return getAppUiState().themePrimaryLight
   }
 
   aboutToAppear(): void {
@@ -236,7 +241,15 @@ export struct AssistantAvatarEditorSheet {
         .type(ButtonType.Circle)
         .width(34)
         .height(34)
-        .backgroundColor($r('app.color.divider'))
+        .backgroundColor(Color.Transparent)
+        .stateEffect(false)
+        .systemMaterial(new uiMaterial.ImmersiveMaterial({
+          style: uiMaterial.ImmersiveStyle.REGULAR,
+          materialColor: Color.Transparent,
+          applyShadow: false,
+          interactive: true,
+          lightEffect: { color: undefined }
+        }))
         .onClick(() => {
           this.onClose()
         })
@@ -251,12 +264,20 @@ export struct AssistantAvatarEditorSheet {
         Button() {
           SymbolGlyph($r('sys.symbol.checkmark'))
             .fontSize(16)
-            .fontColor([Color.White])
+            .fontColor([this.themePrimary])
         }
         .type(ButtonType.Circle)
         .width(34)
         .height(34)
-        .backgroundColor(this.themePrimary)
+        .backgroundColor(Color.Transparent)
+        .stateEffect(false)
+        .systemMaterial(new uiMaterial.ImmersiveMaterial({
+          style: uiMaterial.ImmersiveStyle.REGULAR,
+          materialColor: Color.Transparent,
+          applyShadow: false,
+          interactive: true,
+          lightEffect: { color: undefined }
+        }))
         .onClick(() => {
           this.confirmAvatarValue()
         })
@@ -278,6 +299,10 @@ export struct AssistantAvatarEditorSheet {
         .bindSheet($$this.showColorPicker, this.ColorPickerSheet(), {
           height: 400,
           showClose: true,
+          backgroundColor: Color.Transparent,
+          systemMaterial: new uiMaterial.ImmersiveMaterial({
+            style: uiMaterial.ImmersiveStyle.REGULAR
+          }),
           onDisappear: () => {
             this.showColorPicker = false
           }
@@ -312,8 +337,13 @@ export struct AssistantAvatarEditorSheet {
             .fontSize(15)
             .fontColor($r('app.color.text_primary'))
             .placeholderColor($r('app.color.text_tertiary'))
-            .backgroundColor(getAppUiState().themeSurface)
+            .backgroundColor(Color.Transparent)
             .borderRadius(16)
+            .systemMaterial(new uiMaterial.ImmersiveMaterial({
+              style: uiMaterial.ImmersiveStyle.ULTRA_THIN,
+              materialColor: Color.Transparent,
+              applyShadow: false
+            }))
             .padding({ left: 14, right: 14 })
             .onChange((text: string) => {
               this.textValue = text
@@ -336,8 +366,14 @@ export struct AssistantAvatarEditorSheet {
             .fontColor(this.defaultModelName !== '' ? $r('app.color.text_primary') : $r('app.color.text_tertiary'))
             .width('100%')
             .padding({ left: 14, right: 14, top: 12, bottom: 12 })
-            .backgroundColor(getAppUiState().themeSurface)
+            .backgroundColor(Color.Transparent)
             .borderRadius(16)
+            .border({ width: 1, color: this.themePrimaryLight })
+            .systemMaterial(new uiMaterial.ImmersiveMaterial({
+              style: uiMaterial.ImmersiveStyle.ULTRA_THIN,
+              materialColor: Color.Transparent,
+              applyShadow: false
+            }))
         }
         .width('100%')
         .alignItems(HorizontalAlign.Start)
@@ -353,8 +389,14 @@ export struct AssistantAvatarEditorSheet {
             .fontSize(14)
             .fontColor($r('app.color.text_primary'))
             .placeholderColor($r('app.color.text_tertiary'))
-            .backgroundColor(getAppUiState().themeSurface)
+            .backgroundColor(Color.Transparent)
             .borderRadius(16)
+            .border({ width: 1, color: this.themePrimaryLight })
+            .systemMaterial(new uiMaterial.ImmersiveMaterial({
+              style: uiMaterial.ImmersiveStyle.ULTRA_THIN,
+              materialColor: Color.Transparent,
+              applyShadow: false
+            }))
             .padding({ left: 14, right: 14 })
             .onChange((text: string) => {
               this.linkValue = text
@@ -372,8 +414,13 @@ export struct AssistantAvatarEditorSheet {
               .fontSize(14)
               .fontColor($r('app.color.text_primary'))
               .placeholderColor($r('app.color.text_tertiary'))
-              .backgroundColor(getAppUiState().themeSurface)
+              .backgroundColor(Color.Transparent)
               .borderRadius(16)
+              .systemMaterial(new uiMaterial.ImmersiveMaterial({
+                style: uiMaterial.ImmersiveStyle.ULTRA_THIN,
+                materialColor: Color.Transparent,
+                applyShadow: false
+              }))
               .padding({ left: 14, right: 14 })
               .onChange((text: string) => {
                 this.useCustomQqAvatar(text)
@@ -383,8 +430,16 @@ export struct AssistantAvatarEditorSheet {
               .fontSize(14)
               .fontWeight(FontWeight.Medium)
               .fontColor(this.themePrimary)
-              .backgroundColor(getAppUiState().themeSurface)
+              .backgroundColor(Color.Transparent)
               .borderRadius(16)
+              .border({ width: 1, color: this.themePrimaryLight })
+              .systemMaterial(new uiMaterial.ImmersiveMaterial({
+                style: uiMaterial.ImmersiveStyle.REGULAR,
+                materialColor: Color.Transparent,
+                applyShadow: false,
+                interactive: true,
+                lightEffect: { color: undefined }
+              }))
               .padding({ left: 14, right: 14 })
               .onClick(() => {
                 this.useRandomQqAvatar()
@@ -407,7 +462,15 @@ export struct AssistantAvatarEditorSheet {
             .fontColor(Color.White)
             .backgroundColor(this.themePrimary)
             .borderRadius(18)
-            .enabled(!this.isPickingImage)
+            .systemMaterial(new uiMaterial.ImmersiveMaterial({
+              style: uiMaterial.ImmersiveStyle.REGULAR,
+              materialColor: this.themePrimary,
+              applyShadow: false,
+              interactive: true,
+              lightEffect: { color: undefined }
+            }))
+            .opacity(this.isPickingImage ? 0.55 : 1)
+            .hitTestBehavior(this.isPickingImage ? HitTestMode.None : HitTestMode.Block)
             .onClick(() => {
               this.pickGalleryImage()
             })
@@ -418,7 +481,7 @@ export struct AssistantAvatarEditorSheet {
     }
     .width('100%')
     .padding({ left: 20, right: 20, top: 18, bottom: 28 })
-    .backgroundColor(getAppUiState().themeBackground)
+    .backgroundColor(Color.Transparent)
   }
 
   @Builder
@@ -430,12 +493,21 @@ export struct AssistantAvatarEditorSheet {
           .fontColor($r('app.color.text_secondary'))
           .layoutWeight(1)
         Button($r('app.string.icon_random_generate'))
+          .height(32)
           .fontSize(12)
           .type(ButtonType.Normal)
-          .borderRadius(8)
-          .backgroundColor(getAppUiState().themeSurface)
+          .borderRadius(16)
+          .backgroundColor(Color.Transparent)
           .fontColor($r('app.color.text_primary'))
-          .padding({ left: 12, right: 12, top: 6, bottom: 6 })
+          .padding({ left: 12, right: 12 })
+          .stateEffect(false)
+          .systemMaterial(new uiMaterial.ImmersiveMaterial({
+            style: uiMaterial.ImmersiveStyle.REGULAR,
+            materialColor: Color.Transparent,
+            applyShadow: false,
+            interactive: true,
+            lightEffect: { color: undefined }
+          }))
           .onClick(() => {
             this.tempAvatarColor = generateSoftColor()
           })
@@ -470,12 +542,21 @@ export struct AssistantAvatarEditorSheet {
           .layoutWeight(1)
 
         Button($r('app.string.icon_select_color'))
+          .height(32)
           .fontSize(12)
           .type(ButtonType.Normal)
-          .borderRadius(8)
-          .backgroundColor(getAppUiState().themeSurface)
+          .borderRadius(16)
+          .backgroundColor(Color.Transparent)
           .fontColor($r('app.color.text_primary'))
-          .padding({ left: 12, right: 12, top: 6, bottom: 6 })
+          .padding({ left: 12, right: 12 })
+          .stateEffect(false)
+          .systemMaterial(new uiMaterial.ImmersiveMaterial({
+            style: uiMaterial.ImmersiveStyle.REGULAR,
+            materialColor: Color.Transparent,
+            applyShadow: false,
+            interactive: true,
+            lightEffect: { color: undefined }
+          }))
           .onClick(() => {
             this.showColorPicker = true
           })
@@ -554,7 +635,7 @@ export struct AssistantAvatarEditorSheet {
     }
     .width('100%')
     .padding(20)
-    .backgroundColor(getAppUiState().themeBackground)
+    .backgroundColor(Color.Transparent)
   }
 
   @Builder
@@ -565,12 +646,19 @@ export struct AssistantAvatarEditorSheet {
       .fontSize(12)
       .fontWeight(FontWeight.Medium)
       .fontColor(this.editMode === mode ? Color.White : $r('app.color.text_secondary'))
-      .backgroundColor(this.editMode === mode ? this.themePrimary : getAppUiState().themeSurface)
+      .backgroundColor(this.editMode === mode ? this.themePrimary : Color.Transparent)
       .borderRadius(19)
       .border({
         width: this.editMode === mode ? 0 : 1,
-        color: $r('app.color.divider')
+        color: this.themePrimaryLight
       })
+      .systemMaterial(new uiMaterial.ImmersiveMaterial({
+        style: uiMaterial.ImmersiveStyle.REGULAR,
+        materialColor: this.editMode === mode ? this.themePrimary : Color.Transparent,
+        applyShadow: false,
+        interactive: true,
+        lightEffect: { color: undefined }
+      }))
       .onClick(() => {
         this.editMode = mode
         if (mode === ASSISTANT_AVATAR_MODE_SYMBOL && this.textValue === '') {

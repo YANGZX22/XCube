@@ -98,6 +98,11 @@ export class KnowledgeSearchExecutor implements ToolExecutor {
       return this.buildArgumentError('documentIds 必须是有效文档 ID 组成的字符串数组')
     }
 
+    const bootstrap = await getKnowledgeDocumentService().awaitVectorBootstrapForKnowledgeSearch()
+    console.info(
+      'KnowledgeSearchTool',
+      `Vector bootstrap before explicit search: status=${bootstrap.status}`
+    )
     const request = new KnowledgeSearchRequest(
       query,
       topK,

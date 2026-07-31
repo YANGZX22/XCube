@@ -4,6 +4,8 @@ import knowledgeSearchGuardTest from './KnowledgeSearchGuard.test';
 import aiApiToolStreamStateTest from './AIApiToolStreamState.test';
 import knowledgeEmbeddingBoundaryTest from './KnowledgeEmbeddingBoundary.test';
 import knowledgeVectorProjectionTest from './KnowledgeVectorProjection.test';
+import knowledgeVectorBootstrapGateTest from './KnowledgeVectorBootstrapGate.test';
+import knowledgeSemanticChunkerTest from './KnowledgeSemanticChunker.test';
 import chatMessageTreeHelperTest from './ChatMessageTreeHelper.test';
 
 export default function testsuite() {
@@ -13,5 +15,7 @@ export default function testsuite() {
   aiApiToolStreamStateTest();
   knowledgeEmbeddingBoundaryTest();
   knowledgeVectorProjectionTest();
+  knowledgeVectorBootstrapGateTest();
+  knowledgeSemanticChunkerTest();
   chatMessageTreeHelperTest();
 }

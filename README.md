@@ -57,9 +57,11 @@ XCube includes a dedicated Knowledge Base tab for uploading, managing, and previ
 [`knowledge_search`](entry/src/main/ets/config/KnowledgeSearchTool.ets) tool:
 
 - **One file entry point**: supports PDF, TXT, Markdown, and JPG, JPEG, PNG, WebP, and BMP images. Images are indexed through OCR; PDFs with too little extracted text automatically fall back to page-image OCR.
-- **Hybrid retrieval**: documents are split into semantic chunks and indexed in both a keyword index and an ArkData vector sidecar. Search merges keyword and vector recall, while keyword retrieval remains available if vector generation is unavailable or fails.
+- **Structure-aware semantic chunking**: the chunker preserves PDF/OCR page boundaries, Markdown headings, paragraphs, lists, tables, and FAQ pairs, then adds adaptive semantic breakpoints from adjacent-unit embeddings. Each vector is contextualized with the file name, heading path, and page number; embedding failure falls back to deterministic structure-aware chunks instead of blocking keyword indexing.
+- **Hybrid retrieval with surrounding context**: chunks are indexed in both a keyword index and an ArkData vector sidecar. Search merges keyword and vector recall, then expands a precise hit with at most one related parent/neighbor chunk on each side so a boundary-spanning answer is less likely to be cut off. Keyword retrieval remains available if vector generation or the vector sidecar fails.
 - **Two embedding sources**: [PC/2in1](https://developer.huawei.com/consumer/cn/doc/harmonyos-releases/support-device#section36331990919) devices can use local ArkData Embedding without sending document chunks off-device. You can also select a configured OpenAI-compatible Embedding API. API mode sends document chunks to the selected provider, so choose it according to the sensitivity of your files.
 - **Strict tool-call boundary**: enabling Knowledge Base in the input bar exposes the tool to the model, but the app does not pre-retrieve content or inject knowledge into the system prompt. Retrieval—and API query embedding when needed—starts only after the model actually calls `knowledge_search`.
+- **First-query recovery**: after a real tool call, the first query briefly waits for an existing vector sidecar to reopen. A newly created or stale Data Augmentation Kit retriever may retry once on a cold empty result; ordinary cached no-hit results are not queried twice.
 - **Focused follow-up search**: each user turn allows at most five knowledge queries and should stop early after a complete hit. If a result is truncated and has a clear information gap, the model may issue a narrower, non-duplicate query.
 - **Local management**: original files, OCR/text results, keyword indexes, and the vector sidecar remain in the app sandbox. Files can be previewed, refreshed, or deleted; refreshing rebuilds indexes with the currently selected embedding backend.
 
@@ -111,7 +113,7 @@ You can also add any OpenAI-compatible or Anthropic-compatible provider.
 ### Requirements
 
 - A smart device running HarmonyOS 7 (API 26.0.0)
-- [DevEco Studio](https://developer.huawei.com/consumer/cn/deveco-studio/)
+- [DevEco Studio (>= 26.0.0 Beta2)](https://developer.huawei.com/consumer/cn/deveco-studio/)
 
 ### Build & Run
 

@@ -999,9 +999,16 @@ export struct ChatPage {
         }
         .width(32)
         .height(32)
-        .backgroundColor(this.isCanvasMarkdownPreview ?
-          (this.isDarkMode ? 'rgba(78, 111, 158, 0.22)' : 'rgba(78, 111, 158, 0.14)') :
-          (this.isDarkMode ? 'rgba(255, 255, 255, 0.08)' : 'rgba(0, 0, 0, 0.05)'))
+        .padding(0)
+        .backgroundColor(Color.Transparent)
+        .stateEffect(false)
+        .systemMaterial(new uiMaterial.ImmersiveMaterial({
+          style: uiMaterial.ImmersiveStyle.REGULAR,
+          materialColor: this.isCanvasMarkdownPreview ? this.themePrimaryLight : Color.Transparent,
+          applyShadow: false,
+          interactive: true,
+          lightEffect: { color: undefined }
+        }))
         .onClick(() => {
           this.setCanvasMarkdownPreview(!this.isCanvasMarkdownPreview)
         })
@@ -1013,7 +1020,16 @@ export struct ChatPage {
         }
         .width(32)
         .height(32)
-        .backgroundColor(this.isDarkMode ? 'rgba(255, 255, 255, 0.08)' : 'rgba(0, 0, 0, 0.05)')
+        .padding(0)
+        .backgroundColor(Color.Transparent)
+        .stateEffect(false)
+        .systemMaterial(new uiMaterial.ImmersiveMaterial({
+          style: uiMaterial.ImmersiveStyle.REGULAR,
+          materialColor: Color.Transparent,
+          applyShadow: false,
+          interactive: true,
+          lightEffect: { color: undefined }
+        }))
         .onClick(() => {
           this.handleCanvasClear()
         })
@@ -1025,7 +1041,16 @@ export struct ChatPage {
         }
         .width(32)
         .height(32)
-        .backgroundColor(this.isDarkMode ? 'rgba(255, 255, 255, 0.08)' : 'rgba(0, 0, 0, 0.05)')
+        .padding(0)
+        .backgroundColor(Color.Transparent)
+        .stateEffect(false)
+        .systemMaterial(new uiMaterial.ImmersiveMaterial({
+          style: uiMaterial.ImmersiveStyle.REGULAR,
+          materialColor: Color.Transparent,
+          applyShadow: false,
+          interactive: true,
+          lightEffect: { color: undefined }
+        }))
         .onClick(() => {
           this.setCanvasPanelOpen(false)
         })
@@ -1040,9 +1065,13 @@ export struct ChatPage {
         .fontSize(14)
         .fontColor($r('app.color.text_primary'))
         .placeholderColor($r('app.color.text_tertiary'))
-        .backgroundColor(this.themeBackground)
-        .borderRadius(12)
-        .border({ width: 0.6, color: $r('app.color.divider') })
+        .backgroundColor(Color.Transparent)
+        .borderRadius(16)
+        .systemMaterial(new uiMaterial.ImmersiveMaterial({
+          style: uiMaterial.ImmersiveStyle.ULTRA_THIN,
+          materialColor: Color.Transparent,
+          applyShadow: false
+        }))
         .padding({ left: 12, right: 12 })
         .onChange((value: string) => {
           this.handleCanvasTitleChanged(value)
@@ -1073,9 +1102,15 @@ export struct ChatPage {
         }
         .layoutWeight(1)
         .width('100%')
-        .backgroundColor(this.themeBackground)
+        .backgroundColor(Color.Transparent)
         .borderRadius(14)
-        .border({ width: 0.6, color: $r('app.color.divider') })
+        .systemMaterial(new uiMaterial.ImmersiveMaterial({
+          style: uiMaterial.ImmersiveStyle.ULTRA_THIN,
+          materialColor: Color.Transparent,
+          applyShadow: false,
+          interactive: false,
+          lightEffect: { color: undefined }
+        }))
       } else {
         TextArea({
           text: this.canvasDocumentContent,
@@ -1086,9 +1121,13 @@ export struct ChatPage {
           .fontSize(14)
           .fontColor($r('app.color.text_primary'))
           .placeholderColor($r('app.color.text_tertiary'))
-          .backgroundColor(this.themeBackground)
+          .backgroundColor(Color.Transparent)
           .borderRadius(14)
-          .border({ width: 0.6, color: $r('app.color.divider') })
+          .systemMaterial(new uiMaterial.ImmersiveMaterial({
+            style: uiMaterial.ImmersiveStyle.ULTRA_THIN,
+            materialColor: Color.Transparent,
+            applyShadow: false
+          }))
           .padding(12)
           .onChange((value: string) => {
             this.handleCanvasContentChanged(value)
@@ -1110,20 +1149,15 @@ export struct ChatPage {
           }
           .width(this.getCanvasPanelWidthVp())
           .height(this.getCanvasPanelHeightVp())
-          .backgroundColor(this.isDarkMode ? 'rgba(30, 30, 30, 0.84)' : 'rgba(255, 255, 255, 0.90)')
-          .backgroundBlurStyle(BlurStyle.COMPONENT_REGULAR)
-          .border({
-            width: 0.6,
-            color: this.isDarkMode ? 'rgba(255, 255, 255, 0.10)' : 'rgba(0, 0, 0, 0.08)'
-          })
+          .backgroundColor(Color.Transparent)
           .borderRadius(18)
-          .clip(true)
-          .shadow({
-            radius: 18,
-            color: this.isDarkMode ? 'rgba(0, 0, 0, 0.44)' : 'rgba(15, 23, 42, 0.16)',
-            offsetX: 0,
-            offsetY: 6
-          })
+          .systemMaterial(new uiMaterial.ImmersiveMaterial({
+            style: uiMaterial.ImmersiveStyle.REGULAR,
+            materialColor: Color.Transparent,
+            applyShadow: false,
+            interactive: false,
+            lightEffect: { color: undefined }
+          }))
           .transition(
             TransitionEffect.OPACITY.combine(
               TransitionEffect.translate({ x: 18 })

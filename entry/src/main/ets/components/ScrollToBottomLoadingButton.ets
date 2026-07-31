@@ -4,7 +4,7 @@
  */
 
 import { getAppUiState } from '../state/AppUiState'
-import { ChatFloatingImmersiveButton } from './ChatFloatingImmersiveButton'
+import { uiMaterial } from '@kit.ArkUI'
 
 @ComponentV2
 export struct ScrollToBottomLoadingButton {
@@ -59,6 +59,33 @@ export struct ScrollToBottomLoadingButton {
   build() {
     if (this.isVisible) {
       Stack({ alignContent: Alignment.Center }) {
+        Button({ type: ButtonType.Circle, stateEffect: false }) {
+          SymbolGlyph($r('sys.symbol.chevron_down'))
+            .fontSize(20)
+            .fontColor([this.themePrimary])
+        }
+        .width(40)
+        .height(40)
+        .padding(0)
+        .backgroundColor(Color.Transparent)
+        .systemMaterial(new uiMaterial.ImmersiveMaterial({
+          style: uiMaterial.ImmersiveStyle.REGULAR,
+          materialColor: Color.Transparent,
+          applyShadow: false,
+          interactive: true,
+          lightEffect: { color: undefined }
+        }))
+        .responseRegion({
+          x: -4,
+          y: -4,
+          width: 48,
+          height: 48
+        })
+        .zIndex(2)
+        .onClick(() => {
+          this.onScrollToBottom()
+        })
+
         // 外围 loading 圆环
         Progress({ value: 25, total: 100, type: ProgressType.Ring })
           .width(48)
@@ -67,28 +94,11 @@ export struct ScrollToBottomLoadingButton {
           .backgroundColor('transparent')
           .style({ strokeWidth: 2.5 })
           .rotate({ angle: this.loadingAngle })
-
-        // 中心向下箭头按钮
-        ChatFloatingImmersiveButton({
-          barWidth: 40,
-          barHeight: 40,
-          iconResource: $r('sys.symbol.chevron_down'),
-          iconSize: 20,
-          iconColor: [this.themePrimary],
-          onButtonClick: (): void => {
-            this.onScrollToBottom()
-          }
-        }) {
-          Stack({ alignContent: Alignment.Center }) {
-            SymbolGlyph($r('sys.symbol.chevron_down'))
-              .fontSize(20)
-              .fontColor([this.themePrimary])
-          }
-          .width(40)
-          .height(40)
-          .translate({ y: -4 })
-        }
+          .hitTestBehavior(HitTestMode.None)
+          .zIndex(3)
       }
+      .width(48)
+      .height(48)
       .position({ x: '50%', y: '100%' })
       .translate({
         x: '-50%',
@@ -101,6 +111,7 @@ export struct ScrollToBottomLoadingButton {
           TransitionEffect.scale({ x: 0.8, y: 0.8 })
         ).animation({ duration: 200, curve: Curve.EaseOut })
       )
+      .zIndex(20)
     }
   }
 }

@@ -24,6 +24,7 @@ const INVERTED_INDEX_CONTENT_WEIGHT: number = 1.0
 const VECTOR_RECALL_NAME: string = 'knowledge_vector_index'
 const HYBRID_MIN_DEEP_SIZE: number = 20
 const HYBRID_DEEP_SIZE_MULTIPLIER: number = 4
+const MAX_RETRIEVER_ATTEMPTS: number = 2
 
 export const KNOWLEDGE_FTS_TABLE_NAME: string = 'knowledge_chunks_fts'
 export const KNOWLEDGE_CHUNK_ID_COLUMN: string = 'chunk_id'
@@ -128,6 +129,17 @@ export interface KnowledgeReadyDocumentProvider {
   listReadyDocumentIds(): Promise<string[]>
 }
 
+/**
+ * Expands already-retrieved, still-READY hits with adjacent or parent context.
+ *
+ * Implementations must remain pure retrieval helpers: this hook is reached only
+ * from an actual knowledge_search execution and must not call or modify a model
+ * prompt.
+ */
+export interface KnowledgeHitContextProvider {
+  expandHitContexts(hits: KnowledgeSearchHit[]): Promise<KnowledgeSearchHit[]>
+}
+
 export interface KnowledgeVectorReadyDocumentProvider {
   listVectorReadyDocumentIds(documentIds: string[]): Promise<string[]>
 }
@@ -166,6 +178,44 @@ export interface DataAugmentationVectorIndexConfiguration {
 interface RetrievalBusinessError {
   code?: number
   message?: string
+}
+
+class KnowledgeRetrieverLease {
+  retriever: retrieval.Retriever
+  snapshotGeneration: number
+  createdForAttempt: boolean
+
+  constructor(
+    retriever: retrieval.Retriever,
+    snapshotGeneration: number,
+    createdForAttempt: boolean
+  ) {
+    this.retriever = retriever
+    this.snapshotGeneration = snapshotGeneration
+    this.createdForAttempt = createdForAttempt
+  }
+}
+
+/**
+ * Restricts an internal DAK retry to the first attempt and to evidence that the
+ * Retriever itself may be stale or cold. A normal empty result from an already
+ * cached Retriever is authoritative and must not become an unconditional
+ * duplicate query.
+ */
+export function shouldRetryKnowledgeRetrieverAttempt(
+  attemptIndex: number,
+  retrieverCreated: boolean,
+  snapshotChanged: boolean,
+  retrieveFailed: boolean,
+  noHits: boolean
+): boolean {
+  if (attemptIndex !== 0) {
+    return false
+  }
+  if (retrieveFailed || snapshotChanged) {
+    return true
+  }
+  return retrieverCreated && noHits
 }
 
 class EffectiveRetrievalColumns {
@@ -372,54 +422,94 @@ export class DataAugmentationInvertedIndexAdapter implements KnowledgeRetrievalA
       )
     }
 
-    try {
-      const retriever = await this.getOrCreateRetriever(configuration)
-      const recallCondition = this.buildRecallCondition(configuration, request)
-      const recallConditions: retrieval.RecallCondition[] = [recallCondition]
-      const condition: retrieval.RetrievalCondition = {
-        recallConditions: recallConditions,
-        resultCount: request.topK
-      }
-      const records = await retriever.retrieveRdb(request.query, condition)
-      const hits: KnowledgeSearchHit[] = []
-      for (let index = 0; index < records.records.length; index++) {
-        const hit = mapRetrievalItem(records.records[index], configuration)
-        if (hit === null || !this.matchesDocumentFilter(hit.documentId, request.documentIds)) {
+    const recallCondition = this.buildRecallCondition(configuration, request)
+    const recallConditions: retrieval.RecallCondition[] = [recallCondition]
+    const condition: retrieval.RetrievalCondition = {
+      recallConditions: recallConditions,
+      resultCount: request.topK
+    }
+    for (let attemptIndex = 0; attemptIndex < MAX_RETRIEVER_ATTEMPTS; attemptIndex++) {
+      let lease: KnowledgeRetrieverLease | null = null
+      try {
+        lease = await this.getOrCreateRetriever(configuration)
+        const records = await lease.retriever.retrieveRdb(request.query, condition)
+        const hits: KnowledgeSearchHit[] = []
+        for (let index = 0; index < records.records.length; index++) {
+          const hit = mapRetrievalItem(records.records[index], configuration)
+          if (hit === null || !this.matchesDocumentFilter(hit.documentId, request.documentIds)) {
+            continue
+          }
+          hits.push(hit)
+          if (hits.length >= request.topK) {
+            break
+          }
+        }
+
+        const snapshotChanged = lease.snapshotGeneration !== this.dataSnapshotGeneration
+        const noHits = hits.length === 0
+        if (shouldRetryKnowledgeRetrieverAttempt(
+          attemptIndex,
+          lease.createdForAttempt,
+          snapshotChanged,
+          false,
+          noHits
+        )) {
+          this.discardRetriever(lease)
           continue
         }
-        hits.push(hit)
-        if (hits.length >= request.topK) {
-          break
+        if (snapshotChanged) {
+          return buildErrorResponse(
+            request.query,
+            request.topK,
+            'retrieval_snapshot_changed',
+            '知识库索引正在更新，请稍后重试'
+          )
         }
-      }
-
-      if (hits.length === 0) {
-        return buildNoHitsResponse(request.query, request.topK)
-      }
-      const response = new KnowledgeSearchResponse(KnowledgeSearchStatus.OK, request.query, request.topK)
-      response.hits = hits
-      return response
-    } catch (error) {
-      const businessError = error as RetrievalBusinessError
-      console.error(
-        'KnowledgeRetrievalService',
-        `Data Augmentation Kit inverted retrieval failed: code=${businessError.code}`
-      )
-      if (businessError.code === 801) {
-        return buildUnavailableResponse(
+        if (noHits) {
+          return buildNoHitsResponse(request.query, request.topK)
+        }
+        const response = new KnowledgeSearchResponse(
+          KnowledgeSearchStatus.OK,
+          request.query,
+          request.topK
+        )
+        response.hits = hits
+        return response
+      } catch (error) {
+        const businessError = error as RetrievalBusinessError
+        if (lease !== null) {
+          this.discardRetriever(lease)
+        }
+        if (shouldRetryKnowledgeRetrieverAttempt(
+          attemptIndex,
+          lease !== null && lease.createdForAttempt,
+          lease !== null && lease.snapshotGeneration !== this.dataSnapshotGeneration,
+          true,
+          false
+        )) {
+          continue
+        }
+        console.error(
+          'KnowledgeRetrievalService',
+          `Data Augmentation Kit inverted retrieval failed: code=${businessError.code}`
+        )
+        if (businessError.code === 801) {
+          return buildUnavailableResponse(
+            request.query,
+            request.topK,
+            'retrieval_capability_unavailable',
+            '当前设备不支持知识库检索能力'
+          )
+        }
+        return buildErrorResponse(
           request.query,
           request.topK,
-          'retrieval_capability_unavailable',
-          '当前设备不支持知识库检索能力'
+          'retrieval_failed',
+          '知识库检索失败'
         )
       }
-      return buildErrorResponse(
-        request.query,
-        request.topK,
-        'retrieval_failed',
-        '知识库检索失败'
-      )
     }
+    return buildErrorResponse(request.query, request.topK, 'retrieval_failed', '知识库检索失败')
   }
 
   private validateConfiguration(configuration: EffectiveInvertedIndexConfiguration): string {
@@ -446,9 +536,13 @@ export class DataAugmentationInvertedIndexAdapter implements KnowledgeRetrievalA
 
   private async getOrCreateRetriever(
     configuration: EffectiveInvertedIndexConfiguration
-  ): Promise<retrieval.Retriever> {
+  ): Promise<KnowledgeRetrieverLease> {
     if (this.retriever !== null) {
-      return this.retriever
+      return new KnowledgeRetrieverLease(
+        this.retriever,
+        this.dataSnapshotGeneration,
+        false
+      )
     }
     const snapshotGeneration = this.dataSnapshotGeneration
     const channelConfig: retrieval.ChannelConfig = {
@@ -462,9 +556,24 @@ export class DataAugmentationInvertedIndexAdapter implements KnowledgeRetrievalA
     }
     const retriever = await retrieval.getRetriever(retrievalConfig)
     if (snapshotGeneration === this.dataSnapshotGeneration) {
-      this.retriever = retriever
+      if (this.retriever === null) {
+        this.retriever = retriever
+      } else {
+        return new KnowledgeRetrieverLease(
+          this.retriever,
+          snapshotGeneration,
+          false
+        )
+      }
     }
-    return retriever
+    return new KnowledgeRetrieverLease(retriever, snapshotGeneration, true)
+  }
+
+  private discardRetriever(lease: KnowledgeRetrieverLease): void {
+    if (lease.snapshotGeneration === this.dataSnapshotGeneration &&
+      this.retriever === lease.retriever) {
+      this.retriever = null
+    }
   }
 
   private buildRecallCondition(
@@ -632,10 +741,6 @@ export class DataAugmentationHybridAdapter implements KnowledgeRetrievalAdapter 
         return await this.invertedAdapter.search(request)
       }
 
-      const retriever = await this.getOrCreateRetriever(
-        invertedConfiguration,
-        vectorConfiguration
-      )
       const deepSize = Math.max(
         HYBRID_MIN_DEEP_SIZE,
         request.topK * HYBRID_DEEP_SIZE_MULTIPLIER
@@ -660,15 +765,60 @@ export class DataAugmentationHybridAdapter implements KnowledgeRetrievalAdapter 
       if (embeddingModelKey !== this.embeddingProvider.modelKey()) {
         return await this.invertedAdapter.search(request)
       }
-      const records = await retriever.retrieveRdb(request.query, condition)
-      if (embeddingModelKey !== this.embeddingProvider.modelKey()) {
-        return await this.invertedAdapter.search(request)
+
+      for (let attemptIndex = 0; attemptIndex < MAX_RETRIEVER_ATTEMPTS; attemptIndex++) {
+        let lease: KnowledgeRetrieverLease | null = null
+        try {
+          lease = await this.getOrCreateRetriever(
+            invertedConfiguration,
+            vectorConfiguration
+          )
+          const records = await lease.retriever.retrieveRdb(request.query, condition)
+          if (embeddingModelKey !== this.embeddingProvider.modelKey()) {
+            return await this.invertedAdapter.search(request)
+          }
+          const response = this.mapRecords(records, vectorConfiguration, request)
+          const snapshotChanged = lease.snapshotGeneration !== this.dataSnapshotGeneration
+          if (shouldRetryKnowledgeRetrieverAttempt(
+            attemptIndex,
+            lease.createdForAttempt,
+            snapshotChanged,
+            false,
+            response.status === KnowledgeSearchStatus.NO_HITS
+          )) {
+            this.discardRetriever(lease)
+            continue
+          }
+          if (snapshotChanged) {
+            console.warn(
+              'KnowledgeRetrievalService',
+              'Hybrid retrieval snapshot changed twice, falling back to BM25'
+            )
+            return await this.invertedAdapter.search(request)
+          }
+          return response
+        } catch (error) {
+          const businessError = error as RetrievalBusinessError
+          if (lease !== null) {
+            this.discardRetriever(lease)
+          }
+          if (shouldRetryKnowledgeRetrieverAttempt(
+            attemptIndex,
+            lease !== null && lease.createdForAttempt,
+            lease !== null && lease.snapshotGeneration !== this.dataSnapshotGeneration,
+            true,
+            false
+          )) {
+            continue
+          }
+          console.warn(
+            'KnowledgeRetrievalService',
+            `Hybrid vector retrieval unavailable, falling back to BM25: code=${businessError.code}`
+          )
+          return await this.invertedAdapter.search(request)
+        }
       }
-      const response = this.mapRecords(records, vectorConfiguration, request)
-      if (response.status === KnowledgeSearchStatus.NO_HITS) {
-        return await this.invertedAdapter.search(request)
-      }
-      return response
+      return await this.invertedAdapter.search(request)
     } catch (error) {
       const businessError = error as RetrievalBusinessError
       console.warn(
@@ -716,9 +866,13 @@ export class DataAugmentationHybridAdapter implements KnowledgeRetrievalAdapter 
   private async getOrCreateRetriever(
     invertedConfiguration: EffectiveInvertedIndexConfiguration,
     vectorConfiguration: EffectiveVectorIndexConfiguration
-  ): Promise<retrieval.Retriever> {
+  ): Promise<KnowledgeRetrieverLease> {
     if (this.retriever !== null) {
-      return this.retriever
+      return new KnowledgeRetrieverLease(
+        this.retriever,
+        this.dataSnapshotGeneration,
+        false
+      )
     }
     const snapshotGeneration = this.dataSnapshotGeneration
     const channelConfigs: retrieval.ChannelConfig[] = [
@@ -735,9 +889,24 @@ export class DataAugmentationHybridAdapter implements KnowledgeRetrievalAdapter 
     ]
     const retriever = await retrieval.getRetriever({ channelConfigs: channelConfigs })
     if (snapshotGeneration === this.dataSnapshotGeneration) {
-      this.retriever = retriever
+      if (this.retriever === null) {
+        this.retriever = retriever
+      } else {
+        return new KnowledgeRetrieverLease(
+          this.retriever,
+          snapshotGeneration,
+          false
+        )
+      }
     }
-    return retriever
+    return new KnowledgeRetrieverLease(retriever, snapshotGeneration, true)
+  }
+
+  private discardRetriever(lease: KnowledgeRetrieverLease): void {
+    if (lease.snapshotGeneration === this.dataSnapshotGeneration &&
+      this.retriever === lease.retriever) {
+      this.retriever = null
+    }
   }
 
   private buildInvertedRecallCondition(
@@ -859,6 +1028,7 @@ export class KnowledgeRetrievalService {
   private static instance: KnowledgeRetrievalService | null = null
   private adapter: KnowledgeRetrievalAdapter | null = null
   private readyDocumentProvider: KnowledgeReadyDocumentProvider | null = null
+  private hitContextProvider: KnowledgeHitContextProvider | null = null
 
   private constructor() {
   }
@@ -876,6 +1046,10 @@ export class KnowledgeRetrievalService {
 
   setReadyDocumentProvider(provider: KnowledgeReadyDocumentProvider | null): void {
     this.readyDocumentProvider = provider
+  }
+
+  setHitContextProvider(provider: KnowledgeHitContextProvider | null): void {
+    this.hitContextProvider = provider
   }
 
   hasAdapter(): boolean {
@@ -976,7 +1150,11 @@ export class KnowledgeRetrievalService {
         return noHits
       }
       const finalRequest = new KnowledgeSearchRequest(query, topK, stillReadyDocumentIds)
-      return this.normalizeResponse(response, finalRequest, queryTruncated)
+      const responseWithContext = await this.expandHitContextsBestEffort(
+        response,
+        finalRequest
+      )
+      return this.normalizeResponse(responseWithContext, finalRequest, queryTruncated)
     } catch (error) {
       console.error('KnowledgeRetrievalService', 'Knowledge retrieval adapter failed')
       const failed = buildErrorResponse(query, topK, 'retrieval_adapter_failed', '知识库检索失败')
@@ -1085,6 +1263,104 @@ export class KnowledgeRetrievalService {
       }
     }
     return normalized
+  }
+
+  private async expandHitContextsBestEffort(
+    response: KnowledgeSearchResponse,
+    request: KnowledgeSearchRequest
+  ): Promise<KnowledgeSearchResponse> {
+    if (response.status !== KnowledgeSearchStatus.OK) {
+      return response
+    }
+
+    // Filter before expansion so the provider never observes a hit whose
+    // document failed the second READY check. Keep an independent copy for a
+    // fail-safe fallback if the provider throws or returns an invalid result.
+    const preciseHits = this.copyMatchingHits(response.hits, request.documentIds)
+    const contextualized = this.copyResponseWithHits(response, preciseHits)
+    const provider = this.hitContextProvider
+    if (provider === null || preciseHits.length === 0) {
+      return contextualized
+    }
+
+    try {
+      const providerInput = this.copyHits(preciseHits)
+      const expandedHits = await provider.expandHitContexts(providerInput)
+      if (!Array.isArray(expandedHits)) {
+        console.warn(
+          'KnowledgeRetrievalService',
+          'Knowledge hit context provider returned a non-array result'
+        )
+        return contextualized
+      }
+      const readyExpandedHits = this.copyMatchingHits(expandedHits, request.documentIds)
+      if (readyExpandedHits.length === 0 && preciseHits.length > 0) {
+        console.warn(
+          'KnowledgeRetrievalService',
+          'Knowledge hit context provider returned no usable contexts'
+        )
+        return contextualized
+      }
+      return this.copyResponseWithHits(response, readyExpandedHits)
+    } catch (error) {
+      console.warn(
+        'KnowledgeRetrievalService',
+        'Knowledge hit context expansion failed; using precise hits'
+      )
+      return contextualized
+    }
+  }
+
+  private copyMatchingHits(
+    sourceHits: KnowledgeSearchHit[],
+    documentIds: string[]
+  ): KnowledgeSearchHit[] {
+    const hits: KnowledgeSearchHit[] = []
+    for (let index = 0; index < sourceHits.length; index++) {
+      const source = sourceHits[index]
+      const documentId = source.documentId.trim()
+      if (!this.matchesDocumentFilter(documentId, documentIds)) {
+        continue
+      }
+      hits.push(this.copyHit(source))
+    }
+    return hits
+  }
+
+  private copyHits(sourceHits: KnowledgeSearchHit[]): KnowledgeSearchHit[] {
+    const hits: KnowledgeSearchHit[] = []
+    for (let index = 0; index < sourceHits.length; index++) {
+      hits.push(this.copyHit(sourceHits[index]))
+    }
+    return hits
+  }
+
+  private copyHit(source: KnowledgeSearchHit): KnowledgeSearchHit {
+    return new KnowledgeSearchHit(
+      source.documentId,
+      source.chunkId,
+      source.title,
+      source.locator,
+      source.score,
+      source.content
+    )
+  }
+
+  private copyResponseWithHits(
+    source: KnowledgeSearchResponse,
+    hits: KnowledgeSearchHit[]
+  ): KnowledgeSearchResponse {
+    const response = new KnowledgeSearchResponse(
+      source.status,
+      source.query,
+      source.topK,
+      source.code,
+      source.message
+    )
+    response.hits = hits
+    response.truncated = source.truncated
+    response.queryTruncated = source.queryTruncated
+    return response
   }
 
   private normalizeResponse(

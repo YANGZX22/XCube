@@ -10,11 +10,9 @@ import {
 import { fileIo } from '@kit.CoreFileKit'
 import { util } from '@kit.ArkTS'
 import { uiMaterial } from '@kit.ArkUI'
-import { hdsMaterial } from '@kit.UIDesignKit'
 import { getAttachmentStorageService } from '../services/AttachmentStorageService'
 import { getAppUiState } from '../state/AppUiState'
 import { withColorAlpha } from '../utils/ColorAlphaUtils'
-import { HdsMiniBarButton } from './HdsMiniBarButton'
 
 @ComponentV2
 export struct ChatInputBar {
@@ -28,6 +26,8 @@ export struct ChatInputBar {
   @Local sendBtnScale: number = 1
   @Local sendBtnRotation: number = 0
   @Local modelBtnPressed: boolean = false
+  @Local immersiveBarHeightVp: number = 52
+  private readonly editingHeaderHeightVp: number = 28
   @Param inputText: string = ''
   @Event onInputTextChange: (value: string) => void = (_value: string): void => {}
   @Param attachments: MessageAttachment[] = []
@@ -144,47 +144,49 @@ export struct ChatInputBar {
       // 隐藏的 RecentPhotoComponent 用于检测截图
       this.HiddenRecentPhotoDetector()
 
-      // 编辑模式提示条
-      if (this.isEditing) {
-        Row() {
-          SymbolGlyph($r('sys.symbol.square_and_pencil'))
-            .fontSize(12)
-            .fontColor([this.themePrimary])
-
-          Text($r('app.string.editing_message'))
-            .fontSize(12)
-            .fontColor(this.themePrimary)
-            .margin({ left: 4 })
-        }
-        .width('100%')
-        .height(28)
-        .justifyContent(FlexAlign.Center)
-        .backgroundColor(this.themeAiBubble)
-        .borderRadius(8)
-        .margin({ bottom: 8 })
-      }
-
       // 附件预览区域
       this.AttachmentPreview()
 
-      // 输入栏主体（整条沉浸光感浮动面）
-      this.ImmersiveBar()
+      if (this.isEditing) {
+        Stack({ alignContent: Alignment.Top }) {
+          // 编辑态底板始终比当前输入栏高一个标题区，并随多行输入实时撑高。
+          Column()
+            .width('100%')
+            .height(this.immersiveBarHeightVp + this.editingHeaderHeightVp)
+            .backgroundColor(this.themeAiBubble)
+            .borderRadius(24)
+
+          Column() {
+            Blank()
+              .height(this.editingHeaderHeightVp)
+
+            this.ImmersiveBar()
+          }
+          .width('100%')
+
+          Row() {
+            SymbolGlyph($r('sys.symbol.square_and_pencil'))
+              .fontSize(12)
+              .fontColor([this.themePrimary])
+
+            Text($r('app.string.editing_message'))
+              .fontSize(12)
+              .fontColor(this.themePrimary)
+              .margin({ left: 4 })
+          }
+          .width('100%')
+          .height(this.editingHeaderHeightVp)
+          .justifyContent(FlexAlign.Center)
+        }
+        .width('100%')
+        .height(this.immersiveBarHeightVp + this.editingHeaderHeightVp)
+      } else {
+        // 输入栏主体（整条沉浸光感浮动面）
+        this.ImmersiveBar()
+      }
     }
     .width('100%')
-    .borderRadius(24)
     .backgroundColor(Color.Transparent)
-    .border({
-      width: this.isEditing ? 2 : 0,
-      color: this.isEditing ? this.themePrimary : Color.Transparent
-    })
-    .shadow({
-      radius: this.isEditing ? 16 : 32,
-      color: this.isEditing ? withColorAlpha(this.themePrimary, '26') : 'rgba(0, 0, 0, 0.1)',
-      offsetX: 0,
-      offsetY: this.isEditing ? -4 : 8
-    })
-    .animation({ duration: 200 })
-    .width('100%')
     .clip(false)
   }
 
@@ -199,83 +201,93 @@ export struct ChatInputBar {
     .backgroundColor(Color.Transparent)
     .borderRadius(24)
     .clip(false)
+    .border({
+      width: this.isEditing ? 2 : 0,
+      color: this.isEditing ? this.themePrimary : Color.Transparent
+    })
     .systemMaterial(new uiMaterial.ImmersiveMaterial({
       style: uiMaterial.ImmersiveStyle.REGULAR
     }))
+    .shadow({
+      radius: this.isEditing ? 16 : 32,
+      color: this.isEditing ? withColorAlpha(this.themePrimary, '26') : 'rgba(0, 0, 0, 0.1)',
+      offsetX: 0,
+      offsetY: this.isEditing ? -4 : 8
+    })
     .animation({ duration: 200, curve: Curve.EaseOut })
+    .onAreaChange((_oldArea: Area, newArea: Area) => {
+      const measuredHeight = Number(newArea.height)
+      if (Number.isFinite(measuredHeight) && measuredHeight > 0 &&
+        Math.abs(this.immersiveBarHeightVp - measuredHeight) > 0.5) {
+        this.immersiveBarHeightVp = measuredHeight
+      }
+    })
   }
 
   @Builder
   InputRow() {
     Row() {
       // 模型图标按钮 - 点击触发快速切换（编辑模式下也可点击切换模型）
-      Stack({ alignContent: Alignment.Center }) {
-          HdsMiniBarButton({
-            barWidth: 40,
-            barHeight: 40,
-            contentPadding: 0,
-            containerSize: { width: 40, height: 40 },
-            maskColor: Color.Transparent,
-            enableGradientMask: false,
-            barBottomMargin: 0,
-            materialType: hdsMaterial.MaterialType.IMMERSIVE,
-            materialLevel: hdsMaterial.MaterialLevel.ADAPTIVE,
-            barBackgroundColor: withColorAlpha(this.themeUserBubble, '40'),
-            clipToBarShape: true,
-            onButtonClick: (): void => {
-              this.onModelIconClick()
-            }
-          }) {
-            Stack({ alignContent: Alignment.Center }) {
-              if (this.currentModelId !== '') {
-                if (this.hasCurrentModelIcon()) {
-                  Column() {
-                    Image(this.getCurrentModelIconResourcePath())
-                      .width(18)
-                      .height(18)
-                      .objectFit(ImageFit.Contain)
-                      .fillColor(this.inputButtonIconColor)
-                  }
-                  .width(28)
-                  .height(28)
-                  .borderRadius(7)
-                  .justifyContent(FlexAlign.Center)
-                  .alignItems(HorizontalAlign.Center)
-                } else {
-                  Column() {
-                    SymbolGlyph($r('sys.symbol.ai_edit'))
-                      .fontSize(14)
-                      .fontColor([this.themePrimary])
-                  }
-                  .width(28)
-                  .height(28)
-                  .borderRadius(7)
-                  .justifyContent(FlexAlign.Center)
-                  .alignItems(HorizontalAlign.Center)
-                }
-              } else {
+      Button({ type: ButtonType.Circle, stateEffect: false }) {
+        Stack({ alignContent: Alignment.Center }) {
+          if (this.currentModelId !== '') {
+            if (this.hasCurrentModelIcon()) {
+              Column() {
+                Image(this.getCurrentModelIconResourcePath())
+                  .width(18)
+                  .height(18)
+                  .objectFit(ImageFit.Contain)
+                  .fillColor(this.inputButtonIconColor)
+              }
+              .width(28)
+              .height(28)
+              .borderRadius(7)
+              .justifyContent(FlexAlign.Center)
+              .alignItems(HorizontalAlign.Center)
+            } else {
+              Column() {
                 SymbolGlyph($r('sys.symbol.ai_edit'))
-                  .fontSize(22)
+                  .fontSize(14)
                   .fontColor([this.themePrimary])
               }
+              .width(28)
+              .height(28)
+              .borderRadius(7)
+              .justifyContent(FlexAlign.Center)
+              .alignItems(HorizontalAlign.Center)
             }
-            .width(40)
-            .height(40)
-            .translate({ y: -4 })
+          } else {
+            SymbolGlyph($r('sys.symbol.ai_edit'))
+              .fontSize(22)
+              .fontColor([this.themePrimary])
           }
         }
         .width(40)
         .height(40)
-        .clip(false)
-        .scale({ x: this.modelBtnPressed ? 0.95 : 1, y: this.modelBtnPressed ? 0.95 : 1 })
-        .animation({ duration: 150, curve: Curve.EaseOut })
-        .onTouch((event: TouchEvent) => {
-          if (event.type === TouchType.Down) {
-            this.modelBtnPressed = true
-          } else if (event.type === TouchType.Up || event.type === TouchType.Cancel) {
-            this.modelBtnPressed = false
-          }
-        })
+      }
+      .width(40)
+      .height(40)
+      .padding(0)
+      .backgroundColor(Color.Transparent)
+      .systemMaterial(new uiMaterial.ImmersiveMaterial({
+        style: uiMaterial.ImmersiveStyle.REGULAR,
+        materialColor: withColorAlpha(this.themeUserBubble, '40'),
+        applyShadow: false,
+        interactive: true,
+        lightEffect: { color: undefined }
+      }))
+      .scale({ x: this.modelBtnPressed ? 0.95 : 1, y: this.modelBtnPressed ? 0.95 : 1 })
+      .animation({ duration: 150, curve: Curve.EaseOut })
+      .onTouch((event: TouchEvent) => {
+        if (event.type === TouchType.Down) {
+          this.modelBtnPressed = true
+        } else if (event.type === TouchType.Up || event.type === TouchType.Cancel) {
+          this.modelBtnPressed = false
+        }
+      })
+      .onClick(() => {
+        this.onModelIconClick()
+      })
 
         // 输入框
         TextArea({ text: this.inputText, placeholder: $r('app.string.input_placeholder') })
@@ -330,42 +342,27 @@ export struct ChatInputBar {
         })
 
         // 发送/停止按钮（编辑模式下为"保存并发送"）
-        Stack({ alignContent: Alignment.Center }) {
-          HdsMiniBarButton({
-            barWidth: 40,
-            barHeight: 40,
-            contentPadding: 0,
-            containerSize: { width: 40, height: 40 },
-            maskColor: Color.Transparent,
-            enableGradientMask: false,
-            barBottomMargin: 0,
-            materialType: hdsMaterial.MaterialType.IMMERSIVE,
-            materialLevel: hdsMaterial.MaterialLevel.ADAPTIVE,
-            iconResource: this.getSendButtonSymbol(),
-            iconSize: this.isSending ? 20 : 22,
-            iconColor: [this.themePrimary],
-            iconOffsetY: -4,
-            barBackgroundColor: withColorAlpha(this.themeUserBubble, '40'),
-            clipToBarShape: true,
-            onButtonClick: (): void => {
-              if (this.isSending) {
-                this.onStop()
-              } else if (this.isSendDispatching) {
-                return
-              } else {
-                if (!this.computeHasContent()) {
-                  return
-                }
-                this.onSend()
-              }
-            }
-          })
-          .opacity(this.breathOpacity)
-          .animation({ duration: 850, curve: Curve.EaseInOut })
+        Button({ type: ButtonType.Circle, stateEffect: false }) {
+          SymbolGlyph(this.getSendButtonSymbol())
+            .fontSize(this.isSending ? 20 : 22)
+            .fontColor([this.themePrimary])
+            .symbolEffect(
+              new ScaleSymbolEffect(EffectScope.WHOLE),
+              this.iconTrigger
+            )
         }
         .width(40)
         .height(40)
-        .clip(false)
+        .padding(0)
+        .backgroundColor(Color.Transparent)
+        .systemMaterial(new uiMaterial.ImmersiveMaterial({
+          style: uiMaterial.ImmersiveStyle.REGULAR,
+          materialColor: withColorAlpha(this.themeUserBubble, '40'),
+          applyShadow: false,
+          interactive: true,
+          lightEffect: { color: undefined }
+        }))
+        .opacity(this.breathOpacity)
         .scale({
           x: this.sendBtnPressed ? 0.95 * this.sendBtnScale : this.sendBtnScale,
           y: this.sendBtnPressed ? 0.95 * this.sendBtnScale : this.sendBtnScale
@@ -377,6 +374,18 @@ export struct ChatInputBar {
             this.sendBtnPressed = true
           } else if (event.type === TouchType.Up || event.type === TouchType.Cancel) {
             this.sendBtnPressed = false
+          }
+        })
+        .onClick(() => {
+          if (this.isSending) {
+            this.onStop()
+          } else if (this.isSendDispatching) {
+            return
+          } else {
+            if (!this.computeHasContent()) {
+              return
+            }
+            this.onSend()
           }
         })
       }
@@ -523,11 +532,11 @@ export struct ChatInputBar {
 
   private getSendButtonSymbol(): Resource {
     if (this.isSending) {
-      return $r('sys.symbol.pause')
+      return $r('sys.symbol.pause_round_triangle')
     }
 
     if (this.computeHasContent()) {
-      return $r('sys.symbol.paperplane_right_fill')
+      return $r('sys.symbol.paperplane_fill')
     }
 
     return $r('sys.symbol.paperplane')

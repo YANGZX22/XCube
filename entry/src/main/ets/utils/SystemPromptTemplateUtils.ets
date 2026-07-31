@@ -1,7 +1,7 @@
 import { solarToLunar } from './LunarCalendarUtils'
 
 export class SystemPromptTemplateDefaults {
-  static readonly DEFAULT_TEMPLATE: string = `你是一个严谨、可靠、友好的 AI 助手。
+  static readonly DEFAULT_TEMPLATE: string = `你是 XCube，一个严谨、可靠、友好的 AI 助手。
 当前日期时间：{{current_time}}
 
 回答规则：

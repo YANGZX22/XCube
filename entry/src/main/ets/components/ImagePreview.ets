@@ -4,8 +4,7 @@ import { buffer } from '@kit.ArkTS'
 import { common } from '@kit.AbilityKit'
 import { showToast } from '../utils/ToastUtil'
 import { hilog } from '@kit.PerformanceAnalysisKit'
-import { hdsMaterial } from '@kit.UIDesignKit'
-import { HdsMiniBarButton } from './HdsMiniBarButton'
+import { uiMaterial } from '@kit.ArkUI'
 import { getAppUiState } from '../state/AppUiState'
 
 /**
@@ -108,24 +107,7 @@ export struct ImagePreview {
 
   @Builder
   private SaveActionButtonBuilder() {
-    HdsMiniBarButton({
-      barWidth: this.saveButtonWidthVp,
-      barHeight: this.saveButtonHeightVp,
-      contentPadding: 0,
-      containerSize: { width: this.saveButtonWidthVp, height: this.saveButtonHeightVp },
-      maskColor: Color.Transparent,
-      enableGradientMask: true,
-      barBottomMargin: 0,
-      materialType: hdsMaterial.MaterialType.IMMERSIVE,
-      materialLevel: hdsMaterial.MaterialLevel.ADAPTIVE,
-      barBackgroundColor: Color.Transparent,
-      clipToBarShape: false,
-      onButtonClick: (): void => {
-        if (!this.isSaving) {
-          this.saveCurrentImage()
-        }
-      }
-    }) {
+    Button({ type: ButtonType.Normal, stateEffect: false }) {
       Row({ space: 8 }) {
         if (this.isSaving) {
           LoadingProgress()
@@ -152,37 +134,47 @@ export struct ImagePreview {
       .padding({ left: 12, right: 14 })
       .justifyContent(FlexAlign.Center)
       .alignItems(VerticalAlign.Center)
-      .translate({ y: -3 })
     }
+    .width(this.saveButtonWidthVp)
+    .height(this.saveButtonHeightVp)
+    .padding(0)
+    .backgroundColor(Color.Transparent)
+    .borderRadius(this.saveButtonHeightVp / 2)
+    .systemMaterial(new uiMaterial.ImmersiveMaterial({
+      style: uiMaterial.ImmersiveStyle.REGULAR,
+      materialColor: Color.Transparent,
+      applyShadow: false,
+      interactive: true,
+      lightEffect: { color: undefined }
+    }))
+    .onClick(() => {
+      if (!this.isSaving) {
+        this.saveCurrentImage()
+      }
+    })
   }
 
   @Builder
   private CloseActionButtonBuilder() {
-    HdsMiniBarButton({
-      barWidth: 40,
-      barHeight: 40,
-      contentPadding: 0,
-      containerSize: { width: 40, height: 40 },
-      maskColor: Color.Transparent,
-      enableGradientMask: true,
-      barBottomMargin: 0,
-      materialType: hdsMaterial.MaterialType.IMMERSIVE,
-      materialLevel: hdsMaterial.MaterialLevel.ADAPTIVE,
-      barBackgroundColor: Color.Transparent,
-      clipToBarShape: false,
-      onButtonClick: (): void => {
-        this.dismiss()
-      }
-    }) {
-      Stack({ alignContent: Alignment.Center }) {
-        SymbolGlyph($r('sys.symbol.xmark'))
-          .fontSize(20)
-          .fontColor([this.themePrimary])
-          .translate({ y: -4 })
-      }
-      .width(40)
-      .height(40)
+    Button({ type: ButtonType.Circle, stateEffect: false }) {
+      SymbolGlyph($r('sys.symbol.xmark'))
+        .fontSize(20)
+        .fontColor([this.themePrimary])
     }
+    .width(40)
+    .height(40)
+    .padding(0)
+    .backgroundColor(Color.Transparent)
+    .systemMaterial(new uiMaterial.ImmersiveMaterial({
+      style: uiMaterial.ImmersiveStyle.REGULAR,
+      materialColor: Color.Transparent,
+      applyShadow: false,
+      interactive: true,
+      lightEffect: { color: undefined }
+    }))
+    .onClick(() => {
+      this.dismiss()
+    })
   }
 
   build() {

@@ -10,6 +10,7 @@ import { PickerModelGroup } from '../config/ProviderDetailShared'
 import { buildModelIconRenderData, ModelIconRenderData } from '../utils/ModelIconRenderUtils'
 import { getAppUiState } from '../state/AppUiState'
 import { uiMaterial } from '@kit.ArkUI'
+import { withColorAlpha } from '../utils/ColorAlphaUtils'
 
 @ComponentV2
 export struct ModelPickerSheet {
@@ -182,6 +183,16 @@ export struct ModelPickerSheet {
 
   private getCurrentResultCount(): number {
     return this.showSelectedOnly ? this.visibleModelIds.length : this.filteredModelIds.length
+  }
+
+  private getModelListMaterial(): uiMaterial.Material {
+    return new uiMaterial.ImmersiveMaterial({
+      style: uiMaterial.ImmersiveStyle.REGULAR,
+      materialColor: Color.Transparent,
+      applyShadow: false,
+      interactive: true,
+      lightEffect: { color: undefined }
+    })
   }
 
   private buildModelRow(group: PickerModelGroup, modelId: string, index: number): ModelPickerModelRow {
@@ -453,23 +464,29 @@ export struct ModelPickerSheet {
       this.EmptyState()
     } else {
       List({ scroller: this.listScroller }) {
-        ForEach(this.displayedGroups, (group: PickerModelGroup) => {
-          ListItemGroup({
-            header: this.GroupHeader(group)
-          }) {
+        ListItemGroup({ space: 0 }) {
+          ForEach(this.displayedGroups, (group: PickerModelGroup) => {
+            ListItem() {
+              this.GroupHeader(group)
+            }
+
             ForEach(group.modelIds, (modelId: string, index: number) => {
               ListItem() {
                 this.ModelRow(this.buildModelRow(group, modelId, index))
               }
             }, (modelId: string) => `${group.name}::${modelId}`)
-          }
-          .divider(null)
-        }, (group: PickerModelGroup) => this.buildGroupRenderKey(group))
+          }, (group: PickerModelGroup) => this.buildGroupRenderKey(group))
+        }
+        .divider(null)
+        .margin({ left: 16, right: 16, bottom: 40 })
+        .backgroundColor(Color.Transparent)
+        .borderRadius(16)
+        .border({ width: 1, color: this.themePrimaryLight })
+        .systemMaterial(this.getModelListMaterial())
       }
       .sticky(StickyStyle.None)
       .width('100%')
       .layoutWeight(1)
-      .padding({ left: 16, right: 16, bottom: 40 })
       .scrollBar(BarState.Off)
       .edgeEffect(EdgeEffect.Spring)
       .cachedCount(this.getListCachedCount())
@@ -526,7 +543,9 @@ export struct ModelPickerSheet {
       .width('100%')
       .constraintSize({ minHeight: 56 })
       .padding({ left: 12, right: 12, top: 12, bottom: 12 })
-      .backgroundColor(this.isSelected(row.modelId) ? this.themePrimaryLight : getAppUiState().themeSurface)
+      .backgroundColor(this.isSelected(row.modelId)
+        ? withColorAlpha(this.themePrimaryLight, '80')
+        : Color.Transparent)
       .borderRadius(this.buildRowRadius(row.groupPosition))
       .onClick(() => {
         this.toggleModel(row.modelId)

@@ -716,7 +716,7 @@ export struct KnowledgeBasePanel {
     })
     .systemMaterial(new uiMaterial.ImmersiveMaterial({
       style: uiMaterial.ImmersiveStyle.REGULAR,
-      interactive: true,
+      interactive: false,
       lightEffect: { color: undefined }
     }))
   }

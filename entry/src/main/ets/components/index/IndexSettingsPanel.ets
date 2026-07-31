@@ -315,7 +315,7 @@ export struct IndexSettingsPanel {
     .clip(true)
     .systemMaterial(new uiMaterial.ImmersiveMaterial({
       style: uiMaterial.ImmersiveStyle.REGULAR,
-      interactive: true,
+      interactive: false,
       lightEffect: { color: undefined }
     }))
   }
@@ -332,8 +332,8 @@ export struct IndexSettingsPanel {
     }
     .width('100%')
     .padding({
-      left: this.sidebarMode ? 16 : 12,
-      right: this.sidebarMode ? 16 : 12,
+      left: 16,
+      right: 16,
       top: this.sidebarMode ? 8 : 0,
       bottom: 28
     })

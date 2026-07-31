@@ -1,10 +1,4 @@
-import { hdsMaterial } from '@kit.UIDesignKit'
-import { HdsMiniBarButton } from './HdsMiniBarButton'
-import {
-  createButtonTouchHandler,
-  getButtonAnimation,
-  getButtonScale
-} from '../utils/ButtonAnimationUtils'
+import { uiMaterial } from '@kit.ArkUI'
 
 @ComponentV2
 export struct ChatFloatingImmersiveButton {
@@ -14,10 +8,9 @@ export struct ChatFloatingImmersiveButton {
   @Param iconResource: Resource = $r('sys.symbol.chevron_down')
   @Param iconSize: number = 20
   @Param iconColor: ResourceColor[] = [Color.Gray]
-  @Param iconOffsetY: number = -4
+  @Param iconOffsetY: number = 0
   @Param responsePadding: number = 8
   @Event onButtonClick: () => void = () => {}
-  @Local private pressed: boolean = false
   private lastClickAt: number = 0
 
   private emitButtonClick(): void {
@@ -44,50 +37,29 @@ export struct ChatFloatingImmersiveButton {
   @BuilderParam contentBuilder: () => void = this.DefaultContentBuilder
 
   build() {
-    Stack({ alignContent: Alignment.Center }) {
-      HdsMiniBarButton({
-        barWidth: this.barWidth,
-        barHeight: this.barHeight,
-        contentPadding: this.contentPadding,
-        containerSize: {
-          width: this.barWidth + this.contentPadding * 4,
-          height: this.barHeight + this.contentPadding * 4
-        },
-        maskColor: Color.Transparent,
-        enableGradientMask: true,
-        barBottomMargin: 0,
-        materialType: hdsMaterial.MaterialType.IMMERSIVE,
-        materialLevel: hdsMaterial.MaterialLevel.ADAPTIVE,
-        barBackgroundColor: Color.Transparent,
-        clipToBarShape: false,
-        onButtonClick: (): void => {
-          this.emitButtonClick()
-        }
-      }) {
-        this.contentBuilder()
-      }
-
-      Row()
-        .width(this.barWidth)
-        .height(this.barHeight)
-        .backgroundColor(Color.Transparent)
-        .hitTestBehavior(HitTestMode.Transparent)
-        .onClick(() => {
-          this.emitButtonClick()
-        })
+    Button({ type: ButtonType.Normal, stateEffect: false }) {
+      this.contentBuilder()
     }
     .width(this.barWidth)
     .height(this.barHeight)
+    .padding(this.contentPadding)
+    .backgroundColor(Color.Transparent)
+    .borderRadius(Math.min(this.barWidth, this.barHeight) / 2)
+    .systemMaterial(new uiMaterial.ImmersiveMaterial({
+      style: uiMaterial.ImmersiveStyle.REGULAR,
+      materialColor: Color.Transparent,
+      applyShadow: false,
+      interactive: true,
+      lightEffect: { color: undefined }
+    }))
     .responseRegion({
       x: -this.responsePadding,
       y: -this.responsePadding,
       width: this.barWidth + this.responsePadding * 2,
       height: this.barHeight + this.responsePadding * 2
     })
-    .scale(getButtonScale(this.pressed))
-    .animation(getButtonAnimation())
-    .onTouch(createButtonTouchHandler((pressed: boolean): void => {
-      this.pressed = pressed
-    }))
+    .onClick(() => {
+      this.emitButtonClick()
+    })
   }
 }

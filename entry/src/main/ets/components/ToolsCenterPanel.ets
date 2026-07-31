@@ -2406,7 +2406,6 @@ export struct ToolsCenterPanel {
                     iconResource: $r('sys.symbol.puzzle'),
                     iconSize: 22,
                     iconColor: [this.themePrimary],
-                    iconOffsetY: -4,
                     responsePadding: 0,
                     onButtonClick: (): void => {
                       this.openCreateMcpServer()
@@ -2420,7 +2419,6 @@ export struct ToolsCenterPanel {
                     }
                     .width(42)
                     .height(42)
-                    .translate({ y: -4 })
                   }
 
                   Column({ space: 4 }) {
@@ -2579,7 +2577,6 @@ struct SearchServiceCardItem {
           iconResource: $r('sys.symbol.worldclock_fill_2'),
           iconSize: 20,
           iconColor: [this.themePrimary],
-          iconOffsetY: -4,
           responsePadding: 0,
           onButtonClick: (): void => {
             this.onOpenConfig()
@@ -2593,7 +2590,6 @@ struct SearchServiceCardItem {
           }
           .width(44)
           .height(44)
-          .translate({ y: -4 })
         }
 
         Column({ space: 6 }) {
@@ -2703,7 +2699,6 @@ struct SkillServiceCardItem {
           iconResource: $r('sys.symbol.more'),
           iconSize: 20,
           iconColor: [this.themePrimary],
-          iconOffsetY: -4,
           responsePadding: 0,
           onButtonClick: (): void => {
             this.isSkillsExpanded = !this.isSkillsExpanded
@@ -2717,7 +2712,6 @@ struct SkillServiceCardItem {
           }
           .width(44)
           .height(44)
-          .translate({ y: -4 })
         }
 
         Column({ space: 6 }) {
@@ -3084,7 +3078,6 @@ struct BuiltinToolCardItem {
           iconResource: this.getToolSymbolResource(this.tool.id),
           iconSize: 20,
           iconColor: [this.themePrimary],
-          iconOffsetY: -4,
           responsePadding: 0
         }) {
           Stack({ alignContent: Alignment.Center }) {
@@ -3095,7 +3088,6 @@ struct BuiltinToolCardItem {
           }
           .width(44)
           .height(44)
-          .translate({ y: -4 })
         }
 
         Column({ space: 6 }) {
@@ -3260,7 +3252,6 @@ struct McpServerCardItem {
           iconResource: $r('sys.symbol.cloud'),
           iconSize: 22,
           iconColor: [this.themePrimary],
-          iconOffsetY: -4,
           responsePadding: 0,
           onButtonClick: (): void => {
             this.onEdit()
@@ -3274,7 +3265,6 @@ struct McpServerCardItem {
           }
           .width(46)
           .height(46)
-          .translate({ y: -4 })
         }
 
         Column({ space: 6 }) {

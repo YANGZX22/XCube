@@ -1223,7 +1223,9 @@ export struct MessageBubble {
           .clip(true)
           .alignItems(VerticalAlign.Center)
           .systemMaterial(new uiMaterial.ImmersiveMaterial({
-            style: uiMaterial.ImmersiveStyle.REGULAR
+            style: uiMaterial.ImmersiveStyle.REGULAR,
+            interactive: true,
+            lightEffect: { color: undefined }
           }))
         }
         .width('100%')
@@ -1697,7 +1699,9 @@ export struct MessageBubble {
     .clip(true)
     .alignItems(VerticalAlign.Center)
     .systemMaterial(new uiMaterial.ImmersiveMaterial({
-      style: uiMaterial.ImmersiveStyle.REGULAR
+      style: uiMaterial.ImmersiveStyle.REGULAR,
+      interactive: true,
+      lightEffect: { color: undefined }
     }))
   }
 

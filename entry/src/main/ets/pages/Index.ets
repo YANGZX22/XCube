@@ -131,6 +131,9 @@ struct Index {
   private static readonly TAB_TITLE_BAR_HEIGHT: number = 56
   private static readonly TAB_TITLE_FONT_SIZE: number = 18
   private static readonly TAB_TITLE_VERTICAL_OFFSET: number = -2
+  private static readonly TAB_CONTENT_HORIZONTAL_PADDING: number = 16
+  private static readonly TAB_TITLE_BAR_HORIZONTAL_PADDING: number = 16
+  private static readonly TAB_TITLE_CONTENT_HORIZONTAL_PADDING: number = 8
   private static readonly COMPACT_TABS_FLOATING_SIDE_MARGIN: number = 16
   private static readonly COMPACT_TABS_WITH_ACTION_SMALL_WIDTH: number = 272
   private static readonly COMPACT_TABS_WITH_ACTION_MEDIUM_WIDTH: number = 304
@@ -1174,7 +1177,7 @@ struct Index {
 
   private getSettingsListTopSpacerHeight(): number {
     if (this.isSettingsSplitMode()) {
-      return 0
+      return Index.TAB_TITLE_BAR_HEIGHT + this.getCompactSettingsTitleBarMaskExtraHeight()
     }
     return this.getCompactSettingsHeaderDefaultHeight() + this.getCompactSettingsTitleBarMaskExtraHeight()
   }
@@ -1585,7 +1588,10 @@ struct Index {
           height: SheetSize.MEDIUM,
           dragBar: true,
           showClose: true,
-          backgroundColor: this.themeBackground,
+          backgroundColor: Color.Transparent,
+          systemMaterial: new uiMaterial.ImmersiveMaterial({
+            style: uiMaterial.ImmersiveStyle.REGULAR
+          }),
           preferType: SheetType.BOTTOM,
           title: { title: $r('app.string.assistant_switch_title') },
           onDisappear: () => {
@@ -1619,7 +1625,10 @@ struct Index {
           height: SheetSize.FIT_CONTENT,
           dragBar: true,
           showClose: false,
-          backgroundColor: this.themeBackground,
+          backgroundColor: Color.Transparent,
+          systemMaterial: new uiMaterial.ImmersiveMaterial({
+            style: uiMaterial.ImmersiveStyle.REGULAR
+          }),
           preferType: SheetType.BOTTOM,
           onDisappear: () => {
             this.showAssistantAvatarEditorSheet = false
@@ -1632,10 +1641,12 @@ struct Index {
         .bindSheet($$this.showAssistantModelSheet, this.AssistantModelSheetBuilder(), {
           height: SheetSize.LARGE,
           dragBar: true,
-          showClose: true,
-          backgroundColor: this.themeBackground,
-          preferType: SheetType.BOTTOM,
-          title: { title: $r('app.string.assistant_default_model') }
+          showClose: false,
+          backgroundColor: Color.Transparent,
+          systemMaterial: new uiMaterial.ImmersiveMaterial({
+            style: uiMaterial.ImmersiveStyle.REGULAR
+          }),
+          preferType: SheetType.BOTTOM
         })
 
     }
@@ -2440,8 +2451,8 @@ struct Index {
 
   private getCompactChatTitleBarOptions(): HdsNavigationTitleBarOptions {
     const options = new HdsTopNavigationBlurOptions()
-    options.startPaddingVp = 16
-    options.endPaddingVp = 16
+    options.startPaddingVp = Index.TAB_TITLE_BAR_HORIZONTAL_PADDING
+    options.endPaddingVp = Index.TAB_TITLE_BAR_HORIZONTAL_PADDING
     options.materialType = this.materialType
     options.materialLevel = this.materialLevel
     options.windowWidthVp = this.windowWidthVp
@@ -2591,7 +2602,7 @@ struct Index {
   }
 
   private getAssistantsListHorizontalPadding(): number {
-    return this.isExpandedLayout() ? 20 : 16
+    return Index.TAB_CONTENT_HORIZONTAL_PADDING
   }
 
   private openAssistantManageForNew(): void {
@@ -2797,22 +2808,51 @@ struct Index {
     await this.assistantService.reorderAssistants(reordered)
   }
 
-  @Builder
-  private AssistantsTabContent(applyTopInset: boolean) {
-    Stack({ alignContent: Alignment.BottomEnd }) {
-      Column() {
-        if (applyTopInset) {
-          Column()
-            .width('100%')
-            .height(this.px2vp(this.topAvoidHeight))
-        }
+  private getAssistantsContentTopPadding(): number {
+    const topAvoidHeightVp = this.isExpandedLayout() ? 0 : this.px2vp(this.topAvoidHeight)
+    return getHdsTopNavigationContentTopPadding(topAvoidHeightVp, this.windowWidthVp, this.windowHeightVp,
+      Index.TAB_TITLE_BAR_HEIGHT)
+  }
 
-        this.AssistantsHeader()
-        this.AssistantsList()
+  private getAssistantsTitleBarOptions(): HdsNavigationTitleBarOptions {
+    const options = new HdsTopNavigationBlurOptions()
+    options.startPaddingVp = Index.TAB_TITLE_BAR_HORIZONTAL_PADDING
+    options.endPaddingVp = Index.TAB_TITLE_BAR_HORIZONTAL_PADDING
+    options.materialType = this.materialType
+    options.materialLevel = this.materialLevel
+    options.windowWidthVp = this.windowWidthVp
+    options.windowHeightVp = this.windowHeightVp
+    options.maskExtraHeightVp = getHdsTopNavigationMaskExtraHeight(this.windowWidthVp, this.windowHeightVp)
+    options.blurEffectiveEndOffsetVp = getHdsTopNavigationBlurEffectiveEndOffset(this.windowWidthVp,
+      this.windowHeightVp)
+    options.stackBuilder = (): void => this.AssistantsHeader()
+    return buildHdsTopNavigationTitleBarOptions(options)
+  }
+
+  @Builder
+  private AssistantsTabContent() {
+    Stack({ alignContent: Alignment.BottomEnd }) {
+      HdsNavigation() {
+        Column() {
+          this.AssistantsList()
+        }
+        .width('100%')
+        .height('100%')
       }
       .width('100%')
       .height('100%')
       .backgroundColor(this.themeBackground)
+      .titleBar(this.getAssistantsTitleBarOptions())
+      .bindToScrollable([this.assistantListScroller])
+      .titleMode(HdsNavigationTitleMode.MINI)
+      .systemBarStyle(
+        { statusBarContentColor: getHdsStatusBarContentColor() },
+        { statusBarContentColor: getHdsStatusBarContentColor() }
+      )
+      .hideBackButton(true)
+      .hideToolBar(true)
+      .mode(NavigationMode.Stack)
+      .ignoreLayoutSafeArea([LayoutSafeAreaType.SYSTEM], [LayoutSafeAreaEdge.TOP])
 
       if (this.isExpandedLayout()) {
         this.AssistantFloatingActionButton()
@@ -2824,14 +2864,14 @@ struct Index {
 
   @Builder
   AssistantsTab() {
-    this.AssistantsTabContent(!this.isExpandedLayout())
+    this.AssistantsTabContent()
   }
 
   @Builder
   ExpandedAssistantsTab() {
     Row() {
       Column() {
-        this.AssistantsTabContent(false)
+        this.AssistantsTabContent()
       }
       .width('100%')
       .height('100%')
@@ -3135,7 +3175,10 @@ struct Index {
     }
     .width('100%')
     .height(Index.TAB_TITLE_BAR_HEIGHT)
-    .padding({ left: 8, right: 8 })
+    .padding({
+      left: Index.TAB_TITLE_CONTENT_HORIZONTAL_PADDING,
+      right: Index.TAB_TITLE_CONTENT_HORIZONTAL_PADDING
+    })
     .alignItems(VerticalAlign.Center)
     .translate({ y: Index.TAB_TITLE_VERTICAL_OFFSET })
     .renderGroup(false)
@@ -3143,8 +3186,8 @@ struct Index {
 
   private getKnowledgeTitleBarOptions(): HdsNavigationTitleBarOptions {
     const options = new HdsTopNavigationBlurOptions()
-    options.startPaddingVp = 16
-    options.endPaddingVp = 16
+    options.startPaddingVp = Index.TAB_TITLE_BAR_HORIZONTAL_PADDING
+    options.endPaddingVp = Index.TAB_TITLE_BAR_HORIZONTAL_PADDING
     options.materialType = this.materialType
     options.materialLevel = this.materialLevel
     options.windowWidthVp = this.windowWidthVp
@@ -3306,7 +3349,10 @@ struct Index {
     }
     .width('100%')
     .height(Index.TAB_TITLE_BAR_HEIGHT)
-    .padding({ left: 24, right: 24 })
+    .padding({
+      left: Index.TAB_TITLE_CONTENT_HORIZONTAL_PADDING,
+      right: Index.TAB_TITLE_CONTENT_HORIZONTAL_PADDING
+    })
     .alignItems(VerticalAlign.Center)
     .translate({ y: Index.TAB_TITLE_VERTICAL_OFFSET })
     .renderGroup(false)
@@ -3413,6 +3459,13 @@ struct Index {
     } else {
       List({ space: 8, scroller: this.assistantListScroller }) {
         ListItem() {
+          Column()
+            .height(this.getAssistantsContentTopPadding())
+        }
+        .focusable(false)
+        .selectable(false)
+
+        ListItem() {
           this.AssistantSectionHeader($r('app.string.assistant_current_section'))
         }
         .focusable(false)
@@ -3427,7 +3480,7 @@ struct Index {
             end: this.AssistantEndSwipePanel(assistant)
           })
           .borderRadius(12)
-          .clip(true)
+          .clip(false)
         }, (assistant: Assistant) => this.getAssistantRenderKey(assistant))
 
         if (this.hasOtherAssistantsForWorkspace()) {
@@ -3447,7 +3500,7 @@ struct Index {
             end: this.AssistantEndSwipePanel(assistant)
           })
           .borderRadius(12)
-          .clip(true)
+          .clip(false)
         }, (assistant: Assistant) => this.getAssistantRenderKey(assistant))
 
         ListItem() {
@@ -3461,6 +3514,7 @@ struct Index {
       .height(0)
       .layoutWeight(1)
       .padding({ left: this.getAssistantsListHorizontalPadding(), right: this.getAssistantsListHorizontalPadding(), top: 2 })
+      .clip(false)
       .scrollBar(BarState.Off)
       .edgeEffect(EdgeEffect.Spring)
       .cachedCount(4)
@@ -3539,6 +3593,14 @@ struct Index {
     .height('100%')
     .borderRadius(0)
     .backgroundColor(backgroundColor)
+    .stateEffect(false)
+    .systemMaterial(new uiMaterial.ImmersiveMaterial({
+      style: uiMaterial.ImmersiveStyle.REGULAR,
+      materialColor: backgroundColor,
+      applyShadow: false,
+      interactive: true,
+      lightEffect: { color: undefined }
+    }))
     .onClick(() => {
       onTap()
     })
@@ -3558,6 +3620,13 @@ struct Index {
     .type(ButtonType.Circle)
     .stateEffect(false)
     .padding(0)
+    .systemMaterial(new uiMaterial.ImmersiveMaterial({
+      style: uiMaterial.ImmersiveStyle.REGULAR,
+      materialColor: this.themePrimary,
+      applyShadow: false,
+      interactive: true,
+      lightEffect: { color: undefined }
+    }))
     .position({ x: this.shouldPlaceFabOnLeft() ? 0 : '100%', y: '100%' })
     .translate({ x: this.getFabOffsetX(), y: this.getFabOffsetY() })
     .scale(getButtonScale(this.fabPressed))
@@ -3587,13 +3656,20 @@ struct Index {
     }
     .width('100%')
     .padding({ left: 14, right: 14, top: featured ? 14 : 12, bottom: featured ? 14 : 12 })
-    .backgroundColor(this.themeSurface)
+    .backgroundColor(Color.Transparent)
     .borderRadius(16)
     .border({
       width: assistant.id === this.currentAssistantId || this.openingAssistantId === assistant.id ? 1.5 : 1,
       color: assistant.id === this.currentAssistantId || this.openingAssistantId === assistant.id ? this.themePrimary :
-      $r('app.color.divider')
+      this.themePrimaryLight
     })
+    .systemMaterial(new uiMaterial.ImmersiveMaterial({
+      style: uiMaterial.ImmersiveStyle.REGULAR,
+      materialColor: Color.Transparent,
+      applyShadow: true,
+      interactive: false,
+      lightEffect: { color: undefined }
+    }))
     .scale({
       x: this.openingAssistantId === assistant.id ? 0.985 : 1,
       y: this.openingAssistantId === assistant.id ? 0.985 : 1
@@ -3697,8 +3773,15 @@ struct Index {
       .height(34)
       .borderRadius(17)
       .padding(0)
-      .backgroundColor(this.themeBackground)
-      .stateEffect(true)
+      .backgroundColor(Color.Transparent)
+      .stateEffect(false)
+      .systemMaterial(new uiMaterial.ImmersiveMaterial({
+        style: uiMaterial.ImmersiveStyle.REGULAR,
+        materialColor: Color.Transparent,
+        applyShadow: false,
+        interactive: true,
+        lightEffect: { color: undefined }
+      }))
       .bindMenu(this.AssistantCardMoreMenu(assistant), {
         placement: Placement.BottomRight,
         offset: { x: 0, y: 8 },
@@ -3734,7 +3817,14 @@ struct Index {
     .borderRadius(17)
     .padding({ left: 10, right: 10 })
     .backgroundColor(primary ? this.themePrimary : this.themePrimaryLight)
-    .stateEffect(true)
+    .stateEffect(false)
+    .systemMaterial(new uiMaterial.ImmersiveMaterial({
+      style: uiMaterial.ImmersiveStyle.REGULAR,
+      materialColor: primary ? this.themePrimary : this.themePrimaryLight,
+      applyShadow: false,
+      interactive: true,
+      lightEffect: { color: undefined }
+    }))
     .onClick(() => {
       onTap()
     })
@@ -3786,8 +3876,15 @@ struct Index {
     .layoutWeight(1)
     .height(28)
     .padding({ left: 10, right: 10 })
-    .backgroundColor(this.themeBackground)
+    .backgroundColor(Color.Transparent)
     .borderRadius(10)
+    .border({ width: 0.5, color: this.themePrimaryLight })
+    .systemMaterial(new uiMaterial.ImmersiveMaterial({
+      style: uiMaterial.ImmersiveStyle.ULTRA_THIN,
+      materialColor: Color.Transparent,
+      applyShadow: false,
+      interactive: false
+    }))
   }
 
   @Builder
@@ -3836,12 +3933,31 @@ struct Index {
     Column() {
       this.AssistantEditorHeader()
 
+      Divider()
+        .color($r('app.color.divider'))
+        .margin({ left: 20, right: 20 })
+
       Scroll() {
         Row() {
-          Column({ space: 14 }) {
+          Column() {
             this.AssistantNameAvatarRow()
+
+            Divider()
+              .color($r('app.color.divider'))
+              .margin({ left: 16, right: 16 })
+
             this.AssistantPromptEditor()
+
+            Divider()
+              .color($r('app.color.divider'))
+              .margin({ left: 16, right: 16 })
+
             this.AssistantDefaultModelRow()
+
+            Divider()
+              .color($r('app.color.divider'))
+              .margin({ left: 16, right: 16 })
+
             this.AssistantTemperatureRow()
           }
           .width('100%')
@@ -3871,7 +3987,15 @@ struct Index {
       .type(ButtonType.Circle)
       .width(36)
       .height(36)
-      .backgroundColor($r('app.color.divider'))
+      .backgroundColor(Color.Transparent)
+      .stateEffect(false)
+      .systemMaterial(new uiMaterial.ImmersiveMaterial({
+        style: uiMaterial.ImmersiveStyle.REGULAR,
+        materialColor: Color.Transparent,
+        applyShadow: false,
+        interactive: true,
+        lightEffect: { color: undefined }
+      }))
       .onClick(() => {
         this.showAssistantEditorSheet = false
       })
@@ -3886,14 +4010,22 @@ struct Index {
         .textOverflow({ overflow: TextOverflow.Ellipsis })
 
       Button() {
-        SymbolGlyph($r('sys.symbol.save'))
+        SymbolGlyph($r('sys.symbol.checkmark'))
           .fontSize(18)
-          .fontColor([Color.White])
+          .fontColor([this.themePrimary])
       }
       .type(ButtonType.Circle)
       .width(36)
       .height(36)
-      .backgroundColor(this.themePrimary)
+      .backgroundColor(Color.Transparent)
+      .stateEffect(false)
+      .systemMaterial(new uiMaterial.ImmersiveMaterial({
+        style: uiMaterial.ImmersiveStyle.REGULAR,
+        materialColor: Color.Transparent,
+        applyShadow: false,
+        interactive: true,
+        lightEffect: { color: undefined }
+      }))
       .onClick(() => {
         this.saveAssistantEditor()
       })
@@ -3960,7 +4092,7 @@ struct Index {
       Text($r('app.string.assistant_name'))
         .fontSize(13)
         .fontWeight(FontWeight.Medium)
-        .fontColor($r('app.color.text_secondary'))
+        .fontColor($r('app.color.text_primary'))
         .width('100%')
 
       Row({ space: 12 }) {
@@ -3970,8 +4102,13 @@ struct Index {
           .fontSize(15)
           .fontColor($r('app.color.text_primary'))
           .placeholderColor($r('app.color.text_tertiary'))
-          .backgroundColor(this.themeSurface)
-          .borderRadius(18)
+          .backgroundColor(Color.Transparent)
+          .borderRadius(16)
+          .systemMaterial(new uiMaterial.ImmersiveMaterial({
+            style: uiMaterial.ImmersiveStyle.ULTRA_THIN,
+            materialColor: Color.Transparent,
+            applyShadow: false
+          }))
           .padding({ left: 14, right: 14 })
           .onChange((text: string) => {
             this.assistantFormName = text
@@ -3985,6 +4122,14 @@ struct Index {
         .padding(0)
         .backgroundColor(Color.Transparent)
         .borderRadius(20)
+        .stateEffect(false)
+        .systemMaterial(new uiMaterial.ImmersiveMaterial({
+          style: uiMaterial.ImmersiveStyle.REGULAR,
+          materialColor: Color.Transparent,
+          applyShadow: false,
+          interactive: true,
+          lightEffect: { color: undefined }
+        }))
         .onClick(() => {
           this.showAssistantAvatarEditorSheet = true
         })
@@ -3993,6 +4138,7 @@ struct Index {
       .alignItems(VerticalAlign.Center)
     }
     .width('100%')
+    .padding({ top: 16, bottom: 16 })
   }
 
   @Builder
@@ -4021,7 +4167,7 @@ struct Index {
       Text($r('app.string.assistant_prompt'))
         .fontSize(13)
         .fontWeight(FontWeight.Medium)
-        .fontColor($r('app.color.text_secondary'))
+        .fontColor($r('app.color.text_primary'))
         .width('100%')
 
       TextArea({ text: this.assistantFormSystemPrompt, placeholder: $r('app.string.assistant_prompt_placeholder') })
@@ -4030,14 +4176,20 @@ struct Index {
         .fontSize(14)
         .fontColor($r('app.color.text_primary'))
         .placeholderColor($r('app.color.text_tertiary'))
-        .backgroundColor(this.themeSurface)
+        .backgroundColor(Color.Transparent)
         .borderRadius(16)
+        .systemMaterial(new uiMaterial.ImmersiveMaterial({
+          style: uiMaterial.ImmersiveStyle.ULTRA_THIN,
+          materialColor: Color.Transparent,
+          applyShadow: false
+        }))
         .padding(14)
         .onChange((value: string) => {
           this.assistantFormSystemPrompt = value
         })
     }
     .width('100%')
+    .padding({ top: 16, bottom: 16 })
   }
 
   @Builder
@@ -4066,7 +4218,15 @@ struct Index {
         .width(34)
         .height(34)
         .borderRadius(17)
-        .backgroundColor(this.themeBackground)
+        .backgroundColor(Color.Transparent)
+        .stateEffect(false)
+        .systemMaterial(new uiMaterial.ImmersiveMaterial({
+          style: uiMaterial.ImmersiveStyle.REGULAR,
+          materialColor: Color.Transparent,
+          applyShadow: false,
+          interactive: true,
+          lightEffect: { color: undefined }
+        }))
         .onClick(() => {
           this.clearAssistantDefaultModel()
         })
@@ -4078,8 +4238,17 @@ struct Index {
     }
     .width('100%')
     .padding({ left: 14, right: 12, top: 12, bottom: 12 })
-    .backgroundColor(this.themeSurface)
+    .backgroundColor(Color.Transparent)
     .borderRadius(16)
+    .border({ width: 1, color: this.themePrimaryLight })
+    .systemMaterial(new uiMaterial.ImmersiveMaterial({
+      style: uiMaterial.ImmersiveStyle.REGULAR,
+      materialColor: Color.Transparent,
+      applyShadow: false,
+      interactive: true,
+      lightEffect: { color: undefined }
+    }))
+    .margin({ top: 16, bottom: 16 })
     .onClick(() => {
       this.showAssistantModelSheet = true
       this.loadAssistantProvidersIfNeeded()
@@ -4110,7 +4279,20 @@ struct Index {
         Row({ space: 10 }) {
           Slider({ value: this.assistantFormTemperature, min: 0, max: 2, step: 0.1, style: SliderStyle.InSet })
             .layoutWeight(1)
-            .selectedColor(this.themePrimary)
+            .systemMaterial(new uiMaterial.ImmersiveMaterial({
+              style: uiMaterial.ImmersiveStyle.ULTRA_THIN,
+              materialColor: this.themePrimary,
+              applyShadow: false,
+              interactive: true,
+              lightEffect: { color: undefined }
+            }))
+            .selectedColor(this.themePrimaryLight)
+            .trackColor(Color.White)
+            .blockColor(this.themePrimary)
+            .blockBorderColor(this.themePrimary)
+            .blockBorderWidth(1)
+            .showSteps(false)
+            .showTips(false)
             .onChange((value: number, _mode: SliderChangeMode) => {
               this.assistantFormTemperature = Math.round(value * 10) / 10
             })
@@ -4124,14 +4306,49 @@ struct Index {
       }
     }
     .width('100%')
-    .padding(14)
-    .backgroundColor(this.themeSurface)
-    .borderRadius(16)
+    .padding({ top: 16, bottom: 16 })
+    .backgroundColor(Color.Transparent)
   }
 
   @Builder
   private AssistantModelSheetBuilder() {
     Column() {
+      Row() {
+        Button() {
+          SymbolGlyph($r('sys.symbol.xmark'))
+            .fontSize(16)
+            .fontColor([$r('app.color.text_primary')])
+        }
+        .type(ButtonType.Circle)
+        .width(36)
+        .height(36)
+        .backgroundColor(Color.Transparent)
+        .stateEffect(false)
+        .systemMaterial(new uiMaterial.ImmersiveMaterial({
+          style: uiMaterial.ImmersiveStyle.REGULAR,
+          materialColor: Color.Transparent,
+          applyShadow: false,
+          interactive: true,
+          lightEffect: { color: undefined }
+        }))
+        .onClick(() => {
+          this.showAssistantModelSheet = false
+        })
+
+        Text($r('app.string.assistant_default_model'))
+          .fontSize(17)
+          .fontWeight(FontWeight.Bold)
+          .fontColor($r('app.color.text_primary'))
+          .layoutWeight(1)
+          .textAlign(TextAlign.Center)
+
+        Blank()
+          .width(36)
+      }
+      .width('100%')
+      .height(56)
+      .padding({ left: 16, right: 16 })
+
       ModelSelectorContent({
         currentModelId: this.assistantFormDefaultModelId,
         currentProviderId: this.assistantFormDefaultProviderId,
@@ -4142,6 +4359,9 @@ struct Index {
         showClearSelectionOption: true,
         clearSelectionText: $r('app.string.assistant_model_follow_global'),
         emptyStateMode: 'settings',
+        immersiveMaterial: true,
+        narrowSearchBar: true,
+        showImmersiveGroupBorder: true,
         onSelectModel: (providerId: string, modelId: string, modelName: string): void => {
           this.selectAssistantDefaultModel(providerId, modelId, modelName)
         },
@@ -4150,10 +4370,11 @@ struct Index {
           this.showAssistantModelSheet = false
         }
       })
+      .layoutWeight(1)
     }
     .width('100%')
     .height('100%')
-    .backgroundColor(this.themeBackground)
+    .backgroundColor(Color.Transparent)
   }
 
   @Builder
@@ -4161,8 +4382,20 @@ struct Index {
     Stack() {
       ForEach([this.getCurrentAssistantSwitchRenderKey()], (_renderKey: string) => {
         Row({ space: 8 }) {
-          this.AssistantAvatarBadge(this.getCurrentAssistantSymbol(), this.getCurrentAssistantColor(), 36, 12, 20,
-            '', '', '', true)
+          Stack() {
+            this.AssistantAvatarBadge(this.getCurrentAssistantSymbol(), this.getCurrentAssistantColor(), 36, 12, 20)
+          }
+          .width(36)
+          .height(36)
+          .borderRadius(12)
+          .backgroundColor(Color.Transparent)
+          .systemMaterial(new uiMaterial.ImmersiveMaterial({
+            style: uiMaterial.ImmersiveStyle.ULTRA_THIN,
+            materialColor: Color.Transparent,
+            applyShadow: false,
+            interactive: true,
+            lightEffect: { color: undefined }
+          }))
 
           Text(this.getCurrentAssistantName())
             .fontSize(Index.TAB_TITLE_FONT_SIZE)
@@ -4182,6 +4415,8 @@ struct Index {
     .height(44)
     .padding({ left: 0, right: 10 })
     .constraintSize({ maxWidth: this.getAssistantSwitchMaxWidth() })
+    .backgroundColor(Color.Transparent)
+    .borderRadius(22)
     .onClick(() => {
       this.showAssistantSwitchSheet = true
     })
@@ -4231,7 +4466,7 @@ struct Index {
     }
     .width('100%')
     .height('100%')
-    .backgroundColor(this.themeBackground)
+    .backgroundColor(Color.Transparent)
   }
 
   @Builder
@@ -4387,9 +4622,16 @@ struct Index {
     .width('100%')
     .constraintSize({ minHeight: 70 })
     .padding({ left: 14, right: 14, top: 12, bottom: 12 })
-    .backgroundColor(this.themeSurface)
+    .backgroundColor(Color.Transparent)
     .borderRadius(16)
     .border({ width: 1, color: this.themePrimaryLight })
+    .systemMaterial(new uiMaterial.ImmersiveMaterial({
+      style: uiMaterial.ImmersiveStyle.REGULAR,
+      materialColor: Color.Transparent,
+      applyShadow: false,
+      interactive: true,
+      lightEffect: { color: undefined }
+    }))
     .onClick(() => {
       this.showAssistantSwitchSheet = false
       if (assistant.id !== this.currentAssistantId) {
@@ -4413,7 +4655,10 @@ struct Index {
       }
       .width('100%')
       .height(Index.TAB_TITLE_BAR_HEIGHT)
-      .padding({ left: 8, right: 8 })
+      .padding({
+        left: Index.TAB_TITLE_CONTENT_HORIZONTAL_PADDING,
+        right: Index.TAB_TITLE_CONTENT_HORIZONTAL_PADDING
+      })
       .alignItems(VerticalAlign.Center)
     } else {
       Row() {
@@ -4426,7 +4671,10 @@ struct Index {
       }
       .width('100%')
       .height(Index.TAB_TITLE_BAR_HEIGHT)
-      .padding({ left: 8, right: 8 })
+      .padding({
+        left: Index.TAB_TITLE_CONTENT_HORIZONTAL_PADDING,
+        right: Index.TAB_TITLE_CONTENT_HORIZONTAL_PADDING
+      })
       .alignItems(VerticalAlign.Center)
     }
   }
@@ -4502,6 +4750,7 @@ struct Index {
       } else {
         Column() {
           IndexSessionListSection({
+            horizontalPadding: Index.TAB_CONTENT_HORIZONTAL_PADDING,
             sessionGroups: this.sessionListGroups,
             sessionListScroller: this.sessionListScroller,
             isMultiSelectMode: this.isMultiSelectMode,
@@ -4767,11 +5016,9 @@ struct Index {
   private SettingsNavigationScrollableContent() {
     Scroll(this.settingsRootScroller) {
       Column() {
-        if (!this.isSettingsSplitMode()) {
-          Blank()
-            .width('100%')
-            .height(this.getSettingsListTopSpacerHeight())
-        }
+        Blank()
+          .width('100%')
+          .height(this.getSettingsListTopSpacerHeight())
 
         this.SettingsNavigationContent()
 
@@ -4800,7 +5047,10 @@ struct Index {
     }
     .width('100%')
     .height(Index.TAB_TITLE_BAR_HEIGHT)
-    .padding({ left: 8, right: 8 })
+    .padding({
+      left: Index.TAB_TITLE_CONTENT_HORIZONTAL_PADDING,
+      right: Index.TAB_TITLE_CONTENT_HORIZONTAL_PADDING
+    })
     .alignItems(VerticalAlign.Center)
     .translate({ y: Index.TAB_TITLE_VERTICAL_OFFSET })
     .renderGroup(false)
@@ -4808,8 +5058,8 @@ struct Index {
 
   private getCompactSettingsTitleBarOptions(): HdsNavigationTitleBarOptions {
     const options = new HdsTopNavigationBlurOptions()
-    options.startPaddingVp = 16
-    options.endPaddingVp = 16
+    options.startPaddingVp = Index.TAB_TITLE_BAR_HORIZONTAL_PADDING
+    options.endPaddingVp = Index.TAB_TITLE_BAR_HORIZONTAL_PADDING
     options.materialType = this.materialType
     options.materialLevel = this.materialLevel
     options.windowWidthVp = this.windowWidthVp
@@ -4845,15 +5095,20 @@ struct Index {
   @Builder
   SettingsTab() {
     if (this.isSettingsSplitMode()) {
-      Navigation(this.settingsNavPathStack) {
+      HdsNavigation(this.settingsNavPathStack) {
         this.SettingsNavigationScrollableContent()
       }
       .width('100%')
       .height('100%')
       .backgroundColor(this.themeBackground)
       .ignoreLayoutSafeArea([LayoutSafeAreaType.SYSTEM], [LayoutSafeAreaEdge.TOP])
-      .title($r('app.string.tab_settings'))
-      .titleMode(NavigationTitleMode.Mini)
+      .titleBar(this.getCompactSettingsTitleBarOptions())
+      .bindToScrollable([this.settingsRootScroller])
+      .titleMode(HdsNavigationTitleMode.MINI)
+      .systemBarStyle(
+        { statusBarContentColor: getHdsStatusBarContentColor() },
+        { statusBarContentColor: getHdsStatusBarContentColor() }
+      )
       .mode(NavigationMode.Split)
       .navBarWidth(this.getExpandedSettingsListWidth())
       .hideBackButton(true)
@@ -4902,7 +5157,6 @@ struct Index {
             iconResource: $r('sys.symbol.xmark'),
             iconSize: 18,
             iconColor: [this.themePrimary],
-            iconOffsetY: -3,
             responsePadding: 0,
             onButtonClick: (): void => {
               this.closeAllSettingsSheets()
@@ -4915,7 +5169,6 @@ struct Index {
             }
             .width(36)
             .height(36)
-            .translate({ y: -3 })
           }
 
           Text(getSettingsSheetTitleText(this.activeSettingsSheetType))
