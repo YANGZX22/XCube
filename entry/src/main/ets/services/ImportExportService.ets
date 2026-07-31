@@ -212,7 +212,15 @@ interface MessageData {
   content: string
   timestamp: number
   modelName: string
+  modelId?: string
   reasoningContent: string
+  billingEnabled?: boolean
+  billingCurrency?: string
+  inputPricePerMillion?: number
+  outputPricePerMillion?: number
+  estimatedInputTokens?: number
+  estimatedOutputTokens?: number
+  estimatedCost?: number
   searchQuery: string
   searchEngine: string
   searchSource?: string
@@ -683,7 +691,15 @@ export class ImportExportService {
             content: m.content,
             timestamp: m.timestamp,
             modelName: m.modelName,
+            modelId: m.modelId,
             reasoningContent: m.reasoningContent,
+            billingEnabled: m.billingEnabled,
+            billingCurrency: m.billingCurrency,
+            inputPricePerMillion: m.inputPricePerMillion,
+            outputPricePerMillion: m.outputPricePerMillion,
+            estimatedInputTokens: m.estimatedInputTokens,
+            estimatedOutputTokens: m.estimatedOutputTokens,
+            estimatedCost: m.estimatedCost,
             searchQuery: m.searchQuery,
             searchEngine: m.searchEngine,
             searchSource: m.searchSource,
@@ -1001,9 +1017,22 @@ export class ImportExportService {
       const sessionMessages = messages.get(sessionData.id)
       if (sessionMessages) {
         for (const msgData of sessionMessages) {
-          const message = new ChatMessage(msgData.id, msgData.role as MessageRole, msgData.content, msgData.modelName)
+          const message = new ChatMessage(
+            msgData.id,
+            msgData.role as MessageRole,
+            msgData.content,
+            msgData.modelName,
+            msgData.modelId || ''
+          )
           message.timestamp = msgData.timestamp
           message.reasoningContent = msgData.reasoningContent || ''
+          message.billingEnabled = msgData.billingEnabled || false
+          message.billingCurrency = msgData.billingCurrency || ''
+          message.inputPricePerMillion = msgData.inputPricePerMillion || 0
+          message.outputPricePerMillion = msgData.outputPricePerMillion || 0
+          message.estimatedInputTokens = msgData.estimatedInputTokens || 0
+          message.estimatedOutputTokens = msgData.estimatedOutputTokens || 0
+          message.estimatedCost = msgData.estimatedCost || 0
           message.searchQuery = msgData.searchQuery || ''
           message.searchEngine = msgData.searchEngine || ''
           message.searchSource = msgData.searchSource || ''

@@ -516,6 +516,14 @@ export class ChatMessage {
   @Trace modelName: string
   // 模型 ID（用于图标匹配等）
   @Trace modelId: string
+  // 生成时的计费快照与预估用量（用于消息展示和历史统计）
+  @Trace billingEnabled: boolean
+  @Trace billingCurrency: string
+  @Trace inputPricePerMillion: number
+  @Trace outputPricePerMillion: number
+  @Trace estimatedInputTokens: number
+  @Trace estimatedOutputTokens: number
+  @Trace estimatedCost: number
   // 推理内容（用于支持 o1, DeepSeek R1 等推理模型）
   @Trace reasoningContent: string
   // 对话树父消息 ID（指向对话链中的前驱消息，根消息为空）
@@ -553,6 +561,13 @@ export class ChatMessage {
     this.timestamp = Date.now()
     this.modelName = modelName
     this.modelId = modelId
+    this.billingEnabled = false
+    this.billingCurrency = ''
+    this.inputPricePerMillion = 0
+    this.outputPricePerMillion = 0
+    this.estimatedInputTokens = 0
+    this.estimatedOutputTokens = 0
+    this.estimatedCost = 0
     this.reasoningContent = ''
     this.parentId = ''
     this.versionIndex = 0
@@ -625,6 +640,11 @@ export class ModelInfo {
 
   // 推理请求策略覆盖（空字符串表示沿用自动推断）
   @Trace reasoningStrategyOverride: string
+  // 模型计费配置，价格单位为“币种 / 百万 Token”
+  @Trace billingEnabled: boolean
+  @Trace billingCurrency: string
+  @Trace inputPricePerMillion: number
+  @Trace outputPricePerMillion: number
 
   constructor(
     id: string,
@@ -646,6 +666,10 @@ export class ModelInfo {
     this.capabilities = new ModelCapabilities()
     this.parameters = new ModelParameters()
     this.reasoningStrategyOverride = ''
+    this.billingEnabled = false
+    this.billingCurrency = 'CNY'
+    this.inputPricePerMillion = 0
+    this.outputPricePerMillion = 0
   }
 
   // 从扩展 JSON 对象创建
@@ -681,6 +705,18 @@ export class ModelInfo {
     if (json.reasoningStrategyOverride !== undefined) {
       model.reasoningStrategyOverride = json.reasoningStrategyOverride
     }
+    if (json.billingEnabled !== undefined) {
+      model.billingEnabled = json.billingEnabled
+    }
+    if (json.billingCurrency !== undefined && json.billingCurrency.trim() !== '') {
+      model.billingCurrency = json.billingCurrency.trim().toUpperCase()
+    }
+    if (json.inputPricePerMillion !== undefined && Number.isFinite(json.inputPricePerMillion)) {
+      model.inputPricePerMillion = Math.max(0, json.inputPricePerMillion)
+    }
+    if (json.outputPricePerMillion !== undefined && Number.isFinite(json.outputPricePerMillion)) {
+      model.outputPricePerMillion = Math.max(0, json.outputPricePerMillion)
+    }
 
     return model
   }
@@ -698,7 +734,11 @@ export class ModelInfo {
       outputMode: this.outputMode,
       capabilities: this.capabilities.toJson(),
       parameters: this.parameters.toJson(),
-      reasoningStrategyOverride: this.reasoningStrategyOverride
+      reasoningStrategyOverride: this.reasoningStrategyOverride,
+      billingEnabled: this.billingEnabled,
+      billingCurrency: this.billingCurrency,
+      inputPricePerMillion: this.inputPricePerMillion,
+      outputPricePerMillion: this.outputPricePerMillion
     }
     return json
   }
@@ -717,6 +757,10 @@ export interface ModelInfoExtendedJson {
   capabilities?: ModelCapabilitiesJson
   parameters?: ModelParametersJson
   reasoningStrategyOverride?: string
+  billingEnabled?: boolean
+  billingCurrency?: string
+  inputPricePerMillion?: number
+  outputPricePerMillion?: number
 }
 
 // 模型提供商类型

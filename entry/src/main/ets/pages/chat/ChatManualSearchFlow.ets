@@ -2,6 +2,7 @@ import {
   ChatMessage,
   MessageAttachment,
   MessageRole,
+  ModelInfo,
   ModelProvider,
   ModelRole,
   ProviderType,
@@ -33,6 +34,10 @@ import {
   shouldApplyLlmQueryOptimizationForChat
 } from './ChatSearchDecisionHelper'
 import { syncChatMessageFromSource } from './ChatMessageActionHelper'
+import {
+  applyEstimatedBilling,
+  ModelBillingSnapshot
+} from '../../utils/ModelBillingUtils'
 
 export interface ChatManualSearchFlowDependencies {
   chatViewModel: ChatViewModel
@@ -462,6 +467,17 @@ export class ChatManualSearchFlow {
     return normalized.substring(0, 180) + '...'
   }
 
+  private getModelBillingSnapshot(provider: ModelProvider, modelId: string): ModelBillingSnapshot {
+    let model: ModelInfo | null = null
+    for (let i = 0; i < provider.models.length; i++) {
+      if (provider.models[i].id === modelId) {
+        model = provider.models[i]
+        break
+      }
+    }
+    return new ModelBillingSnapshot(model)
+  }
+
   private async sendSearchResultMessage(userQuery: string, searchResult: SearchResult,
     attachmentsToSend: MessageAttachment[] = [],
     taskId: string = ''): Promise<void> {
@@ -482,6 +498,7 @@ export class ChatManualSearchFlow {
     }
 
     const modelId = this.deps.appStateManager.getCurrentModelId()
+    const billing = this.getModelBillingSnapshot(currentProvider, modelId)
     await this.deps.chatViewModel.sendMessageWithSearchResult(
       userQuery,
       searchResult,
@@ -511,11 +528,13 @@ export class ChatManualSearchFlow {
         }
       },
       (aiMessage: ChatMessage): void => {
+        applyEstimatedBilling(aiMessage, this.deps.messages, billing, true)
         this.deps.messages.push(aiMessage)
         this.deps.onSyncMessages()
         this.deps.onScrollBottom()
       },
       (aiMessage: ChatMessage): void => {
+        applyEstimatedBilling(aiMessage, this.deps.messages, billing)
         const index = this.deps.messages.findIndex((message: ChatMessage) => message.id === aiMessage.id)
         if (index < 0) {
           console.warn('ChatManualSearchFlow', `[sendSearchResultMessage] ai message not found: ${aiMessage.id}`)

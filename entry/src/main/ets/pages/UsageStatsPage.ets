@@ -11,8 +11,11 @@ import {
 } from '../utils/HdsVisualEffectUtil'
 import {
   getDatabaseService,
-  ModelUsageRankingItem
+  ModelUsageRankingItem,
+  UsageBillingSummary
 } from '../services/DatabaseService'
+import { formatBillingAmount } from '../utils/ModelBillingUtils'
+import { pickLocalizedText } from '../utils/LocalizedTextUtils'
 
 const TAG = 'UsageStatsPage'
 const RANGE_30D_MS: number = 30 * 24 * 60 * 60 * 1000
@@ -130,6 +133,7 @@ struct UsageStatsPage {
   @Local distinctModelCount: number = 0
   @Local activeDayCount: number = 0
   @Local ranking: ModelUsageRankingItem[] = []
+  @Local billingSummaries: UsageBillingSummary[] = []
   @Local isLoading: boolean = true
   @Local rankingAnimationProgress: number = 0
   @Local rangeSwipeOffsetX: number = 0
@@ -169,6 +173,7 @@ struct UsageStatsPage {
       const rangeStart = this.getRangeStartMs()
       const overview = await db.getUsageOverview(rangeStart)
       const ranking = await db.getModelUsageRanking(rangeStart, RANKING_LIMIT)
+      const billingSummaries = await db.getUsageBillingSummary(rangeStart)
       if (loadToken !== this.statsLoadToken) {
         return
       }
@@ -177,6 +182,7 @@ struct UsageStatsPage {
       this.distinctModelCount = overview.distinctModelCount
       this.activeDayCount = overview.activeDayCount
       this.ranking = ranking
+      this.billingSummaries = billingSummaries
       this.startRankingAnimation()
     } catch (error) {
       console.error(TAG, `Failed to load usage stats: ${JSON.stringify(error)}`)
@@ -275,6 +281,17 @@ struct UsageStatsPage {
       return item.modelId
     }
     return '—'
+  }
+
+  private formatTokenCount(value: number): string {
+    const safeValue = Math.max(0, value)
+    if (safeValue >= 1_000_000) {
+      return `${(safeValue / 1_000_000).toFixed(2)}M`
+    }
+    if (safeValue >= 1_000) {
+      return `${(safeValue / 1_000).toFixed(1)}K`
+    }
+    return safeValue.toString()
   }
 
   private isEmpty(): boolean {
@@ -561,6 +578,111 @@ struct UsageStatsPage {
   }
 
   @Builder
+  private BillingSummaryRow(item: UsageBillingSummary) {
+    Column({ space: 10 }) {
+      Row({ space: 10 }) {
+        Column() {
+          SymbolGlyph($r('sys.symbol.creditcard'))
+            .fontSize(17)
+            .fontColor([this.themePrimary])
+        }
+        .width(32)
+        .height(32)
+        .borderRadius(10)
+        .backgroundColor(this.themePrimaryLight)
+        .justifyContent(FlexAlign.Center)
+        .alignItems(HorizontalAlign.Center)
+
+        Column({ space: 2 }) {
+          Text(formatBillingAmount(item.currency, item.estimatedCost))
+            .fontSize(20)
+            .fontWeight(FontWeight.Bold)
+            .fontColor($r('app.color.text_primary'))
+
+          Text(pickLocalizedText(
+            `${item.currency} · ${item.messageCount} 条计费消息`,
+            `${item.currency} · ${item.messageCount} billed messages`
+          ))
+            .fontSize(11)
+            .fontColor($r('app.color.text_tertiary'))
+        }
+        .layoutWeight(1)
+        .alignItems(HorizontalAlign.Start)
+      }
+      .width('100%')
+      .alignItems(VerticalAlign.Center)
+
+      Row({ space: 10 }) {
+        Row({ space: 5 }) {
+          SymbolGlyph($r('sys.symbol.arrow_down'))
+            .fontSize(11)
+            .fontColor([this.themePrimary])
+          Text(pickLocalizedText(
+            `输入 ${this.formatTokenCount(item.inputTokens)} Token`,
+            `Input ${this.formatTokenCount(item.inputTokens)} tokens`
+          ))
+            .fontSize(11)
+            .fontColor($r('app.color.text_secondary'))
+        }
+        .layoutWeight(1)
+
+        Row({ space: 5 }) {
+          SymbolGlyph($r('sys.symbol.arrow_up'))
+            .fontSize(11)
+            .fontColor([this.themePrimary])
+          Text(pickLocalizedText(
+            `输出 ${this.formatTokenCount(item.outputTokens)} Token`,
+            `Output ${this.formatTokenCount(item.outputTokens)} tokens`
+          ))
+            .fontSize(11)
+            .fontColor($r('app.color.text_secondary'))
+        }
+        .layoutWeight(1)
+      }
+      .width('100%')
+    }
+    .width('100%')
+    .padding({ left: 14, right: 14, top: 13, bottom: 13 })
+  }
+
+  @Builder
+  private BillingSummaryCard() {
+    Column() {
+      if (this.billingSummaries.length === 0) {
+        Row({ space: 8 }) {
+          SymbolGlyph($r('sys.symbol.info_circle'))
+            .fontSize(15)
+            .fontColor([$r('app.color.text_tertiary')])
+          Text($r('app.string.usage_stats_billing_empty'))
+            .fontSize(12)
+            .fontColor($r('app.color.text_secondary'))
+            .layoutWeight(1)
+        }
+        .width('100%')
+        .padding(14)
+        .alignItems(VerticalAlign.Center)
+      } else {
+        ForEach(this.billingSummaries, (item: UsageBillingSummary, index: number) => {
+          Column() {
+            this.BillingSummaryRow(item)
+            if (index < this.billingSummaries.length - 1) {
+              Divider()
+                .color(this.themePrimaryLight)
+                .margin({ left: 14, right: 14 })
+            }
+          }
+        }, (item: UsageBillingSummary) => item.currency)
+      }
+    }
+    .width('100%')
+    .backgroundColor(this.themeSurface)
+    .borderRadius(18)
+    .clip(true)
+    .border({ width: 1, color: this.themePrimaryLight })
+    .visualEffect(buildPointLightBorderEffect())
+  }
+
+  @Builder
   private EmptyState() {
     Column({ space: 8 }) {
       SymbolGlyph($r('sys.symbol.exclamationmark_circle'))
@@ -605,6 +727,17 @@ struct UsageStatsPage {
             }
             .width('100%')
             .margin({ top: 6 })
+
+            // 计费统计
+            Column() {
+              this.SectionTitle(
+                $r('app.string.usage_stats_billing_title'),
+                $r('app.string.usage_stats_billing_subtitle')
+              )
+              this.BillingSummaryCard()
+            }
+            .width('100%')
+            .margin({ top: 18 })
 
             // 模型排行
             if (this.ranking.length > 0) {

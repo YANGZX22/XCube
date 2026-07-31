@@ -25,6 +25,12 @@ export interface ProviderBalanceConfig {
 export interface BalanceResult {
   providerId: string
   providerName: string
+  providerIconType: string
+  providerIconPath: string
+  providerTextIcon: string
+  providerTextIconBgColor: string
+  providerCustomImagePath: string
+  providerBrandColor: Resource
   success: boolean
   balance: string
   currency: string
@@ -103,6 +109,12 @@ export class ProviderBalanceService {
     const result: BalanceResult = {
       providerId: provider.id,
       providerName: provider.name,
+      providerIconType: provider.iconType,
+      providerIconPath: provider.iconPath,
+      providerTextIcon: provider.textIcon,
+      providerTextIconBgColor: provider.textIconBgColor,
+      providerCustomImagePath: provider.customImagePath,
+      providerBrandColor: provider.brandColor,
       success: false,
       balance: '',
       currency: '',
@@ -122,7 +134,9 @@ export class ProviderBalanceService {
     }
 
     const headers: Record<string, string> = {
-      'Accept': 'application/json'
+      'Accept': 'application/json',
+      'Cache-Control': 'no-cache, no-store',
+      'Pragma': 'no-cache'
     }
     if (provider.apiKey.trim() !== '') {
       headers['Authorization'] = `Bearer ${provider.apiKey.trim()}`

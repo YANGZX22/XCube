@@ -312,7 +312,7 @@ struct Index {
   @Local shareMessages: ChatMessage[] = []
   // 服务商余额查询弹窗状态
   @Local showBalanceSheet: boolean = false
-  private balanceSheetState: BalanceSheetState = new BalanceSheetState()
+  @Local balanceSheetState: BalanceSheetState = new BalanceSheetState()
   // Settings Sheet 关闭动画期间的状态机（避免“关闭回调晚到”误关新弹窗）
   private settingsSheetClosing: boolean = false
   private pendingSettingsSheetType: SettingsSheetType = SettingsSheetType.NONE
@@ -2129,7 +2129,6 @@ struct Index {
       }
       .width(Index.COMPACT_MINI_BAR_WIDTH)
       .height(Index.COMPACT_TABS_BAR_HEIGHT)
-      .translate({ y: -4 })
     }
   }
 
@@ -2349,12 +2348,14 @@ struct Index {
         return
       }
       this.balanceSheetState.results = results
+      this.balanceSheetState.revision += 1
     } catch (error) {
       if (querySeq !== this.balanceQuerySeq) {
         return
       }
       console.error('Index', `Failed to query provider balances: ${JSON.stringify(error)}`)
       this.balanceSheetState.results = []
+      this.balanceSheetState.revision += 1
       this.showIndexSnack($r('app.string.balance_query_failed'), 2000, SnackBarTone.ERROR)
     } finally {
       if (querySeq === this.balanceQuerySeq) {

@@ -356,6 +356,18 @@ export class ProviderViewModel {
           if (modelObj.reasoningStrategyOverride !== undefined) {
             modelInfo.reasoningStrategyOverride = modelObj.reasoningStrategyOverride
           }
+          if (modelObj.billingEnabled !== undefined) {
+            modelInfo.billingEnabled = modelObj.billingEnabled
+          }
+          if (modelObj.billingCurrency !== undefined && modelObj.billingCurrency.trim() !== '') {
+            modelInfo.billingCurrency = modelObj.billingCurrency.trim().toUpperCase()
+          }
+          if (modelObj.inputPricePerMillion !== undefined && Number.isFinite(modelObj.inputPricePerMillion)) {
+            modelInfo.inputPricePerMillion = Math.max(0, modelObj.inputPricePerMillion)
+          }
+          if (modelObj.outputPricePerMillion !== undefined && Number.isFinite(modelObj.outputPricePerMillion)) {
+            modelInfo.outputPricePerMillion = Math.max(0, modelObj.outputPricePerMillion)
+          }
 
           provider.models.push(modelInfo)
         }
@@ -598,6 +610,10 @@ interface ModelData {
   capabilities?: ModelCapabilitiesJson
   parameters?: ModelParametersJson
   reasoningStrategyOverride?: string
+  billingEnabled?: boolean
+  billingCurrency?: string
+  inputPricePerMillion?: number
+  outputPricePerMillion?: number
 }
 
 // 导出获取实例方法

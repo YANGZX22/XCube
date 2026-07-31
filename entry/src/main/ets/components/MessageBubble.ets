@@ -17,6 +17,7 @@ import { SymbolGlyphModifier, uiMaterial } from '@kit.ArkUI'
 import { getAppUiState } from '../state/AppUiState'
 import { withColorAlpha } from '../utils/ColorAlphaUtils'
 import { MATH_CHART_TOOL_ID } from '../config/BuiltinTools'
+import { formatBillingAmount } from '../utils/ModelBillingUtils'
 
 const DOMAIN = 0x0002
 const TAG = 'MessageBubble'
@@ -83,6 +84,7 @@ export struct MessageBubble {
   @Local showTranslation: boolean = false  // 是否显示翻译结果
   @Local isTranslationExpanded: boolean = true  // 翻译结果是否展开
   @Local currentTranslateLang: string = ''  // 当前翻译的目标语言
+  @Local showEstimatedCostPopup: boolean = false
   @Local showLatexPreview: boolean = false
   @Local latexPreviewText: string = ''
   @Local latexPreviewPixelMap: image.PixelMap | undefined = undefined
@@ -373,6 +375,11 @@ export struct MessageBubble {
       this.message.timestamp.toString(),
       this.message.modelId,
       this.message.modelName,
+      this.message.billingEnabled ? '1' : '0',
+      this.message.billingCurrency,
+      this.message.estimatedInputTokens.toString(),
+      this.message.estimatedOutputTokens.toString(),
+      this.message.estimatedCost.toString(),
       this.message.content,
       this.message.reasoningContent,
       this.message.isGenerating ? '1' : '0',
@@ -822,6 +829,18 @@ export struct MessageBubble {
 
   private shouldShowAssistantToolbar(): boolean {
     return shouldShowAssistantMessageToolbar(this.message, this.isMultiSelectMode)
+  }
+
+  private shouldShowEstimatedCost(): boolean {
+    return this.message.role === MessageRole.ASSISTANT &&
+      this.message.billingEnabled &&
+      !this.message.isGenerating &&
+      this.message.billingCurrency !== ''
+  }
+
+  private getEstimatedCostText(): string {
+    return `${formatBillingAmount(this.message.billingCurrency, this.message.estimatedCost)} ` +
+      this.message.billingCurrency
   }
 
   private hasAskUserToolCall(): boolean {
@@ -1675,6 +1694,37 @@ export struct MessageBubble {
           systemMaterial: new uiMaterial.ImmersiveMaterial({
             style: uiMaterial.ImmersiveStyle.THICK
           })
+        })
+      }
+
+      if (this.shouldShowEstimatedCost()) {
+        Divider()
+          .vertical(true)
+          .height(14)
+          .color($r('app.color.divider'))
+          .margin({ left: 3, right: 3 })
+
+        Button({ type: ButtonType.Circle, stateEffect: false }) {
+          SymbolGlyph($r('sys.symbol.yuansign_coupon'))
+            .fontSize(13)
+            .fontColor([$r('app.color.text_tertiary')])
+        }
+        .width(this.getMessageToolbarButtonSize())
+        .height(this.getMessageToolbarButtonSize())
+        .padding(0)
+        .backgroundColor(Color.Transparent)
+        .onClick(() => {
+          this.showEstimatedCostPopup = !this.showEstimatedCostPopup
+        })
+        .bindPopup(this.showEstimatedCostPopup, {
+          message: this.getEstimatedCostText(),
+          placement: Placement.Top,
+          systemMaterial: new uiMaterial.ImmersiveMaterial({
+            style: uiMaterial.ImmersiveStyle.THIN
+          }),
+          onStateChange: (event) => {
+            this.showEstimatedCostPopup = event.isVisible
+          }
         })
       }
 

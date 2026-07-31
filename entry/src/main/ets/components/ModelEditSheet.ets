@@ -5,6 +5,8 @@
 import { ModelInfo, InputMode, OutputMode, ModelInfoExtendedJson } from '../models/ChatModels'
 import { LengthMetrics, uiMaterial } from '@kit.ArkUI'
 import { getAppUiState } from '../state/AppUiState'
+import { pickLocalizedText } from '../utils/LocalizedTextUtils'
+import { normalizeBillingCurrency, parseBillingPrice } from '../utils/ModelBillingUtils'
 
 @ComponentV2
 struct ModelCapabilityButton {
@@ -75,6 +77,21 @@ export struct ModelEditSheet {
   @Local paramTopP: number = 1.0
   @Local paramPresencePenalty: number = 0
   @Local paramFrequencyPenalty: number = 0
+  // 计费配置
+  @Local billingEnabled: boolean = false
+  @Local billingCurrency: string = 'CNY'
+  @Local billingCurrencySelectedIndex: number = 0
+  @Local inputPriceText: string = ''
+  @Local outputPriceText: string = ''
+  private readonly billingCurrencies: string[] = ['CNY', 'USD', 'EUR', 'GBP', 'JPY', 'KRW']
+  private readonly billingCurrencyOptions: SelectOption[] = [
+    { value: 'CNY' },
+    { value: 'USD' },
+    { value: 'EUR' },
+    { value: 'GBP' },
+    { value: 'JPY' },
+    { value: 'KRW' }
+  ]
   // 回调函数
   @Event onSave: (draft: ModelInfoExtendedJson) => Promise<void> = async (_draft: ModelInfoExtendedJson): Promise<void> => {
   }
@@ -101,6 +118,23 @@ export struct ModelEditSheet {
     this.paramTopP = this.model.parameters.topP
     this.paramPresencePenalty = this.model.parameters.presencePenalty
     this.paramFrequencyPenalty = this.model.parameters.frequencyPenalty
+    this.billingEnabled = this.model.billingEnabled
+    this.billingCurrency = normalizeBillingCurrency(this.model.billingCurrency)
+    this.billingCurrencySelectedIndex = this.getBillingCurrencyIndex(this.billingCurrency)
+    this.inputPriceText = this.model.inputPricePerMillion > 0 ?
+      this.model.inputPricePerMillion.toString() : ''
+    this.outputPriceText = this.model.outputPricePerMillion > 0 ?
+      this.model.outputPricePerMillion.toString() : ''
+  }
+
+  private getBillingCurrencyIndex(currency: string): number {
+    const normalized = normalizeBillingCurrency(currency)
+    for (let i = 0; i < this.billingCurrencies.length; i++) {
+      if (this.billingCurrencies[i] === normalized) {
+        return i
+      }
+    }
+    return 0
   }
 
   private buildDraft(): ModelInfoExtendedJson {
@@ -122,6 +156,10 @@ export struct ModelEditSheet {
         supportsStreaming: this.capSupportsStreaming
       },
       reasoningStrategyOverride: this.reasoningStrategyOverride,
+      billingEnabled: this.billingEnabled,
+      billingCurrency: this.billingCurrency,
+      inputPricePerMillion: parseBillingPrice(this.inputPriceText),
+      outputPricePerMillion: parseBillingPrice(this.outputPriceText),
       parameters: {
         temperature: this.paramTemperature,
         topP: this.paramTopP,
@@ -157,6 +195,12 @@ export struct ModelEditSheet {
 
           // 能力标签区
           this.CapabilityChipsSection()
+
+          Divider()
+            .color($r('app.color.divider'))
+            .margin({ left: 16, right: 16 })
+
+          this.BillingSection()
 
           Divider()
             .color($r('app.color.divider'))
@@ -354,6 +398,135 @@ export struct ModelEditSheet {
     .alignItems(HorizontalAlign.Start)
     .padding(16)
     .backgroundColor(Color.Transparent)
+  }
+
+  @Builder
+  BillingSection() {
+    Column({ space: 12 }) {
+      Row() {
+        Column({ space: 3 }) {
+          Text(pickLocalizedText('模型计费', 'Model billing'))
+            .fontSize(15)
+            .fontWeight(FontWeight.Medium)
+            .fontColor($r('app.color.text_primary'))
+
+          Text(pickLocalizedText('在消息和使用统计中显示预估费用', 'Show estimated cost in messages and usage statistics'))
+            .fontSize(12)
+            .fontColor($r('app.color.text_tertiary'))
+        }
+        .layoutWeight(1)
+        .alignItems(HorizontalAlign.Start)
+
+        Toggle({ type: ToggleType.Switch, isOn: this.billingEnabled })
+          .selectedColor(this.themePrimary)
+          .systemMaterial(new uiMaterial.Material())
+          .switchPointColor(Color.White)
+          .onChange((value: boolean) => {
+            this.billingEnabled = value
+          })
+      }
+      .width('100%')
+      .alignItems(VerticalAlign.Center)
+
+      if (this.billingEnabled) {
+        Divider()
+          .color($r('app.color.divider'))
+
+        Row() {
+          Text(pickLocalizedText('币种', 'Currency'))
+            .fontSize(13)
+            .fontColor($r('app.color.text_primary'))
+            .layoutWeight(1)
+
+          Select(this.billingCurrencyOptions)
+            .selected(this.billingCurrencySelectedIndex)
+            .value(this.billingCurrency)
+            .height(38)
+            .font({ size: 13 })
+            .fontColor($r('app.color.text_primary'))
+            .selectedOptionFontColor(this.themePrimary)
+            .backgroundColor(Color.Transparent)
+            .borderRadius(14)
+            .systemMaterial(new uiMaterial.ImmersiveMaterial({
+              style: uiMaterial.ImmersiveStyle.ULTRA_THIN,
+              materialColor: Color.Transparent,
+              applyShadow: false
+            }))
+            .menuSystemMaterial(new uiMaterial.ImmersiveMaterial({
+              style: uiMaterial.ImmersiveStyle.THICK
+            }))
+            .onSelect((index: number, value: string) => {
+              this.billingCurrencySelectedIndex = index
+              this.billingCurrency = normalizeBillingCurrency(value)
+            })
+        }
+        .width('100%')
+        .alignItems(VerticalAlign.Center)
+
+        Row({ space: 10 }) {
+          this.BillingPriceInput(
+            pickLocalizedText('输入价格', 'Input price'),
+            this.inputPriceText,
+            (value: string): void => {
+              this.inputPriceText = value
+            }
+          )
+
+          this.BillingPriceInput(
+            pickLocalizedText('输出价格', 'Output price'),
+            this.outputPriceText,
+            (value: string): void => {
+              this.outputPriceText = value
+            }
+          )
+        }
+        .width('100%')
+        .alignItems(VerticalAlign.Top)
+
+        Text(pickLocalizedText(
+          `单位：${this.billingCurrency} / 百万 Token`,
+          `Unit: ${this.billingCurrency} / million tokens`
+        ))
+          .fontSize(11)
+          .fontColor($r('app.color.text_tertiary'))
+          .width('100%')
+      }
+    }
+    .width('100%')
+    .padding(16)
+    .alignItems(HorizontalAlign.Start)
+    .backgroundColor(Color.Transparent)
+  }
+
+  @Builder
+  BillingPriceInput(label: string, value: string, onChange: (value: string) => void) {
+    Column({ space: 7 }) {
+      Text(label)
+        .fontSize(12)
+        .fontColor($r('app.color.text_secondary'))
+        .width('100%')
+
+      TextInput({ text: value, placeholder: '0.00' })
+        .width('100%')
+        .height(42)
+        .fontSize(14)
+        .fontColor($r('app.color.text_primary'))
+        .placeholderColor($r('app.color.text_tertiary'))
+        .backgroundColor(Color.Transparent)
+        .borderRadius(14)
+        .border({ width: 0.8, color: this.themePrimaryLight })
+        .padding({ left: 12, right: 12 })
+        .systemMaterial(new uiMaterial.ImmersiveMaterial({
+          style: uiMaterial.ImmersiveStyle.ULTRA_THIN,
+          materialColor: Color.Transparent,
+          applyShadow: false
+        }))
+        .onChange((text: string) => {
+          onChange(text)
+        })
+    }
+    .layoutWeight(1)
+    .alignItems(HorizontalAlign.Start)
   }
 
   @Builder

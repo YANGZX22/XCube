@@ -50,6 +50,10 @@ interface ModelJsonData {
   capabilities?: CapabilitiesJsonData
   parameters?: ParametersJsonData
   reasoningStrategyOverride?: string
+  billingEnabled?: boolean
+  billingCurrency?: string
+  inputPricePerMillion?: number
+  outputPricePerMillion?: number
 }
 
 // 能力配置 JSON 数据
@@ -231,6 +235,13 @@ export class DatabaseService {
         reasoning_content TEXT,
         translated_text TEXT DEFAULT '',
         translated_lang TEXT DEFAULT '',
+        billing_enabled INTEGER DEFAULT 0,
+        billing_currency TEXT DEFAULT '',
+        input_price_per_million REAL DEFAULT 0,
+        output_price_per_million REAL DEFAULT 0,
+        estimated_input_tokens INTEGER DEFAULT 0,
+        estimated_output_tokens INTEGER DEFAULT 0,
+        estimated_cost REAL DEFAULT 0,
         FOREIGN KEY (session_id) REFERENCES ${TableNames.SESSIONS}(id)
       )
     `
@@ -331,6 +342,7 @@ export class DatabaseService {
       await this.addMessageParentIdColumnIfNeeded()
       // 尝试添加消息翻译字段（用于保存翻译结果）
       await this.addMessageTranslationColumnsIfNeeded()
+      await this.addMessageBillingColumnsIfNeeded()
 	      // 迁移现有供应商数据
 	      await this.migrateExistingProviders()
 	      await this.ensureDefaultAssistant()
@@ -385,6 +397,29 @@ export class DatabaseService {
       await this.rdbStore.executeSql(`ALTER TABLE ${TableNames.MESSAGES} ADD COLUMN translated_lang TEXT DEFAULT ''`)
     } catch (error) {
       console.info('DatabaseService', 'translated_lang column may already exist')
+    }
+  }
+
+  // 添加消息计费快照字段（用于预估费用展示与历史统计）
+  private async addMessageBillingColumnsIfNeeded(): Promise<void> {
+    if (this.rdbStore === null) {
+      return
+    }
+    const columns: string[] = [
+      'billing_enabled INTEGER DEFAULT 0',
+      "billing_currency TEXT DEFAULT ''",
+      'input_price_per_million REAL DEFAULT 0',
+      'output_price_per_million REAL DEFAULT 0',
+      'estimated_input_tokens INTEGER DEFAULT 0',
+      'estimated_output_tokens INTEGER DEFAULT 0',
+      'estimated_cost REAL DEFAULT 0'
+    ]
+    for (let i = 0; i < columns.length; i++) {
+      try {
+        await this.rdbStore.executeSql(`ALTER TABLE ${TableNames.MESSAGES} ADD COLUMN ${columns[i]}`)
+      } catch (error) {
+        console.info('DatabaseService', `message billing column may already exist: ${columns[i]}`)
+      }
     }
   }
 
@@ -1720,6 +1755,13 @@ export class DatabaseService {
       reasoning_content: message.reasoningContent,
       translated_text: message.translatedText || '',
       translated_lang: message.translatedLang || '',
+      billing_enabled: message.billingEnabled ? 1 : 0,
+      billing_currency: message.billingCurrency || '',
+      input_price_per_million: message.inputPricePerMillion,
+      output_price_per_million: message.outputPricePerMillion,
+      estimated_input_tokens: message.estimatedInputTokens,
+      estimated_output_tokens: message.estimatedOutputTokens,
+      estimated_cost: message.estimatedCost,
       parent_id: message.parentId || '',
       // 保存搜索引用数据
       search_query: message.searchQuery || '',
@@ -1864,6 +1906,13 @@ export class DatabaseService {
     message.reasoningContent = this.safeGetString(resultSet, 'reasoning_content')
     message.translatedText = this.safeGetString(resultSet, 'translated_text')
     message.translatedLang = this.safeGetString(resultSet, 'translated_lang')
+    message.billingEnabled = this.safeGetLong(resultSet, 'billing_enabled') === 1
+    message.billingCurrency = this.safeGetString(resultSet, 'billing_currency')
+    message.inputPricePerMillion = this.safeGetDouble(resultSet, 'input_price_per_million')
+    message.outputPricePerMillion = this.safeGetDouble(resultSet, 'output_price_per_million')
+    message.estimatedInputTokens = this.safeGetLong(resultSet, 'estimated_input_tokens')
+    message.estimatedOutputTokens = this.safeGetLong(resultSet, 'estimated_output_tokens')
+    message.estimatedCost = this.safeGetDouble(resultSet, 'estimated_cost')
     message.parentId = this.safeGetString(resultSet, 'parent_id')
     message.searchQuery = this.safeGetString(resultSet, 'search_query')
     message.searchEngine = this.safeGetString(resultSet, 'search_engine')
@@ -2141,7 +2190,11 @@ export class DatabaseService {
         outputMode: model.outputMode,
         capabilities: capabilitiesData,
         parameters: parametersData,
-        reasoningStrategyOverride: model.reasoningStrategyOverride
+        reasoningStrategyOverride: model.reasoningStrategyOverride,
+        billingEnabled: model.billingEnabled,
+        billingCurrency: model.billingCurrency,
+        inputPricePerMillion: model.inputPricePerMillion,
+        outputPricePerMillion: model.outputPricePerMillion
       }
       modelsArray.push(modelObj)
     }
@@ -2649,6 +2702,14 @@ export class DatabaseService {
     }
   }
 
+  private safeGetDouble(resultSet: relationalStore.ResultSet, columnName: string, defaultValue: number = 0): number {
+    try {
+      return resultSet.getDouble(resultSet.getColumnIndex(columnName))
+    } catch (_error) {
+      return defaultValue
+    }
+  }
+
   // ==================== 使用统计聚合查询 ====================
 
   private applyUsageRange(
@@ -2703,14 +2764,29 @@ export class DatabaseService {
     }
     const predicates = new relationalStore.RdbPredicates(TableNames.MESSAGES)
     this.applyUsageRange(predicates, 'timestamp', rangeStartMs)
-    const resultSet = await this.rdbStore.query(predicates, ['role', 'model_name', 'model_id', 'timestamp'])
+    const resultSet = await this.rdbStore.query(predicates, [
+      'role',
+      'model_name',
+      'model_id',
+      'timestamp',
+      'billing_enabled',
+      'billing_currency',
+      'estimated_input_tokens',
+      'estimated_output_tokens',
+      'estimated_cost'
+    ])
     try {
       while (resultSet.goToNextRow()) {
         rows.push({
           role: this.safeGetString(resultSet, 'role'),
           modelName: this.safeGetString(resultSet, 'model_name'),
           modelId: this.safeGetString(resultSet, 'model_id'),
-          timestamp: resultSet.getLong(resultSet.getColumnIndex('timestamp'))
+          timestamp: resultSet.getLong(resultSet.getColumnIndex('timestamp')),
+          billingEnabled: this.safeGetLong(resultSet, 'billing_enabled') === 1,
+          billingCurrency: this.safeGetString(resultSet, 'billing_currency'),
+          estimatedInputTokens: this.safeGetLong(resultSet, 'estimated_input_tokens'),
+          estimatedOutputTokens: this.safeGetLong(resultSet, 'estimated_output_tokens'),
+          estimatedCost: this.safeGetDouble(resultSet, 'estimated_cost')
         })
       }
     } finally {
@@ -2811,6 +2887,45 @@ export class DatabaseService {
     }
     return items
   }
+
+  // 获取按币种分组的预估计费统计
+  async getUsageBillingSummary(rangeStartMs: number = 0): Promise<UsageBillingSummary[]> {
+    await this.waitForInitialization()
+    const summaries = new Map<string, UsageBillingSummary>()
+    if (this.rdbStore === null) {
+      return []
+    }
+    try {
+      const rows = await this.collectMessageUsageRows(rangeStartMs)
+      for (let i = 0; i < rows.length; i++) {
+        const row = rows[i]
+        const currency = row.billingCurrency.trim().toUpperCase()
+        if (row.role !== MessageRole.ASSISTANT || !row.billingEnabled || currency === '') {
+          continue
+        }
+        const existing = summaries.get(currency)
+        if (existing !== undefined) {
+          existing.estimatedCost += Math.max(0, row.estimatedCost)
+          existing.inputTokens += Math.max(0, row.estimatedInputTokens)
+          existing.outputTokens += Math.max(0, row.estimatedOutputTokens)
+          existing.messageCount += 1
+        } else {
+          summaries.set(currency, {
+            currency: currency,
+            estimatedCost: Math.max(0, row.estimatedCost),
+            inputTokens: Math.max(0, row.estimatedInputTokens),
+            outputTokens: Math.max(0, row.estimatedOutputTokens),
+            messageCount: 1
+          })
+        }
+      }
+    } catch (error) {
+      console.error('DatabaseService', `Failed to get usage billing summary: ${JSON.stringify(error)}`)
+    }
+    const result = Array.from(summaries.values())
+    result.sort((a: UsageBillingSummary, b: UsageBillingSummary): number => a.currency.localeCompare(b.currency))
+    return result
+  }
 }
 
 // 使用统计 - 总览数据
@@ -2828,11 +2943,25 @@ export interface ModelUsageRankingItem {
   count: number
 }
 
+// 使用统计 - 按币种分组的预估计费
+export interface UsageBillingSummary {
+  currency: string
+  estimatedCost: number
+  inputTokens: number
+  outputTokens: number
+  messageCount: number
+}
+
 interface UsageMessageRow {
   role: string
   modelName: string
   modelId: string
   timestamp: number
+  billingEnabled: boolean
+  billingCurrency: string
+  estimatedInputTokens: number
+  estimatedOutputTokens: number
+  estimatedCost: number
 }
 
 // 工具事件数据接口

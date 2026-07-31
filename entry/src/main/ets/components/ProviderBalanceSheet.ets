@@ -6,11 +6,14 @@ import { getAppUiState } from '../state/AppUiState'
 import { BalanceResult } from '../services/ProviderBalanceService'
 import { withColorAlpha } from '../utils/ColorAlphaUtils'
 import { ChatFloatingImmersiveButton } from './ChatFloatingImmersiveButton'
+import { ProviderIcon } from './ProviderIcon'
+import { uiMaterial } from '@kit.ArkUI'
 
 @ObservedV2
 export class BalanceSheetState {
   @Trace results: BalanceResult[] = []
   @Trace loading: boolean = false
+  @Trace revision: number = 0
 }
 
 @ComponentV2
@@ -23,13 +26,9 @@ export struct ProviderBalanceSheet {
     return getAppUiState().themePrimary
   }
 
-  private get themeBackground(): string {
-    return getAppUiState().themeBackground
-  }
-
   build() {
     Column() {
-      // 顶部标题 + 刷新
+      // 顶部标题与操作
       Row() {
         ChatFloatingImmersiveButton({
           barWidth: 40,
@@ -37,7 +36,6 @@ export struct ProviderBalanceSheet {
           iconResource: $r('sys.symbol.xmark'),
           iconSize: 17,
           iconColor: [this.themePrimary],
-          iconOffsetY: -4,
           responsePadding: 0,
           onButtonClick: (): void => {
             this.onClose()
@@ -50,7 +48,6 @@ export struct ProviderBalanceSheet {
           }
           .width(40)
           .height(40)
-          .translate({ y: -4 })
         }
 
         Text($r('app.string.balance_query'))
@@ -66,7 +63,6 @@ export struct ProviderBalanceSheet {
           iconResource: $r('sys.symbol.arrow_clockwise'),
           iconSize: 18,
           iconColor: [this.themePrimary],
-          iconOffsetY: -4,
           responsePadding: 0,
           onButtonClick: (): void => {
             if (!this.state.loading) {
@@ -88,11 +84,11 @@ export struct ProviderBalanceSheet {
           }
           .width(40)
           .height(40)
-          .translate({ y: -4 })
         }
       }
       .width('100%')
-      .padding({ left: 20, right: 16, top: 8, bottom: 12 })
+      .padding({ left: 16, right: 16, top: 8, bottom: 14 })
+      .alignItems(VerticalAlign.Center)
 
       // 列表 / 空态
       if (this.state.results.length === 0 && this.state.loading) {
@@ -126,13 +122,13 @@ export struct ProviderBalanceSheet {
         .justifyContent(FlexAlign.Center)
         .alignItems(HorizontalAlign.Center)
       } else {
-        Column() {
+        Column({ space: 10 }) {
           ForEach(this.state.results, (item: BalanceResult) => {
             this.BalanceRow(item)
-          }, (item: BalanceResult) => item.providerId)
+          }, (item: BalanceResult) => `${this.state.revision}:${item.providerId}`)
         }
         .width('100%')
-        .padding({ left: 16, right: 16, bottom: 16 })
+        .padding({ left: 16, right: 16, bottom: 18 })
       }
     }
     .width('100%')
@@ -141,48 +137,80 @@ export struct ProviderBalanceSheet {
 
   @Builder
   BalanceRow(item: BalanceResult) {
-    Row() {
+    Row({ space: 12 }) {
+      ProviderIcon({
+        iconType: item.providerIconType,
+        iconPath: item.providerIconPath,
+        textIcon: item.providerTextIcon,
+        textIconBgColor: item.providerTextIconBgColor,
+        customImagePath: item.providerCustomImagePath,
+        iconSize: 42,
+        radius: 11,
+        bgColor: $r('app.color.divider'),
+        brandColor: item.providerBrandColor,
+        fallbackSymbol: $r('sys.symbol.cloud'),
+        fallbackColor: $r('app.color.text_secondary')
+      })
+
       Column() {
         Text(item.providerName)
-          .fontSize(15)
-          .fontWeight(FontWeight.Medium)
+          .fontSize(16)
+          .fontWeight(FontWeight.Bold)
           .fontColor($r('app.color.text_primary'))
           .maxLines(1)
           .textOverflow({ overflow: TextOverflow.Ellipsis })
 
         if (!item.success) {
-          Text(item.error !== '' ? item.error : $r('app.string.balance_query_failed'))
-            .fontSize(12)
-            .fontColor($r('app.color.status_error'))
-            .maxLines(1)
-            .textOverflow({ overflow: TextOverflow.Ellipsis })
-            .margin({ top: 2 })
+          Row({ space: 4 }) {
+            SymbolGlyph($r('sys.symbol.exclamationmark_circle'))
+              .fontSize(12)
+              .fontColor([$r('app.color.status_error')])
+
+            Text(item.error !== '' ? item.error : $r('app.string.balance_query_failed'))
+              .fontSize(12)
+              .fontColor($r('app.color.status_error'))
+              .maxLines(1)
+              .textOverflow({ overflow: TextOverflow.Ellipsis })
+          }
+          .margin({ top: 3 })
+          .alignItems(VerticalAlign.Center)
         }
       }
       .alignItems(HorizontalAlign.Start)
       .layoutWeight(1)
 
       if (item.success) {
-        Row() {
+        Row({ space: 5 }) {
           Text(item.balance)
-            .fontSize(17)
+            .fontSize(20)
             .fontWeight(FontWeight.Bold)
             .fontColor(this.themePrimary)
+
           if (item.currency !== '') {
             Text(item.currency)
-              .fontSize(12)
+              .fontSize(11)
+              .fontWeight(FontWeight.Medium)
               .fontColor($r('app.color.text_secondary'))
-              .margin({ left: 4 })
+              .margin({ bottom: 2 })
           }
         }
         .alignItems(VerticalAlign.Bottom)
       }
     }
     .width('100%')
-    .padding(14)
-    .borderRadius(14)
-    .backgroundColor(withColorAlpha(this.themeBackground, 'CC'))
-    .margin({ bottom: 10 })
+    .padding({ left: 14, right: 14, top: 13, bottom: 13 })
+    .borderRadius(18)
+    .border({
+      width: 1,
+      color: withColorAlpha(this.themePrimary, '38')
+    })
+    .systemMaterial(new uiMaterial.ImmersiveMaterial({
+      style: uiMaterial.ImmersiveStyle.ULTRA_THIN,
+      materialColor: Color.Transparent,
+      applyShadow: false,
+      interactive: false,
+      lightEffect: { color: undefined }
+    }))
     .alignItems(VerticalAlign.Center)
   }
 }

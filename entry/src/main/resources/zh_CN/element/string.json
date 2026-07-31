@@ -498,7 +498,7 @@
     },
     {
       "name": "settings_usage_stats_desc",
-      "value": "查看会话与模型调用情况"
+      "value": "查看会话、模型调用与预估计费"
     },
     {
       "name": "usage_stats_range_all",
@@ -535,6 +535,18 @@
     {
       "name": "usage_stats_ranking_subtitle",
       "value": "Top 10 · 按 AI 回复条数统计"
+    },
+    {
+      "name": "usage_stats_billing_title",
+      "value": "计费统计"
+    },
+    {
+      "name": "usage_stats_billing_subtitle",
+      "value": "按币种分组 · 根据模型配置价格预估"
+    },
+    {
+      "name": "usage_stats_billing_empty",
+      "value": "暂无计费数据，开启模型计费后会开始记录预估费用。"
     },
     {
       "name": "usage_stats_unit_count",

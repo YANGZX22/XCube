@@ -2,6 +2,7 @@ import {
   ApiStyle,
   ChatMessage,
   MessageAttachment,
+  ModelInfo,
   ModelProvider,
   ReasoningLevel,
   ToolCall,
@@ -14,6 +15,10 @@ import { appendUniqueToolId } from './ChatToolIdHelper'
 import { syncChatMessageFromSource } from './ChatMessageActionHelper'
 import { validateProviderConfig } from '../../utils/ProviderValidationUtils'
 import { ASK_USER_TOOL_ID, CANVAS_DOCUMENT_TOOL_ID } from '../../config/BuiltinTools'
+import {
+  applyEstimatedBilling,
+  ModelBillingSnapshot
+} from '../../utils/ModelBillingUtils'
 
 export class ChatSendPrepareResult {
   shouldSend: boolean = false
@@ -357,14 +362,16 @@ export class ChatSendFlow {
     this.deps.onScrollBottom()
   }
 
-  private handleAIMessageAdded(aiMessage: ChatMessage): void {
+  private handleAIMessageAdded(aiMessage: ChatMessage, billing: ModelBillingSnapshot): void {
     this.deps.onSessionResolved()
+    applyEstimatedBilling(aiMessage, this.deps.messages, billing, true)
     this.deps.messages.push(aiMessage)
     this.deps.onSyncMessages()
     this.deps.onScrollBottom()
   }
 
-  private handleAIMessageUpdated(aiMessage: ChatMessage): void {
+  private handleAIMessageUpdated(aiMessage: ChatMessage, billing: ModelBillingSnapshot): void {
+    applyEstimatedBilling(aiMessage, this.deps.messages, billing)
     const index = this.deps.messages.findIndex((message: ChatMessage) => message.id === aiMessage.id)
     if (index < 0) {
       console.warn('ChatSendFlow', `[handleAIMessageUpdated] message not found: ${aiMessage.id}`)
@@ -372,6 +379,17 @@ export class ChatSendFlow {
     }
     syncChatMessageFromSource(this.deps.messages[index], aiMessage)
     this.deps.onScrollBottom()
+  }
+
+  private getModelBillingSnapshot(provider: ModelProvider, modelId: string): ModelBillingSnapshot {
+    let model: ModelInfo | null = null
+    for (let i = 0; i < provider.models.length; i++) {
+      if (provider.models[i].id === modelId) {
+        model = provider.models[i]
+        break
+      }
+    }
+    return new ModelBillingSnapshot(model)
   }
 
   private handleTaskCompleted(taskId: string): void {
@@ -412,6 +430,7 @@ export class ChatSendFlow {
 
     this.prepareSendState(taskId)
     const modelId = this.deps.getCurrentModelId()
+    const billing = this.getModelBillingSnapshot(currentProvider, modelId)
 
     try {
       await this.deps.chatViewModel.sendMessage(
@@ -428,10 +447,10 @@ export class ChatSendFlow {
           this.handleUserMessageAdded(userMessage)
         },
         (aiMessage: ChatMessage): void => {
-          this.handleAIMessageAdded(aiMessage)
+          this.handleAIMessageAdded(aiMessage, billing)
         },
         (aiMessage: ChatMessage): void => {
-          this.handleAIMessageUpdated(aiMessage)
+          this.handleAIMessageUpdated(aiMessage, billing)
         },
         (): void => {
           this.handleTaskCompleted(taskId)
@@ -473,6 +492,7 @@ export class ChatSendFlow {
 
     this.prepareSendState(taskId)
     const modelId = this.deps.getCurrentModelId()
+    const billing = this.getModelBillingSnapshot(currentProvider, modelId)
     const tools = this.deps.toolRegistry.getEnabledToolDefinitions(enabledToolIds)
 
     console.info('ChatSendFlow', `[Function Calling] 启用工具: ${enabledToolIds.join(', ')}`)
@@ -515,10 +535,10 @@ export class ChatSendFlow {
           this.handleUserMessageAdded(userMessage)
         },
         (aiMessage: ChatMessage): void => {
-          this.handleAIMessageAdded(aiMessage)
+          this.handleAIMessageAdded(aiMessage, billing)
         },
         (aiMessage: ChatMessage): void => {
-          this.handleAIMessageUpdated(aiMessage)
+          this.handleAIMessageUpdated(aiMessage, billing)
         },
         (): void => {
           this.handleTaskCompleted(taskId)

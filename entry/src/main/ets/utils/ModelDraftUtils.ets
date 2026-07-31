@@ -44,4 +44,16 @@ export function applyModelDraft(target: ModelInfo, draft: ModelInfoExtendedJson)
   if (draft.reasoningStrategyOverride !== undefined) {
     target.reasoningStrategyOverride = draft.reasoningStrategyOverride
   }
+  if (draft.billingEnabled !== undefined) {
+    target.billingEnabled = draft.billingEnabled
+  }
+  if (draft.billingCurrency !== undefined && draft.billingCurrency.trim() !== '') {
+    target.billingCurrency = draft.billingCurrency.trim().toUpperCase()
+  }
+  if (draft.inputPricePerMillion !== undefined && Number.isFinite(draft.inputPricePerMillion)) {
+    target.inputPricePerMillion = Math.max(0, draft.inputPricePerMillion)
+  }
+  if (draft.outputPricePerMillion !== undefined && Number.isFinite(draft.outputPricePerMillion)) {
+    target.outputPricePerMillion = Math.max(0, draft.outputPricePerMillion)
+  }
 }

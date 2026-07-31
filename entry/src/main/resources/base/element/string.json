@@ -498,7 +498,7 @@
     },
     {
       "name": "settings_usage_stats_desc",
-      "value": "View sessions and model usage"
+      "value": "View sessions, model usage, and estimated billing"
     },
     {
       "name": "usage_stats_range_all",
@@ -535,6 +535,18 @@
     {
       "name": "usage_stats_ranking_subtitle",
       "value": "Top 10 · counted by AI replies"
+    },
+    {
+      "name": "usage_stats_billing_title",
+      "value": "Estimated Billing"
+    },
+    {
+      "name": "usage_stats_billing_subtitle",
+      "value": "Grouped by currency · calculated from configured model prices"
+    },
+    {
+      "name": "usage_stats_billing_empty",
+      "value": "No billing data yet. Enable billing for a model to start tracking estimates."
     },
     {
       "name": "usage_stats_unit_count",
