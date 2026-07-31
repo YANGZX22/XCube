@@ -11,6 +11,7 @@ import {
   DEFAULT_ELEVENLABS_SPEED,
   DEFAULT_ELEVENLABS_STABILITY,
   ElevenLabsVoiceInfo,
+  getTTSService,
   TTSEngineType,
   TTSService
 } from '../services/TTSService'
@@ -51,7 +52,9 @@ struct TTSSettingsPage {
     { value: 'eleven_v3' }
   ]
   private preferences = getPreferencesService()
-  private previewService: TTSService = new TTSService()
+  private previewService: TTSService = getTTSService()
+  private settingsLoadGeneration: number = 0
+  private voiceLoadGeneration: number = 0
 
   private get topAvoidHeight(): number {
     return getAppUiState().topAvoidHeight
@@ -94,12 +97,16 @@ struct TTSSettingsPage {
   }
 
   aboutToAppear(): void {
-    this.loadSettings()
+    const loadGeneration = this.settingsLoadGeneration + 1
+    this.settingsLoadGeneration = loadGeneration
+    this.loadSettings(loadGeneration)
   }
 
   aboutToDisappear(): void {
-    this.previewService.destroy()
-    this.isTesting = false
+    // 返回动画期间不调用 TextReader.stop / HttpRequest.destroy，也不修改 @Local。
+    // 共享 TTS 服务会在下一次朗读时接管当前任务，这里只让离页后的异步结果失效。
+    this.settingsLoadGeneration += 1
+    this.voiceLoadGeneration += 1
   }
 
   private px2vp(px: number): number {
@@ -107,35 +114,48 @@ struct TTSSettingsPage {
       160
   }
 
-  private async loadSettings(): Promise<void> {
-    this.ttsEnabled = await this.preferences.getBoolean(PreferenceKeys.TTS_ENABLED, true)
+  private async loadSettings(loadGeneration: number): Promise<void> {
+    const ttsEnabled = await this.preferences.getBoolean(PreferenceKeys.TTS_ENABLED, true)
     const savedEngine = await this.preferences.getString(PreferenceKeys.TTS_ENGINE, TTSEngineType.LOCAL)
-    this.engine = savedEngine === TTSEngineType.ELEVENLABS ? TTSEngineType.ELEVENLABS : TTSEngineType.LOCAL
-    this.elevenLabsBaseUrl = await this.preferences.getString(
+    const engine = savedEngine === TTSEngineType.ELEVENLABS ? TTSEngineType.ELEVENLABS : TTSEngineType.LOCAL
+    const elevenLabsBaseUrl = await this.preferences.getString(
       PreferenceKeys.ELEVENLABS_BASE_URL,
       DEFAULT_ELEVENLABS_BASE_URL
     )
-    this.elevenLabsApiKey = await this.preferences.getString(PreferenceKeys.ELEVENLABS_API_KEY, '')
-    this.elevenLabsVoiceId = await this.preferences.getString(PreferenceKeys.ELEVENLABS_VOICE_ID, '')
-    if (this.elevenLabsVoiceId !== '') {
-      this.voiceOptions = [{ value: this.elevenLabsVoiceId }]
-      this.voiceIds = [this.elevenLabsVoiceId]
-    }
-    this.elevenLabsModelId = await this.preferences.getString(
+    const elevenLabsApiKey = await this.preferences.getString(PreferenceKeys.ELEVENLABS_API_KEY, '')
+    const elevenLabsVoiceId = await this.preferences.getString(PreferenceKeys.ELEVENLABS_VOICE_ID, '')
+    const elevenLabsModelId = await this.preferences.getString(
       PreferenceKeys.ELEVENLABS_MODEL_ID,
       DEFAULT_ELEVENLABS_MODEL_ID
     )
-    this.stability = await this.preferences.getNumber(
+    const stability = await this.preferences.getNumber(
       PreferenceKeys.ELEVENLABS_STABILITY,
       DEFAULT_ELEVENLABS_STABILITY
     )
-    this.similarityBoost = await this.preferences.getNumber(
+    const similarityBoost = await this.preferences.getNumber(
       PreferenceKeys.ELEVENLABS_SIMILARITY_BOOST,
       DEFAULT_ELEVENLABS_SIMILARITY_BOOST
     )
-    this.speed = await this.preferences.getNumber(PreferenceKeys.ELEVENLABS_SPEED, DEFAULT_ELEVENLABS_SPEED)
-    if (this.engine === TTSEngineType.ELEVENLABS && this.elevenLabsApiKey.trim() !== '') {
-      await this.loadVoices(false)
+    const speed = await this.preferences.getNumber(PreferenceKeys.ELEVENLABS_SPEED, DEFAULT_ELEVENLABS_SPEED)
+    if (loadGeneration !== this.settingsLoadGeneration) {
+      return
+    }
+
+    this.ttsEnabled = ttsEnabled
+    this.engine = engine
+    this.elevenLabsBaseUrl = elevenLabsBaseUrl
+    this.elevenLabsApiKey = elevenLabsApiKey
+    this.elevenLabsVoiceId = elevenLabsVoiceId
+    this.elevenLabsModelId = elevenLabsModelId
+    this.stability = stability
+    this.similarityBoost = similarityBoost
+    this.speed = speed
+    if (elevenLabsVoiceId !== '') {
+      this.voiceOptions = [{ value: elevenLabsVoiceId }]
+      this.voiceIds = [elevenLabsVoiceId]
+    } else {
+      this.voiceOptions = []
+      this.voiceIds = []
     }
   }
 
@@ -145,12 +165,17 @@ struct TTSSettingsPage {
       return
     }
 
+    const loadGeneration = this.voiceLoadGeneration + 1
+    this.voiceLoadGeneration = loadGeneration
     this.isLoadingVoices = true
     try {
       const voices = await this.previewService.listElevenLabsVoices(
         this.elevenLabsBaseUrl,
         this.elevenLabsApiKey
       )
+      if (loadGeneration !== this.voiceLoadGeneration) {
+        return
+      }
       this.applyVoiceOptions(voices)
       if (showSuccess) {
         this.showMessage(
@@ -159,13 +184,24 @@ struct TTSSettingsPage {
         )
       }
     } catch (error) {
+      if (loadGeneration !== this.voiceLoadGeneration) {
+        return
+      }
       const message = error instanceof Error ? error.message : JSON.stringify(error)
       if (showSuccess) {
         this.showMessage(message, SnackBarTone.ERROR)
       }
     } finally {
-      this.isLoadingVoices = false
+      if (loadGeneration === this.voiceLoadGeneration) {
+        this.isLoadingVoices = false
+      }
     }
+  }
+
+  private cancelVoiceLoading(): void {
+    this.voiceLoadGeneration += 1
+    this.previewService.cancelVoiceListRequest()
+    this.isLoadingVoices = false
   }
 
   private applyVoiceOptions(voices: ElevenLabsVoiceInfo[]): void {
@@ -235,7 +271,11 @@ struct TTSSettingsPage {
       return
     }
 
+    const pageGeneration = this.settingsLoadGeneration
     await this.saveSettings(false)
+    if (pageGeneration !== this.settingsLoadGeneration) {
+      return
+    }
     const context = this.getUIContext().getHostContext()
     if (context === undefined) {
       this.showMessage($r('app.string.tts_test_failed'), SnackBarTone.ERROR)
@@ -244,14 +284,26 @@ struct TTSSettingsPage {
 
     this.isTesting = true
     await this.previewService.init(context)
+    if (pageGeneration !== this.settingsLoadGeneration) {
+      return
+    }
     await this.previewService.speak('你好，欢迎使用 XCube 播报功能。Hello from XCube.', {
       onStart: (): void => {
+        if (pageGeneration !== this.settingsLoadGeneration) {
+          return
+        }
         this.showMessage($r('app.string.tts_test_started'), SnackBarTone.SUCCESS)
       },
       onComplete: (): void => {
+        if (pageGeneration !== this.settingsLoadGeneration) {
+          return
+        }
         this.isTesting = false
       },
       onError: (error: string): void => {
+        if (pageGeneration !== this.settingsLoadGeneration) {
+          return
+        }
         this.isTesting = false
         this.showMessage(error, SnackBarTone.ERROR)
       }
@@ -450,6 +502,7 @@ struct TTSSettingsPage {
 
       TextInput({ text: value, placeholder: placeholder })
         .type(password ? InputType.Password : InputType.Normal)
+        .enableAutoFill(false)
         .width('100%')
         .height(46)
         .fontSize(14)
@@ -628,6 +681,7 @@ struct TTSSettingsPage {
         false,
         (value: string): void => {
           if (value !== this.elevenLabsBaseUrl) {
+            this.cancelVoiceLoading()
             this.voiceOptions = []
             this.voiceIds = []
           }
@@ -641,6 +695,7 @@ struct TTSSettingsPage {
         true,
         (value: string): void => {
           if (value !== this.elevenLabsApiKey) {
+            this.cancelVoiceLoading()
             this.voiceOptions = []
             this.voiceIds = []
           }

@@ -96,6 +96,7 @@ export class TTSService {
   private currentReadId: string = ''
   private activeRequestToken: number = 0
   private activeEngine: TTSEngineType = TTSEngineType.LOCAL
+  private localStopPromise: Promise<void> | null = null
 
   private apiRequest: http.HttpRequest | null = null
   private apiPlayer: media.AVPlayer | null = null
@@ -105,6 +106,7 @@ export class TTSService {
   private apiChunkIndex: number = 0
   private apiStartNotified: boolean = false
   private apiSettings: TTSSettingsSnapshot | null = null
+  private voiceListRequest: http.HttpRequest | null = null
 
   // 保存上下文；本地朗读引擎按需初始化，避免用户选择 API 时仍启动系统朗读控件。
   async init(context: common.Context): Promise<void> {
@@ -126,6 +128,7 @@ export class TTSService {
 
     while (hasMore && pageCount < 20) {
       const request = http.createHttp()
+      this.voiceListRequest = request
       let endpoint = `${this.buildElevenLabsApiRoot(baseUrl)}/v2/voices` +
         '?page_size=100&sort=name&sort_direction=asc&include_total_count=false'
       if (nextPageToken !== '') {
@@ -184,12 +187,25 @@ export class TTSService {
         const err = error as BusinessError
         throw new Error(`获取 ElevenLabs 语音失败: ${err.message ?? JSON.stringify(error)}`)
       } finally {
+        if (this.voiceListRequest === request) {
+          this.voiceListRequest = null
+        }
         try {
           request.destroy()
         } catch (_error) {}
       }
     }
     return voices
+  }
+
+  cancelVoiceListRequest(): void {
+    if (this.voiceListRequest === null) {
+      return
+    }
+    try {
+      this.voiceListRequest.destroy()
+    } catch (_error) {}
+    this.voiceListRequest = null
   }
 
   // 朗读文本。引擎配置每次读取，设置页修改后无需重建聊天页面。
@@ -314,6 +330,10 @@ export class TTSService {
 
   private async speakWithLocalReader(text: string, requestToken: number): Promise<void> {
     try {
+      await this.waitForLocalStop()
+      if (requestToken !== this.activeRequestToken) {
+        return
+      }
       await this.ensureLocalReaderInitialized()
       if (requestToken !== this.activeRequestToken) {
         return
@@ -571,6 +591,9 @@ export class TTSService {
 
   // 停止本地或 API 播报。
   stop(): void {
+    const shouldStopLocalReader = this.localReaderInitialized &&
+      this.activeEngine === TTSEngineType.LOCAL &&
+      (this.isReading || this.currentCallback !== null)
     this.activeRequestToken += 1
     this.isReading = false
     this.currentCallback = null
@@ -579,9 +602,15 @@ export class TTSService {
     this.apiChunkIndex = 0
     this.apiSettings = null
 
-    if (this.localReaderInitialized) {
-      TextReader.stop().catch((error: Error): void => {
+    if (shouldStopLocalReader) {
+      const stopPromise = TextReader.stop().catch((error: Error): void => {
         console.error('TTSService', `Local TextReader stop failed: ${error.message}`)
+      })
+      this.localStopPromise = stopPromise
+      stopPromise.then((): void => {
+        if (this.localStopPromise === stopPromise) {
+          this.localStopPromise = null
+        }
       })
     }
     if (this.apiRequest !== null) {
@@ -604,8 +633,16 @@ export class TTSService {
     return this.isReading
   }
 
-  destroy(): void {
+  private async waitForLocalStop(): Promise<void> {
+    const pendingStop = this.localStopPromise
+    if (pendingStop !== null) {
+      await pendingStop
+    }
+  }
+
+  async destroy(): Promise<void> {
     this.stop()
+    await this.waitForLocalStop()
     if (this.localReaderInitialized) {
       try {
         TextReader.off('stateChange')
@@ -613,7 +650,7 @@ export class TTSService {
       } catch (error) {
         console.error('TTSService', `Local TextReader listener release failed: ${JSON.stringify(error)}`)
       }
-      TextReader.release().catch((error: Error): void => {
+      await TextReader.release().catch((error: Error): void => {
         console.error('TTSService', `Local TextReader release failed: ${JSON.stringify(error)}`)
       })
     }
@@ -772,4 +809,13 @@ export class TTSService {
     text = text.replace(/\n{3,}/g, '\n\n')
     return text.trim()
   }
+}
+
+let sharedTTSService: TTSService | null = null
+
+export function getTTSService(): TTSService {
+  if (sharedTTSService === null) {
+    sharedTTSService = new TTSService()
+  }
+  return sharedTTSService
 }

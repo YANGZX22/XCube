@@ -17,6 +17,7 @@ export class AppStorageKeys {
   static readonly IS_DARK_MODE: string = 'isDarkMode'
   static readonly TOP_AVOID_HEIGHT: string = 'topAvoidHeight'
   static readonly BOTTOM_AVOID_HEIGHT: string = 'bottomAvoidHeight'
+  static readonly TTS_LOADING_MESSAGE_ID: string = 'ttsLoadingMessageId'
   static readonly SPEAKING_MESSAGE_ID: string = 'speakingMessageId'
   static readonly WINDOW_WIDTH_VP: string = 'window_width_vp'
   static readonly WINDOW_HEIGHT_VP: string = 'window_height_vp'

@@ -33,7 +33,7 @@ import { AITaskService } from '../services/AITaskService'
 import { WebSearchService } from '../services/WebSearchService'
 import { DefaultModelService } from '../services/DefaultModelService'
 import { PreferenceKeys, PreferencesService } from '../services/PreferencesService'
-import { TTSService } from '../services/TTSService'
+import { getTTSService, TTSService } from '../services/TTSService'
 import { McpService } from '../services/McpService'
 import { SkillService } from '../services/SkillService'
 import { ToolRegistry } from '../services/ToolRegistry'
@@ -246,6 +246,9 @@ export struct ChatPage {
   private get speakingMessageId(): string {
     return getAppUiState().speakingMessageId
   }
+  private get ttsLoadingMessageId(): string {
+    return getAppUiState().ttsLoadingMessageId
+  }
   // 是否为通过"新建对话"创建的空会话（返回时需要删除）
   private isNewEmptySession: boolean = false
   // 搜索取消标志（用于取消正在进行的联网查询）
@@ -384,7 +387,8 @@ export struct ChatPage {
   private canvasDocumentService: CanvasDocumentService = ServiceRegistry.canvasDocument()
   private documentAttachmentRegistry: DocumentAttachmentRegistryService = ServiceRegistry.documentAttachmentRegistry()
   private chatTaskOrchestrator = ServiceRegistry.chatTaskOrchestrator()
-  private ttsService: TTSService = new TTSService()
+  private ttsService: TTSService = getTTSService()
+  private ttsRequestGeneration: number = 0
   // 当前服务商配置
   private currentProvider: ModelProvider | null = null
   private sessionId: string = ''
@@ -575,8 +579,13 @@ export struct ChatPage {
     this.isPageVisible = false
     this.cancelPendingToolExecutionApproval('页面已关闭，工具调用未执行。')
     ServiceRegistry.toolExecution().setApprovalCallback(null)
-    // 释放TTS资源
-    this.ttsService.destroy()
+    // 页面切换时只停止当前播报。系统 TextReader 由应用级共享服务持有，
+    // 不在导航转场中 release，避免阻塞转场并与下一页面的 init 竞争。
+    this.ttsRequestGeneration += 1
+    if (this.ttsLoadingMessageId !== '' || this.speakingMessageId !== '' || this.ttsService.getReadingStatus()) {
+      this.ttsService.stop()
+      this.clearTTSMessageState()
+    }
     this.clearInitialBottomAlignmentRetries()
     this.clearRuntimeStateWatchdog()
     this.clearHistoryPreviewCollapseTimer()
@@ -601,8 +610,11 @@ export struct ChatPage {
   // 初始化TTS服务
   private async initTTSService(): Promise<void> {
     try {
-      const context = this.getUIContext().getHostContext() as common.UIAbilityContext
-      await this.ttsService.init(context)
+      const context = this.getUIContext().getHostContext()
+      if (context === undefined) {
+        return
+      }
+      await this.ttsService.init(context as common.UIAbilityContext)
     } catch (error) {
       console.error('ChatPage', 'TTS初始化失败: ' + error)
     }
@@ -5061,37 +5073,80 @@ export struct ChatPage {
   }
 
   // 处理TTS朗读
-  private handleTTS(messageId: string, content: string): void {
-    // 如果正在朗读其他消息，先停止
-    if (this.speakingMessageId !== '') {
+  private async handleTTS(messageId: string, content: string): Promise<void> {
+    const requestGeneration = this.ttsRequestGeneration + 1
+    this.ttsRequestGeneration = requestGeneration
+
+    // 新请求会接管尚在加载或正在播放的旧请求。
+    if (this.ttsLoadingMessageId !== '' || this.speakingMessageId !== '' ||
+      this.ttsService.getReadingStatus()) {
       this.ttsService.stop()
     }
 
-    this.setSpeakingMessageId(messageId)
+    this.setTTSLoadingMessageId(messageId)
+    this.setSpeakingMessageId('')
 
-    this.ttsService.speak(content, {
-      onStart: () => {
-        // 朗读开始
-      },
-      onComplete: () => {
-        // 朗读完成
-        this.setSpeakingMessageId('')
-      },
-      onError: (error: string) => {
-        this.setSpeakingMessageId('')
-        this.showChatSnack(error, 3000, SnackBarTone.ERROR)
+    try {
+      // 页面恢复后重新绑定有效 Context，避免仅依赖 aboutToAppear 的时序。
+      const context = this.getUIContext().getHostContext()
+      if (context === undefined) {
+        throw new Error('朗读服务上下文不可用')
       }
-    })
+      await this.ttsService.init(context as common.UIAbilityContext)
+      if (requestGeneration !== this.ttsRequestGeneration) {
+        return
+      }
+      await this.ttsService.speak(content, {
+        onStart: () => {
+          if (requestGeneration !== this.ttsRequestGeneration) {
+            return
+          }
+          // 收到音频并开始播放后，加载图标才切换为暂停。
+          this.setSpeakingMessageId(messageId)
+          this.setTTSLoadingMessageId('')
+        },
+        onComplete: () => {
+          if (requestGeneration !== this.ttsRequestGeneration) {
+            return
+          }
+          this.clearTTSMessageState()
+        },
+        onError: (error: string) => {
+          if (requestGeneration !== this.ttsRequestGeneration) {
+            return
+          }
+          this.clearTTSMessageState()
+          this.showChatSnack(error, 3000, SnackBarTone.ERROR)
+        }
+      })
+    } catch (error) {
+      if (requestGeneration !== this.ttsRequestGeneration) {
+        return
+      }
+      this.clearTTSMessageState()
+      const message = error instanceof Error ? error.message : JSON.stringify(error)
+      this.showChatSnack(message, 3000, SnackBarTone.ERROR)
+    }
   }
 
   // 处理停止TTS朗读
   private handleTTSStop(): void {
+    this.ttsRequestGeneration += 1
     this.ttsService.stop()
-    this.setSpeakingMessageId('')
+    this.clearTTSMessageState()
+  }
+
+  private setTTSLoadingMessageId(messageId: string): void {
+    setAppUiStateValue(AppStorageKeys.TTS_LOADING_MESSAGE_ID, messageId)
   }
 
   private setSpeakingMessageId(messageId: string): void {
     setAppUiStateValue(AppStorageKeys.SPEAKING_MESSAGE_ID, messageId)
+  }
+
+  private clearTTSMessageState(): void {
+    this.setTTSLoadingMessageId('')
+    this.setSpeakingMessageId('')
   }
 
   // 处理新建对话

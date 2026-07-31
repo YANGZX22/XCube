@@ -20,6 +20,7 @@ export class AppUiState {
   @Trace isDarkMode: boolean = false
   @Trace topAvoidHeight: number = 0
   @Trace bottomAvoidHeight: number = 0
+  @Trace ttsLoadingMessageId: string = ''
   @Trace speakingMessageId: string = ''
   @Trace windowWidthVp: number = 0
   @Trace windowHeightVp: number = 0
@@ -104,6 +105,9 @@ function applyAppUiStateValue<T extends string | number | boolean>(state: AppUiS
       return
     case AppStorageKeys.BOTTOM_AVOID_HEIGHT:
       state.bottomAvoidHeight = value as number
+      return
+    case AppStorageKeys.TTS_LOADING_MESSAGE_ID:
+      state.ttsLoadingMessageId = value as string
       return
     case AppStorageKeys.SPEAKING_MESSAGE_ID:
       state.speakingMessageId = value as string
@@ -243,6 +247,8 @@ function createAppUiStateFromStorage(): AppUiState {
   applyAppUiStateValue(state, AppStorageKeys.TOP_AVOID_HEIGHT, readStorageValue<number>(AppStorageKeys.TOP_AVOID_HEIGHT, 0))
   applyAppUiStateValue(state, AppStorageKeys.BOTTOM_AVOID_HEIGHT,
     readStorageValue<number>(AppStorageKeys.BOTTOM_AVOID_HEIGHT, 0))
+  applyAppUiStateValue(state, AppStorageKeys.TTS_LOADING_MESSAGE_ID,
+    readStorageValue<string>(AppStorageKeys.TTS_LOADING_MESSAGE_ID, ''))
   applyAppUiStateValue(state, AppStorageKeys.SPEAKING_MESSAGE_ID,
     readStorageValue<string>(AppStorageKeys.SPEAKING_MESSAGE_ID, ''))
   applyAppUiStateValue(state, AppStorageKeys.TTS_ENABLED,
@@ -341,6 +347,7 @@ export function syncAppUiStateFromStorage(): void {
   state.isDarkMode = freshState.isDarkMode
   state.topAvoidHeight = freshState.topAvoidHeight
   state.bottomAvoidHeight = freshState.bottomAvoidHeight
+  state.ttsLoadingMessageId = freshState.ttsLoadingMessageId
   state.speakingMessageId = freshState.speakingMessageId
   state.ttsEnabled = freshState.ttsEnabled
   state.windowWidthVp = freshState.windowWidthVp
@@ -431,6 +438,8 @@ function resolveAppUiStatePath(path: string): string {
       return 'topAvoidHeight'
     case AppStorageKeys.BOTTOM_AVOID_HEIGHT:
       return 'bottomAvoidHeight'
+    case AppStorageKeys.TTS_LOADING_MESSAGE_ID:
+      return 'ttsLoadingMessageId'
     case AppStorageKeys.SPEAKING_MESSAGE_ID:
       return 'speakingMessageId'
     case AppStorageKeys.TTS_ENABLED:

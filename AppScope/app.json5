@@ -2,8 +2,8 @@
   "app": {
     "bundleName": "com.zixiao.xcube",
     "vendor": "longlivey",
-    "versionCode": 1001016,
-    "versionName": "1.1.16",
+    "versionCode": 1001017,
+    "versionName": "1.1.17",
     "icon": "$media:layered_image",
     "label": "$string:app_name"
   }

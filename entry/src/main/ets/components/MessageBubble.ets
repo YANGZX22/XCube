@@ -141,6 +141,9 @@ export struct MessageBubble {
   private get speakingMessageId(): string {
     return getAppUiState().speakingMessageId
   }
+  private get ttsLoadingMessageId(): string {
+    return getAppUiState().ttsLoadingMessageId
+  }
   // 聊天图片紧凑展示参数
   private compactImageMaxHeight: number = 100
   private compactImageContainerWidth: number = 180
@@ -1661,18 +1664,26 @@ export struct MessageBubble {
 
       if (this.canReadMessageContent()) {
         Button({ type: ButtonType.Circle, stateEffect: false }) {
-          SymbolGlyph((this.speakingMessageId === this.message.id)
-            ? $r('sys.symbol.pause') : $r('sys.symbol.speaker_wave_2'))
-            .fontSize(13)
-            .fontColor([(this.speakingMessageId === this.message.id)
-              ? this.themePrimary : $r('app.color.text_tertiary')])
+          if (this.ttsLoadingMessageId === this.message.id) {
+            LoadingProgress()
+              .width(13)
+              .height(13)
+              .color(this.themePrimary)
+          } else {
+            SymbolGlyph((this.speakingMessageId === this.message.id)
+              ? $r('sys.symbol.pause') : $r('sys.symbol.speaker_wave_2'))
+              .fontSize(13)
+              .fontColor([(this.speakingMessageId === this.message.id)
+                ? this.themePrimary : $r('app.color.text_tertiary')])
+          }
         }
         .width(this.getMessageToolbarButtonSize())
         .height(this.getMessageToolbarButtonSize())
         .padding(0)
         .backgroundColor(Color.Transparent)
         .onClick(() => {
-          if (this.speakingMessageId === this.message.id) {
+          if (this.ttsLoadingMessageId === this.message.id ||
+            this.speakingMessageId === this.message.id) {
             this.onTTSStop()
           } else {
             this.onTTS(this.message.id, this.message.content)
@@ -1906,7 +1917,8 @@ export struct MessageBubble {
           }
           .width('100%')
           .onClick(() => {
-            if (!this.isMultiSelectMode && (this.speakingMessageId === this.message.id)) {
+            if (!this.isMultiSelectMode &&
+              (this.ttsLoadingMessageId === this.message.id || this.speakingMessageId === this.message.id)) {
               this.onTTSStop()
             }
           })

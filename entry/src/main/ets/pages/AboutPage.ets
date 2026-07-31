@@ -1,4 +1,4 @@
-import { Want, common } from '@kit.AbilityKit'
+import { Want, bundleManager, common } from '@kit.AbilityKit'
 import { uiMaterial } from '@kit.ArkUI'
 import { hilog } from '@kit.PerformanceAnalysisKit'
 import { HdsNavigation, HdsNavigationTitleBarOptions, HdsNavigationTitleMode } from '@kit.UIDesignKit'
@@ -21,6 +21,8 @@ let aboutPagePathStack: NavPathStack | null = null
 @Entry
 @ComponentV2
 struct AboutPage {
+  @Local versionName: string = '1.1.17'
+
   private get topAvoidHeight(): number {
     return getAppUiState().topAvoidHeight
   }
@@ -49,6 +51,15 @@ struct AboutPage {
     return getAppUiState().materialLevel
   }
   private compactScroller: Scroller = new Scroller()
+
+  aboutToAppear(): void {
+    try {
+      const info = bundleManager.getBundleInfoForSelfSync(bundleManager.BundleFlag.GET_BUNDLE_INFO_DEFAULT)
+      this.versionName = info.versionName
+    } catch (error) {
+      console.error(TAG, `Get version failed: ${JSON.stringify(error)}`)
+    }
+  }
 
   private px2vp(px: number): number {
     return px / (this.getUIContext().getHostContext()?.resourceManager.getDeviceCapabilitySync().screenDensity ?? 3) * 160
@@ -95,7 +106,13 @@ struct AboutPage {
     .padding(0)
     .backgroundColor('#17132E')
     .borderRadius(22)
-    .clip(true)
+    .clip(false)
+    .shadow({
+      radius: 22,
+      color: 'rgba(23, 19, 46, 0.32)',
+      offsetX: 0,
+      offsetY: 8
+    })
     .systemMaterial(new uiMaterial.ImmersiveMaterial({
       style: uiMaterial.ImmersiveStyle.REGULAR,
       materialColor: '#17132E',
@@ -125,7 +142,7 @@ struct AboutPage {
               .fontWeight(FontWeight.Bold)
               .fontColor($r('app.color.text_primary'))
 
-            Text('v1.1.16')
+            Text(`v${this.versionName}`)
               .fontSize(13)
               .fontColor($r('app.color.text_secondary'))
 
