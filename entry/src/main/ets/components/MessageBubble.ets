@@ -5,7 +5,7 @@ import { showToast } from '../utils/ToastUtil'
 import { getModelIconPath, buildIconResourcePath } from '../utils/ProviderIconUtils'
 import { shouldShowAssistantMessageToolbar } from '../utils/MessageBubbleDisplayUtils'
 import { SearchReferenceCard } from './SearchReferenceCard'
-import { ToolCallCard } from './ToolCallCard'
+import { ToolCallCard, ToolCallCardEntry } from './ToolCallCard'
 import { AskUserCard } from './AskUserCard'
 import { HtmlPreviewCard } from './HtmlPreviewCard'
 import { VChartCard } from './VChartCard'
@@ -46,6 +46,15 @@ interface MathChartToolPayload {
   chart_type?: string
   summary?: string
   chart_spec?: string
+}
+
+// 工具调用渲染分组：同一工具（同名 + 同来源）的多次调用合并成一张卡片
+class ToolCallRenderGroup {
+  key: string = ''
+  isAskUser: boolean = false
+  askUserCall: ToolCall = new ToolCall()
+  entries: ToolCallCardEntry[] = []
+  anyExecuting: boolean = false
 }
 
 class MessageVChartPayload {
@@ -896,6 +905,54 @@ export struct MessageBubble {
     const normalizedFunctionName = this.normalizeToolFunctionName(toolCall.functionName)
     const normalizedToolId = this.normalizeToolFunctionName(toolCall.toolId)
     return normalizedFunctionName === MATH_CHART_TOOL_ID || normalizedToolId === MATH_CHART_TOOL_ID
+  }
+
+  // 按工具身份（规范化函数名 + 来源标签）合并同一消息内的多次调用；
+  // AskUser 卡片保持逐次独立渲染，被隐藏的调用（如已有搜索引用的联网搜索）不入组
+  private getToolCallRenderGroups(): ToolCallRenderGroup[] {
+    const groups: ToolCallRenderGroup[] = []
+    const groupIndex = new Map<string, ToolCallRenderGroup>()
+    for (let i = 0; i < this.message.toolCalls.length; i++) {
+      const toolCall = this.message.toolCalls[i]
+      if (this.isAskUserToolCall(toolCall)) {
+        const askGroup = new ToolCallRenderGroup()
+        askGroup.key = 'ask_' + toolCall.id + '_' + i.toString()
+        askGroup.isAskUser = true
+        askGroup.askUserCall = toolCall
+        groups.push(askGroup)
+        continue
+      }
+      if (this.shouldHideToolCallCard(toolCall)) {
+        continue
+      }
+      const identity = this.normalizeToolFunctionName(toolCall.functionName) + '|' + toolCall.sourceLabel.trim()
+      let group = groupIndex.get(identity)
+      if (group === undefined) {
+        group = new ToolCallRenderGroup()
+        group.key = 'tool_' + identity
+        groupIndex.set(identity, group)
+        groups.push(group)
+      }
+      const toolResult = i < this.message.toolResults.length ? this.message.toolResults[i] : null
+      group.entries.push(new ToolCallCardEntry(toolCall, toolResult))
+      if (this.message.isGenerating && i >= this.message.toolResults.length) {
+        group.anyExecuting = true
+      }
+    }
+    return groups
+  }
+
+  // 分组卡片的入参是本次 build 里临时创建的普通对象，不具备 @Trace 可观察性；
+  // 把结果数量与执行状态编入 ForEach 键值，状态变化时重建卡片以保证刷新
+  private buildToolCallRenderGroupKey(group: ToolCallRenderGroup, index: number): string {
+    let resolvedResults = 0
+    for (let i = 0; i < group.entries.length; i++) {
+      if (group.entries[i].toolResult !== null) {
+        resolvedResults++
+      }
+    }
+    return group.key + '_' + group.entries.length.toString() + '_' + resolvedResults.toString() +
+      (group.anyExecuting ? '_e' : '_d') + '_' + index.toString()
   }
 
   private findToolResultForCall(toolCallId: string): ToolResult | null {
@@ -1822,25 +1879,24 @@ export struct MessageBubble {
           Column() {
             // ========== 工具调用区域 ==========
             if (this.message.hasToolCalls()) {
-              ForEach(this.message.toolCalls, (toolCall: ToolCall, index: number) => {
-                if (this.isAskUserToolCall(toolCall)) {
+              ForEach(this.getToolCallRenderGroups(), (group: ToolCallRenderGroup) => {
+                if (group.isAskUser) {
                   AskUserCard({
-                    toolCall: toolCall,
-                    isAnswered: this.findToolResultForCall(toolCall.id) !== null,
+                    toolCall: group.askUserCall,
+                    isAnswered: this.findToolResultForCall(group.askUserCall.id) !== null,
                     onAnswer: (toolCallId: string, answerJson: string): void => {
                       this.onAskUserAnswer(toolCallId, answerJson)
                     }
                   })
                     .margin({ bottom: 6 })
-                } else if (!this.shouldHideToolCallCard(toolCall)) {
+                } else {
                   ToolCallCard({
-                    toolCall: toolCall,
-                    toolResult: index < this.message.toolResults.length ? this.message.toolResults[index] : null,
-                    isExecuting: this.message.isGenerating && index >= this.message.toolResults.length
+                    entries: group.entries,
+                    isExecuting: group.anyExecuting
                   })
                     .margin({ bottom: 6 })
                 }
-              }, (toolCall: ToolCall, index: number) => toolCall.id + '_' + index.toString())
+              }, (group: ToolCallRenderGroup, index: number) => this.buildToolCallRenderGroupKey(group, index))
             }
 
             if (this.getVChartPayloads().length > 0) {

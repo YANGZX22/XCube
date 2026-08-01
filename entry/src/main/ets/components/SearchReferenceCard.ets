@@ -2,6 +2,7 @@ import { SearchReference } from '../models/ChatModels'
 import { webview } from '@kit.ArkWeb'
 import { getAppUiState } from '../state/AppUiState'
 import { withColorAlpha } from '../utils/ColorAlphaUtils'
+import { uiMaterial } from '@kit.ArkUI'
 
 @ComponentV2
 export struct SearchReferenceCard {
@@ -46,8 +47,9 @@ export struct SearchReferenceCard {
   }
 
   build() {
-    Stack({ alignContent: Alignment.TopStart }) {
-      // ========== 悬浮联网查询标签 ==========
+    // 与 ToolCallCard 一致的沉浸材质卡片：标题栏 + 可折叠引用列表
+    Column() {
+      // ========== 联网查询标题栏 ==========
       Row() {
         // 联网搜索图标
         SymbolGlyph($r('sys.symbol.worldclock_fill_2'))
@@ -113,14 +115,13 @@ export struct SearchReferenceCard {
           .width(12)
           .height(12)
       }
+      .width('100%')
       .height(36)
       .padding({ left: 10, right: 8 })
       .borderRadius(12)
-      .border({ width: 0.5, color: this.getTimelineRailColor() })
-      .clip(true)
       .stateStyles({
         normal: {
-          .backgroundColor(this.themeAiBubble)
+          .backgroundColor(Color.Transparent)
         },
         pressed: {
           .backgroundColor(withColorAlpha(this.themePrimary, this.isDarkMode ? '1F' : '12'))
@@ -140,16 +141,28 @@ export struct SearchReferenceCard {
           }, (ref: SearchReference) => ref.id)
         }
         .width('100%')
-        .margin({ top: 42 })
         .padding({ left: 10, right: 10, top: 4, bottom: 4 })
-        .backgroundColor(this.themeAiBubble)
-        .borderRadius(12)
-        .border({ width: 0.5, color: this.getTimelineRailColor() })
-        .clip(true)
+        .transition(TransitionEffect.OPACITY.animation({ duration: 200 }))
       }
     }
     .width('100%')
-    .alignContent(Alignment.TopStart)
+    .backgroundColor(Color.Transparent)
+    .borderRadius(12)
+    .border({ width: 0.5, color: this.getTimelineRailColor() })
+    .clip(false)
+    .systemMaterial(new uiMaterial.ImmersiveMaterial({
+      style: uiMaterial.ImmersiveStyle.REGULAR,
+      materialColor: this.themeAiBubble,
+      applyShadow: false,
+      interactive: false,
+      lightEffect: { color: undefined }
+    }))
+    .shadow({
+      radius: 12,
+      color: this.isDarkMode ? 'rgba(0, 0, 0, 0.32)' : 'rgba(15, 23, 42, 0.14)',
+      offsetX: 0,
+      offsetY: 0
+    })
     .bindSheet($$this.showWebSheet, this.WebSheetBuilder(), {
       height: SheetSize.LARGE,
       detents: [SheetSize.LARGE],
