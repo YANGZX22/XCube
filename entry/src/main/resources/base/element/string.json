@@ -58,7 +58,7 @@
     },
     {
       "name": "knowledge_usage_message",
-      "value": "Use + to upload and index PDF, TXT, Markdown, or image files on this device. Tap a file to preview it, or swipe left or right to update its index or delete it. Images use OCR; PDFs with too little extracted text automatically fall back to page-image OCR. Retrieval combines local semantic vectors with BM25 keywords and transparently keeps BM25 when vector capability is unavailable. When the knowledge-base switch is enabled, a tool-capable model may decide to call knowledge_search. Retrieval starts only after that tool call; document content is never inserted into the prompt in advance."
+      "value": "The knowledge base lets the AI answer questions using your own files, such as lecture notes, documents, or manuals.\n\n1. Add files: tap + in the corner to upload PDF, TXT, Markdown, or image files. The app builds a searchable index on this device, and text in images or scanned PDFs is recognized automatically.\n\n2. Manage files: tap a file to preview it; swipe right to rebuild its index after the file changes, or swipe left to delete it.\n\n3. Start using it: turn on the knowledge-base switch on the chat page and ask questions as usual. When the AI thinks your files can help, it searches them by keywords and by meaning, so related passages are found even if your wording differs from the original text (the selected model must support tool calling).\n\nYour files are read only when the AI actually runs a search, and only the few most relevant snippets are shared with it — never the whole file."
     },
     {
       "name": "knowledge_usage_label",
