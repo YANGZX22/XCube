@@ -25,6 +25,8 @@ const MAX_CHUNK_ID_CHARACTERS: number = 1024
 const MAX_TITLE_CHARACTERS: number = 4096
 const MAX_LOCATOR_CHARACTERS: number = 4096
 const MAX_CONTENT_CHARACTERS: number = 64 * 1024
+const MAX_VECTOR_SEARCH_RESULTS: number = 200
+const MAX_DOCUMENT_FILTERS_PER_QUERY: number = 800
 
 export enum KnowledgeVectorStoreStatus {
   CLOSED = 'closed',
@@ -117,6 +119,51 @@ export class KnowledgeVectorRecord {
     this.content = content
     this.embedding = embedding
   }
+}
+
+/**
+ * 直接由 ArkData 向量 sidecar 返回的近邻记录。
+ *
+ * similarity 是由余弦距离换算得到的相似度（1 - distance），只用于应用层排序，
+ * 不会写回数据库。
+ */
+export class KnowledgeVectorSearchRecord {
+  chunkId: string = ''
+  documentId: string = ''
+  title: string = ''
+  locator: string = ''
+  content: string = ''
+  similarity: number = 0
+
+  constructor(
+    chunkId: string = '',
+    documentId: string = '',
+    title: string = '',
+    locator: string = '',
+    content: string = '',
+    similarity: number = 0
+  ) {
+    this.chunkId = chunkId
+    this.documentId = documentId
+    this.title = title
+    this.locator = locator
+    this.content = content
+    this.similarity = similarity
+  }
+}
+
+class KnowledgeVectorNearestScan {
+  records: KnowledgeVectorSearchRecord[] = []
+  rawRows: number = 0
+  nullDistanceRows: number = 0
+  bestSimilarity: number | null = null
+}
+
+export function knowledgeCosineDistanceToSimilarity(distance: number): number | null {
+  if (!Number.isFinite(distance)) {
+    return null
+  }
+  return Math.max(-1, Math.min(1, 1 - distance))
 }
 
 /**
@@ -376,6 +423,59 @@ export class KnowledgeVectorStore {
        WHERE ${KNOWLEDGE_VECTOR_DOCUMENT_ID_COLUMN} = ?`,
       [normalizedDocumentId]
     )
+  }
+
+  /**
+   * 绕过 Data Augmentation Kit 的最终相关性筛选，直接使用 ArkData COSINE
+   * 索引做近邻查询。调用方传入 READY 文档范围，避免孤儿或旧 generation 参与召回。
+   */
+  async searchNearest(
+    queryVector: Float32Array,
+    documentIds: string[],
+    limit: number,
+    minimumSimilarity: number
+  ): Promise<KnowledgeVectorSearchRecord[]> {
+    const normalizedLimit = this.requireSearchLimit(limit)
+    const normalizedMinimumSimilarity = this.requireMinimumSimilarity(minimumSimilarity)
+    const scopedDocumentIds = this.requireDocumentScope(documentIds)
+    const releaseLock = await this.acquireMutationLock()
+    try {
+      const store = this.requireReadyStore()
+      const metadata = this.requireMetadata()
+      this.validateQueryVector(queryVector, metadata.dimension)
+
+      const candidates: KnowledgeVectorSearchRecord[] = []
+      for (let offset = 0; offset < scopedDocumentIds.length;
+        offset += MAX_DOCUMENT_FILTERS_PER_QUERY) {
+        const batch = scopedDocumentIds.slice(
+          offset,
+          Math.min(offset + MAX_DOCUMENT_FILTERS_PER_QUERY, scopedDocumentIds.length)
+        )
+        const batchRecords = await this.searchNearestBatch(
+          store,
+          queryVector,
+          batch,
+          normalizedLimit,
+          normalizedMinimumSimilarity
+        )
+        for (let index = 0; index < batchRecords.length; index++) {
+          candidates.push(batchRecords[index])
+        }
+      }
+
+      candidates.sort((left: KnowledgeVectorSearchRecord, right: KnowledgeVectorSearchRecord): number => {
+        if (left.similarity !== right.similarity) {
+          return right.similarity - left.similarity
+        }
+        if (left.chunkId === right.chunkId) {
+          return 0
+        }
+        return left.chunkId < right.chunkId ? -1 : 1
+      })
+      return candidates.slice(0, Math.min(normalizedLimit, candidates.length))
+    } finally {
+      releaseLock()
+    }
   }
 
   async close(): Promise<void> {
@@ -642,6 +742,241 @@ export class KnowledgeVectorStore {
       }
     } finally {
       releaseLock()
+    }
+  }
+
+  private async searchNearestBatch(
+    store: relationalStore.RdbStore,
+    queryVector: Float32Array,
+    documentIds: string[],
+    limit: number,
+    minimumSimilarity: number
+  ): Promise<KnowledgeVectorSearchRecord[]> {
+    const placeholders: string[] = []
+    const documentBindArgs: relationalStore.ValueType[] = []
+    for (let index = 0; index < documentIds.length; index++) {
+      placeholders.push('?')
+      documentBindArgs.push(documentIds[index])
+    }
+    const inClause = placeholders.join(', ')
+    const scopedRows = await this.countScopedRows(store, documentIds)
+
+    // 部分 GaussPD 固件的 ANN 查询不接受绑定参数形式的查询向量或 LIMIT，会静默
+    // 返回空集而非报错。按“绑定向量 → 字面量向量 → 无 ORDER BY 全量扫描”逐级
+    // 降级，任一形状返回行即采用。向量与 LIMIT 均为已校验的纯数字，字面量拼接
+    // 不构成注入面。
+    let shape = 'bound'
+    let scan: KnowledgeVectorNearestScan | null = null
+    try {
+      const boundArgs: relationalStore.ValueType[] = [queryVector]
+      for (let index = 0; index < documentBindArgs.length; index++) {
+        boundArgs.push(documentBindArgs[index])
+      }
+      boundArgs.push(queryVector)
+      scan = await this.runNearestScan(
+        store,
+        this.buildNearestSql(inClause, '?', limit),
+        boundArgs,
+        minimumSimilarity
+      )
+    } catch (error) {
+      console.warn(
+        'KnowledgeVectorStore',
+        `Bound-vector nearest query failed: ${this.safeErrorMessage(error)}`
+      )
+      scan = null
+    }
+
+    if (scopedRows > 0 && (scan === null || scan.rawRows === 0)) {
+      const vectorLiteral = this.serializeVectorLiteral(queryVector)
+      try {
+        shape = 'literal'
+        scan = await this.runNearestScan(
+          store,
+          this.buildNearestSql(inClause, vectorLiteral, limit),
+          documentBindArgs.slice(),
+          minimumSimilarity
+        )
+      } catch (error) {
+        console.warn(
+          'KnowledgeVectorStore',
+          `Literal-vector nearest query failed: ${this.safeErrorMessage(error)}`
+        )
+        scan = null
+      }
+      if (scan === null || scan.rawRows === 0) {
+        shape = 'scan'
+        scan = await this.runNearestScan(
+          store,
+          `SELECT ${KNOWLEDGE_VECTOR_CHUNK_ID_COLUMN},
+                  ${KNOWLEDGE_VECTOR_DOCUMENT_ID_COLUMN},
+                  ${KNOWLEDGE_VECTOR_TITLE_COLUMN},
+                  ${KNOWLEDGE_VECTOR_LOCATOR_COLUMN},
+                  ${KNOWLEDGE_VECTOR_CONTENT_COLUMN},
+                  ${KNOWLEDGE_VECTOR_EMBEDDING_COLUMN} <=> ${vectorLiteral} AS cosine_distance
+           FROM ${KNOWLEDGE_VECTOR_TABLE_NAME}
+           WHERE ${KNOWLEDGE_VECTOR_DOCUMENT_ID_COLUMN} IN (${inClause})`,
+          documentBindArgs.slice(),
+          minimumSimilarity
+        )
+      }
+    }
+
+    const effectiveScan = scan === null ? new KnowledgeVectorNearestScan() : scan
+    console.info(
+      'KnowledgeVectorStore',
+      `Nearest batch: shape=${shape}, docs=${documentIds.length}, scopedRows=${scopedRows}, ` +
+      `rows=${effectiveScan.rawRows}, nullDistance=${effectiveScan.nullDistanceRows}, ` +
+      `kept=${effectiveScan.records.length}, ` +
+      `bestSimilarity=${effectiveScan.bestSimilarity === null ? 'none' : effectiveScan.bestSimilarity.toFixed(4)}`
+    )
+    return effectiveScan.records
+  }
+
+  private buildNearestSql(inClause: string, vectorExpression: string, limit: number): string {
+    // limit 已由 requireSearchLimit 限定为 1..MAX_VECTOR_SEARCH_RESULTS 的纯整数。
+    return `SELECT ${KNOWLEDGE_VECTOR_CHUNK_ID_COLUMN},
+            ${KNOWLEDGE_VECTOR_DOCUMENT_ID_COLUMN},
+            ${KNOWLEDGE_VECTOR_TITLE_COLUMN},
+            ${KNOWLEDGE_VECTOR_LOCATOR_COLUMN},
+            ${KNOWLEDGE_VECTOR_CONTENT_COLUMN},
+            ${KNOWLEDGE_VECTOR_EMBEDDING_COLUMN} <=> ${vectorExpression} AS cosine_distance
+     FROM ${KNOWLEDGE_VECTOR_TABLE_NAME}
+     WHERE ${KNOWLEDGE_VECTOR_DOCUMENT_ID_COLUMN} IN (${inClause})
+     ORDER BY ${KNOWLEDGE_VECTOR_EMBEDDING_COLUMN} <=> ${vectorExpression}
+     LIMIT ${limit}`
+  }
+
+  /** 查询向量已通过 validateQueryVector 的有穷性校验，序列化结果只含数字与分隔符。 */
+  private serializeVectorLiteral(queryVector: Float32Array): string {
+    const parts: string[] = []
+    for (let index = 0; index < queryVector.length; index++) {
+      parts.push(`${queryVector[index]}`)
+    }
+    return `'[${parts.join(',')}]'`
+  }
+
+  private async runNearestScan(
+    store: relationalStore.RdbStore,
+    sql: string,
+    bindArgs: relationalStore.ValueType[],
+    minimumSimilarity: number
+  ): Promise<KnowledgeVectorNearestScan> {
+    const scan = new KnowledgeVectorNearestScan()
+    const resultSet = await store.querySql(sql, bindArgs)
+    try {
+      const chunkIdIndex = resultSet.getColumnIndex(KNOWLEDGE_VECTOR_CHUNK_ID_COLUMN)
+      const documentIdIndex = resultSet.getColumnIndex(KNOWLEDGE_VECTOR_DOCUMENT_ID_COLUMN)
+      const titleIndex = resultSet.getColumnIndex(KNOWLEDGE_VECTOR_TITLE_COLUMN)
+      const locatorIndex = resultSet.getColumnIndex(KNOWLEDGE_VECTOR_LOCATOR_COLUMN)
+      const contentIndex = resultSet.getColumnIndex(KNOWLEDGE_VECTOR_CONTENT_COLUMN)
+      const distanceIndex = resultSet.getColumnIndex('cosine_distance')
+      while (resultSet.goToNextRow()) {
+        scan.rawRows++
+        if (resultSet.isColumnNull(distanceIndex)) {
+          scan.nullDistanceRows++
+          continue
+        }
+        const similarity = knowledgeCosineDistanceToSimilarity(
+          resultSet.getDouble(distanceIndex)
+        )
+        if (similarity === null) {
+          scan.nullDistanceRows++
+          continue
+        }
+        if (scan.bestSimilarity === null || similarity > scan.bestSimilarity) {
+          scan.bestSimilarity = similarity
+        }
+        if (similarity < minimumSimilarity) {
+          continue
+        }
+        scan.records.push(new KnowledgeVectorSearchRecord(
+          resultSet.getString(chunkIdIndex),
+          resultSet.getString(documentIdIndex),
+          resultSet.getString(titleIndex),
+          resultSet.getString(locatorIndex),
+          resultSet.getString(contentIndex),
+          similarity
+        ))
+      }
+      return scan
+    } finally {
+      resultSet.close()
+    }
+  }
+
+  /** 仅用于检索诊断：统计范围内向量行数，不读取任何内容或向量。 */
+  private async countScopedRows(
+    store: relationalStore.RdbStore,
+    documentIds: string[]
+  ): Promise<number> {
+    const placeholders: string[] = []
+    const bindArgs: relationalStore.ValueType[] = []
+    for (let index = 0; index < documentIds.length; index++) {
+      placeholders.push('?')
+      bindArgs.push(documentIds[index])
+    }
+    let resultSet: relationalStore.ResultSet | null = null
+    try {
+      resultSet = await store.querySql(
+        `SELECT COUNT(*) AS row_count
+         FROM ${KNOWLEDGE_VECTOR_TABLE_NAME}
+         WHERE ${KNOWLEDGE_VECTOR_DOCUMENT_ID_COLUMN} IN (${placeholders.join(', ')})`,
+        bindArgs
+      )
+      if (!resultSet.goToNextRow()) {
+        return -1
+      }
+      return resultSet.getLong(resultSet.getColumnIndex('row_count'))
+    } catch (_error) {
+      return -1
+    } finally {
+      if (resultSet !== null) {
+        resultSet.close()
+      }
+    }
+  }
+
+  private requireSearchLimit(limit: number): number {
+    if (!Number.isFinite(limit) || !Number.isInteger(limit) || limit < 1) {
+      throw new Error('向量检索条数无效')
+    }
+    return Math.min(limit, MAX_VECTOR_SEARCH_RESULTS)
+  }
+
+  private requireMinimumSimilarity(value: number): number {
+    if (!Number.isFinite(value) || value < -1 || value > 1) {
+      throw new Error('向量检索相似度阈值无效')
+    }
+    return value
+  }
+
+  private requireDocumentScope(documentIds: string[]): string[] {
+    if (!Array.isArray(documentIds) || documentIds.length === 0) {
+      throw new Error('向量检索文档范围不能为空')
+    }
+    const normalizedIds: string[] = []
+    for (let index = 0; index < documentIds.length; index++) {
+      const documentId = this.requireScopedValue(
+        documentIds[index],
+        MAX_DOCUMENT_ID_CHARACTERS,
+        '向量检索文档 ID'
+      )
+      if (normalizedIds.indexOf(documentId) < 0) {
+        normalizedIds.push(documentId)
+      }
+    }
+    return normalizedIds
+  }
+
+  private validateQueryVector(queryVector: Float32Array, expectedDimension: number): void {
+    if (!(queryVector instanceof Float32Array) || queryVector.length !== expectedDimension) {
+      throw new Error(`查询向量维度必须为 ${expectedDimension}`)
+    }
+    for (let index = 0; index < queryVector.length; index++) {
+      if (!Number.isFinite(queryVector[index])) {
+        throw new Error('查询向量包含无效数值')
+      }
     }
   }
 

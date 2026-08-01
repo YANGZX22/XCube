@@ -311,6 +311,9 @@ export default class EntryAbility extends UIAbility {
         setAppUiStateValue(AppStorageKeys.OPEN_SESSION_PAYLOAD, this.pendingOpenSessionPayload)
         this.pendingOpenSessionPayload = ''
       }
+
+      // 首帧加载完成后再启动缺失向量的串行恢复，避免 OCR/切块抢占冷启动。
+      ServiceRegistry.knowledgeDocuments().startDeferredVectorMigrations()
       });
     };
     loadAfterInit();

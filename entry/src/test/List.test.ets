@@ -7,6 +7,8 @@ import knowledgeVectorProjectionTest from './KnowledgeVectorProjection.test';
 import knowledgeVectorBootstrapGateTest from './KnowledgeVectorBootstrapGate.test';
 import knowledgeSemanticChunkerTest from './KnowledgeSemanticChunker.test';
 import chatMessageTreeHelperTest from './ChatMessageTreeHelper.test';
+import knowledgeVectorStartupCoordinatorTest from './KnowledgeVectorStartupCoordinator.test';
+import knowledgeVectorRecoveryPolicyTest from './KnowledgeVectorRecoveryPolicy.test';
 
 export default function testsuite() {
   localUnitTest();
@@ -18,4 +20,6 @@ export default function testsuite() {
   knowledgeVectorBootstrapGateTest();
   knowledgeSemanticChunkerTest();
   chatMessageTreeHelperTest();
+  knowledgeVectorStartupCoordinatorTest();
+  knowledgeVectorRecoveryPolicyTest();
 }

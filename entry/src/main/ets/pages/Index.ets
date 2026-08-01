@@ -3088,13 +3088,18 @@ struct Index {
     this.knowledgeEmbeddingApplying = false
     this.showKnowledgeEmbeddingSheet = false
 
-    if (!result.changed) {
+    if (!result.changed && !result.repaired) {
+      this.showIndexSnack(
+        pickLocalizedText('当前向量模型和索引均已就绪', 'The current embedding model and indexes are ready'),
+        2600,
+        SnackBarTone.SUCCESS
+      )
       return
     }
     if (result.cancelled) {
       this.showIndexSnack(
-        pickLocalizedText('向量模型已切换，后台重建已被新的切换任务替代',
-          'Embedding model switched; the rebuild was superseded by a newer switch'),
+        pickLocalizedText('向量重建已被新的任务替代',
+          'The vector rebuild was superseded by a newer task'),
         3200
       )
       return
@@ -3105,9 +3110,11 @@ struct Index {
         : `；${result.lastVectorMessage}`
       this.showIndexSnack(
         pickLocalizedText(
-          `向量模型已切换：知识索引 ${result.keywordReadyDocuments}/${result.totalDocuments}，` +
+          `${result.repaired ? '向量修复' : '向量模型已切换'}：` +
+            `知识索引 ${result.keywordReadyDocuments}/${result.totalDocuments}，` +
             `语义向量 ${result.vectorReadyDocuments}/${result.totalDocuments}${failureDetail}`,
-          `Embedding model switched: knowledge index ${result.keywordReadyDocuments}/${result.totalDocuments}, ` +
+          `${result.repaired ? 'Vector repair' : 'Embedding model switched'}: ` +
+            `knowledge index ${result.keywordReadyDocuments}/${result.totalDocuments}, ` +
             `semantic vectors ${result.vectorReadyDocuments}/${result.totalDocuments}${failureDetail}`
         ),
         4200,
@@ -3122,9 +3129,11 @@ struct Index {
         : result.lastVectorMessage
       this.showIndexSnack(
         pickLocalizedText(
-          `向量模型已切换：知识索引 ${result.keywordReadyDocuments}/${result.totalDocuments}，` +
+          `${result.repaired ? '向量修复' : '向量模型已切换'}：` +
+            `知识索引 ${result.keywordReadyDocuments}/${result.totalDocuments}，` +
             `语义向量 ${result.vectorReadyDocuments}/${result.totalDocuments}；${vectorDetail}`,
-          `Embedding model switched: knowledge index ${result.keywordReadyDocuments}/${result.totalDocuments}, ` +
+          `${result.repaired ? 'Vector repair' : 'Embedding model switched'}: ` +
+            `knowledge index ${result.keywordReadyDocuments}/${result.totalDocuments}, ` +
             `semantic vectors ${result.vectorReadyDocuments}/${result.totalDocuments}; ${vectorDetail}`
         ),
         4600,
@@ -3134,9 +3143,13 @@ struct Index {
     }
     const successMessage: string = result.totalDocuments > 0
       ? pickLocalizedText(
-        `已切换向量模型：${result.vectorReadyDocuments} 个文件的知识索引与语义向量均已就绪`,
-        `Embedding model switched: knowledge indexes and semantic vectors are ready for ` +
-          `${result.vectorReadyDocuments} file(s)`
+        result.repaired
+          ? `已修复 ${result.vectorReadyDocuments} 个文件的知识索引与语义向量`
+          : `已切换向量模型：${result.vectorReadyDocuments} 个文件的知识索引与语义向量均已就绪`,
+        result.repaired
+          ? `Repaired knowledge indexes and semantic vectors for ${result.vectorReadyDocuments} file(s)`
+          : `Embedding model switched: knowledge indexes and semantic vectors are ready for ` +
+            `${result.vectorReadyDocuments} file(s)`
       )
       : pickLocalizedText('已切换向量模型', 'Embedding model switched')
     this.showIndexSnack(successMessage, 3000, SnackBarTone.SUCCESS)

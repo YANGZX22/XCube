@@ -7,6 +7,10 @@ import {
   KnowledgeEmbeddingProvider
 } from './KnowledgeEmbeddingService'
 import { projectKnowledgeVector } from './KnowledgeVectorProjection'
+import {
+  getKnowledgeVectorStore,
+  KnowledgeVectorSearchRecord
+} from './KnowledgeVectorStore'
 
 const DEFAULT_TOP_K: number = 5
 const MIN_TOP_K: number = 1
@@ -24,7 +28,14 @@ const INVERTED_INDEX_CONTENT_WEIGHT: number = 1.0
 const VECTOR_RECALL_NAME: string = 'knowledge_vector_index'
 const HYBRID_MIN_DEEP_SIZE: number = 20
 const HYBRID_DEEP_SIZE_MULTIPLIER: number = 4
+const HYBRID_RRF_RANK_CONSTANT: number = 60
+const HYBRID_KEYWORD_WEIGHT: number = 1.05
+const HYBRID_VECTOR_WEIGHT: number = 1.0
 const MAX_RETRIEVER_ATTEMPTS: number = 2
+
+// Data Augmentation Kit 在未设置时默认 1，只会保留近乎完全相同的向量。
+// 0.4 与 SDK 默认向量重排分层 [0.6, 0.45, 0.4] 的最低相关档一致。
+export const KNOWLEDGE_VECTOR_SIMILARITY_THRESHOLD: number = 0.4
 
 export const KNOWLEDGE_FTS_TABLE_NAME: string = 'knowledge_chunks_fts'
 export const KNOWLEDGE_CHUNK_ID_COLUMN: string = 'chunk_id'
@@ -56,6 +67,100 @@ export enum KnowledgeSearchStatus {
   NO_HITS = 'no_hits',
   UNAVAILABLE = 'unavailable',
   ERROR = 'error'
+}
+
+export enum KnowledgeRetrievalMode {
+  KEYWORD = 'keyword',
+  HYBRID = 'hybrid'
+}
+
+export enum KnowledgeRetrievalFallbackReason {
+  NONE = '',
+  INVERTED_NOT_CONFIGURED = 'inverted_not_configured',
+  VECTOR_NOT_CONFIGURED = 'vector_not_configured',
+  VECTOR_SCOPE_UNAVAILABLE = 'vector_scope_unavailable',
+  EMBEDDING_UNAVAILABLE = 'embedding_unavailable',
+  NO_VECTOR_READY_DOCUMENTS = 'no_vector_ready_documents',
+  VECTOR_SCOPE_FAILED = 'vector_scope_failed',
+  EMBEDDING_MODEL_CHANGED = 'embedding_model_changed',
+  QUERY_EMBEDDING_FAILED = 'query_embedding_failed',
+  QUERY_VECTOR_INVALID = 'query_vector_invalid',
+  VECTOR_DIMENSION_MISMATCH = 'vector_dimension_mismatch',
+  HYBRID_SNAPSHOT_CHANGED = 'hybrid_snapshot_changed',
+  HYBRID_RETRIEVAL_FAILED = 'hybrid_retrieval_failed'
+}
+
+export interface KnowledgeRetrievalPlanInput {
+  invertedConfigured: boolean
+  vectorConfigured: boolean
+  vectorScopeAvailable: boolean
+  embeddingAvailable: boolean
+  vectorReadyDocumentCount: number
+  embeddingModelStable: boolean
+}
+
+export class KnowledgeRetrievalPlan {
+  mode: string = KnowledgeRetrievalMode.KEYWORD
+  reason: string = KnowledgeRetrievalFallbackReason.NONE
+  shouldEmbedQuery: boolean = false
+
+  constructor(mode: string, reason: string, shouldEmbedQuery: boolean) {
+    this.mode = mode
+    this.reason = reason
+    this.shouldEmbedQuery = shouldEmbedQuery
+  }
+}
+
+export function resolveKnowledgeRetrievalPlan(
+  input: KnowledgeRetrievalPlanInput
+): KnowledgeRetrievalPlan {
+  if (!input.invertedConfigured) {
+    return new KnowledgeRetrievalPlan(
+      KnowledgeRetrievalMode.KEYWORD,
+      KnowledgeRetrievalFallbackReason.INVERTED_NOT_CONFIGURED,
+      false
+    )
+  }
+  if (!input.vectorConfigured) {
+    return new KnowledgeRetrievalPlan(
+      KnowledgeRetrievalMode.KEYWORD,
+      KnowledgeRetrievalFallbackReason.VECTOR_NOT_CONFIGURED,
+      false
+    )
+  }
+  if (!input.vectorScopeAvailable) {
+    return new KnowledgeRetrievalPlan(
+      KnowledgeRetrievalMode.KEYWORD,
+      KnowledgeRetrievalFallbackReason.VECTOR_SCOPE_UNAVAILABLE,
+      false
+    )
+  }
+  if (!input.embeddingAvailable) {
+    return new KnowledgeRetrievalPlan(
+      KnowledgeRetrievalMode.KEYWORD,
+      KnowledgeRetrievalFallbackReason.EMBEDDING_UNAVAILABLE,
+      false
+    )
+  }
+  if (input.vectorReadyDocumentCount === 0) {
+    return new KnowledgeRetrievalPlan(
+      KnowledgeRetrievalMode.KEYWORD,
+      KnowledgeRetrievalFallbackReason.NO_VECTOR_READY_DOCUMENTS,
+      false
+    )
+  }
+  if (!input.embeddingModelStable) {
+    return new KnowledgeRetrievalPlan(
+      KnowledgeRetrievalMode.KEYWORD,
+      KnowledgeRetrievalFallbackReason.EMBEDDING_MODEL_CHANGED,
+      false
+    )
+  }
+  return new KnowledgeRetrievalPlan(
+    KnowledgeRetrievalMode.HYBRID,
+    KnowledgeRetrievalFallbackReason.NONE,
+    true
+  )
 }
 
 export class KnowledgeSearchRequest {
@@ -104,6 +209,8 @@ export class KnowledgeSearchResponse {
   hits: KnowledgeSearchHit[] = []
   truncated: boolean = false
   queryTruncated: boolean = false
+  retrievalMode: string = KnowledgeRetrievalMode.KEYWORD
+  fallbackReason: string = KnowledgeRetrievalFallbackReason.NONE
 
   constructor(
     status: KnowledgeSearchStatus,
@@ -364,6 +471,113 @@ function mapRetrievalItem(
   const locator = stringFromColumn(item.columns, configuration.locatorColumn).trim()
   const score = Number.isFinite(item.score) && item.score >= 0 ? item.score : 0
   return new KnowledgeSearchHit(documentId, chunkId, title, locator, score, content)
+}
+
+class KnowledgeFusionCandidate {
+  hit: KnowledgeSearchHit
+  fusedScore: number = 0
+  keywordRank: number = 0
+  vectorRank: number = 0
+
+  constructor(hit: KnowledgeSearchHit) {
+    this.hit = hit
+  }
+}
+
+function findKnowledgeFusionCandidate(
+  candidates: KnowledgeFusionCandidate[],
+  hit: KnowledgeSearchHit
+): KnowledgeFusionCandidate | null {
+  for (let index = 0; index < candidates.length; index++) {
+    const candidate = candidates[index]
+    if (candidate.hit.chunkId === hit.chunkId && candidate.hit.documentId === hit.documentId) {
+      return candidate
+    }
+  }
+  return null
+}
+
+function addKnowledgeFusionChannel(
+  candidates: KnowledgeFusionCandidate[],
+  hits: KnowledgeSearchHit[],
+  weight: number,
+  keywordChannel: boolean
+): void {
+  for (let index = 0; index < hits.length; index++) {
+    const hit = hits[index]
+    let candidate = findKnowledgeFusionCandidate(candidates, hit)
+    if (candidate === null) {
+      candidate = new KnowledgeFusionCandidate(hit)
+      candidates.push(candidate)
+    }
+    if (keywordChannel) {
+      if (candidate.keywordRank > 0) {
+        continue
+      }
+      candidate.keywordRank = index + 1
+    } else {
+      if (candidate.vectorRank > 0) {
+        continue
+      }
+      candidate.vectorRank = index + 1
+    }
+    candidate.fusedScore += weight / (HYBRID_RRF_RANK_CONSTANT + index + 1)
+  }
+}
+
+/**
+ * DAK 的默认多通道重排可能淘汰“仅向量命中”的记录。这里对两路独立召回做
+ * union-RRF：任一路的候选都会保留，同时被关键词和向量命中的候选自然获得加分。
+ */
+export function fuseKnowledgeSearchHits(
+  keywordHits: KnowledgeSearchHit[],
+  vectorHits: KnowledgeSearchHit[],
+  topK: number
+): KnowledgeSearchHit[] {
+  const candidates: KnowledgeFusionCandidate[] = []
+  addKnowledgeFusionChannel(candidates, keywordHits, HYBRID_KEYWORD_WEIGHT, true)
+  addKnowledgeFusionChannel(candidates, vectorHits, HYBRID_VECTOR_WEIGHT, false)
+  candidates.sort((left: KnowledgeFusionCandidate, right: KnowledgeFusionCandidate): number => {
+    if (left.fusedScore !== right.fusedScore) {
+      return right.fusedScore - left.fusedScore
+    }
+    const leftChannels = (left.keywordRank > 0 ? 1 : 0) + (left.vectorRank > 0 ? 1 : 0)
+    const rightChannels = (right.keywordRank > 0 ? 1 : 0) + (right.vectorRank > 0 ? 1 : 0)
+    if (leftChannels !== rightChannels) {
+      return rightChannels - leftChannels
+    }
+    if ((left.keywordRank > 0) !== (right.keywordRank > 0)) {
+      return left.keywordRank > 0 ? -1 : 1
+    }
+    const leftBestRank = left.keywordRank === 0
+      ? left.vectorRank
+      : (left.vectorRank === 0 ? left.keywordRank : Math.min(left.keywordRank, left.vectorRank))
+    const rightBestRank = right.keywordRank === 0
+      ? right.vectorRank
+      : (right.vectorRank === 0 ? right.keywordRank : Math.min(right.keywordRank, right.vectorRank))
+    if (leftBestRank !== rightBestRank) {
+      return leftBestRank - rightBestRank
+    }
+    if (left.hit.chunkId === right.hit.chunkId) {
+      return 0
+    }
+    return left.hit.chunkId < right.hit.chunkId ? -1 : 1
+  })
+
+  const limit = Math.max(0, Math.min(Math.floor(topK), candidates.length))
+  const fused: KnowledgeSearchHit[] = []
+  for (let index = 0; index < limit; index++) {
+    const candidate = candidates[index]
+    fused.push(new KnowledgeSearchHit(
+      candidate.hit.documentId,
+      candidate.hit.chunkId,
+      candidate.hit.title,
+      candidate.hit.locator,
+      candidate.fusedScore,
+      candidate.hit.content
+    ))
+  }
+  return fused
 }
 
 /**
@@ -703,27 +917,70 @@ export class DataAugmentationHybridAdapter implements KnowledgeRetrievalAdapter 
     const invertedConfiguration = this.invertedConfiguration
     const vectorConfiguration = this.vectorConfiguration
     const vectorReadyDocumentProvider = this.vectorReadyDocumentProvider
+    const embeddingAvailable = this.embeddingProvider.isAvailable()
+    const preflightPlan = resolveKnowledgeRetrievalPlan({
+      invertedConfigured: invertedConfiguration !== null,
+      vectorConfigured: vectorConfiguration !== null,
+      vectorScopeAvailable: vectorReadyDocumentProvider !== null,
+      embeddingAvailable: embeddingAvailable,
+      vectorReadyDocumentCount: -1,
+      embeddingModelStable: true
+    })
     if (invertedConfiguration === null || vectorConfiguration === null ||
-      vectorReadyDocumentProvider === null || !this.embeddingProvider.isAvailable()) {
-      return await this.invertedAdapter.search(request)
+      vectorReadyDocumentProvider === null || !embeddingAvailable) {
+      return await this.searchKeywordFallback(request, preflightPlan.reason)
     }
 
     try {
       const embeddingModelKey = this.embeddingProvider.modelKey()
-      const vectorDocumentIds = await vectorReadyDocumentProvider
-        .listVectorReadyDocumentIds(request.documentIds)
-      if (vectorDocumentIds.length === 0 ||
-        embeddingModelKey !== this.embeddingProvider.modelKey()) {
-        return await this.invertedAdapter.search(request)
+      let vectorDocumentIds: string[]
+      try {
+        vectorDocumentIds = await vectorReadyDocumentProvider
+          .listVectorReadyDocumentIds(request.documentIds)
+      } catch (_error) {
+        return await this.searchKeywordFallback(
+          request,
+          KnowledgeRetrievalFallbackReason.VECTOR_SCOPE_FAILED
+        )
+      }
+      const scopedPlan = resolveKnowledgeRetrievalPlan({
+        invertedConfigured: true,
+        vectorConfigured: true,
+        vectorScopeAvailable: true,
+        embeddingAvailable: true,
+        vectorReadyDocumentCount: vectorDocumentIds.length,
+        embeddingModelStable: embeddingModelKey === this.embeddingProvider.modelKey()
+      })
+      if (!scopedPlan.shouldEmbedQuery) {
+        return await this.searchKeywordFallback(request, scopedPlan.reason)
       }
       const queryForEmbedding = this.clampEmbeddingInput(
         request.query,
         this.embeddingProvider.maxInputCharacters()
       )
-      const rawQueryVector = await this.embeddingProvider.embedQuery(queryForEmbedding)
-      const queryVector = projectKnowledgeVector(rawQueryVector)
+      let rawQueryVector: Float32Array
+      try {
+        rawQueryVector = await this.embeddingProvider.embedQuery(queryForEmbedding)
+      } catch (error) {
+        return await this.searchKeywordFallback(
+          request,
+          KnowledgeRetrievalFallbackReason.QUERY_EMBEDDING_FAILED
+        )
+      }
+      let queryVector: Float32Array
+      try {
+        queryVector = projectKnowledgeVector(rawQueryVector)
+      } catch (_error) {
+        return await this.searchKeywordFallback(
+          request,
+          KnowledgeRetrievalFallbackReason.QUERY_VECTOR_INVALID
+        )
+      }
       if (embeddingModelKey !== this.embeddingProvider.modelKey()) {
-        return await this.invertedAdapter.search(request)
+        return await this.searchKeywordFallback(
+          request,
+          KnowledgeRetrievalFallbackReason.EMBEDDING_MODEL_CHANGED
+        )
       }
       if (queryVector.length !== vectorConfiguration.dimension) {
         this.vectorConfiguration = null
@@ -738,95 +995,141 @@ export class DataAugmentationHybridAdapter implements KnowledgeRetrievalAdapter 
           'KnowledgeRetrievalService',
           `Vector dimension mismatch: expected=${vectorConfiguration.dimension}, actual=${queryVector.length}`
         )
-        return await this.invertedAdapter.search(request)
+        return await this.searchKeywordFallback(
+          request,
+          KnowledgeRetrievalFallbackReason.VECTOR_DIMENSION_MISMATCH
+        )
       }
 
       const deepSize = Math.max(
         HYBRID_MIN_DEEP_SIZE,
         request.topK * HYBRID_DEEP_SIZE_MULTIPLIER
       )
-      const recallConditions: retrieval.RecallCondition[] = [
-        this.buildInvertedRecallCondition(invertedConfiguration, request, deepSize),
-        this.buildVectorRecallCondition(
-          vectorConfiguration,
-          new KnowledgeSearchRequest(request.query, request.topK, vectorDocumentIds),
-          queryVector,
-          deepSize
-        )
-      ]
-      const rerankMethod: retrieval.RerankMethod = {
-        rerankType: retrieval.RerankType.RRF
-      }
-      const condition: retrieval.RetrievalCondition = {
-        recallConditions: recallConditions,
-        rerankMethod: rerankMethod,
-        resultCount: request.topK
-      }
       if (embeddingModelKey !== this.embeddingProvider.modelKey()) {
-        return await this.invertedAdapter.search(request)
+        return await this.searchKeywordFallback(
+          request,
+          KnowledgeRetrievalFallbackReason.EMBEDDING_MODEL_CHANGED
+        )
       }
 
-      for (let attemptIndex = 0; attemptIndex < MAX_RETRIEVER_ATTEMPTS; attemptIndex++) {
-        let lease: KnowledgeRetrieverLease | null = null
-        try {
-          lease = await this.getOrCreateRetriever(
-            invertedConfiguration,
-            vectorConfiguration
-          )
-          const records = await lease.retriever.retrieveRdb(request.query, condition)
-          if (embeddingModelKey !== this.embeddingProvider.modelKey()) {
-            return await this.invertedAdapter.search(request)
-          }
-          const response = this.mapRecords(records, vectorConfiguration, request)
-          const snapshotChanged = lease.snapshotGeneration !== this.dataSnapshotGeneration
-          if (shouldRetryKnowledgeRetrieverAttempt(
-            attemptIndex,
-            lease.createdForAttempt,
-            snapshotChanged,
-            false,
-            response.status === KnowledgeSearchStatus.NO_HITS
-          )) {
-            this.discardRetriever(lease)
-            continue
-          }
-          if (snapshotChanged) {
-            console.warn(
-              'KnowledgeRetrievalService',
-              'Hybrid retrieval snapshot changed twice, falling back to BM25'
-            )
-            return await this.invertedAdapter.search(request)
-          }
-          return response
-        } catch (error) {
-          const businessError = error as RetrievalBusinessError
-          if (lease !== null) {
-            this.discardRetriever(lease)
-          }
-          if (shouldRetryKnowledgeRetrieverAttempt(
-            attemptIndex,
-            lease !== null && lease.createdForAttempt,
-            lease !== null && lease.snapshotGeneration !== this.dataSnapshotGeneration,
-            true,
-            false
-          )) {
-            continue
-          }
-          console.warn(
-            'KnowledgeRetrievalService',
-            `Hybrid vector retrieval unavailable, falling back to BM25: code=${businessError.code}`
-          )
-          return await this.invertedAdapter.search(request)
-        }
-      }
-      return await this.invertedAdapter.search(request)
-    } catch (error) {
-      const businessError = error as RetrievalBusinessError
-      console.warn(
-        'KnowledgeRetrievalService',
-        `Hybrid vector retrieval unavailable, falling back to BM25: code=${businessError.code}`
+      // BM25 仍由 DAK 负责；向量近邻直接由 ArkData sidecar 查询。DAK 的最终
+      // 相关性筛选会淘汰 BM25=0 的向量候选，因此不能再让它决定向量通道结果。
+      const keywordResponse = await this.invertedAdapter.search(
+        new KnowledgeSearchRequest(request.query, deepSize, request.documentIds)
       )
-      return await this.invertedAdapter.search(request)
+      let vectorRecords: KnowledgeVectorSearchRecord[]
+      try {
+        vectorRecords = await getKnowledgeVectorStore().searchNearest(
+          queryVector,
+          vectorDocumentIds,
+          deepSize,
+          KNOWLEDGE_VECTOR_SIMILARITY_THRESHOLD
+        )
+      } catch (error) {
+        return this.reuseKeywordResponse(
+          keywordResponse,
+          request,
+          KnowledgeRetrievalFallbackReason.HYBRID_RETRIEVAL_FAILED,
+          this.safeFallbackCode(error)
+        )
+      }
+      if (embeddingModelKey !== this.embeddingProvider.modelKey()) {
+        return this.reuseKeywordResponse(
+          keywordResponse,
+          request,
+          KnowledgeRetrievalFallbackReason.EMBEDDING_MODEL_CHANGED
+        )
+      }
+      return this.fuseDirectSearchChannels(
+        keywordResponse,
+        vectorRecords,
+        request,
+        deepSize
+      )
+    } catch (error) {
+      return await this.searchKeywordFallback(
+        request,
+        KnowledgeRetrievalFallbackReason.HYBRID_RETRIEVAL_FAILED,
+        this.safeFallbackCode(error)
+      )
     }
+  }
+
+  private reuseKeywordResponse(
+    source: KnowledgeSearchResponse,
+    request: KnowledgeSearchRequest,
+    reason: string,
+    detail: string = ''
+  ): KnowledgeSearchResponse {
+    const safeReason = reason.trim() === ''
+      ? KnowledgeRetrievalFallbackReason.HYBRID_RETRIEVAL_FAILED
+      : reason
+    console.warn(
+      'KnowledgeRetrievalService',
+      `Knowledge retrieval mode=keyword, reason=${safeReason}` +
+      `${detail.trim() === '' ? '' : `, diagnostic=${detail.substring(0, 80)}`}`
+    )
+    const response = new KnowledgeSearchResponse(
+      source.status,
+      request.query,
+      request.topK,
+      source.code,
+      source.message
+    )
+    response.hits = source.hits.slice(0, Math.min(request.topK, source.hits.length))
+    response.truncated = source.truncated || source.hits.length > request.topK
+    response.queryTruncated = source.queryTruncated
+    response.retrievalMode = KnowledgeRetrievalMode.KEYWORD
+    response.fallbackReason = safeReason
+    return response
+  }
+
+  private async searchKeywordFallback(
+    request: KnowledgeSearchRequest,
+    reason: string,
+    detail: string = ''
+  ): Promise<KnowledgeSearchResponse> {
+    const safeReason = reason.trim() === ''
+      ? KnowledgeRetrievalFallbackReason.HYBRID_RETRIEVAL_FAILED
+      : reason
+    console.warn(
+      'KnowledgeRetrievalService',
+      `Knowledge retrieval mode=keyword, reason=${safeReason}` +
+      `${detail.trim() === '' ? '' : `, diagnostic=${detail.substring(0, 80)}`}`
+    )
+    try {
+      const response = await this.invertedAdapter.search(request)
+      response.retrievalMode = KnowledgeRetrievalMode.KEYWORD
+      response.fallbackReason = safeReason
+      return response
+    } catch (_error) {
+      console.error(
+        'KnowledgeRetrievalService',
+        `Keyword fallback failed: originalReason=${safeReason}`
+      )
+      const failed = buildErrorResponse(
+        request.query,
+        request.topK,
+        'keyword_fallback_failed',
+        '关键词检索失败'
+      )
+      failed.retrievalMode = KnowledgeRetrievalMode.KEYWORD
+      failed.fallbackReason = safeReason
+      return failed
+    }
+  }
+
+  /** Provider 的自由文本异常可能回显私有查询，只允许记录稳定、短小的错误码。 */
+  private safeFallbackCode(error: Object): string {
+    const businessError = error as RetrievalBusinessError
+    if (businessError.code === undefined) {
+      return ''
+    }
+    const code = `${businessError.code}`.trim()
+    if (code === '' || code.length > 64 || !/^[A-Za-z0-9_.:-]+$/.test(code)) {
+      return ''
+    }
+    return `code=${code}`
   }
 
   private validateInvertedConfiguration(
@@ -948,7 +1251,8 @@ export class DataAugmentationHybridAdapter implements KnowledgeRetrievalAdapter 
   ): retrieval.VectorRecallCondition {
     const vectorQuery: retrieval.VectorQuery = {
       column: configuration.embeddingColumn,
-      value: queryVector
+      value: queryVector,
+      similarityThreshold: KNOWLEDGE_VECTOR_SIMILARITY_THRESHOLD
     }
     const condition: retrieval.VectorRecallCondition = {
       vectorQuery: vectorQuery,
@@ -977,25 +1281,37 @@ export class DataAugmentationHybridAdapter implements KnowledgeRetrievalAdapter 
     return [filter]
   }
 
-  private mapRecords(
-    records: retrieval.RdbRecords,
-    configuration: EffectiveRetrievalColumns,
-    request: KnowledgeSearchRequest
+  private fuseDirectSearchChannels(
+    keywordResponse: KnowledgeSearchResponse,
+    vectorRecords: KnowledgeVectorSearchRecord[],
+    request: KnowledgeSearchRequest,
+    channelLimit: number
   ): KnowledgeSearchResponse {
-    const hits: KnowledgeSearchHit[] = []
-    for (let index = 0; index < records.records.length; index++) {
-      const hit = mapRetrievalItem(records.records[index], configuration)
-      if (hit === null ||
-        (request.documentIds.length > 0 && request.documentIds.indexOf(hit.documentId) < 0)) {
-        continue
-      }
-      hits.push(hit)
-      if (hits.length >= request.topK) {
-        break
-      }
-    }
+    const keywordHits = keywordResponse.status === KnowledgeSearchStatus.OK
+      ? keywordResponse.hits.slice(0, Math.min(channelLimit, keywordResponse.hits.length))
+      : []
+    const vectorHits = this.mapDirectVectorHits(vectorRecords, request, channelLimit)
+    const hits = fuseKnowledgeSearchHits(keywordHits, vectorHits, request.topK)
+    console.info(
+      'KnowledgeRetrievalService',
+      `Direct hybrid recall: keyword=${keywordHits.length}, vector=${vectorHits.length}, ` +
+      `fused=${hits.length}, bestVectorSimilarity=${this.bestVectorSimilarity(vectorRecords)}`
+    )
     if (hits.length === 0) {
-      return buildNoHitsResponse(request.query, request.topK)
+      if (keywordResponse.status === KnowledgeSearchStatus.ERROR ||
+        keywordResponse.status === KnowledgeSearchStatus.UNAVAILABLE) {
+        const failed = buildErrorResponse(
+          request.query,
+          request.topK,
+          'hybrid_channels_unavailable',
+          '知识库检索失败'
+        )
+        failed.retrievalMode = KnowledgeRetrievalMode.HYBRID
+        return failed
+      }
+      const noHits = buildNoHitsResponse(request.query, request.topK)
+      noHits.retrievalMode = KnowledgeRetrievalMode.HYBRID
+      return noHits
     }
     const response = new KnowledgeSearchResponse(
       KnowledgeSearchStatus.OK,
@@ -1003,7 +1319,42 @@ export class DataAugmentationHybridAdapter implements KnowledgeRetrievalAdapter 
       request.topK
     )
     response.hits = hits
+    response.retrievalMode = KnowledgeRetrievalMode.HYBRID
     return response
+  }
+
+  private mapDirectVectorHits(
+    records: KnowledgeVectorSearchRecord[],
+    request: KnowledgeSearchRequest,
+    limit: number
+  ): KnowledgeSearchHit[] {
+    const hits: KnowledgeSearchHit[] = []
+    for (let index = 0; index < records.length; index++) {
+      const record = records[index]
+      if (request.documentIds.length > 0 &&
+        request.documentIds.indexOf(record.documentId) < 0) {
+        continue
+      }
+      hits.push(new KnowledgeSearchHit(
+        record.documentId,
+        record.chunkId,
+        record.title,
+        record.locator,
+        record.similarity,
+        record.content
+      ))
+      if (hits.length >= limit) {
+        break
+      }
+    }
+    return hits
+  }
+
+  private bestVectorSimilarity(records: KnowledgeVectorSearchRecord[]): string {
+    if (records.length === 0 || !Number.isFinite(records[0].similarity)) {
+      return 'none'
+    }
+    return records[0].similarity.toFixed(4)
   }
 
   private clampEmbeddingInput(value: string, maxCharacters: number): string {
@@ -1147,6 +1498,8 @@ export class KnowledgeRetrievalService {
       if (stillReadyDocumentIds.length === 0) {
         const noHits = buildNoHitsResponse(query, topK)
         noHits.queryTruncated = queryTruncated
+        noHits.retrievalMode = response.retrievalMode
+        noHits.fallbackReason = response.fallbackReason
         return noHits
       }
       const finalRequest = new KnowledgeSearchRequest(query, topK, stillReadyDocumentIds)
@@ -1360,6 +1713,8 @@ export class KnowledgeRetrievalService {
     response.hits = hits
     response.truncated = source.truncated
     response.queryTruncated = source.queryTruncated
+    response.retrievalMode = source.retrievalMode
+    response.fallbackReason = source.fallbackReason
     return response
   }
 
@@ -1376,6 +1731,8 @@ export class KnowledgeRetrievalService {
         response.message === '' ? '知识库检索不可用' : response.message
       )
       unavailable.queryTruncated = queryTruncated
+      unavailable.retrievalMode = response.retrievalMode
+      unavailable.fallbackReason = response.fallbackReason
       return unavailable
     }
     if (response.status === KnowledgeSearchStatus.ERROR) {
@@ -1386,11 +1743,15 @@ export class KnowledgeRetrievalService {
         response.message === '' ? '知识库检索失败' : response.message
       )
       failed.queryTruncated = queryTruncated
+      failed.retrievalMode = response.retrievalMode
+      failed.fallbackReason = response.fallbackReason
       return failed
     }
 
     const budgeted = this.applyResultBudget(response.hits, request)
     budgeted.queryTruncated = queryTruncated
+    budgeted.retrievalMode = response.retrievalMode
+    budgeted.fallbackReason = response.fallbackReason
     return budgeted
   }
 

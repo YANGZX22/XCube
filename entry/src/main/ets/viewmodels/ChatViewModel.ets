@@ -104,6 +104,8 @@ interface KnowledgeToolResultData {
   topK?: number
   truncated?: boolean
   queryTruncated?: boolean
+  retrievalMode?: string
+  fallbackReason?: string
   knowledgeQueryCount?: number
   remainingKnowledgeQueries?: number
   maxKnowledgeQueries?: number
@@ -137,6 +139,8 @@ class PersistedKnowledgeToolResult {
   hitCount: number = 0
   truncated: boolean = false
   queryTruncated: boolean = false
+  retrievalMode: string = ''
+  fallbackReason: string = ''
   knowledgeQueryCount: number = 0
   remainingKnowledgeQueries: number = 0
   maxKnowledgeQueries: number = 0
@@ -2330,6 +2334,8 @@ ${preview}`
       persisted.topK = source.topK === undefined ? 0 : source.topK
       persisted.truncated = source.truncated === true
       persisted.queryTruncated = source.queryTruncated === true
+      persisted.retrievalMode = source.retrievalMode === undefined ? '' : source.retrievalMode
+      persisted.fallbackReason = source.fallbackReason === undefined ? '' : source.fallbackReason
       persisted.knowledgeQueryCount =
         source.knowledgeQueryCount === undefined ? 0 : source.knowledgeQueryCount
       persisted.remainingKnowledgeQueries =

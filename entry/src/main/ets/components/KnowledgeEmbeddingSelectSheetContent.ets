@@ -261,8 +261,8 @@ export struct KnowledgeEmbeddingSelectSheetContent {
         .color(this.themePrimary)
 
       Text(pickLocalizedText(
-        '正在切换模型并重建向量...',
-        'Switching the model and rebuilding vectors...'
+        '正在检查并重建语义向量...',
+        'Checking and rebuilding semantic vectors...'
       ))
         .fontSize(14)
         .fontWeight(FontWeight.Medium)

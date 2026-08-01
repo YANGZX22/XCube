@@ -25,10 +25,16 @@ import {
   KnowledgeVectorStoreStatus
 } from './KnowledgeVectorStore'
 import {
-  KnowledgeVectorBootstrapCompletion,
   KnowledgeVectorBootstrapGate,
   KnowledgeVectorBootstrapResult
 } from './KnowledgeVectorBootstrapGate'
+import {
+  KnowledgeVectorStartupCoordinator,
+  KnowledgeVectorStartupDependencyCallbacks,
+  KnowledgeVectorStartupDocumentResult,
+  KnowledgeVectorStartupMigrationSummary,
+  KnowledgeVectorStartupPlanLike
+} from './KnowledgeVectorStartupCoordinator'
 import {
   KNOWLEDGE_SEMANTIC_CHUNKER_VERSION,
   KnowledgeSemanticChunk,
@@ -36,6 +42,10 @@ import {
   KnowledgeSemanticChunkRequest
 } from './KnowledgeSemanticChunker'
 import { projectKnowledgeVector } from './KnowledgeVectorProjection'
+import {
+  KnowledgeEmbeddingMigrationAction,
+  resolveKnowledgeEmbeddingMigrationAction
+} from './KnowledgeVectorRecoveryPolicy'
 import { RegisteredDocumentAttachment } from './DocumentAttachmentRegistryService'
 import { getPdfTextExtractionService } from './PdfTextExtractionService'
 import { getImageTextRecognitionService } from './ImageTextRecognitionService'
@@ -57,6 +67,8 @@ const EMBEDDING_BATCH_SIZE: number = 16
 const FILE_IO_CHUNK_BYTES: number = 256 * 1024
 const KNOWLEDGE_UI_YIELD_MS: number = 16
 const KNOWLEDGE_CHUNK_YIELD_INTERVAL: number = 4
+const KNOWLEDGE_STARTUP_VECTOR_DELAY_MS: number = 800
+const KNOWLEDGE_DOCUMENT_YIELD_MS: number = 32
 
 export enum KnowledgeDocumentStatus {
   INDEXING = 'indexing',
@@ -153,6 +165,7 @@ export class KnowledgeTextPreview {
 
 export class KnowledgeEmbeddingMigrationResult {
   changed: boolean = false
+  repaired: boolean = false
   totalDocuments: number = 0
   keywordReadyDocuments: number = 0
   vectorReadyDocuments: number = 0
@@ -183,11 +196,12 @@ class KnowledgeDocumentMigrationResult {
   }
 }
 
-class KnowledgeVectorStartupPlan {
+class KnowledgeVectorStartupPlan implements KnowledgeVectorStartupPlanLike {
   modelKey: string = ''
   documentIds: string[] = []
   vectorReady: boolean = false
   message: string = ''
+  migrationGeneration: number = 0
 }
 
 class KnowledgeChunk {
@@ -269,11 +283,38 @@ export class KnowledgeDocumentService implements
   private vectorRecoveryScheduled: boolean = false
   private embeddingMigrationGeneration: number = 0
   private vectorBootstrapGate: KnowledgeVectorBootstrapGate = new KnowledgeVectorBootstrapGate()
+  private vectorStartupCoordinator: KnowledgeVectorStartupCoordinator
   private semanticChunker: KnowledgeSemanticChunker = new KnowledgeSemanticChunker()
   private retrievalAdapter: DataAugmentationHybridAdapter =
     new DataAugmentationHybridAdapter()
 
   private constructor() {
+    this.vectorStartupCoordinator = new KnowledgeVectorStartupCoordinator(
+      this.vectorBootstrapGate,
+      new KnowledgeVectorStartupDependencyCallbacks(
+        (plan: KnowledgeVectorStartupPlanLike): boolean => {
+          return getKnowledgeEmbeddingService().modelKey() === plan.modelKey &&
+            this.embeddingMigrationGeneration === plan.migrationGeneration
+        },
+        async (): Promise<void> => {
+          await this.waitForMilliseconds(KNOWLEDGE_STARTUP_VECTOR_DELAY_MS)
+        },
+        async (
+          documentId: string,
+          modelKey: string
+        ): Promise<KnowledgeVectorStartupDocumentResult> => {
+          const result = await this.migrateReadyDocument(documentId, modelKey)
+          return new KnowledgeVectorStartupDocumentResult(
+            result.keywordReady,
+            result.vectorReady,
+            result.message
+          )
+        },
+        async (): Promise<void> => {
+          await this.waitForMilliseconds(KNOWLEDGE_DOCUMENT_YIELD_MS)
+        }
+      )
+    )
   }
 
   private async acquireMutationLock(): Promise<() => void> {
@@ -332,28 +373,7 @@ export class KnowledgeDocumentService implements
       `Initialized: readyDocuments=${this.readyDocumentCount}`
     )
     const quickVectorStartup = this.prepareVectorStartup()
-    this.vectorBootstrapGate.track(
-      quickVectorStartup.then(
-        (plan: KnowledgeVectorStartupPlan): KnowledgeVectorBootstrapCompletion => {
-          return plan.vectorReady
-            ? KnowledgeVectorBootstrapCompletion.readyResult(plan.message)
-            : KnowledgeVectorBootstrapCompletion.failedResult(plan.message)
-        }
-      )
-    )
-    quickVectorStartup.then(
-      (plan: KnowledgeVectorStartupPlan): void => {
-        if (plan.documentIds.length > 0) {
-          console.info(
-            'KnowledgeDocumentService',
-            `Deferred startup vector migrations: documents=${plan.documentIds.length}`
-          )
-        }
-      },
-      (_error: Object): void => {
-        console.warn('KnowledgeDocumentService', 'Knowledge vector startup recovery stopped')
-      }
-    )
+    this.vectorStartupCoordinator.track(quickVectorStartup)
   }
 
   private async recoverInterruptedDocuments(store: relationalStore.RdbStore): Promise<void> {
@@ -688,6 +708,7 @@ export class KnowledgeDocumentService implements
   private async prepareVectorStartup(): Promise<KnowledgeVectorStartupPlan> {
     const releaseLock = await this.acquireMutationLock()
     const plan = new KnowledgeVectorStartupPlan()
+    plan.migrationGeneration = this.embeddingMigrationGeneration
     try {
       const store = this.store
       const context = this.context
@@ -930,6 +951,20 @@ export class KnowledgeDocumentService implements
       document = await this.findDocumentById(store, documentId)
       if (document === null || document.status !== KnowledgeDocumentStatus.READY) {
         return new KnowledgeDocumentMigrationResult(false, false, '知识文件当前不可用')
+      }
+      const pendingDocumentIds = await this.listDocumentsNeedingVectorMigration(
+        store,
+        activeModelKey,
+        getKnowledgeVectorStore().isVectorSupported()
+      )
+      if (pendingDocumentIds.indexOf(document.id) < 0) {
+        const vectorReadyDocumentIds = await this.listVectorReadyDocumentIds([document.id])
+        const vectorReady = vectorReadyDocumentIds.indexOf(document.id) >= 0
+        return new KnowledgeDocumentMigrationResult(
+          true,
+          vectorReady,
+          vectorReady ? '语义向量已就绪，无需重复生成' : '当前向量状态无需迁移'
+        )
       }
       const extension = this.getSupportedExtension(document.originalName)
       if (extension === '' || !fileIo.accessSync(document.filePath)) {
@@ -1532,13 +1567,49 @@ export class KnowledgeDocumentService implements
   }
 
   private async yieldToUiFrame(): Promise<void> {
+    await this.waitForMilliseconds(KNOWLEDGE_UI_YIELD_MS)
+  }
+
+  private async waitForMilliseconds(delayMs: number): Promise<void> {
     await new Promise<void>((resolve): void => {
-      setTimeout(resolve, KNOWLEDGE_UI_YIELD_MS)
+      setTimeout(resolve, delayMs)
     })
   }
 
   isReady(): boolean {
     return this.initialized && this.store !== null
+  }
+
+  /**
+   * 仅在主页面 loadContent 成功后调用。快速 sidecar 恢复不依赖此方法，
+   * 缺失/过期文档的 OCR、切块和向量生成会在首帧之后严格串行执行。
+   */
+  startDeferredVectorMigrations(): void {
+    this.vectorStartupCoordinator.startDeferredMigrations().then(
+      (summary: KnowledgeVectorStartupMigrationSummary): void => {
+        if (summary.plannedDocuments === 0) {
+          return
+        }
+        console.info(
+          'KnowledgeDocumentService',
+          `Deferred vector migrations completed: planned=${summary.plannedDocuments}, ` +
+          `attempted=${summary.attemptedDocuments}, vectors=${summary.vectorReadyDocuments}, ` +
+          `failed=${summary.failedDocuments}, cancelled=${summary.cancelled}`
+        )
+        if (summary.lastMessage.trim() !== '') {
+          console.warn(
+            'KnowledgeDocumentService',
+            `Deferred vector migration detail: ${summary.lastMessage}`
+          )
+        }
+      },
+      (error: Object): void => {
+        console.warn(
+          'KnowledgeDocumentService',
+          `Knowledge vector startup migration stopped: ${this.safeVectorErrorMessage(error)}`
+        )
+      }
+    )
   }
 
   async switchEmbeddingSelection(
@@ -1547,10 +1618,9 @@ export class KnowledgeDocumentService implements
     const result = new KnowledgeEmbeddingMigrationResult()
     const embeddingService = getKnowledgeEmbeddingService()
     await embeddingService.initialize()
-    if (embeddingService.getSelection().identityKey() === selection.identityKey()) {
-      return result
-    }
-
+    const currentIdentity = embeddingService.getSelection().identityKey()
+    const requestedIdentity = selection.identityKey()
+    const sameSelection = currentIdentity === requestedIdentity
     await embeddingService.validateSelection(selection)
     const releaseLock = await this.acquireMutationLock()
     let documentIds: string[] = []
@@ -1563,40 +1633,69 @@ export class KnowledgeDocumentService implements
         throw new Error('知识库尚未初始化')
       }
 
-      this.retrievalAdapter.configureVector(null)
-      try {
-        result.changed = await embeddingService.applySelection(selection)
-      } catch (error) {
-        const metadata = getKnowledgeVectorStore().getMetadata()
-        if (metadata !== null && metadata.modelKey === embeddingService.modelKey()) {
-          this.configureVectorRetrieval(context, metadata.dimension)
+      if (sameSelection) {
+        migrationModelKey = embeddingService.modelKey()
+        documentIds = await this.listDocumentsNeedingVectorMigration(
+          store,
+          migrationModelKey,
+          getKnowledgeVectorStore().isVectorSupported()
+        )
+        const action = resolveKnowledgeEmbeddingMigrationAction(
+          currentIdentity,
+          requestedIdentity,
+          documentIds.length
+        )
+        if (action === KnowledgeEmbeddingMigrationAction.NO_OP) {
+          const metadata = getKnowledgeVectorStore().getMetadata()
+          if (metadata !== null && metadata.modelKey === migrationModelKey) {
+            this.configureVectorRetrieval(context, metadata.dimension)
+          }
+          return result
         }
-        throw new Error(this.safeVectorErrorMessage(error))
-      }
-      if (!result.changed) {
-        const metadata = getKnowledgeVectorStore().getMetadata()
-        if (metadata !== null && metadata.modelKey === embeddingService.modelKey()) {
-          this.configureVectorRetrieval(context, metadata.dimension)
+        result.repaired = true
+        this.embeddingMigrationGeneration += 1
+        migrationGeneration = this.embeddingMigrationGeneration
+        result.totalDocuments = documentIds.length
+        console.info(
+          'KnowledgeDocumentService',
+          `Repairing current embedding selection: documents=${documentIds.length}`
+        )
+      } else {
+        this.retrievalAdapter.configureVector(null)
+        try {
+          result.changed = await embeddingService.applySelection(selection)
+        } catch (error) {
+          const metadata = getKnowledgeVectorStore().getMetadata()
+          if (metadata !== null && metadata.modelKey === embeddingService.modelKey()) {
+            this.configureVectorRetrieval(context, metadata.dimension)
+          }
+          throw new Error(this.safeVectorErrorMessage(error))
         }
-        return result
-      }
+        if (!result.changed) {
+          const metadata = getKnowledgeVectorStore().getMetadata()
+          if (metadata !== null && metadata.modelKey === embeddingService.modelKey()) {
+            this.configureVectorRetrieval(context, metadata.dimension)
+          }
+          return result
+        }
 
-      this.embeddingMigrationGeneration += 1
-      migrationGeneration = this.embeddingMigrationGeneration
-      migrationModelKey = embeddingService.modelKey()
-      await store.executeSql(
-        `UPDATE ${KNOWLEDGE_VECTOR_INDEX_STATE_TABLE}
-         SET status = ?, last_error = ?, updated_at = ?
-         WHERE status <> ?`,
-        [
-          KnowledgeVectorIndexStatus.FAILED,
-          '向量模型已切换，等待重新生成',
-          Date.now(),
-          KnowledgeVectorIndexStatus.DELETE_PENDING
-        ]
-      )
-      documentIds = await this.listReadyDocumentIds()
-      result.totalDocuments = documentIds.length
+        this.embeddingMigrationGeneration += 1
+        migrationGeneration = this.embeddingMigrationGeneration
+        migrationModelKey = embeddingService.modelKey()
+        await store.executeSql(
+          `UPDATE ${KNOWLEDGE_VECTOR_INDEX_STATE_TABLE}
+           SET status = ?, last_error = ?, updated_at = ?
+           WHERE status <> ?`,
+          [
+            KnowledgeVectorIndexStatus.FAILED,
+            '向量模型已切换，等待重新生成',
+            Date.now(),
+            KnowledgeVectorIndexStatus.DELETE_PENDING
+          ]
+        )
+        documentIds = await this.listReadyDocumentIds()
+        result.totalDocuments = documentIds.length
+      }
     } finally {
       releaseLock()
     }
@@ -1621,6 +1720,9 @@ export class KnowledgeDocumentService implements
         result.vectorReadyDocuments += 1
       } else if (migrated.message.trim() !== '') {
         result.lastVectorMessage = migrated.message
+      }
+      if (index + 1 < documentIds.length) {
+        await this.waitForMilliseconds(KNOWLEDGE_DOCUMENT_YIELD_MS)
       }
     }
     return result

@@ -9,16 +9,21 @@ import {
   KnowledgeSearchGateway
 } from '../main/ets/config/KnowledgeSearchTool'
 import {
+  fuseKnowledgeSearchHits,
   getKnowledgeRetrievalService,
   KnowledgeHitContextProvider,
   KnowledgeReadyDocumentProvider,
   KnowledgeRetrievalAdapter,
+  KNOWLEDGE_VECTOR_SIMILARITY_THRESHOLD,
   KnowledgeSearchHit,
   KnowledgeSearchRequest,
   KnowledgeSearchResponse,
   KnowledgeSearchStatus,
   shouldRetryKnowledgeRetrieverAttempt
 } from '../main/ets/services/KnowledgeRetrievalService'
+import {
+  knowledgeCosineDistanceToSimilarity
+} from '../main/ets/services/KnowledgeVectorStore'
 import {
   KNOWLEDGE_SEARCH_TOOL_ID,
   KnowledgeToolExposureInput,
@@ -294,6 +299,56 @@ export default function knowledgeSearchGuardTest() {
         .assertEqual(false)
       expect(shouldRetryKnowledgeRetrieverAttempt(1, true, true, true, true))
         .assertEqual(false)
+    })
+
+    it('enables_non_exact_vector_recall', 0, () => {
+      expect(KNOWLEDGE_VECTOR_SIMILARITY_THRESHOLD).assertEqual(0.4)
+    })
+
+    it('converts_cosine_distance_before_applying_similarity_threshold', 0, () => {
+      const similarity = knowledgeCosineDistanceToSimilarity(0.4522895068562365)
+      expect(similarity !== null).assertEqual(true)
+      expect((similarity as number) > KNOWLEDGE_VECTOR_SIMILARITY_THRESHOLD)
+        .assertEqual(true)
+    })
+
+    it('keeps_vector_only_candidates_in_hybrid_union', 0, () => {
+      const vectorOnly = new KnowledgeSearchHit(
+        'kb_doc_vector',
+        'chunk_vector',
+        'Vector result',
+        '片段 1',
+        0.55,
+        'semantic content'
+      )
+      const fused = fuseKnowledgeSearchHits([], [vectorOnly], 5)
+
+      expect(fused.length).assertEqual(1)
+      expect(fused[0].chunkId).assertEqual('chunk_vector')
+    })
+
+    it('deduplicates_and_promotes_candidates_recalled_by_both_channels', 0, () => {
+      const lexicalOnly = new KnowledgeSearchHit(
+        'kb_doc_lexical', 'chunk_lexical', 'Lexical', '片段 1', 1, 'lexical content'
+      )
+      const sharedKeyword = new KnowledgeSearchHit(
+        'kb_doc_shared', 'chunk_shared', 'Shared', '片段 2', 0.8, 'shared content'
+      )
+      const vectorOnly = new KnowledgeSearchHit(
+        'kb_doc_vector', 'chunk_vector', 'Vector', '片段 3', 0.7, 'vector content'
+      )
+      const sharedVector = new KnowledgeSearchHit(
+        'kb_doc_shared', 'chunk_shared', 'Shared', '片段 2', 0.6, 'shared content'
+      )
+
+      const fused = fuseKnowledgeSearchHits(
+        [lexicalOnly, sharedKeyword],
+        [vectorOnly, sharedVector],
+        3
+      )
+
+      expect(fused.length).assertEqual(3)
+      expect(fused[0].chunkId).assertEqual('chunk_shared')
     })
 
     it('rejects_invalid_runtime_argument_shapes_without_retrieval', 0, async () => {
