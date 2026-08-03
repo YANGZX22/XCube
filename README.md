@@ -12,6 +12,9 @@
   <a href="./README.zh-CN.md">简体中文</a> | <a href="./LICENSE">MIT License</a>
 </p>
 
+> [!IMPORTANT]
+> XCube runs only on devices with HarmonyOS 7 (API 26.0.0) or later. If you are not a developer or are still on HarmonyOS 6 or earlier, please sign up for the [Huawei Beta Test Program](https://cn.club.vmall.com/mhw/assets/file-html-app/3b2bca9630d0fcb2bb2dfac09ee415ea20230529103243/index.html?ts=1785306752202#/) to install this app.
+
 ---
 
 ## Project Origin

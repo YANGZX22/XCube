@@ -12,6 +12,9 @@
   <a href="./README.md">English</a> | <a href="./LICENSE">MIT License</a>
 </p>
 
+> [!IMPORTANT]
+> XCube 仅在 HarmonyOS 7 (API 26.0.0) 及以上版本的设备上运行。如果您非开发者或仍处于HarmonyOS 6及以下版本，请报名[花粉 Beta 版测试计划](https://cn.club.vmall.com/mhw/assets/file-html-app/3b2bca9630d0fcb2bb2dfac09ee415ea20230529103243/index.html?ts=1785306752202#/)以安装本应用。
+
 ---
 
 ## 项目来源
