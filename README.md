@@ -28,7 +28,7 @@
 ### Release Identity
 
 - App name: XCube
-- Current version: `1.2.0` (versionCode `1002000`)
+- Current version: `1.2.1` (versionCode `1002001`)
 
 ## Latest Screens
 
@@ -51,6 +51,16 @@ Includes 15+ AI providers out of the box. You can also add any OpenAI / Anthropi
 ### Tools, web search, and MCP
 
 Built-in web search supports Bocha, Bing (local), Tavily, and Exa. Models with function-calling support can invoke tools autonomously to retrieve real-time information. Remote streamable MCP servers are also supported.
+
+### Parallel sub-agents
+
+XCube includes a Sub-agent tool for decomposable work such as multi-topic research, source comparisons, or processing several documents independently. The main model can dispatch up to three sub-agents in parallel and then synthesize their reports:
+
+- **Isolated contexts**: each sub-agent receives an independent conversation context containing only the self-contained task written for it by the main model. Sub-agents cannot recursively dispatch more sub-agents.
+- **Inherited tools**: sub-agents can use the tools enabled for the current conversation. When Knowledge Base is on, they also receive `knowledge_search` and share the per-user-turn limit of five knowledge queries with the main model.
+- **Live preview**: sub-agent output, tool calls, and execution status appear in the Sub-agent Live Preview panel. Question cards that require user input remain visible in the main conversation.
+
+Enable **Sub-agent** from the tool selector in the chat input area. The main model decides whether and how to split the request; the selected model must fully support tool calling.
 
 ### Read aloud with local TTS or ElevenLabs
 
@@ -88,6 +98,7 @@ To use it:
 
 XCube provides a set of local tools that models can call:
 
+- **Sub-agent**: run one to three independent subtasks in parallel, each in an isolated context, and return their reports to the main model for synthesis.
 - **Web search**: fetch real-time information with a search budget and user-approved extra searches.
 - **Canvas document**: maintain a shared document beside the conversation that both the user and AI can edit, with support for collapsing it into a floating overlay and previewing Markdown.
 - **PDF / image to text**: when the model does not have native document reading enabled, uploaded PDFs are temporarily stored in the local sandbox and the model can call `pdf_to_text` to extract their contents; when vision understanding is disabled, uploaded images can be read through CoreVisionKit OCR via `image_to_text`. If the model supports the corresponding native input, the app does not intervene.

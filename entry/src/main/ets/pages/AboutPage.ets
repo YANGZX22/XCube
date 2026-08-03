@@ -21,7 +21,7 @@ let aboutPagePathStack: NavPathStack | null = null
 @Entry
 @ComponentV2
 struct AboutPage {
-  @Local versionName: string = '1.2.0'
+  @Local versionName: string = '1.2.1'
 
   private get topAvoidHeight(): number {
     return getAppUiState().topAvoidHeight

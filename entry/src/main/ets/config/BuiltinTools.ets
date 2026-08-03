@@ -18,6 +18,7 @@ import { CanvasDocumentMutationResult, CanvasDocumentState, getCanvasDocumentSer
 import { getPdfTextExtractionService, PdfTextExtractionRequest } from '../services/PdfTextExtractionService'
 import { getImageTextRecognitionService, ImageTextRecognitionRequest } from '../services/ImageTextRecognitionService'
 import { getSkillService } from '../services/SkillService'
+import { getSubAgentService, SUB_AGENT_MAX_TASKS, SUB_AGENT_TOOL_ID } from '../services/SubAgentService'
 import {
   createKnowledgeSearchToolConfig,
   createKnowledgeSearchToolDefinition,
@@ -26,6 +27,7 @@ import {
 } from './KnowledgeSearchTool'
 
 export { KNOWLEDGE_SEARCH_TOOL_ID } from './KnowledgeSearchTool'
+export { SUB_AGENT_TOOL_ID } from '../services/SubAgentService'
 
 export const ASK_USER_TOOL_ID: string = 'ask_user'
 export const READ_SCHEDULE_TOOL_ID: string = 'read_schedule'
@@ -242,6 +244,12 @@ class MathChartOutput {
 class AskUserExecutor implements ToolExecutor {
   async execute(_args: string): Promise<string> {
     return JSON.stringify(new ErrorOutput('ask_user should be resolved by the user, not executed directly'))
+  }
+}
+
+class SubAgentExecutor implements ToolExecutor {
+  async execute(args: string): Promise<string> {
+    return await getSubAgentService().executeSubAgentToolCall(args)
   }
 }
 
@@ -1782,6 +1790,63 @@ function createAskUserToolConfig(): ToolConfig {
   )
 }
 
+function createSubAgentToolDefinition(): ToolDefinition {
+  const parameters = new ToolParameters()
+  const rawSchemaJson: string = `{
+    "type": "object",
+    "properties": {
+      "tasks": {
+        "type": "array",
+        "description": "1 to ${SUB_AGENT_MAX_TASKS} independent sub-tasks to run in parallel. Each sub-agent works in an isolated context with the same tools exposed to this conversation except sub_agent itself. When the knowledge-base switch is on, this includes knowledge_search with one shared per-user-turn query budget across the main agent and all sub-agents. Sub-agent ask_user questions and generated charts appear in the main conversation; other sub-agent tool activity is visible to the user in a live preview panel.",
+        "items": {
+          "type": "object",
+          "properties": {
+            "name": {
+              "type": "string",
+              "description": "Short label for this sub-agent, e.g. 'price-research'."
+            },
+            "prompt": {
+              "type": "string",
+              "description": "Complete standalone instructions for the sub-agent. It cannot see this conversation, so include the goal, all necessary background, constraints, and what to return."
+            },
+            "expected_output": {
+              "type": "string",
+              "description": "Optional description of the desired output format of the final report."
+            }
+          },
+          "required": ["prompt"]
+        }
+      }
+    },
+    "required": ["tasks"]
+  }`
+  parameters.setRawSchema(JSON.parse(rawSchemaJson) as object)
+
+  const func = new ToolFunction(
+    SUB_AGENT_TOOL_ID,
+    `Dispatch 1-${SUB_AGENT_MAX_TASKS} autonomous sub-agents to handle independent sub-tasks in parallel. Use this when a request splits into separate research or processing tracks (e.g. comparing multiple topics, gathering info from different sources). Each sub-agent runs its own tool-call loop and returns a final report. Do NOT use it for simple tasks you can answer directly, and write each prompt fully self-contained.`,
+    parameters
+  )
+
+  return new ToolDefinition(func)
+}
+
+function createSubAgentToolConfig(): ToolConfig {
+  return new ToolConfig(
+    SUB_AGENT_TOOL_ID,
+    '子智能体',
+    '模型可派出最多 3 个并行子智能体独立完成子任务，结果汇总后继续回答',
+    null,
+    true,
+    false,
+    ToolSourceType.BUILTIN,
+    'builtin',
+    SUB_AGENT_TOOL_ID,
+    '内置工具',
+    ToolPermissionLevel.READ
+  )
+}
+
 function createCanvasDocumentToolDefinition(): ToolDefinition {
   const parameters = new ToolParameters()
   const rawSchemaJson: string = `{
@@ -2396,6 +2461,17 @@ export function registerBuiltinTools(): void {
     registeredNow += 1
   }
 
+  if (!registry.isToolRegistered(SUB_AGENT_TOOL_ID)) {
+    const subAgentTool = new RegisteredTool(
+      SUB_AGENT_TOOL_ID,
+      createSubAgentToolConfig(),
+      createSubAgentToolDefinition(),
+      new SubAgentExecutor()
+    )
+    registry.registerTool(subAgentTool)
+    registeredNow += 1
+  }
+
   if (!registry.isToolRegistered(PYTHON_SANDBOX_TOOL_ID)) {
     const pythonSandboxTool = new RegisteredTool(
       PYTHON_SANDBOX_TOOL_ID,
@@ -2510,6 +2586,7 @@ export function getBuiltinToolIds(): string[] {
     KNOWLEDGE_SEARCH_TOOL_ID,
     'web_search',
     ASK_USER_TOOL_ID,
+    SUB_AGENT_TOOL_ID,
     PYTHON_SANDBOX_TOOL_ID,
     PDF_TO_TEXT_TOOL_ID,
     IMAGE_TO_TEXT_TOOL_ID,

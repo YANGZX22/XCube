@@ -11,6 +11,7 @@ import { getAppStateManager, AppStateManager } from './AppStateManager'
 import { getAITaskService, AITaskService } from '../services/AITaskService'
 import { getAttachmentStorageService, AttachmentStorageService } from '../services/AttachmentStorageService'
 import { getToolExecutionService, ToolExecutionService } from '../services/ToolExecutionService'
+import { getSubAgentService, SubAgentRuntimeConfig, SUB_AGENT_TOOL_ID } from '../services/SubAgentService'
 import { getProviderViewModel, ProviderViewModel } from './ProviderViewModel'
 import { getAssistantService, AssistantService, AssistantRuntimeConfig } from '../services/AssistantService'
 import { getSkillService, SkillConfig } from '../services/SkillService'
@@ -212,8 +213,6 @@ export class ChatViewModel {
   private titleCallbacks: TitleGenerationCallbacks | null = null
   // 最大重试次数
   private readonly MAX_TITLE_RETRY = 3
-  // 最大工具调用轮次
-  private readonly MAX_TOOL_ITERATIONS = 14
   private readonly DEFAULT_WEB_SEARCH_LIMIT = 5
   private readonly EXTRA_WEB_SEARCH_LIMIT = 5
   // 取消令牌：用于停止”尚未开始发送的请求”（例如退出页面时）
@@ -1915,6 +1914,8 @@ ${limitedSearchContext}
     let hasWebSearchTool = false
     let hasAskUserTool = false
     let hasSkillTool = false
+    let hasSubAgentTool = false
+    let hasKnowledgeSearchTool = false
     for (let i = 0; i < tools.length; i++) {
       if (tools[i].function.name === 'web_search') {
         hasWebSearchTool = true
@@ -1925,8 +1926,11 @@ ${limitedSearchContext}
       if (tools[i].function.name === 'use_skill') {
         hasSkillTool = true
       }
-      if (hasWebSearchTool && hasAskUserTool && hasSkillTool) {
-        break
+      if (tools[i].function.name === SUB_AGENT_TOOL_ID) {
+        hasSubAgentTool = true
+      }
+      if (tools[i].function.name === KNOWLEDGE_SEARCH_TOOL_ID) {
+        hasKnowledgeSearchTool = true
       }
     }
 
@@ -1976,6 +1980,19 @@ ${limitedSearchContext}
       toolUsageSystemPrompt += `
 - 当用户需求存在关键歧义，且自行假设会导致明显返工时，可以调用 ask_user 一次性向用户提出 1-3 个澄清问题。
 - 不要为了无关紧要的偏好或可以合理默认的细节调用 ask_user；能继续完成时优先继续完成。`
+    }
+    if (hasSubAgentTool) {
+      toolUsageSystemPrompt += `
+- 当任务能拆成多个彼此独立、可并行的子任务（例如多主题调研、多来源对比、多份材料分别处理）时，可调用 sub_agent 一次性派出 1-3 个子智能体并行处理，再汇总它们的结果作答。
+- 子智能体看不到本对话历史，每个任务的 prompt 必须自包含：写清目标、必要背景、约束和期望输出。
+- 简单任务或强依赖前后顺序的任务不要使用 sub_agent，自己直接完成更快。`
+    }
+    if (hasKnowledgeSearchTool) {
+      toolUsageSystemPrompt += `
+- 以下知识库规则优先级高于前面的“普通问答不调用工具”和“纯生成任务不调用工具”规则。
+- 用户已开启知识库。在本次回答的第一步，必须先调用 knowledge_search，根据用户当前问题生成独立、具体的 query。
+- 首次 knowledge_search 返回之前，禁止直接回答用户，禁止以自然语言文本代替工具调用，也不要输出伪造的工具调用标记。
+- 只能通过模型的正式 function call 调用 knowledge_search，arguments 必须是符合工具 schema 的有效 JSON。`
     }
     if (hasSkillTool) {
       const skillContext = await this.buildEnabledSkillSystemContext()
@@ -2054,6 +2071,57 @@ ${limitedSearchContext}
       localContentThrottle.reset()
       localReasoningThrottle.reset()
     })
+
+    // 注入子智能体运行时：sub_agent 工具被调用时使用与本次请求相同的模型、参数与工具集
+    getSubAgentService().configureRuntime(new SubAgentRuntimeConfig(
+      apiConfig,
+      modelId,
+      requestTemperature,
+      this.appStateManager.getDefaultMaxTokens(),
+      reasoningLevel,
+      tools,
+      currentTime,
+      async (toolCall: ToolCall, allowedFunctionNames: string[]): Promise<ToolResult> => {
+        // 子智能体与主循环共用联网/知识库预算。结果必须在返回（以及工具互斥锁释放）前
+        // 登记到 aiMessage，避免并行子智能体同时读取到过期的剩余额度。
+        const subToolResults = await this.executeToolCallsWithSearchBudgets(
+          [toolCall],
+          aiMessage,
+          allowedFunctionNames
+        )
+        const subToolResult = subToolResults[0]
+        aiMessage.toolResults.push(subToolResult)
+        onAIMessageUpdated(aiMessage)
+        return subToolResult
+      },
+      // 镜像子智能体的工具调用到主对话消息：ask_user 提问卡片、图表由此渲染并可交互，
+      // 普通工具卡片会按“子智能体”来源标签在 MessageBubble 中隐藏（活动见实时预览面板）；
+      // 配对与图表提取均按 toolCallId 关联
+      (subToolCall: ToolCall): void => {
+        aiMessage.toolCalls.push(subToolCall)
+        onAIMessageUpdated(aiMessage)
+      },
+      (subToolCall: ToolCall, subToolResult: ToolResult): void => {
+        if (snapshotSession !== null) {
+          this.databaseService.saveToolEvent(
+            snapshotSessionId,
+            aiMessage.id,
+            subToolCall.id,
+            subToolCall.functionName,
+            subToolCall.displayName,
+            subToolCall.sourceLabel,
+            subToolCall.sourceType,
+            subToolCall.permissionLevel,
+            subToolCall.arguments,
+            this.buildPersistedToolResult(subToolCall.functionName, subToolResult.content),
+            subToolResult.isError ? 'failed' : 'completed'
+          ).catch((error: Object): void => {
+            console.warn('ChatViewModel', `Failed to persist sub-agent tool event: ${JSON.stringify(error)}`)
+          })
+        }
+      },
+      () => toolExecutionCancelled
+    ))
 
     // 开始工具调用循环
     await this.executeToolCallLoop(
@@ -2603,14 +2671,10 @@ ${preview}`
       return
     }
 
-    const globalToolLimitReached = iteration >= this.MAX_TOOL_ITERATIONS
-    if (globalToolLimitReached) {
-      console.warn('ChatViewModel', `Max tool iterations (${this.MAX_TOOL_ITERATIONS}) reached, forcing final answer without tools`)
-    }
     const completedKnowledgeQueryCount = this.countCompletedKnowledgeSearchCalls(aiMessage)
     const requestHasKnowledgeSearch = this.hasKnowledgeSearchTool(tools)
     const forceKnowledgeSearchInThisRound =
-      !globalToolLimitReached && requestHasKnowledgeSearch && completedKnowledgeQueryCount === 0
+      requestHasKnowledgeSearch && completedKnowledgeQueryCount === 0
     // DashScope 等 OpenAI 兼容接口在 Thinking 模式下拒绝 required tool_choice。
     // 首轮只负责让模型生成知识库 query，因此临时关闭该轮 Thinking；拿到 tool result
     // 后的续轮会恢复用户原本选择的推理级别。
@@ -2618,26 +2682,26 @@ ${preview}`
       forceKnowledgeSearchInThisRound ? ReasoningLevel.OFF : reasoningLevel
     let toolsForThisRound: ToolDefinition[] = []
     let toolChoiceForThisRound = 'none'
-    if (!globalToolLimitReached) {
-      if (forceKnowledgeSearchInThisRound) {
-        toolsForThisRound = this.getOnlyKnowledgeSearchTools(tools)
-        toolChoiceForThisRound = 'required'
-      } else if (requestHasKnowledgeSearch &&
-        completedKnowledgeQueryCount >= KNOWLEDGE_SEARCH_MAX_CALLS_PER_USER_TURN) {
-        toolsForThisRound = this.getToolsWithoutKnowledgeSearch(tools)
-        toolChoiceForThisRound = toolsForThisRound.length > 0 ? 'auto' : 'none'
-      } else {
-        toolsForThisRound = tools
-        toolChoiceForThisRound = toolsForThisRound.length > 0 ? 'auto' : 'none'
-      }
+    if (forceKnowledgeSearchInThisRound) {
+      toolsForThisRound = this.getOnlyKnowledgeSearchTools(tools)
+      toolChoiceForThisRound = 'required'
+    } else if (requestHasKnowledgeSearch &&
+      completedKnowledgeQueryCount >= KNOWLEDGE_SEARCH_MAX_CALLS_PER_USER_TURN) {
+      toolsForThisRound = this.getToolsWithoutKnowledgeSearch(tools)
+      toolChoiceForThisRound = toolsForThisRound.length > 0 ? 'auto' : 'none'
+    } else {
+      toolsForThisRound = tools
+      toolChoiceForThisRound = toolsForThisRound.length > 0 ? 'auto' : 'none'
     }
-    const toolsEnabledInThisRound = !globalToolLimitReached && toolsForThisRound.length > 0
-    const requestMessagesForRound = !globalToolLimitReached ? requestMessages : requestMessages.concat([
-      new RequestMessage(
+    const toolsEnabledInThisRound = toolsForThisRound.length > 0
+    const requestMessagesForRound = forceKnowledgeSearchInThisRound && iteration > 0
+      ? requestMessages.concat([new RequestMessage(
         'system',
-        '工具调用次数已达上限。不要再调用任何工具，也不要输出工具调用标记；请仅根据前文已有工具结果，直接用自然语言回答用户。不要说“模型未返回最终回答”，不要把搜索摘要或工具 JSON 原样返回；如果证据不足，请给出谨慎结论和下一步建议。'
-      )
-    ])
+        '重试指令：上一次输出没有包含必需的 knowledge_search function call。' +
+          '这一轮不要输出任何最终回答或解释；必须立即调用当前唯一提供的 knowledge_search，' +
+          '并传入符合 schema 的 JSON arguments。'
+      )])
+      : requestMessages
 
     console.info('ChatViewModel', `Tool call loop iteration ${iteration + 1}`)
     let roundContentBuffer = ''
@@ -2779,6 +2843,40 @@ ${preview}`
           rollbackStreamedRoundOutput()
           roundContentBuffer = ''
           roundReasoningBuffer = ''
+          if (iteration === 0) {
+            console.warn('ChatViewModel', 'Required knowledge_search was not called; retrying once with explicit instruction')
+            aiMessage.content = ''
+            aiMessage.reasoningContent = ''
+            onAIMessageUpdated(aiMessage)
+            await this.executeToolCallLoop(
+              apiConfig,
+              requestMessages,
+              modelId,
+              aiMessage,
+              onAIMessageUpdated,
+              onComplete,
+              onError,
+	            tools,
+	            toolCallbacks,
+	            reasoningLevel,
+	            requestTemperature,
+	            iteration + 1,
+              snapshotSessionId,
+              snapshotSession,
+              shouldAutoGenerateTitle,
+              requestId,
+              isCancelledFn,
+              isUserCancelledFn,
+              isToolCancelledFn,
+              setUserCancelled,
+              getHasReceivedFirstChunk,
+              setHasReceivedFirstChunk,
+              localFirstChunkThrottle,
+              localContentThrottle,
+              localReasoningThrottle
+            )
+            return
+          }
           const requiredToolError =
             '当前模型未按要求调用知识库。请重试，或切换到完整支持 OpenAI 工具调用的模型。'
           aiMessage.content = requiredToolError
@@ -2978,7 +3076,7 @@ ${preview}`
           )
         } else {
           if (toolCalls.length > 0) {
-            console.warn('ChatViewModel', `Ignored ${toolCalls.length} tool calls because tool round limit is reached`)
+            console.warn('ChatViewModel', `Ignored ${toolCalls.length} tool calls because tools are disabled in this round`)
           }
           // 没有工具调用，完成
           flushBufferedRoundOutput()

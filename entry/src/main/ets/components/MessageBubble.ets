@@ -6,6 +6,8 @@ import { getModelIconPath, buildIconResourcePath } from '../utils/ProviderIconUt
 import { shouldShowAssistantMessageToolbar } from '../utils/MessageBubbleDisplayUtils'
 import { SearchReferenceCard } from './SearchReferenceCard'
 import { ToolCallCard, ToolCallCardEntry } from './ToolCallCard'
+import { SubAgentPreviewSheetContent } from './SubAgentPreviewSheetContent'
+import { SUB_AGENT_SOURCE_LABEL_PREFIX } from '../services/SubAgentService'
 import { AskUserCard } from './AskUserCard'
 import { HtmlPreviewCard } from './HtmlPreviewCard'
 import { VChartCard } from './VChartCard'
@@ -97,6 +99,8 @@ export struct MessageBubble {
   @Local currentTranslateLang: string = ''  // 当前翻译的目标语言
   @Local showEstimatedCostPopup: boolean = false
   @Local showLatexPreview: boolean = false
+  // 子智能体实时预览面板（bindSheet 挂在工具区域 Column 上，避免卡片重建时被关闭）
+  @Local showSubAgentPreviewSheet: boolean = false
   @Local latexPreviewText: string = ''
   @Local latexPreviewPixelMap: image.PixelMap | undefined = undefined
   @Local latexPreviewImageWidth: number = 0
@@ -601,6 +605,15 @@ export struct MessageBubble {
   }
 
   @Builder
+  SubAgentPreviewSheet() {
+    SubAgentPreviewSheetContent({
+      onClose: (): void => {
+        this.showSubAgentPreviewSheet = false
+      }
+    })
+  }
+
+  @Builder
   LatexPreviewSheet() {
     Column() {
       ImmersiveSheetHeader({
@@ -948,9 +961,11 @@ export struct MessageBubble {
         groupIndex.set(identity, group)
         groups.push(group)
       }
-      const toolResult = i < this.message.toolResults.length ? this.message.toolResults[i] : null
+      // 按 toolCallId 关联结果：子智能体镜像的调用会与主循环的调用交错追加，
+      // 位置配对会错位，必须用 id 配对
+      const toolResult = this.findToolResultForCall(toolCall.id)
       group.entries.push(new ToolCallCardEntry(toolCall, toolResult))
-      if (this.message.isGenerating && i >= this.message.toolResults.length) {
+      if (this.message.isGenerating && toolResult === null) {
         group.anyExecuting = true
       }
     }
@@ -1908,7 +1923,10 @@ export struct MessageBubble {
                 } else {
                   ToolCallCard({
                     entries: group.entries,
-                    isExecuting: group.anyExecuting
+                    isExecuting: group.anyExecuting,
+                    onSubAgentPreview: (): void => {
+                      this.showSubAgentPreviewSheet = true
+                    }
                   })
                     .margin({ bottom: 6 })
                 }
@@ -1993,6 +2011,17 @@ export struct MessageBubble {
               (this.ttsLoadingMessageId === this.message.id || this.speakingMessageId === this.message.id)) {
               this.onTTSStop()
             }
+          })
+          .bindSheet($$this.showSubAgentPreviewSheet, this.SubAgentPreviewSheet(), {
+            height: '75%',
+            detents: ['75%', '100%'],
+            dragBar: false,
+            showClose: false,
+            backgroundColor: Color.Transparent,
+            systemMaterial: new uiMaterial.ImmersiveMaterial({
+              style: uiMaterial.ImmersiveStyle.REGULAR,
+              materialColor: Color.Transparent
+            })
           })
         }
         .width('100%')
@@ -2351,7 +2380,16 @@ export struct MessageBubble {
   }
 
   private shouldHideToolCallCard(toolCall: ToolCall): boolean {
+    // 子智能体发起的工具调用不在主对话中渲染卡片（活动可在“实时预览”面板查看）；
+    // ask_user 提问卡片在分组前单独处理，不受此过滤影响，图表提取同样不走卡片渲染
+    if (this.isSubAgentOriginToolCall(toolCall)) {
+      return true
+    }
     return this.message.hasSearchReferences() && this.isWebSearchToolCall(toolCall)
+  }
+
+  private isSubAgentOriginToolCall(toolCall: ToolCall): boolean {
+    return toolCall.sourceLabel.startsWith(SUB_AGENT_SOURCE_LABEL_PREFIX)
   }
 
   private isWebSearchToolCall(toolCall: ToolCall): boolean {

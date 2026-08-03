@@ -37,6 +37,8 @@ function getToolDisplayName(toolCall: ToolCall): string | Resource {
 export struct ToolCallCard {
   @Param entries: ToolCallCardEntry[] = []
   @Param isExecuting: boolean = false
+  // 子智能体卡片点击“实时预览”时触发（由宿主打开 bindSheet）
+  @Event onSubAgentPreview: () => void = (): void => {}
   @Local isExpanded: boolean = false
   @Local rawArgumentIndices: number[] = []
   @Local rawResultIndices: number[] = []
@@ -185,6 +187,21 @@ export struct ToolCallCard {
             .fontSize(14)
             .fontColor([this.getResultStatusColor()])
             .margin({ left: 8 })
+        }
+
+        // 子智能体卡片：实时预览入口（bindSheet 由宿主 MessageBubble 承载）
+        if (this.isSubAgentCard()) {
+          Text('实时预览')
+            .fontSize(10)
+            .fontWeight(FontWeight.Medium)
+            .fontColor(this.themePrimary)
+            .padding({ left: 7, right: 7, top: 2, bottom: 2 })
+            .borderRadius(9)
+            .backgroundColor(this.themePrimaryLight)
+            .margin({ left: 8 })
+            .onClick(() => {
+              this.onSubAgentPreview()
+            })
         }
 
         Blank()
@@ -443,6 +460,14 @@ export struct ToolCallCard {
   // Python 工具不展示成功/失败状态图标（按产品要求）
   private shouldHideStatusIcon(): boolean {
     return this.getPrimaryCall().functionName === 'python_sandbox'
+  }
+
+  private isSubAgentCard(): boolean {
+    const raw = this.getPrimaryCall().functionName as string | null | undefined
+    if (raw === undefined || raw === null) {
+      return false
+    }
+    return raw.toLowerCase().replace(/[\s\-]+/g, '_') === 'sub_agent'
   }
 
   private getResultStatusSymbol(): Resource {

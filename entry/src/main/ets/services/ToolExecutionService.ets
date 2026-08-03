@@ -316,7 +316,10 @@ export class ToolExecutionService {
   private async handleAskUser(toolCall: ToolCall): Promise<ToolResult> {
     toolCall.toolId = ASK_USER_TOOL_ID
     toolCall.displayName = '向用户提问'
-    toolCall.sourceLabel = '内置工具'
+    // 子智能体会预先打上“子智能体 · xxx”来源标签，保留它以便 UI 区分调用来源
+    if (toolCall.sourceLabel === '') {
+      toolCall.sourceLabel = '内置工具'
+    }
     toolCall.permissionLevel = 'read'
 
     let answerJson: string | null = null
@@ -410,7 +413,11 @@ export class ToolExecutionService {
     toolCall.toolId = registeredTool.id
     toolCall.displayName = registeredTool.config.name
     toolCall.sourceType = registeredTool.config.sourceType
-    toolCall.sourceLabel = registeredTool.config.sourceLabel
+    // 流式解析出的工具调用 sourceLabel 恒为空；子智能体镜像的调用会预先打上
+    // “子智能体 · xxx”标签，保留它以便 UI 区分调用来源
+    if (toolCall.sourceLabel === '') {
+      toolCall.sourceLabel = registeredTool.config.sourceLabel
+    }
     toolCall.permissionLevel = registeredTool.config.permissionLevel
     if (this.isWebSearchToolId(toolId)) {
       this.applyWebSearchPagination(toolCall)

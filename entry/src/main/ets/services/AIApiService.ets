@@ -1385,6 +1385,12 @@ export class AIApiService {
     return AIApiService.instance
   }
 
+  // 创建独立实例：流式解析状态（thinking/MiniMax 缓冲等）是实例级的，
+  // 需要并发流式请求的调用方（如子智能体）必须使用独立实例，不能共用单例
+  static createIsolated(): AIApiService {
+    return new AIApiService()
+  }
+
   // 发送聊天请求
   async sendChatRequest(
     config: AIApiConfig,

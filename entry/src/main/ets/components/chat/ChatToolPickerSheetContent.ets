@@ -116,6 +116,9 @@ export struct ChatToolPickerSheetContent {
     if (toolId === 'ask_user') {
       return $r('sys.symbol.ellipsis_message')
     }
+    if (toolId === 'sub_agent') {
+      return $r('sys.symbol.protein')
+    }
     if (toolId === 'python_sandbox') {
       return $r('sys.symbol.doc_text')
     }
