@@ -27,7 +27,11 @@ export function buildSubAgentToolSet(tools: ToolDefinition[]): ToolDefinition[] 
 
 // 子智能体执行工具时的回调（由 ChatViewModel 注入 ToolExecutionService.executeToolCall，
 // 避免 SubAgentService -> ToolExecutionService -> BuiltinTools 的循环依赖）
-export type SubAgentToolRunner = (toolCall: ToolCall, allowedFunctionNames: string[]) => Promise<ToolResult>
+export type SubAgentToolRunner = (
+  toolCall: ToolCall,
+  allowedFunctionNames: string[],
+  budgetKey: string
+) => Promise<ToolResult>
 
 // 子智能体工具调用镜像回调：把子智能体的工具调用/结果同步进主对话的 AI 消息，
 // 让 ask_user 提问卡片、图表、Canvas、日程等交互式工具对用户可见
@@ -283,11 +287,13 @@ export class SubAgentService {
     // 避免并行子智能体各自的流生成相同 id（如 call_0）导致镜像卡片与 ask_user 应答串线
     this.agentSequence += 1
     const agentSeq = this.agentSequence
+    const budgetKey = `sub-agent-${agentSeq}`
 
     const agentTools = buildSubAgentToolSet(runtime.tools)
     const allowedFunctionNames: string[] = []
     let hasAskUserTool = false
     let hasKnowledgeSearchTool = false
+    let hasWebSearchTool = false
     for (let i = 0; i < agentTools.length; i++) {
       allowedFunctionNames.push(agentTools[i].function.name)
       if (this.isAskUserFunction(agentTools[i].function.name)) {
@@ -296,12 +302,21 @@ export class SubAgentService {
       if (agentTools[i].function.name === 'knowledge_search') {
         hasKnowledgeSearchTool = true
       }
+      if (agentTools[i].function.name === 'web_search') {
+        hasWebSearchTool = true
+      }
     }
 
     const messages: RequestMessage[] = []
     messages.push(new RequestMessage(
       'system',
-      this.buildSubAgentSystemPrompt(runtime, report.name, hasAskUserTool, hasKnowledgeSearchTool)
+      this.buildSubAgentSystemPrompt(
+        runtime,
+        report.name,
+        hasAskUserTool,
+        hasKnowledgeSearchTool,
+        hasWebSearchTool
+      )
     ))
     messages.push(new RequestMessage('user', this.buildSubAgentTaskPrompt(task)))
 
@@ -384,8 +399,8 @@ export class SubAgentService {
         // ask_user 需要等待用户作答（可能耗时数分钟），不占用全局工具互斥锁，
         // 以免阻塞其他子智能体和多个提问卡片并行等待
         const toolResult = this.isAskUserFunction(toolCall.functionName)
-          ? await runtime.toolRunner(toolCall, allowedFunctionNames)
-          : await this.executeToolCallExclusively(runtime, toolCall, allowedFunctionNames)
+          ? await runtime.toolRunner(toolCall, allowedFunctionNames, budgetKey)
+          : await this.executeToolCallExclusively(runtime, toolCall, allowedFunctionNames, budgetKey)
 
         // executeToolCall 会把注册表里的显示名回填到 toolCall 上
         toolEvent.displayName = toolCall.displayName !== '' ? toolCall.displayName : toolCall.functionName
@@ -414,13 +429,17 @@ export class SubAgentService {
     runtime: SubAgentRuntimeConfig,
     agentName: string,
     hasAskUser: boolean,
-    hasKnowledgeSearch: boolean
+    hasKnowledgeSearch: boolean,
+    hasWebSearch: boolean
   ): string {
     const askUserRule = hasAskUser
       ? '- 仅在遇到无法自行决定的关键歧义时，才调用 ask_user 向用户提问（问题会显示在主对话中）；能合理假设时优先继续完成，并在结果中说明假设。'
       : '- 你无法向用户提问。信息不足时基于合理假设继续，并在结果中说明假设与不确定性。'
     const knowledgeSearchRule = hasKnowledgeSearch
-      ? '- 本次对话已开启知识库，你可调用 knowledge_search 检索用户文件。你与主助手、其他子智能体共享每次用户提问最多 5 次的查询额度；工具返回额度耗尽后立即停止检索。'
+      ? '- 本次对话已开启知识库，你可调用 knowledge_search 检索用户文件。你拥有独立的每次用户提问最多 5 次知识库查询额度，不与主助手或其他子智能体共享；工具返回额度耗尽后立即停止检索。'
+      : ''
+    const webSearchRule = hasWebSearch
+      ? '- 你拥有独立的默认 5 次 web_search 额度，不与主助手或其他子智能体共享。默认额度用完后，仅在确有必要且 ask_user 可用时请求用户允许追加搜索；否则基于已有结果完成报告。'
       : ''
     return `当前时间: ${runtime.timeContext}
 
@@ -430,6 +449,7 @@ export class SubAgentService {
 - 你的最终输出会作为工具结果返回给主助手，而不是直接展示给用户，请输出简洁、结构化、信息完整的结果报告。
 - 请自主完成任务；确实需要外部信息或外部系统时，使用提供的工具。
 ${askUserRule}
+${webSearchRule}
 ${knowledgeSearchRule}
 - 引用外部信息时保留关键来源（标题/URL），方便主助手复核。
 - 任务完成后直接输出最终结果，不要输出与任务无关的寒暄。`
@@ -508,7 +528,8 @@ ${knowledgeSearchRule}
   private async executeToolCallExclusively(
     runtime: SubAgentRuntimeConfig,
     toolCall: ToolCall,
-    allowedFunctionNames: string[]
+    allowedFunctionNames: string[],
+    budgetKey: string
   ): Promise<ToolResult> {
     const previous = this.toolExecutionChain
     let release: () => void = () => {}
@@ -517,7 +538,7 @@ ${knowledgeSearchRule}
     })
     await previous
     try {
-      return await runtime.toolRunner(toolCall, allowedFunctionNames)
+      return await runtime.toolRunner(toolCall, allowedFunctionNames, budgetKey)
     } catch (error) {
       console.error('SubAgentService', `Sub-agent tool execution failed: ${JSON.stringify(error)}`)
       return new ToolResult(

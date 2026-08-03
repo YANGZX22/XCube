@@ -11,7 +11,12 @@ import { getAppStateManager, AppStateManager } from './AppStateManager'
 import { getAITaskService, AITaskService } from '../services/AITaskService'
 import { getAttachmentStorageService, AttachmentStorageService } from '../services/AttachmentStorageService'
 import { getToolExecutionService, ToolExecutionService } from '../services/ToolExecutionService'
-import { getSubAgentService, SubAgentRuntimeConfig, SUB_AGENT_TOOL_ID } from '../services/SubAgentService'
+import {
+  getSubAgentService,
+  SubAgentRuntimeConfig,
+  SUB_AGENT_SOURCE_LABEL_PREFIX,
+  SUB_AGENT_TOOL_ID
+} from '../services/SubAgentService'
 import { getProviderViewModel, ProviderViewModel } from './ProviderViewModel'
 import { getAssistantService, AssistantService, AssistantRuntimeConfig } from '../services/AssistantService'
 import { getSkillService, SkillConfig } from '../services/SkillService'
@@ -2072,6 +2077,10 @@ ${limitedSearchContext}
       localReasoningThrottle.reset()
     })
 
+    // 每个子智能体拥有独立的联网搜索/知识库预算记录，
+    // 不与主对话或其他子智能体相互扣减。
+    const subAgentBudgetMessages: Map<string, ChatMessage> = new Map()
+
     // 注入子智能体运行时：sub_agent 工具被调用时使用与本次请求相同的模型、参数与工具集
     getSubAgentService().configureRuntime(new SubAgentRuntimeConfig(
       apiConfig,
@@ -2081,15 +2090,33 @@ ${limitedSearchContext}
       reasoningLevel,
       tools,
       currentTime,
-      async (toolCall: ToolCall, allowedFunctionNames: string[]): Promise<ToolResult> => {
-        // 子智能体与主循环共用联网/知识库预算。结果必须在返回（以及工具互斥锁释放）前
-        // 登记到 aiMessage，避免并行子智能体同时读取到过期的剩余额度。
+      async (
+        toolCall: ToolCall,
+        allowedFunctionNames: string[],
+        budgetKey: string
+      ): Promise<ToolResult> => {
+        let budgetMessage = subAgentBudgetMessages.get(budgetKey)
+        if (budgetMessage === undefined) {
+          budgetMessage = new ChatMessage(
+            `sub_agent_budget_${budgetKey}`,
+            MessageRole.ASSISTANT,
+            '',
+            modelName,
+            modelId
+          )
+          subAgentBudgetMessages.set(budgetKey, budgetMessage)
+        }
+        budgetMessage.toolCalls.push(toolCall)
         const subToolResults = await this.executeToolCallsWithSearchBudgets(
           [toolCall],
-          aiMessage,
-          allowedFunctionNames
+          budgetMessage,
+          allowedFunctionNames,
+          true
         )
         const subToolResult = subToolResults[0]
+        // 先写入该子智能体的独立预算上下文，再释放工具互斥锁。
+        budgetMessage.toolResults.push(subToolResult)
+        // 主消息仍保留镜像结果，供实时预览、交互卡片和持久化使用。
         aiMessage.toolResults.push(subToolResult)
         onAIMessageUpdated(aiMessage)
         return subToolResult
@@ -2290,7 +2317,8 @@ ${preview}`
   private async executeToolCallsWithSearchBudgets(
     toolCalls: ToolCall[],
     aiMessage: ChatMessage,
-    allowedFunctionNames: string[]
+    allowedFunctionNames: string[],
+    includeSubAgentCalls: boolean = false
   ): Promise<ToolResult[]> {
     const results: ToolResult[] = []
     let executedSearchesInBatch = 0
@@ -2298,10 +2326,17 @@ ${preview}`
     for (let i = 0; i < toolCalls.length; i++) {
       const toolCall = toolCalls[i]
       if (this.isWebSearchFunction(toolCall.functionName)) {
-        const usedSearchCount = this.countCompletedWebSearchCalls(aiMessage) + executedSearchesInBatch
-        const limit = this.getCurrentWebSearchLimit(aiMessage)
+        const usedSearchCount =
+          this.countCompletedWebSearchCalls(aiMessage, includeSubAgentCalls) + executedSearchesInBatch
+        const limit = this.getCurrentWebSearchLimit(aiMessage, includeSubAgentCalls)
         if (usedSearchCount >= limit) {
-          results.push(this.buildWebSearchBudgetResult(toolCall, usedSearchCount, limit, aiMessage))
+          results.push(this.buildWebSearchBudgetResult(
+            toolCall,
+            usedSearchCount,
+            limit,
+            aiMessage,
+            includeSubAgentCalls
+          ))
           continue
         }
         const result = await this.toolExecutionService.executeToolCall(toolCall, allowedFunctionNames)
@@ -2313,7 +2348,7 @@ ${preview}`
       }
       if (this.isKnowledgeSearchFunction(toolCall.functionName)) {
         const usedKnowledgeQueryCount =
-          this.countCompletedKnowledgeSearchCalls(aiMessage) + executedKnowledgeQueriesInBatch
+          this.countCompletedKnowledgeSearchCalls(aiMessage, includeSubAgentCalls) + executedKnowledgeQueriesInBatch
         if (usedKnowledgeQueryCount >= KNOWLEDGE_SEARCH_MAX_CALLS_PER_USER_TURN) {
           results.push(this.buildKnowledgeSearchBudgetResult(toolCall, usedKnowledgeQueryCount))
           continue
@@ -2425,10 +2460,16 @@ ${preview}`
     return JSON.stringify(persisted)
   }
 
-  private countCompletedWebSearchCalls(aiMessage: ChatMessage): number {
+  private countCompletedWebSearchCalls(
+    aiMessage: ChatMessage,
+    includeSubAgentCalls: boolean = false
+  ): number {
     let count = 0
     for (let i = 0; i < aiMessage.toolCalls.length; i++) {
       const toolCall = aiMessage.toolCalls[i]
+      if (!includeSubAgentCalls && toolCall.sourceLabel.startsWith(SUB_AGENT_SOURCE_LABEL_PREFIX)) {
+        continue
+      }
       if (!this.isWebSearchFunction(toolCall.functionName)) {
         continue
       }
@@ -2440,10 +2481,16 @@ ${preview}`
     return count
   }
 
-  private countCompletedKnowledgeSearchCalls(aiMessage: ChatMessage): number {
+  private countCompletedKnowledgeSearchCalls(
+    aiMessage: ChatMessage,
+    includeSubAgentCalls: boolean = false
+  ): number {
     let count = 0
     for (let i = 0; i < aiMessage.toolCalls.length; i++) {
       const toolCall = aiMessage.toolCalls[i]
+      if (!includeSubAgentCalls && toolCall.sourceLabel.startsWith(SUB_AGENT_SOURCE_LABEL_PREFIX)) {
+        continue
+      }
       if (!this.isKnowledgeSearchFunction(toolCall.functionName)) {
         continue
       }
@@ -2481,7 +2528,9 @@ ${preview}`
   private buildKnowledgeSearchBudgetResult(toolCall: ToolCall, usedQueryCount: number): ToolResult {
     toolCall.toolId = KNOWLEDGE_SEARCH_TOOL_ID
     toolCall.displayName = '知识库检索'
-    toolCall.sourceLabel = '内置工具'
+    if (!toolCall.sourceLabel.startsWith(SUB_AGENT_SOURCE_LABEL_PREFIX)) {
+      toolCall.sourceLabel = '内置工具'
+    }
     toolCall.permissionLevel = 'read'
     return new ToolResult(
       toolCall.id,
@@ -2501,8 +2550,11 @@ ${preview}`
     )
   }
 
-  private getCurrentWebSearchLimit(aiMessage: ChatMessage): number {
-    if (this.hasApprovedExtraWebSearch(aiMessage)) {
+  private getCurrentWebSearchLimit(
+    aiMessage: ChatMessage,
+    includeSubAgentCalls: boolean = false
+  ): number {
+    if (this.hasApprovedExtraWebSearch(aiMessage, includeSubAgentCalls)) {
       return this.DEFAULT_WEB_SEARCH_LIMIT + this.EXTRA_WEB_SEARCH_LIMIT
     }
     return this.DEFAULT_WEB_SEARCH_LIMIT
@@ -2512,12 +2564,15 @@ ${preview}`
     toolCall: ToolCall,
     usedSearchCount: number,
     limit: number,
-    aiMessage: ChatMessage
+    aiMessage: ChatMessage,
+    includeSubAgentCalls: boolean = false
   ): ToolResult {
-    const extraApproved = this.hasApprovedExtraWebSearch(aiMessage)
+    const extraApproved = this.hasApprovedExtraWebSearch(aiMessage, includeSubAgentCalls)
     toolCall.toolId = 'web_search'
     toolCall.displayName = '联网搜索'
-    toolCall.sourceLabel = '内置工具'
+    if (!toolCall.sourceLabel.startsWith(SUB_AGENT_SOURCE_LABEL_PREFIX)) {
+      toolCall.sourceLabel = '内置工具'
+    }
     toolCall.permissionLevel = 'read'
     return new ToolResult(
       toolCall.id,
@@ -2544,6 +2599,15 @@ ${preview}`
     for (let i = 0; i < aiMessage.toolResults.length; i++) {
       if (aiMessage.toolResults[i].toolCallId === toolCallId) {
         return aiMessage.toolResults[i]
+      }
+    }
+    return null
+  }
+
+  private findToolCall(aiMessage: ChatMessage, toolCallId: string): ToolCall | null {
+    for (let i = 0; i < aiMessage.toolCalls.length; i++) {
+      if (aiMessage.toolCalls[i].id === toolCallId) {
+        return aiMessage.toolCalls[i]
       }
     }
     return null
@@ -2581,9 +2645,17 @@ ${preview}`
     return false
   }
 
-  private hasApprovedExtraWebSearch(aiMessage: ChatMessage): boolean {
+  private hasApprovedExtraWebSearch(
+    aiMessage: ChatMessage,
+    includeSubAgentCalls: boolean = false
+  ): boolean {
     for (let i = 0; i < aiMessage.toolResults.length; i++) {
       const result = aiMessage.toolResults[i]
+      const toolCall = this.findToolCall(aiMessage, result.toolCallId)
+      if (!includeSubAgentCalls && toolCall !== null &&
+        toolCall.sourceLabel.startsWith(SUB_AGENT_SOURCE_LABEL_PREFIX)) {
+        continue
+      }
       if (this.isWebSearchBudgetResult(result)) {
         continue
       }

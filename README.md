@@ -57,7 +57,7 @@ Built-in web search supports Bocha, Bing (local), Tavily, and Exa. Models with f
 XCube includes a Sub-agent tool for decomposable work such as multi-topic research, source comparisons, or processing several documents independently. The main model can dispatch up to three sub-agents in parallel and then synthesize their reports:
 
 - **Isolated contexts**: each sub-agent receives an independent conversation context containing only the self-contained task written for it by the main model. Sub-agents cannot recursively dispatch more sub-agents.
-- **Inherited tools**: sub-agents can use the tools enabled for the current conversation. When Knowledge Base is on, they also receive `knowledge_search` and share the per-user-turn limit of five knowledge queries with the main model.
+- **Inherited tools and independent budgets**: sub-agents can use the tools enabled for the current conversation. The main model and every sub-agent each receive five default web searches of their own, with extra searches approved separately by the user. When Knowledge Base is on, each also receives up to five `knowledge_search` queries without consuming another agent's allowance.
 - **Live preview**: sub-agent output, tool calls, and execution status appear in the Sub-agent Live Preview panel. Question cards that require user input remain visible in the main conversation.
 
 Enable **Sub-agent** from the tool selector in the chat input area. The main model decides whether and how to split the request; the selected model must fully support tool calling.

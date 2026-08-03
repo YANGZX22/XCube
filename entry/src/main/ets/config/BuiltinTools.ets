@@ -1797,7 +1797,7 @@ function createSubAgentToolDefinition(): ToolDefinition {
     "properties": {
       "tasks": {
         "type": "array",
-        "description": "1 to ${SUB_AGENT_MAX_TASKS} independent sub-tasks to run in parallel. Each sub-agent works in an isolated context with the same tools exposed to this conversation except sub_agent itself. When the knowledge-base switch is on, this includes knowledge_search with one shared per-user-turn query budget across the main agent and all sub-agents. Sub-agent ask_user questions and generated charts appear in the main conversation; other sub-agent tool activity is visible to the user in a live preview panel.",
+        "description": "1 to ${SUB_AGENT_MAX_TASKS} independent sub-tasks to run in parallel. Each sub-agent works in an isolated context with the same tools exposed to this conversation except sub_agent itself. Every sub-agent has its own web_search and knowledge_search budgets, independent from the main conversation and other sub-agents. Sub-agent ask_user questions and generated charts appear in the main conversation; other sub-agent tool activity is visible to the user in a live preview panel.",
         "items": {
           "type": "object",
           "properties": {
@@ -1835,7 +1835,7 @@ function createSubAgentToolConfig(): ToolConfig {
   return new ToolConfig(
     SUB_AGENT_TOOL_ID,
     '子智能体',
-    '模型可派出最多 3 个并行子智能体独立完成子任务，结果汇总后继续回答',
+    '模型可派出最多 3 个并行子智能体进行工作。可能消耗更多 Token',
     null,
     true,
     false,
