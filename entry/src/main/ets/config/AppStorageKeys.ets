@@ -56,6 +56,8 @@ export class AppStorageKeys {
 
   // 聊天字体大小
   static readonly CHAT_FONT_SIZE: string = 'chat_font_size'
+  static readonly CHAT_SERIF_FONT_ENABLED: string = 'chat_serif_font_enabled'
+  static readonly CHAT_SERIF_FONT_FAMILY: string = 'chat_serif_font_family'
 
   // 聊天输入设置
   static readonly CHAT_INPUT_ENTER_KEY_SEND: string = 'chat_input_enter_key_send'

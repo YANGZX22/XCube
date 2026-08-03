@@ -3,6 +3,7 @@ import { webview } from '@kit.ArkWeb'
 import { getAppUiState } from '../state/AppUiState'
 import { withColorAlpha } from '../utils/ColorAlphaUtils'
 import { uiMaterial } from '@kit.ArkUI'
+import { ImmersiveSheetHeader } from './ImmersiveSheetHeader'
 
 @ComponentV2
 export struct SearchReferenceCard {
@@ -167,8 +168,7 @@ export struct SearchReferenceCard {
       height: SheetSize.LARGE,
       detents: [SheetSize.LARGE],
       dragBar: true,
-      showClose: true,
-      title: { title: this.sheetTitle !== '' ? this.sheetTitle : $r('app.string.common_web_page') },
+      showClose: false,
       onDisappear: () => {
         this.sheetUrl = ''
         this.sheetTitle = ''
@@ -179,6 +179,13 @@ export struct SearchReferenceCard {
   @Builder
   WebSheetBuilder() {
     Column() {
+      ImmersiveSheetHeader({
+        title: this.sheetTitle !== '' ? this.sheetTitle : $r('app.string.common_web_page'),
+        onLeadingClick: (): void => {
+          this.showWebSheet = false
+        }
+      })
+
       if (this.sheetUrl !== '') {
         Web({ src: this.sheetUrl, controller: this.sheetWebController })
           .width('100%')

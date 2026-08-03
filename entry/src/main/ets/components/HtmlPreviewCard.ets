@@ -2,6 +2,7 @@ import { webview } from '@kit.ArkWeb'
 import { pasteboard } from '@kit.BasicServicesKit'
 import { hilog } from '@kit.PerformanceAnalysisKit'
 import { getAppUiState, observeAppUiState } from '../state/AppUiState'
+import { ImmersiveSheetHeader } from './ImmersiveSheetHeader'
 
 const DOMAIN = 0x0002
 const TAG = 'HtmlPreviewCard'
@@ -246,14 +247,20 @@ export struct HtmlPreviewCard {
       height: SheetSize.LARGE,
       detents: [SheetSize.LARGE],
       dragBar: true,
-      showClose: true,
-      title: { title: 'HTML 预览' }
+      showClose: false
     })
   }
 
   @Builder
   FullScreenBuilder() {
     Column() {
+      ImmersiveSheetHeader({
+        title: 'HTML 预览',
+        onLeadingClick: (): void => {
+          this.showFullScreen = false
+        }
+      })
+
       Web({ src: this.getDataUrl(), controller: this.fullScreenWebController })
         .width('100%')
         .layoutWeight(1)

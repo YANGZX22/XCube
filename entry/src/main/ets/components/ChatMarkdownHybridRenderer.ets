@@ -25,6 +25,7 @@ export struct ChatMarkdownHybridRenderer {
   @Param latexFontSize: number = 0
   @Param textColorOverride: string = ''
   @Param titleColorOverride: string = ''
+  @Param textTypeface: string = 'HarmonyOS Sans'
   @Param themeRenderKey: string = ''
   @Param showCodeFullScreen: boolean = true
 
@@ -39,6 +40,40 @@ export struct ChatMarkdownHybridRenderer {
   private cachedConfig: MarkdownConfiguration | null = null
   private cachedConfigSignature: string = ''
   private cachedPlugin: MarkdownPlugin | null = null
+
+  private isCustomTextTypeface(): boolean {
+    return this.textTypeface !== '' && this.textTypeface !== 'HarmonyOS Sans'
+  }
+
+  /**
+   * markdown_hybrid 没有提供有序列表前缀的字体接口。使用衬线字体时保留原列表结构，
+   * 隐藏组件生成的前缀，并把同一编号放进列表正文，使编号与正文使用相同字体。
+   */
+  private getTypefaceAwareContent(): string {
+    if (!this.isCustomTextTypeface() || this.content === '') {
+      return this.content
+    }
+    const lines: Array<string> = this.content.split('\n')
+    let inFencedCodeBlock: boolean = false
+    const orderedListPattern = new RegExp('^(\\s*)([0-9]+)([.)])(\\s+)(.*)$')
+    for (let index = 0; index < lines.length; index++) {
+      const line = lines[index]
+      const trimmedLine = line.trim()
+      if (trimmedLine.startsWith('```') || trimmedLine.startsWith('~~~')) {
+        inFencedCodeBlock = !inFencedCodeBlock
+        continue
+      }
+      if (inFencedCodeBlock) {
+        continue
+      }
+      const match = line.match(orderedListPattern)
+      if (match !== null && match.length >= 6 && match[5] !== '') {
+        // 转义正文中的分隔符，避免复制出的 “1.” 再次被解析成一层嵌套列表。
+        lines[index] = match[1] + match[2] + match[3] + match[4] + match[2] + '\\' + match[3] + ' ' + match[5]
+      }
+    }
+    return lines.join('\n')
+  }
 
   private parseThemeColor(value: string, fallback: number): number {
     let color = value.trim()
@@ -81,6 +116,7 @@ export struct ChatMarkdownHybridRenderer {
       this.latexFontSize.toString(),
       this.textColorOverride,
       this.titleColorOverride,
+      this.textTypeface,
       this.showCodeFullScreen ? 'fullscreen' : 'no_fullscreen'
     ].join('|')
   }
@@ -118,7 +154,8 @@ export struct ChatMarkdownHybridRenderer {
     theme.setBlockLeftMargin(listLeftMargin)
     theme.setBlockRightMargin(0)
     theme.setOrderedListItemPrefixBold(false)
-    theme.setOrderedListItemColor(textColor)
+    // 自定义字体下，编号会作为正文绘制；组件自身不支持为此前缀指定字体。
+    theme.setOrderedListItemColor(this.isCustomTextTypeface() ? 0x00000000 : textColor)
     theme.setOrderedListItemSize(textSize)
     theme.setOrderedListItemLineHeight(textLineHeight)
     theme.setBulletListItemColor(textColor)
@@ -193,9 +230,11 @@ export struct ChatMarkdownHybridRenderer {
     theme.setParagraphTextSize(textSize)
     theme.setParagraphTextLineHeight(textLineHeight)
     theme.setParagraphTextColor(textColor)
+    theme.setParagraphTypeface(this.textTypeface)
     theme.setParagraphTopMargins(0)
     theme.setParagraphBottomMargins(0)
     this.applyHeadingTheme(theme, titleSizes, titleLineHeights, titleColor, tableBorderColor)
+    theme.setHeadingTypeface(this.textTypeface)
     theme.setHeadingTopMargins(blockSpacing)
     theme.setHeadingBottomMargins(Math.max(Math.round(textSize * 0.35), 4))
 
@@ -322,7 +361,7 @@ export struct ChatMarkdownHybridRenderer {
     Column() {
       ForEach([this.buildConfigSignature()], (_renderKey: string) => {
         CJMarkdown({
-          content: this.content,
+          content: this.getTypefaceAwareContent(),
           isInputEnded: this.isInputEnded,
           incrementalAnalysis: this.incrementalAnalysis,
           useCangjieComponent: this.useCangjieComponent,

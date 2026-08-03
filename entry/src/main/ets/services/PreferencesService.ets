@@ -81,6 +81,8 @@ export class PreferenceKeys {
 
   // 聊天字体大小
   static readonly CHAT_FONT_SIZE: string = 'chat_font_size'
+  static readonly CHAT_SERIF_FONT_ENABLED: string = 'chat_serif_font_enabled'
+  static readonly CHAT_SERIF_FONT_FAMILY: string = 'chat_serif_font_family'
 
   // 聊天输入设置
   static readonly CHAT_INPUT_ENTER_KEY_SEND: string = 'chat_input_enter_key_send'
@@ -461,6 +463,24 @@ export class PreferencesService {
   // 设置聊天字体大小
   async setChatFontSize(size: number): Promise<void> {
     await this.setNumber(PreferenceKeys.CHAT_FONT_SIZE, size)
+  }
+
+  // 获取聊天气泡是否使用衬线字体
+  async getChatSerifFontEnabled(): Promise<boolean> {
+    return await this.getBoolean(PreferenceKeys.CHAT_SERIF_FONT_ENABLED, false)
+  }
+
+  // 设置聊天气泡是否使用衬线字体
+  async setChatSerifFontEnabled(enabled: boolean): Promise<void> {
+    await this.setBoolean(PreferenceKeys.CHAT_SERIF_FONT_ENABLED, enabled)
+  }
+
+  async getChatSerifFontFamily(): Promise<string> {
+    return await this.getString(PreferenceKeys.CHAT_SERIF_FONT_FAMILY, 'common')
+  }
+
+  async setChatSerifFontFamily(fontFamily: string): Promise<void> {
+    await this.setString(PreferenceKeys.CHAT_SERIF_FONT_FAMILY, fontFamily)
   }
 
   // 获取聊天输入框回车键是否发送

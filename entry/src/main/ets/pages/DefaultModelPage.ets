@@ -18,6 +18,7 @@ import {
   getHdsStatusBarContentColor
 } from '../utils/HdsVisualEffectUtil'
 import { uiMaterial } from '@kit.ArkUI'
+import { ImmersiveSheetHeader } from '../components/ImmersiveSheetHeader'
 
 let defaultModelPagePathStack: NavPathStack | null = null
 
@@ -423,59 +424,19 @@ struct DefaultModelPage {
   @Builder
   PromptEditSheet() {
     Column() {
-      Row() {
-        Button() {
-          SymbolGlyph($r('sys.symbol.xmark'))
-            .fontSize(18)
-            .fontColor([$r('app.color.text_primary')])
-        }
-        .type(ButtonType.Circle)
-        .width(36)
-        .height(36)
-        .backgroundColor(Color.Transparent)
-        .systemMaterial(new uiMaterial.ImmersiveMaterial({
-          style: uiMaterial.ImmersiveStyle.REGULAR,
-          materialColor: Color.Transparent,
-          applyShadow: false,
-          interactive: true,
-          lightEffect: { color: undefined }
-        }))
-        .onClick(() => {
-          this.showPromptSheet = false
-        })
-
-        Text(this.currentPromptRole === ModelRole.TITLE ?
+      ImmersiveSheetHeader({
+        title: this.currentPromptRole === ModelRole.TITLE ?
           $r('app.string.default_model_prompt_edit_title_title') :
-          $r('app.string.default_model_prompt_edit_title_translate'))
-          .fontSize(17)
-          .fontWeight(FontWeight.Bold)
-          .fontColor($r('app.color.text_primary'))
-          .layoutWeight(1)
-          .textAlign(TextAlign.Center)
-
-        Button() {
-          SymbolGlyph($r('sys.symbol.checkmark'))
-            .fontSize(18)
-            .fontColor([this.themePrimary])
-        }
-        .type(ButtonType.Circle)
-        .width(36)
-        .height(36)
-        .backgroundColor(Color.Transparent)
-        .systemMaterial(new uiMaterial.ImmersiveMaterial({
-          style: uiMaterial.ImmersiveStyle.REGULAR,
-          materialColor: Color.Transparent,
-          applyShadow: false,
-          interactive: true,
-          lightEffect: { color: undefined }
-        }))
-        .onClick(() => {
+          $r('app.string.default_model_prompt_edit_title_translate'),
+        showTrailing: true,
+        trailingColor: this.themePrimary,
+        onLeadingClick: (): void => {
+          this.showPromptSheet = false
+        },
+        onTrailingClick: (): void => {
           this.savePrompt()
-        })
-      }
-      .width('100%')
-      .height(56)
-      .padding({ left: 16, right: 16 })
+        }
+      })
 
       // 变量提示
       Column() {

@@ -330,7 +330,7 @@
     },
     {
       "name": "chat_list_immersive_material_desc",
-      "value": "开启后对话栏使用沉浸光感材质；关闭时使用高斯模糊。"
+      "value": "开启后对话栏使用沉浸光感材质；关闭以避免卡顿。"
     },
     {
       "name": "knowledge_list_immersive_material_title",
@@ -338,7 +338,7 @@
     },
     {
       "name": "knowledge_list_immersive_material_desc",
-      "value": "开启后知识库文件栏使用沉浸光感材质；关闭时使用高斯模糊。"
+      "value": "开启后知识库文件栏使用沉浸光感材质；关闭以避免卡顿。"
     },
     {
       "name": "settings_language",
@@ -1831,6 +1831,30 @@
     {
       "name": "settings_font_size_desc",
       "value": "调整聊天消息字体大小"
+    },
+    {
+      "name": "settings_chat_font_desc",
+      "value": "调整聊天消息气泡内的字体与字号"
+    },
+    {
+      "name": "settings_chat_serif_font",
+      "value": "衬线字体"
+    },
+    {
+      "name": "settings_chat_serif_font_desc",
+      "value": "仅在用户与 AI 消息气泡内使用衬线字体"
+    },
+    {
+      "name": "settings_chat_serif_font_family",
+      "value": "字体样式"
+    },
+    {
+      "name": "chat_serif_font_common",
+      "value": "Common Serif"
+    },
+    {
+      "name": "chat_serif_font_anthropic",
+      "value": "Anthropic Serif Text（本地）"
     },
     {
       "name": "font_size_small",

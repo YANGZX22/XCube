@@ -330,7 +330,7 @@
     },
     {
       "name": "chat_list_immersive_material_desc",
-      "value": "Use immersive light-sense material for conversation rows. When off, Gaussian blur is used."
+      "value": "Use immersive light-sense material for conversation rows. Turn this switch off to prevent stuttering."
     },
     {
       "name": "knowledge_list_immersive_material_title",
@@ -338,7 +338,7 @@
     },
     {
       "name": "knowledge_list_immersive_material_desc",
-      "value": "Use immersive light-sense material for knowledge rows. When off, Gaussian blur is used."
+      "value": "Use immersive light-sense material for knowledge rows. Turn this switch off to prevent stuttering."
     },
     {
       "name": "settings_language",
@@ -1831,6 +1831,30 @@
     {
       "name": "settings_font_size_desc",
       "value": "Adjust chat message font size"
+    },
+    {
+      "name": "settings_chat_font_desc",
+      "value": "Adjust the typeface and size used in chat message bubbles"
+    },
+    {
+      "name": "settings_chat_serif_font",
+      "value": "Serif Font"
+    },
+    {
+      "name": "settings_chat_serif_font_desc",
+      "value": "Use serif typefaces only in user and AI message bubbles"
+    },
+    {
+      "name": "settings_chat_serif_font_family",
+      "value": "Serif Typeface"
+    },
+    {
+      "name": "chat_serif_font_common",
+      "value": "Common Serif"
+    },
+    {
+      "name": "chat_serif_font_anthropic",
+      "value": "Anthropic Serif Text (Local)"
     },
     {
       "name": "font_size_small",

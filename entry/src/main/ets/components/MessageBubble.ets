@@ -18,6 +18,8 @@ import { getAppUiState } from '../state/AppUiState'
 import { withColorAlpha } from '../utils/ColorAlphaUtils'
 import { MATH_CHART_TOOL_ID } from '../config/BuiltinTools'
 import { formatBillingAmount } from '../utils/ModelBillingUtils'
+import { ImmersiveSheetHeader } from './ImmersiveSheetHeader'
+import { resolveChatSerifFontFamily } from '../utils/ChatSerifFontUtils'
 
 const DOMAIN = 0x0002
 const TAG = 'MessageBubble'
@@ -118,6 +120,10 @@ export struct MessageBubble {
   }
   private get themePrimaryLight(): string {
     return getAppUiState().themePrimaryLight
+  }
+  private get chatBubbleTypeface(): string {
+    const uiState = getAppUiState()
+    return uiState.chatSerifFontEnabled ? resolveChatSerifFontFamily(uiState.chatSerifFontFamily) : 'HarmonyOS Sans'
   }
   private get translationLightSurface(): string {
     return '#FFFFFF'
@@ -446,6 +452,7 @@ export struct MessageBubble {
       useCangjieComponent: true,
       chatFontSize: this.chatFontSize,
       latexFontSize: this.chatFontSize,
+      textTypeface: this.chatBubbleTypeface,
       themeRenderKey: this.themeRenderKey,
       onOpenLink: (title: string, url: string): void => {
         this.openWebSheetForLink(title, url)
@@ -503,7 +510,8 @@ export struct MessageBubble {
 
   // 静态内容渲染（翻译结果 / HTML 分段正文）：仅在非流式时出现，传参不涉及响应式断链问题。
   @Builder
-  StaticMarkdown(content: string, compact: boolean, textColorOverride: string = '', titleColorOverride: string = '') {
+  StaticMarkdown(content: string, compact: boolean, textColorOverride: string = '', titleColorOverride: string = '',
+    useChatBubbleTypeface: boolean = false) {
     ChatMarkdownHybridRenderer({
       content: content,
       isInputEnded: true,
@@ -514,6 +522,7 @@ export struct MessageBubble {
       latexFontSize: this.chatFontSize,
       textColorOverride: textColorOverride,
       titleColorOverride: titleColorOverride,
+      textTypeface: useChatBubbleTypeface ? this.chatBubbleTypeface : 'HarmonyOS Sans',
       themeRenderKey: this.themeRenderKey,
       onOpenLink: (title: string, url: string): void => {
         this.openWebSheetForLink(title, url)
@@ -586,15 +595,21 @@ export struct MessageBubble {
       height: '25%',
       detents: ['25%'],
       dragBar: true,
-      showClose: true,
-      maskColor: '#00000000',
-      title: { title: '公式预览' }
+      showClose: false,
+      maskColor: '#00000000'
     })
   }
 
   @Builder
   LatexPreviewSheet() {
     Column() {
+      ImmersiveSheetHeader({
+        title: '公式预览',
+        onLeadingClick: (): void => {
+          this.showLatexPreview = false
+        }
+      })
+
       if (this.latexPreviewPixelMap !== undefined) {
         Scroll() {
           Row() {
@@ -1136,6 +1151,7 @@ export struct MessageBubble {
             if (this.getDisplayContent().length > 0) {
               Text(this.getDisplayContent())
                 .fontSize(this.chatFontSize)
+                .fontFamily(this.chatBubbleTypeface)
                 .fontColor(this.themeUserBubbleText)
                 .lineHeight(Math.round(this.chatFontSize * 1.4))
                 .textAlign(TextAlign.Start)
@@ -1950,7 +1966,7 @@ export struct MessageBubble {
                         }
                       })
                     } else {
-                      this.StaticMarkdown(segment.renderContent, false)
+                      this.StaticMarkdown(segment.renderContent, false, '', '', true)
                     }
                   },
                   (segment: ContentSegment, index: number) => {

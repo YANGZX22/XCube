@@ -8,6 +8,7 @@ import { getAppUiState } from '../state/AppUiState'
 import { pickLocalizedText } from '../utils/LocalizedTextUtils'
 import { withColorAlpha } from '../utils/ColorAlphaUtils'
 import { ModelSelectorContent } from './ModelSelector'
+import { ImmersiveSheetHeader } from './ImmersiveSheetHeader'
 
 const EMBEDDING_OPTION_CORNER_RADIUS: number = 16
 
@@ -36,45 +37,13 @@ export struct KnowledgeEmbeddingSelectSheetContent {
 
   @Builder
   private Header() {
-    Row() {
-      Button({ type: ButtonType.Circle, stateEffect: false }) {
-        SymbolGlyph($r('sys.symbol.xmark'))
-          .fontSize(16)
-          .fontColor([$r('app.color.text_primary')])
-      }
-      .width(36)
-      .height(36)
-      .padding(0)
-      .backgroundColor(Color.Transparent)
-      .systemMaterial(new uiMaterial.ImmersiveMaterial({
-        style: uiMaterial.ImmersiveStyle.REGULAR,
-        materialColor: Color.Transparent,
-        applyShadow: false,
-        interactive: true,
-        lightEffect: { color: undefined }
-      }))
-      .enabled(!this.isApplying)
-      .opacity(this.isApplying ? 0.45 : 1)
-      .onClick(() => {
+    ImmersiveSheetHeader({
+      title: pickLocalizedText('向量模型', 'Embedding model'),
+      leadingButtonEnabled: !this.isApplying,
+      onLeadingClick: (): void => {
         this.onClose()
-      })
-
-      Text(pickLocalizedText('向量模型', 'Embedding model'))
-        .fontSize(17)
-        .fontWeight(FontWeight.Bold)
-        .fontColor($r('app.color.text_primary'))
-        .textAlign(TextAlign.Center)
-        .maxLines(1)
-        .textOverflow({ overflow: TextOverflow.Ellipsis })
-        .layoutWeight(1)
-
-      Blank()
-        .width(36)
-    }
-    .width('100%')
-    .height(56)
-    .padding({ left: 16, right: 16 })
-    .alignItems(VerticalAlign.Center)
+      }
+    })
   }
 
   @Builder

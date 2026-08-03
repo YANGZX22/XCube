@@ -60,6 +60,7 @@ import {
   getHdsTopNavigationContentTopPadding,
   getHdsStatusBarContentColor
 } from '../utils/HdsVisualEffectUtil'
+import { ImmersiveSheetHeader } from './ImmersiveSheetHeader'
 
 @ObservedV2
 class ProviderHeaderEntry {
@@ -1589,64 +1590,24 @@ export struct ProviderDetailPanel {
       .backgroundColor(getAppUiState().themeBackground)
       .border({ width: { bottom: 1 }, color: $r('app.color.divider') })
     } else {
-      Row() {
-        // 关闭按钮
-        Button() {
-          SymbolGlyph(this.headerLeadingSymbol())
-            .fontSize(18)
-            .fontColor([$r('app.color.text_secondary')])
-        }
-        .type(ButtonType.Circle)
-        .width(36)
-        .height(36)
-        .backgroundColor($r('app.color.divider'))
-        .onClick(() => {
+      ImmersiveSheetHeader({
+        title: this.isCreateMode ? $r('app.string.add_custom_provider') :
+          (this.provider?.name ?? $r('app.string.provider_detail_title')),
+        leadingSymbol: this.headerLeadingSymbol(),
+        trailingSymbol: this.headerSaveSymbol(),
+        showTrailing: true,
+        showSecondaryTrailing: !this.isCreateMode && this.provider !== null && !this.provider.isPreset,
+        trailingColor: this.themePrimary,
+        onLeadingClick: (): void => {
           this.onClose()
-        })
-
-        // 标题
-        Text(this.isCreateMode ? $r('app.string.add_custom_provider') :
-          (this.provider?.name ?? $r('app.string.provider_detail_title')))
-          .fontSize(17)
-          .fontWeight(FontWeight.Bold)
-          .fontColor($r('app.color.text_primary'))
-          .layoutWeight(1)
-          .textAlign(TextAlign.Center)
-
-        // 删除按钮（非创建模式且非预置服务商）
-        if (!this.isCreateMode && this.provider !== null && !this.provider.isPreset) {
-          Button() {
-            SymbolGlyph($r('sys.symbol.clean'))
-              .fontSize(18)
-              .fontColor([$r('app.color.status_error')])
-          }
-          .type(ButtonType.Circle)
-          .width(36)
-          .height(36)
-          .backgroundColor($r('app.color.divider'))
-          .margin({ right: 8 })
-          .onClick(() => {
-            this.showDeleteConfirmDialog()
-          })
-        }
-
-        // 保存按钮
-        Button() {
-          SymbolGlyph(this.headerSaveSymbol())
-            .fontSize(18)
-            .fontColor([Color.White])
-        }
-        .type(ButtonType.Circle)
-        .width(36)
-        .height(36)
-        .backgroundColor(this.themePrimary)
-        .onClick(() => {
+        },
+        onSecondaryTrailingClick: (): void => {
+          this.showDeleteConfirmDialog()
+        },
+        onTrailingClick: (): void => {
           this.saveConfigAndClose()
-        })
-      }
-      .width('100%')
-      .height(52)
-      .padding({ left: 16, right: 16 })
+        }
+      })
     }
   }
 

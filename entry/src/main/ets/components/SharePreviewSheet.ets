@@ -10,6 +10,7 @@ import { common } from '@kit.AbilityKit'
 import { display } from '@kit.ArkUI'
 import { getAppUiState } from '../state/AppUiState'
 import { preloadModelIcon, resolveShareModelIdentity } from '../utils/ProviderIconUtils'
+import { ImmersiveSheetHeader } from './ImmersiveSheetHeader'
 
 @ComponentV2
 export struct SharePreviewSheet {
@@ -65,32 +66,12 @@ export struct SharePreviewSheet {
 
   build() {
     Column() {
-      // 标题栏
-      Row() {
-        Text($r('app.string.share_title'))
-          .fontSize(18)
-          .fontWeight(FontWeight.Bold)
-          .fontColor($r('app.color.text_primary'))
-
-        Blank()
-
-        // 关闭按钮
-        Row() {
-          SymbolGlyph($r('sys.symbol.xmark'))
-            .fontSize(16)
-            .fontColor([$r('app.color.text_secondary')])
-        }
-        .width(32)
-        .height(32)
-        .borderRadius(16)
-        .backgroundColor($r('app.color.divider'))
-        .justifyContent(FlexAlign.Center)
-        .onClick(() => {
+      ImmersiveSheetHeader({
+        title: $r('app.string.share_title'),
+        onLeadingClick: (): void => {
           this.onClose()
-        })
-      }
-      .width('100%')
-      .padding({ left: 20, right: 20, top: 16, bottom: 12 })
+        }
+      })
 
       // 分享模式选择
       Row() {

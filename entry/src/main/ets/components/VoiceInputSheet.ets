@@ -14,6 +14,7 @@ import {
   AsrResultCallback,
   AsrErrorCallback
 } from '../services/SherpaAsrService'
+import { ImmersiveSheetHeader } from './ImmersiveSheetHeader'
 
 // 录音浮层状态
 enum VoiceState {
@@ -227,6 +228,13 @@ export struct VoiceInputSheet {
 
   build() {
     Column() {
+      ImmersiveSheetHeader({
+        title: $r('app.string.voice_input'),
+        onLeadingClick: (): void => {
+          this.onClose()
+        }
+      })
+
       // 状态提示
       Text(this.getStatusText())
         .fontSize(15)

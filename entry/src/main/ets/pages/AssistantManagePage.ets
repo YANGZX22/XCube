@@ -27,6 +27,7 @@ import {
   getHdsTopNavigationContentTopPadding,
   getHdsStatusBarContentColor
 } from '../utils/HdsVisualEffectUtil'
+import { ImmersiveSheetHeader } from '../components/ImmersiveSheetHeader'
 
 let assistantManagePathStack: NavPathStack | null = null
 
@@ -1028,6 +1029,13 @@ struct AssistantManagePage {
   @Builder
   private ModelSheetBuilder() {
     Column() {
+      ImmersiveSheetHeader({
+        title: $r('app.string.assistant_default_model'),
+        onLeadingClick: (): void => {
+          this.showModelSheet = false
+        }
+      })
+
       ModelSelectorContent({
         currentModelId: this.formDefaultModelId,
         currentProviderId: this.formDefaultProviderId,
@@ -1083,8 +1091,7 @@ struct AssistantManagePage {
         .bindSheet($$this.showModelSheet, this.ModelSheetBuilder(), {
           height: SheetSize.LARGE,
           dragBar: true,
-          showClose: true,
-          title: { title: $r('app.string.assistant_default_model') }
+          showClose: false
         })
 
       Column()

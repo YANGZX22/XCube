@@ -7,6 +7,7 @@ import { LengthMetrics, uiMaterial } from '@kit.ArkUI'
 import { getAppUiState } from '../state/AppUiState'
 import { pickLocalizedText } from '../utils/LocalizedTextUtils'
 import { normalizeBillingCurrency, parseBillingPrice } from '../utils/ModelBillingUtils'
+import { ImmersiveSheetHeader } from './ImmersiveSheetHeader'
 
 @ComponentV2
 struct ModelCapabilityButton {
@@ -223,53 +224,17 @@ export struct ModelEditSheet {
 
   @Builder
   HeaderBar() {
-    Row() {
-      Button() {
-        SymbolGlyph($r('sys.symbol.xmark'))
-          .fontSize(18)
-          .fontColor([$r('app.color.text_primary')])
-      }
-      .type(ButtonType.Circle)
-      .width(36)
-      .height(36)
-      .backgroundColor(Color.Transparent)
-      .systemMaterial(new uiMaterial.ImmersiveMaterial({
-        style: uiMaterial.ImmersiveStyle.REGULAR,
-        interactive: true,
-        lightEffect: { color: undefined }
-      }))
-      .onClick(() => {
+    ImmersiveSheetHeader({
+      title: '编辑模型',
+      showTrailing: true,
+      trailingColor: this.themePrimary,
+      onLeadingClick: (): void => {
         this.onCancel()
-      })
-
-      Text('编辑模型')
-        .fontSize(17)
-        .fontWeight(FontWeight.Bold)
-        .fontColor($r('app.color.text_primary'))
-        .layoutWeight(1)
-        .textAlign(TextAlign.Center)
-
-      Button() {
-        SymbolGlyph($r('sys.symbol.checkmark'))
-          .fontSize(18)
-          .fontColor([this.themePrimary])
+      },
+      onTrailingClick: (): void => {
+        this.onSave(this.buildDraft())
       }
-      .type(ButtonType.Circle)
-      .width(36)
-      .height(36)
-      .backgroundColor(Color.Transparent)
-      .systemMaterial(new uiMaterial.ImmersiveMaterial({
-        style: uiMaterial.ImmersiveStyle.REGULAR,
-        interactive: true,
-        lightEffect: { color: undefined }
-      }))
-      .onClick(async () => {
-        await this.onSave(this.buildDraft())
-      })
-    }
-    .width('100%')
-    .height(56)
-    .padding({ left: 20, right: 20 })
+    })
   }
 
   @Builder

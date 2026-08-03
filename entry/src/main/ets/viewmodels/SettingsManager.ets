@@ -25,6 +25,8 @@ export class SettingsManager {
   private notifyOnComplete: boolean = true
   private notifyOnFailed: boolean = true
   private chatFontSize: number = 15
+  private chatSerifFontEnabled: boolean = false
+  private chatSerifFontFamily: string = 'common'
   private chatInputEnterKeySend: boolean = false
   private ttsEnabled: boolean = true
   private materialType: number = 100    // ADAPTIVE
@@ -68,6 +70,8 @@ export class SettingsManager {
     this.notifyOnComplete = await preferencesService.getNotifyOnComplete()
     this.notifyOnFailed = await preferencesService.getNotifyOnFailed()
     this.chatFontSize = await preferencesService.getChatFontSize()
+    this.chatSerifFontEnabled = await preferencesService.getChatSerifFontEnabled()
+    this.chatSerifFontFamily = await preferencesService.getChatSerifFontFamily()
     this.chatInputEnterKeySend = await preferencesService.getChatInputEnterKeySend()
     this.ttsEnabled = await preferencesService.getBoolean(PreferenceKeys.TTS_ENABLED, true)
     this.materialType = await preferencesService.getMaterialType()
@@ -75,6 +79,8 @@ export class SettingsManager {
     this.lightColorMode = await preferencesService.getLightColorMode()
     this.chatListImmersiveMaterial = await preferencesService.getChatListImmersiveMaterial()
     this.knowledgeListImmersiveMaterial = await preferencesService.getKnowledgeListImmersiveMaterial()
+    setAppUiStateValue(AppStorageKeys.CHAT_SERIF_FONT_ENABLED, this.chatSerifFontEnabled)
+    setAppUiStateValue(AppStorageKeys.CHAT_SERIF_FONT_FAMILY, this.chatSerifFontFamily)
     setAppUiStateValue(AppStorageKeys.CHAT_INPUT_ENTER_KEY_SEND, this.chatInputEnterKeySend)
     setAppUiStateValue(AppStorageKeys.TTS_ENABLED, this.ttsEnabled)
     setAppUiStateValue(AppStorageKeys.CHAT_LIST_IMMERSIVE_MATERIAL, this.chatListImmersiveMaterial)
@@ -91,6 +97,8 @@ export class SettingsManager {
     this.notifyOnComplete = await preferencesService.getNotifyOnComplete()
     this.notifyOnFailed = await preferencesService.getNotifyOnFailed()
     this.chatFontSize = await preferencesService.getChatFontSize()
+    this.chatSerifFontEnabled = await preferencesService.getChatSerifFontEnabled()
+    this.chatSerifFontFamily = await preferencesService.getChatSerifFontFamily()
     this.chatInputEnterKeySend = await preferencesService.getChatInputEnterKeySend()
     this.ttsEnabled = await preferencesService.getBoolean(PreferenceKeys.TTS_ENABLED, true)
     this.materialType = await preferencesService.getMaterialType()
@@ -98,6 +106,8 @@ export class SettingsManager {
     this.lightColorMode = await preferencesService.getLightColorMode()
     this.chatListImmersiveMaterial = await preferencesService.getChatListImmersiveMaterial()
     this.knowledgeListImmersiveMaterial = await preferencesService.getKnowledgeListImmersiveMaterial()
+    setAppUiStateValue(AppStorageKeys.CHAT_SERIF_FONT_ENABLED, this.chatSerifFontEnabled)
+    setAppUiStateValue(AppStorageKeys.CHAT_SERIF_FONT_FAMILY, this.chatSerifFontFamily)
     setAppUiStateValue(AppStorageKeys.CHAT_INPUT_ENTER_KEY_SEND, this.chatInputEnterKeySend)
     setAppUiStateValue(AppStorageKeys.TTS_ENABLED, this.ttsEnabled)
     setAppUiStateValue(AppStorageKeys.CHAT_LIST_IMMERSIVE_MATERIAL, this.chatListImmersiveMaterial)
@@ -292,6 +302,34 @@ export class SettingsManager {
         callback.onChatFontSizeChanged(size)
       }
     }
+  }
+
+  getChatSerifFontEnabled(): boolean {
+    return this.chatSerifFontEnabled
+  }
+
+  async setChatSerifFontEnabled(enabled: boolean): Promise<void> {
+    if (this.chatSerifFontEnabled === enabled) {
+      return
+    }
+
+    await getPreferencesService().setChatSerifFontEnabled(enabled)
+    this.chatSerifFontEnabled = enabled
+    setAppUiStateValue(AppStorageKeys.CHAT_SERIF_FONT_ENABLED, enabled)
+  }
+
+  getChatSerifFontFamily(): string {
+    return this.chatSerifFontFamily
+  }
+
+  async setChatSerifFontFamily(fontFamily: string): Promise<void> {
+    if (this.chatSerifFontFamily === fontFamily) {
+      return
+    }
+
+    await getPreferencesService().setChatSerifFontFamily(fontFamily)
+    this.chatSerifFontFamily = fontFamily
+    setAppUiStateValue(AppStorageKeys.CHAT_SERIF_FONT_FAMILY, fontFamily)
   }
 
   // ========== 聊天输入设置相关方法 ==========

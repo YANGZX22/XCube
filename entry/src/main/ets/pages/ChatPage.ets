@@ -116,6 +116,7 @@ import { DocumentAttachmentRegistryService } from '../services/DocumentAttachmen
 import { getPdfTextExtractionService } from '../services/PdfTextExtractionService'
 import { getImageTextRecognitionService } from '../services/ImageTextRecognitionService'
 import { resolveKnowledgeToolExposure } from './chat/KnowledgeToolExposurePolicy'
+import { ImmersiveSheetHeader } from '../components/ImmersiveSheetHeader'
 
 const DOMAIN = 0x0003
 const TAG = 'ChatPage'
@@ -1469,6 +1470,13 @@ export struct ChatPage {
   @Builder
   private MessageWebSheetBuilder() {
     Column() {
+      ImmersiveSheetHeader({
+        title: this.messageWebSheetTitle !== '' ? this.messageWebSheetTitle : $r('app.string.common_web_page'),
+        onLeadingClick: (): void => {
+          this.showMessageWebSheet = false
+        }
+      })
+
       if (this.messageWebSheetUrl !== '') {
         Web({ src: this.messageWebSheetUrl, controller: this.messageSheetWebController })
           .width('100%')
@@ -1492,6 +1500,13 @@ export struct ChatPage {
   @Builder
   private PdfPreviewSheetBuilder() {
     Column() {
+      ImmersiveSheetHeader({
+        title: this.pdfPreviewTitle !== '' ? this.pdfPreviewTitle : pickLocalizedText('PDF 预览', 'PDF Preview'),
+        onLeadingClick: (): void => {
+          this.closePdfPreview()
+        }
+      })
+
       if (this.pdfPreviewError !== '') {
         Column({ space: 8 }) {
           SymbolGlyph($r('sys.symbol.exclamationmark_triangle'))
@@ -3404,8 +3419,7 @@ export struct ChatPage {
           height: SheetSize.LARGE,
           detents: [SheetSize.LARGE],
           dragBar: true,
-          showClose: true,
-          title: { title: this.messageWebSheetTitle !== '' ? this.messageWebSheetTitle : $r('app.string.common_web_page') },
+          showClose: false,
           onDisappear: () => {
             this.messageWebSheetUrl = ''
             this.messageWebSheetTitle = ''
@@ -3419,8 +3433,7 @@ export struct ChatPage {
           height: SheetSize.LARGE,
           detents: [SheetSize.LARGE],
           dragBar: true,
-          showClose: true,
-          title: { title: this.pdfPreviewTitle !== '' ? this.pdfPreviewTitle : pickLocalizedText('PDF 预览', 'PDF Preview') },
+          showClose: false,
           onDisappear: () => {
             this.closePdfPreview()
           }
@@ -3487,7 +3500,6 @@ export struct ChatPage {
               style: uiMaterial.ImmersiveStyle.REGULAR
             }),
             preferType: SheetType.BOTTOM,
-            title: { title: $r('app.string.voice_input') },
             onDisappear: () => {
               this.showVoiceInputSheet = false
             }
@@ -3676,6 +3688,9 @@ export struct ChatPage {
       },
       onEditAdvancedExpandedChange: (expanded: boolean): void => {
         this.isModelEditAdvancedExpanded = expanded
+      },
+      onClose: (): void => {
+        this.isModelSelectorVisible = false
       }
     })
   }

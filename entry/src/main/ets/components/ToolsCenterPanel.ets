@@ -16,6 +16,7 @@ import { getAppUiState } from '../state/AppUiState'
 import { formatLocalizedCount, pickLocalizedText } from '../utils/LocalizedTextUtils'
 import { withColorAlpha } from '../utils/ColorAlphaUtils'
 import { ChatFloatingImmersiveButton } from './ChatFloatingImmersiveButton'
+import { ImmersiveSheetHeader } from './ImmersiveSheetHeader'
 import {
   buildCustomHeadersJson,
   isSensitiveCustomHeaderName,
@@ -1294,48 +1295,17 @@ export struct ToolsCenterPanel {
   @Builder
   SearchConfigSheetBuilder() {
     Column() {
-      Row() {
-        Button() {
-          SymbolGlyph($r('sys.symbol.xmark'))
-            .renderingStrategy(SymbolRenderingStrategy.SINGLE)
-            .fontSize(18)
-            .fontColor([$r('app.color.text_secondary')])
-        }
-        .type(ButtonType.Circle)
-        .stateEffect(false)
-        .width(36)
-        .height(36)
-        .backgroundColor($r('app.color.divider'))
-        .onClick(() => {
+      ImmersiveSheetHeader({
+        title: $r('app.string.search_service_config'),
+        showTrailing: true,
+        trailingColor: this.themePrimary,
+        onLeadingClick: (): void => {
           this.requestCloseSearchConfigSheet()
-        })
-
-        Text($r('app.string.search_service_config'))
-          .fontSize(17)
-          .fontWeight(FontWeight.Bold)
-          .fontColor($r('app.color.text_primary'))
-          .layoutWeight(1)
-          .textAlign(TextAlign.Center)
-
-        Button() {
-          SymbolGlyph($r('sys.symbol.checkmark'))
-            .renderingStrategy(SymbolRenderingStrategy.SINGLE)
-            .fontSize(18)
-            .fontColor([Color.White])
-        }
-        .type(ButtonType.Circle)
-        .stateEffect(false)
-        .width(36)
-        .height(36)
-        .backgroundColor(this.themePrimary)
-        .onClick(() => {
+        },
+        onTrailingClick: (): void => {
           this.handleSaveAndCloseSearchSettings()
-        })
-      }
-      .width('100%')
-      .height(56)
-      .padding({ left: 16, right: 16 })
-      .alignItems(VerticalAlign.Center)
+        }
+      })
 
       Scroll() {
         Column() {
@@ -1536,47 +1506,19 @@ export struct ToolsCenterPanel {
   @Builder
   McpServerSheetBuilder() {
     Column() {
-      Row() {
-        Button() {
-          SymbolGlyph($r('sys.symbol.xmark'))
-            .renderingStrategy(SymbolRenderingStrategy.SINGLE)
-            .fontSize(18)
-            .fontColor([$r('app.color.text_secondary')])
-        }
-        .type(ButtonType.Circle)
-        .stateEffect(false)
-        .width(36)
-        .height(36)
-        .backgroundColor($r('app.color.divider'))
-        .onClick(() => {
+      ImmersiveSheetHeader({
+        title: this.getMcpFormTitle(),
+        showTrailing: true,
+        trailingButtonEnabled: !this.isSavingMcpServer,
+        trailingLoading: this.isSavingMcpServer,
+        trailingColor: this.themePrimary,
+        onLeadingClick: (): void => {
           this.showMcpServerSheet = false
-        })
-
-        Text(this.getMcpFormTitle())
-          .fontSize(17)
-          .fontWeight(FontWeight.Bold)
-          .fontColor($r('app.color.text_primary'))
-          .layoutWeight(1)
-          .textAlign(TextAlign.Center)
-
-        Button() {
-          SymbolGlyph($r('sys.symbol.checkmark'))
-            .renderingStrategy(SymbolRenderingStrategy.SINGLE)
-            .fontSize(18)
-            .fontColor([Color.White])
-        }
-        .type(ButtonType.Circle)
-        .stateEffect(false)
-        .width(36)
-        .height(36)
-        .backgroundColor(this.isSavingMcpServer ? withColorAlpha(this.themePrimary, '99') : this.themePrimary)
-        .onClick(() => {
+        },
+        onTrailingClick: (): void => {
           this.handleSaveMcpServer()
-        })
-      }
-      .width('100%')
-      .height(56)
-      .padding({ left: 16, right: 16 })
+        }
+      })
 
       Scroll() {
         Column({ space: 14 }) {
@@ -2054,47 +1996,19 @@ export struct ToolsCenterPanel {
   @Builder
   SkillConfigSheetBuilder() {
     Column() {
-      Row() {
-        Button() {
-          SymbolGlyph($r('sys.symbol.xmark'))
-            .renderingStrategy(SymbolRenderingStrategy.SINGLE)
-            .fontSize(18)
-            .fontColor([$r('app.color.text_secondary')])
-        }
-        .type(ButtonType.Circle)
-        .stateEffect(false)
-        .width(36)
-        .height(36)
-        .backgroundColor($r('app.color.divider'))
-        .onClick(() => {
+      ImmersiveSheetHeader({
+        title: this.getSkillFormTitle(),
+        showTrailing: true,
+        trailingButtonEnabled: !this.isSavingSkill,
+        trailingLoading: this.isSavingSkill,
+        trailingColor: this.themePrimary,
+        onLeadingClick: (): void => {
           this.showSkillConfigSheet = false
-        })
-
-        Text(this.getSkillFormTitle())
-          .fontSize(17)
-          .fontWeight(FontWeight.Bold)
-          .fontColor($r('app.color.text_primary'))
-          .layoutWeight(1)
-          .textAlign(TextAlign.Center)
-
-        Button() {
-          SymbolGlyph($r('sys.symbol.checkmark'))
-            .renderingStrategy(SymbolRenderingStrategy.SINGLE)
-            .fontSize(18)
-            .fontColor([Color.White])
-        }
-        .type(ButtonType.Circle)
-        .stateEffect(false)
-        .width(36)
-        .height(36)
-        .backgroundColor(this.isSavingSkill ? withColorAlpha(this.themePrimary, '99') : this.themePrimary)
-        .onClick(() => {
+        },
+        onTrailingClick: (): void => {
           this.handleSaveSkill()
-        })
-      }
-      .width('100%')
-      .height(56)
-      .padding({ left: 16, right: 16 })
+        }
+      })
 
       Scroll() {
         Column({ space: 14 }) {

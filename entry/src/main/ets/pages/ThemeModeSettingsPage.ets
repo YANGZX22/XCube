@@ -23,6 +23,13 @@ import {
   CompactTabsFloatingStyleOptions
 } from '../utils/HdsTabsFloatingStyleHelper'
 import { IndexBottomTabItem } from '../components/index/IndexBottomTabItem'
+import {
+  CHAT_SERIF_FONT_ANTHROPIC,
+  CHAT_SERIF_FONT_COMMON,
+  ChatSerifFontAvailability,
+  detectAndRegisterChatSerifFonts,
+  resolveChatSerifFontFamily
+} from '../utils/ChatSerifFontUtils'
 
 let themeModeSettingsPathStack: NavPathStack | null = null
 
@@ -31,6 +38,7 @@ const TAB_INDEX_THEME = 0
 const PREVIEW_TAB_INDEX_ASSISTANTS = 0
 const PREVIEW_TAB_INDEX_CHAT = 1
 const PREVIEW_TAB_INDEX_SETTINGS = 2
+const APPEARANCE_BLOCK_GAP = 16
 
 @ComponentV2
 export struct ThemeAppearanceSettingsView {
@@ -79,6 +87,9 @@ export struct ThemeAppearanceSettingsView {
   private get isDarkMode(): boolean {
     return getAppUiState().isDarkMode
   }
+  private get previewChatTypeface(): string {
+    return this.chatSerifFontEnabled ? resolveChatSerifFontFamily(this.chatSerifFontFamily) : 'HarmonyOS Sans'
+  }
 
   @Param compactTitle: string | Resource = $r('app.string.settings_appearance')
   @Event onCompactBack: () => void = () => {}
@@ -86,6 +97,9 @@ export struct ThemeAppearanceSettingsView {
   @Local currentThemeMode: ThemeMode = ThemeMode.SYSTEM
   @Local currentColorTheme: ColorTheme = ColorTheme.LAVENDER
   @Local chatFontSize: number = 15
+  @Local chatSerifFontEnabled: boolean = false
+  @Local chatSerifFontFamily: string = CHAT_SERIF_FONT_COMMON
+  @Local anthropicSerifAvailable: boolean = false
   @Local materialType: number = 100
   @Local materialLevel: number = 10
   @Local lightColorMode: string = 'default'
@@ -105,9 +119,15 @@ export struct ThemeAppearanceSettingsView {
   }
 
   aboutToAppear(): void {
+    const fontAvailability: ChatSerifFontAvailability = detectAndRegisterChatSerifFonts(this.getUIContext())
+    this.anthropicSerifAvailable = fontAvailability.anthropicAvailable
     this.currentThemeMode = this.settingsManager.getThemeMode()
     this.currentColorTheme = this.settingsManager.getColorTheme()
     this.chatFontSize = this.settingsManager.getChatFontSize()
+    this.chatSerifFontEnabled = this.settingsManager.getChatSerifFontEnabled()
+    const savedSerifFont = this.settingsManager.getChatSerifFontFamily()
+    this.chatSerifFontFamily = savedSerifFont === CHAT_SERIF_FONT_ANTHROPIC && this.anthropicSerifAvailable ?
+      CHAT_SERIF_FONT_ANTHROPIC : CHAT_SERIF_FONT_COMMON
     this.materialType = this.settingsManager.getMaterialType()
     this.materialLevel = this.settingsManager.getMaterialLevel()
     this.lightColorMode = this.settingsManager.getLightColorMode()
@@ -258,6 +278,48 @@ export struct ThemeAppearanceSettingsView {
     })
   }
 
+  private async handleChatSerifFontChanged(enabled: boolean): Promise<void> {
+    const previous = this.chatSerifFontEnabled
+    this.chatSerifFontEnabled = enabled
+    try {
+      if (enabled) {
+        const availability = detectAndRegisterChatSerifFonts(this.getUIContext())
+        this.anthropicSerifAvailable = availability.anthropicAvailable
+      }
+      await this.settingsManager.setChatSerifFontEnabled(enabled)
+    } catch (error) {
+      console.error('ThemeAppearanceSettingsView',
+        `Failed to update chat serif font setting: ${JSON.stringify(error)}`)
+      this.chatSerifFontEnabled = previous
+    }
+  }
+
+  private getSerifFontOptions(): SelectOption[] {
+    const options: SelectOption[] = [{ value: $r('app.string.chat_serif_font_common') }]
+    if (this.anthropicSerifAvailable) {
+      options.push({ value: $r('app.string.chat_serif_font_anthropic') })
+    }
+    return options
+  }
+
+  private getSerifFontSelectedIndex(): number {
+    return this.chatSerifFontFamily === CHAT_SERIF_FONT_ANTHROPIC && this.anthropicSerifAvailable ? 1 : 0
+  }
+
+  private async handleChatSerifFontFamilyChanged(index: number): Promise<void> {
+    const nextFontFamily = index === 1 && this.anthropicSerifAvailable ?
+      CHAT_SERIF_FONT_ANTHROPIC : CHAT_SERIF_FONT_COMMON
+    const previous = this.chatSerifFontFamily
+    this.chatSerifFontFamily = nextFontFamily
+    try {
+      await this.settingsManager.setChatSerifFontFamily(nextFontFamily)
+    } catch (error) {
+      console.error('ThemeAppearanceSettingsView',
+        `Failed to update chat serif font family: ${JSON.stringify(error)}`)
+      this.chatSerifFontFamily = previous
+    }
+  }
+
   private async handleChatListImmersiveMaterialChanged(enabled: boolean): Promise<void> {
     const previous = this.chatListImmersiveMaterial
     this.chatListImmersiveMaterial = enabled
@@ -292,6 +354,24 @@ export struct ThemeAppearanceSettingsView {
     opts.barBottomMargin = 8
     opts.barWidth = { smallWidth: 200, mediumWidth: 220, largeWidth: 240 }
     return buildCompactTabsFloatingStyle(opts)
+  }
+
+  private getAppearanceBlockMaterial(interactive: boolean = false): uiMaterial.Material {
+    return new uiMaterial.ImmersiveMaterial({
+      style: uiMaterial.ImmersiveStyle.ULTRA_THIN,
+      materialColor: Color.Transparent,
+      applyShadow: true,
+      interactive: interactive,
+      lightEffect: { color: undefined }
+    })
+  }
+
+  private getThemeRowStartIndexes(): number[] {
+    const indexes: number[] = []
+    for (let index = 0; index < ALL_THEMES.length; index += 2) {
+      indexes.push(index)
+    }
+    return indexes
   }
 
   @Builder
@@ -368,10 +448,11 @@ export struct ThemeAppearanceSettingsView {
       this.ModeRadioRow(ThemeMode.DARK, $r('app.string.theme_dark'))
     }
     .width('100%')
-    .backgroundColor(this.themeSurface)
+    .backgroundColor(Color.Transparent)
     .borderRadius(24)
     .border({ width: 1, color: this.themePrimaryLight })
     .padding({ top: 6, bottom: 6 })
+    .systemMaterial(this.getAppearanceBlockMaterial(false))
   }
 
   @Builder
@@ -452,14 +533,18 @@ export struct ThemeAppearanceSettingsView {
       }
       .width('100%')
       .padding(10)
-      .backgroundColor(this.themeSurface)
+      .backgroundColor(Color.Transparent)
       .borderRadius(20)
     }
     .padding(2)
-    .backgroundColor(this.currentColorTheme === theme.id ? this.themePrimary : this.themeSurface)
-    .borderRadius(22)
-    .border({ width: 1, color: this.themePrimaryLight })
-    .clip(true)
+    .backgroundColor(Color.Transparent)
+    .borderRadius(24)
+    .border({
+      width: this.currentColorTheme === theme.id ? 2 : 1,
+      color: this.currentColorTheme === theme.id ? this.themePrimary : this.themePrimaryLight
+    })
+    .layoutWeight(1)
+    .systemMaterial(this.getAppearanceBlockMaterial(true))
     .onClick(() => {
       this.handleColorThemeSelected(theme.id)
     })
@@ -472,8 +557,19 @@ export struct ThemeAppearanceSettingsView {
       .fontSize(13)
       .fontWeight(FontWeight.Medium)
       .fontColor(this.chatFontSize === size ? Color.White : this.themePrimary)
-      .backgroundColor(this.chatFontSize === size ? this.themePrimary : this.themePrimaryLight)
+      .backgroundColor(Color.Transparent)
       .borderRadius(18)
+      .border({
+        width: 1,
+        color: this.chatFontSize === size ? this.themePrimary : this.themePrimaryLight
+      })
+      .systemMaterial(new uiMaterial.ImmersiveMaterial({
+        style: uiMaterial.ImmersiveStyle.ULTRA_THIN,
+        materialColor: this.chatFontSize === size ? this.themePrimary : Color.Transparent,
+        applyShadow: false,
+        interactive: true,
+        lightEffect: { color: undefined }
+      }))
       .layoutWeight(1)
       .onClick(() => {
         this.handleFontSizeChanged(size)
@@ -557,6 +653,7 @@ export struct ThemeAppearanceSettingsView {
           Text($r('app.string.font_preview_ai_message'))
             .fontSize(this.getAiPreviewFontSize())
             .lineHeight(this.getAiPreviewFontSize() + 7)
+            .fontFamily(this.previewChatTypeface)
             .fontColor(this.themeTextPrimary)
         }
         .padding({ left: 14, right: 14, top: 10, bottom: 10 })
@@ -576,6 +673,7 @@ export struct ThemeAppearanceSettingsView {
           Text($r('app.string.font_preview_user_message'))
             .fontSize(this.chatFontSize)
             .lineHeight(this.chatFontSize + 7)
+            .fontFamily(this.previewChatTypeface)
             .fontColor(this.themeUserBubbleText)
         }
         .padding({ left: 14, right: 14, top: 10, bottom: 10 })
@@ -590,7 +688,7 @@ export struct ThemeAppearanceSettingsView {
 
   @Builder
   private LivePreviewSection() {
-    Column({ space: 14 }) {
+    Column({ space: APPEARANCE_BLOCK_GAP }) {
       this.SectionHeader($r('app.string.appearance_live_preview_title'),
         $r('app.string.appearance_live_preview_desc'))
 
@@ -600,9 +698,10 @@ export struct ThemeAppearanceSettingsView {
       }
       .width('100%')
       .padding(12)
-      .backgroundColor(this.themeSurface)
+      .backgroundColor(Color.Transparent)
       .borderRadius(24)
       .border({ width: 1, color: this.themePrimaryLight })
+      .systemMaterial(this.getAppearanceBlockMaterial(false))
     }
     .width('100%')
   }
@@ -658,7 +757,7 @@ export struct ThemeAppearanceSettingsView {
   private ThemeTabContent() {
     Scroll(this.themeScroller) {
       Row() {
-        Column({ space: 22 }) {
+        Column({ space: APPEARANCE_BLOCK_GAP }) {
           this.SectionHeader($r('app.string.appearance_display_mode_title'),
             $r('app.string.appearance_display_mode_desc'))
 
@@ -667,17 +766,20 @@ export struct ThemeAppearanceSettingsView {
           this.SectionHeader($r('app.string.settings_color_theme'),
             $r('app.string.appearance_color_theme_desc'))
 
-          Grid() {
-            ForEach(ALL_THEMES, (theme: ThemeInfo) => {
-              GridItem() {
-                this.ThemeCard(theme)
+          ForEach(this.getThemeRowStartIndexes(), (startIndex: number) => {
+            Row({ space: APPEARANCE_BLOCK_GAP }) {
+              this.ThemeCard(ALL_THEMES[startIndex])
+
+              if (startIndex + 1 < ALL_THEMES.length) {
+                this.ThemeCard(ALL_THEMES[startIndex + 1])
+              } else {
+                Blank()
+                  .layoutWeight(1)
               }
-            }, (theme: ThemeInfo) => theme.id)
-          }
-          .columnsTemplate('1fr 1fr')
-          .columnsGap(12)
-          .rowsGap(12)
-          .width('100%')
+            }
+            .width('100%')
+            .alignItems(VerticalAlign.Top)
+          }, (startIndex: number) => `theme_row_${startIndex}`)
         }
         .width('100%')
         .constraintSize({ maxWidth: this.getContentMaxWidth() })
@@ -695,9 +797,9 @@ export struct ThemeAppearanceSettingsView {
   private FontTabContent() {
     Scroll(this.fontScroller) {
       Row() {
-        Column({ space: 22 }) {
-          this.SectionHeader($r('app.string.settings_font_size'),
-            $r('app.string.settings_font_size_desc'))
+        Column({ space: APPEARANCE_BLOCK_GAP }) {
+          this.SectionHeader($r('app.string.appearance_tab_font'),
+            $r('app.string.settings_chat_font_desc'))
 
           Column({ space: 16 }) {
             Row() {
@@ -756,8 +858,81 @@ export struct ThemeAppearanceSettingsView {
           }
           .width('100%')
           .padding(18)
-          .backgroundColor(this.themeSurface)
+          .backgroundColor(Color.Transparent)
           .borderRadius(24)
+          .border({ width: 1, color: this.themePrimaryLight })
+          .systemMaterial(this.getAppearanceBlockMaterial(false))
+
+          Row({ space: 16 }) {
+            Column({ space: 4 }) {
+              Text($r('app.string.settings_chat_serif_font'))
+                .fontSize(16)
+                .fontWeight(FontWeight.Medium)
+                .fontColor($r('app.color.text_primary'))
+                .width('100%')
+
+              Text($r('app.string.settings_chat_serif_font_desc'))
+                .fontSize(12)
+                .fontColor($r('app.color.text_secondary'))
+                .lineHeight(18)
+                .width('100%')
+            }
+            .layoutWeight(1)
+            .alignItems(HorizontalAlign.Start)
+
+            Toggle({ type: ToggleType.Switch, isOn: this.chatSerifFontEnabled })
+              .selectedColor(this.themePrimary)
+              .systemMaterial(new uiMaterial.Material())
+              .switchPointColor(Color.White)
+              .onChange((enabled: boolean) => {
+                this.handleChatSerifFontChanged(enabled)
+              })
+          }
+          .width('100%')
+          .padding(18)
+          .alignItems(VerticalAlign.Center)
+          .backgroundColor(Color.Transparent)
+          .borderRadius(24)
+          .border({ width: 1, color: this.themePrimaryLight })
+          .systemMaterial(this.getAppearanceBlockMaterial(false))
+
+          Column({ space: 10 }) {
+            Text($r('app.string.settings_chat_serif_font_family'))
+              .fontSize(16)
+              .fontWeight(FontWeight.Medium)
+              .fontColor($r('app.color.text_primary'))
+              .width('100%')
+
+            Select(this.getSerifFontOptions())
+              .selected(this.getSerifFontSelectedIndex())
+              .value(this.getSerifFontOptions()[this.getSerifFontSelectedIndex()].value)
+              .width('100%')
+              .height(46)
+              .font({ size: 13 })
+              .fontColor($r('app.color.text_primary'))
+              .selectedOptionFontColor(this.themePrimary)
+              .backgroundColor(Color.Transparent)
+              .borderRadius(16)
+              .systemMaterial(new uiMaterial.ImmersiveMaterial({
+                style: uiMaterial.ImmersiveStyle.ULTRA_THIN,
+                materialColor: Color.Transparent,
+                applyShadow: false
+              }))
+              .menuSystemMaterial(new uiMaterial.ImmersiveMaterial({
+                style: uiMaterial.ImmersiveStyle.THICK
+              }))
+              .enabled(this.chatSerifFontEnabled && this.getSerifFontOptions().length > 1)
+              .onSelect((index: number, _value: string): void => {
+                this.handleChatSerifFontFamilyChanged(index)
+              })
+          }
+          .width('100%')
+          .padding(18)
+          .alignItems(HorizontalAlign.Start)
+          .backgroundColor(Color.Transparent)
+          .borderRadius(24)
+          .border({ width: 1, color: this.themePrimaryLight })
+          .systemMaterial(this.getAppearanceBlockMaterial(false))
         }
         .width('100%')
         .constraintSize({ maxWidth: this.getContentMaxWidth() })
@@ -839,9 +1014,10 @@ export struct ThemeAppearanceSettingsView {
           .alignItems(VerticalAlign.Center)
         }
         .width('100%')
-        .backgroundColor(this.themeSurface)
+        .backgroundColor(Color.Transparent)
         .borderRadius(24)
         .border({ width: 1, color: this.themePrimaryLight })
+        .systemMaterial(this.getAppearanceBlockMaterial(false))
         .constraintSize({ maxWidth: this.getContentMaxWidth() })
       }
       .width('100%')
@@ -855,7 +1031,7 @@ export struct ThemeAppearanceSettingsView {
 
   @Builder
   private PageBody() {
-    Column({ space: 12 }) {
+    Column({ space: APPEARANCE_BLOCK_GAP }) {
       Row() {
         Column() {
           this.LivePreviewSection()

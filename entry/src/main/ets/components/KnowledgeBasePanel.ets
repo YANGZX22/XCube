@@ -13,6 +13,7 @@ import { getAppUiState } from '../state/AppUiState'
 import { pickLocalizedText } from '../utils/LocalizedTextUtils'
 import { showSnackBar, SnackBarDisplayOptions, SnackBarTone } from '../utils/ToastUtil'
 import { withColorAlpha } from '../utils/ColorAlphaUtils'
+import { ImmersiveSheetHeader } from './ImmersiveSheetHeader'
 
 @ComponentV2
 export struct KnowledgeBasePanel {
@@ -750,6 +751,13 @@ export struct KnowledgeBasePanel {
   @Builder
   private PreviewSheetContent() {
     Column() {
+      ImmersiveSheetHeader({
+        title: this.previewTitle !== '' ? this.previewTitle : pickLocalizedText('文件预览', 'File preview'),
+        onLeadingClick: (): void => {
+          this.showPreviewSheet = false
+        }
+      })
+
       if (this.previewError !== '') {
         Column({ space: 8 }) {
           SymbolGlyph($r('sys.symbol.exclamationmark_triangle'))
@@ -937,12 +945,7 @@ export struct KnowledgeBasePanel {
           height: SheetSize.LARGE,
           detents: [SheetSize.LARGE],
           dragBar: true,
-          showClose: true,
-          title: {
-            title: this.previewTitle !== ''
-              ? this.previewTitle
-              : pickLocalizedText('文件预览', 'File preview')
-          },
+          showClose: false,
           onDisappear: () => {
             this.closeDocumentPreview()
           }

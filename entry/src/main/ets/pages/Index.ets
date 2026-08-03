@@ -31,6 +31,7 @@ import { SharePreviewSheet } from '../components/SharePreviewSheet'
 import { ProviderBalanceSheet, BalanceSheetState } from '../components/ProviderBalanceSheet'
 import { ColorTheme, ThemeColorConfig } from '../models/ThemeColors'
 import { ServiceRegistry } from '../services/ServiceRegistry'
+import { detectAndRegisterChatSerifFonts } from '../utils/ChatSerifFontUtils'
 import { BalanceResult, getProviderBalanceService, ProviderBalanceService } from '../services/ProviderBalanceService'
 import { AppStorageKeys } from '../config/AppStorageKeys'
 import { SettingsRouteName } from '../config/SettingsRouteName'
@@ -122,6 +123,7 @@ import {
   KnowledgeEmbeddingSelection
 } from '../services/KnowledgeEmbeddingService'
 import { KnowledgeEmbeddingMigrationResult } from '../services/KnowledgeDocumentService'
+import { ImmersiveSheetHeader } from '../components/ImmersiveSheetHeader'
 
 @Entry
 @ComponentV2
@@ -634,6 +636,13 @@ struct Index {
   }
 
   aboutToAppear(): void {
+    try {
+      if (this.settingsManager.getChatSerifFontEnabled()) {
+        detectAndRegisterChatSerifFonts(this.getUIContext())
+      }
+    } catch (error) {
+      console.warn('Index', `Failed to register chat serif fonts: ${JSON.stringify(error)}`)
+    }
     this.registerAppUiStateObservers()
     this.chatTabNavStack.setInterception({
       didShow: (from: NavDestinationContext | "navBar", to: NavDestinationContext | "navBar",
@@ -1586,13 +1595,12 @@ struct Index {
         .bindSheet($$this.showAssistantSwitchSheet, this.AssistantSwitchSheetBuilder(), {
           height: SheetSize.MEDIUM,
           dragBar: true,
-          showClose: true,
+          showClose: false,
           backgroundColor: Color.Transparent,
           systemMaterial: new uiMaterial.ImmersiveMaterial({
             style: uiMaterial.ImmersiveStyle.REGULAR
           }),
           preferType: SheetType.BOTTOM,
-          title: { title: $r('app.string.assistant_switch_title') },
           onDisappear: () => {
             this.showAssistantSwitchSheet = false
           }
@@ -3973,61 +3981,17 @@ struct Index {
 
   @Builder
   private AssistantEditorHeader() {
-    Row() {
-      Button() {
-        SymbolGlyph($r('sys.symbol.xmark'))
-          .fontSize(18)
-          .fontColor([$r('app.color.text_secondary')])
-      }
-      .type(ButtonType.Circle)
-      .width(36)
-      .height(36)
-      .backgroundColor(Color.Transparent)
-      .stateEffect(false)
-      .systemMaterial(new uiMaterial.ImmersiveMaterial({
-        style: uiMaterial.ImmersiveStyle.REGULAR,
-        materialColor: Color.Transparent,
-        applyShadow: false,
-        interactive: true,
-        lightEffect: { color: undefined }
-      }))
-      .onClick(() => {
+    ImmersiveSheetHeader({
+      title: this.getAssistantEditorTitle(),
+      showTrailing: true,
+      trailingColor: this.themePrimary,
+      onLeadingClick: (): void => {
         this.showAssistantEditorSheet = false
-      })
-
-      Text(this.getAssistantEditorTitle())
-        .fontSize(17)
-        .fontWeight(FontWeight.Bold)
-        .fontColor($r('app.color.text_primary'))
-        .layoutWeight(1)
-        .textAlign(TextAlign.Center)
-        .maxLines(1)
-        .textOverflow({ overflow: TextOverflow.Ellipsis })
-
-      Button() {
-        SymbolGlyph($r('sys.symbol.checkmark'))
-          .fontSize(18)
-          .fontColor([this.themePrimary])
-      }
-      .type(ButtonType.Circle)
-      .width(36)
-      .height(36)
-      .backgroundColor(Color.Transparent)
-      .stateEffect(false)
-      .systemMaterial(new uiMaterial.ImmersiveMaterial({
-        style: uiMaterial.ImmersiveStyle.REGULAR,
-        materialColor: Color.Transparent,
-        applyShadow: false,
-        interactive: true,
-        lightEffect: { color: undefined }
-      }))
-      .onClick(() => {
+      },
+      onTrailingClick: (): void => {
         this.saveAssistantEditor()
-      })
-    }
-    .width('100%')
-    .height(56)
-    .padding({ left: 16, right: 16 })
+      }
+    })
   }
 
   @Builder
@@ -4304,41 +4268,12 @@ struct Index {
   @Builder
   private AssistantModelSheetBuilder() {
     Column() {
-      Row() {
-        Button() {
-          SymbolGlyph($r('sys.symbol.xmark'))
-            .fontSize(16)
-            .fontColor([$r('app.color.text_primary')])
-        }
-        .type(ButtonType.Circle)
-        .width(36)
-        .height(36)
-        .backgroundColor(Color.Transparent)
-        .stateEffect(false)
-        .systemMaterial(new uiMaterial.ImmersiveMaterial({
-          style: uiMaterial.ImmersiveStyle.REGULAR,
-          materialColor: Color.Transparent,
-          applyShadow: false,
-          interactive: true,
-          lightEffect: { color: undefined }
-        }))
-        .onClick(() => {
+      ImmersiveSheetHeader({
+        title: $r('app.string.assistant_default_model'),
+        onLeadingClick: (): void => {
           this.showAssistantModelSheet = false
-        })
-
-        Text($r('app.string.assistant_default_model'))
-          .fontSize(17)
-          .fontWeight(FontWeight.Bold)
-          .fontColor($r('app.color.text_primary'))
-          .layoutWeight(1)
-          .textAlign(TextAlign.Center)
-
-        Blank()
-          .width(36)
-      }
-      .width('100%')
-      .height(56)
-      .padding({ left: 16, right: 16 })
+        }
+      })
 
       ModelSelectorContent({
         currentModelId: this.assistantFormDefaultModelId,
@@ -4420,6 +4355,13 @@ struct Index {
   @Builder
   private AssistantSwitchSheetBuilder() {
     Column() {
+      ImmersiveSheetHeader({
+        title: $r('app.string.assistant_switch_title'),
+        onLeadingClick: (): void => {
+          this.showAssistantSwitchSheet = false
+        }
+      })
+
       if (this.assistants.length === 0) {
         Column() {
           IndexEmptyStateCard({
@@ -5113,44 +5055,13 @@ struct Index {
   SettingsSheetBuilder() {
     Column() {
       Column() {
-        // 自绘标题栏：唯一关闭入口，避免系统遮罩/拖拽关闭造成“点快了自己收缩/吞点击”。
-        Row() {
-          ChatFloatingImmersiveButton({
-            barWidth: 36,
-            barHeight: 36,
-            iconResource: $r('sys.symbol.xmark'),
-            iconSize: 18,
-            iconColor: [this.themePrimary],
-            responsePadding: 0,
-            onButtonClick: (): void => {
-              this.closeAllSettingsSheets()
-            }
-          }) {
-            Stack({ alignContent: Alignment.Center }) {
-              SymbolGlyph($r('sys.symbol.xmark'))
-                .fontSize(18)
-                .fontColor([this.themePrimary])
-            }
-            .width(36)
-            .height(36)
+        ImmersiveSheetHeader({
+          title: getSettingsSheetTitleText(this.activeSettingsSheetType),
+          leadingColor: this.themePrimary,
+          onLeadingClick: (): void => {
+            this.closeAllSettingsSheets()
           }
-
-          Text(getSettingsSheetTitleText(this.activeSettingsSheetType))
-            .fontSize(17)
-            .fontWeight(FontWeight.Bold)
-            .fontColor($r('app.color.text_primary'))
-            .layoutWeight(1)
-            .textAlign(TextAlign.Center)
-
-          // 占位，保持标题居中
-          Column()
-            .width(36)
-            .height(36)
-        }
-        .width('100%')
-        .height(56)
-        .padding({ left: 16, right: 16 })
-        .alignItems(VerticalAlign.Center)
+        })
 
         IndexSettingsSheetContent({
           settingsSheetType: this.activeSettingsSheetType,
@@ -5172,7 +5083,7 @@ struct Index {
       .borderRadius({ topLeft: 28, topRight: 28, bottomLeft: 28, bottomRight: 28 })
     }
     .width('100%')
-    .padding({ left: 16, right: 16, top: 8, bottom: 8 })
+    .padding({ top: 8, bottom: 8 })
     .backgroundColor(Color.Transparent)
   }
 
@@ -5309,44 +5220,17 @@ struct Index {
   @Builder
   SystemPromptSheetBuilder() {
     Column() {
-      Row() {
-        Button() {
-          SymbolGlyph($r('sys.symbol.xmark'))
-            .fontSize(18)
-            .fontColor([$r('app.color.text_secondary')])
-        }
-        .type(ButtonType.Circle)
-        .width(36)
-        .height(36)
-        .backgroundColor($r('app.color.divider'))
-        .onClick(() => {
+      ImmersiveSheetHeader({
+        title: $r('app.string.system_prompt_edit_title'),
+        showTrailing: true,
+        trailingColor: this.themePrimary,
+        onLeadingClick: (): void => {
           this.showSystemPromptSheet = false
-        })
-
-        Text($r('app.string.system_prompt_edit_title'))
-          .fontSize(17)
-          .fontWeight(FontWeight.Bold)
-          .fontColor($r('app.color.text_primary'))
-          .layoutWeight(1)
-          .textAlign(TextAlign.Center)
-
-        Button() {
-          SymbolGlyph($r('sys.symbol.checkmark'))
-            .fontSize(18)
-            .fontColor([Color.White])
-        }
-        .type(ButtonType.Circle)
-        .width(36)
-        .height(36)
-        .backgroundColor(this.themePrimary)
-        .onClick(() => {
+        },
+        onTrailingClick: (): void => {
           this.saveSystemPrompt()
-        })
-      }
-      .width('100%')
-      .height(56)
-      .padding({ left: 16, right: 16 })
-      .alignItems(VerticalAlign.Center)
+        }
+      })
 
       Text($r('app.string.system_prompt_hint'))
         .fontSize(12)

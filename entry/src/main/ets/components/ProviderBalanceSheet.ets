@@ -5,9 +5,9 @@
 import { getAppUiState } from '../state/AppUiState'
 import { BalanceResult } from '../services/ProviderBalanceService'
 import { withColorAlpha } from '../utils/ColorAlphaUtils'
-import { ChatFloatingImmersiveButton } from './ChatFloatingImmersiveButton'
 import { ProviderIcon } from './ProviderIcon'
 import { uiMaterial } from '@kit.ArkUI'
+import { ImmersiveSheetHeader } from './ImmersiveSheetHeader'
 
 @ObservedV2
 export class BalanceSheetState {
@@ -28,67 +28,21 @@ export struct ProviderBalanceSheet {
 
   build() {
     Column() {
-      // 顶部标题与操作
-      Row() {
-        ChatFloatingImmersiveButton({
-          barWidth: 34,
-          barHeight: 34,
-          iconResource: $r('sys.symbol.xmark'),
-          iconSize: 15,
-          iconColor: [this.themePrimary],
-          responsePadding: 3,
-          onButtonClick: (): void => {
-            this.onClose()
-          }
-        }) {
-          Stack({ alignContent: Alignment.Center }) {
-            SymbolGlyph($r('sys.symbol.xmark'))
-              .fontSize(15)
-              .fontColor([this.themePrimary])
-          }
-          .width(34)
-          .height(34)
+      ImmersiveSheetHeader({
+        title: $r('app.string.balance_query'),
+        trailingSymbol: $r('sys.symbol.arrow_clockwise'),
+        showTrailing: true,
+        trailingButtonEnabled: !this.state.loading,
+        trailingLoading: this.state.loading,
+        leadingColor: this.themePrimary,
+        trailingColor: this.themePrimary,
+        onLeadingClick: (): void => {
+          this.onClose()
+        },
+        onTrailingClick: (): void => {
+          this.onRefresh()
         }
-
-        Text($r('app.string.balance_query'))
-          .fontSize(16)
-          .fontWeight(FontWeight.Bold)
-          .fontColor($r('app.color.text_primary'))
-          .layoutWeight(1)
-          .textAlign(TextAlign.Center)
-
-        ChatFloatingImmersiveButton({
-          barWidth: 34,
-          barHeight: 34,
-          iconResource: $r('sys.symbol.arrow_clockwise'),
-          iconSize: 16,
-          iconColor: [this.themePrimary],
-          responsePadding: 3,
-          onButtonClick: (): void => {
-            if (!this.state.loading) {
-              this.onRefresh()
-            }
-          }
-        }) {
-          Stack({ alignContent: Alignment.Center }) {
-            if (this.state.loading) {
-              LoadingProgress()
-                .width(16)
-                .height(16)
-                .color(this.themePrimary)
-            } else {
-              SymbolGlyph($r('sys.symbol.arrow_clockwise'))
-                .fontSize(16)
-                .fontColor([this.themePrimary])
-            }
-          }
-          .width(34)
-          .height(34)
-        }
-      }
-      .width('100%')
-      .padding({ left: 14, right: 14, top: 6, bottom: 10 })
-      .alignItems(VerticalAlign.Center)
+      })
 
       // 列表 / 空态
       if (this.state.results.length === 0 && this.state.loading) {

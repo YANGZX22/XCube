@@ -51,6 +51,8 @@ export class AppUiState {
   @Trace themeMarkdownTableAltBg: string = '#F8F7FF'
   @Trace themeMarkdownTableBorder: string = '#E9E6FF'
   @Trace chatFontSize: number = 15
+  @Trace chatSerifFontEnabled: boolean = false
+  @Trace chatSerifFontFamily: string = 'common'
   @Trace chatInputEnterKeySend: boolean = false
   @Trace ttsEnabled: boolean = true
   @Trace materialType: number = 100   // ADAPTIVE
@@ -202,6 +204,12 @@ function applyAppUiStateValue<T extends string | number | boolean>(state: AppUiS
     case AppStorageKeys.CHAT_FONT_SIZE:
       state.chatFontSize = value as number
       return
+    case AppStorageKeys.CHAT_SERIF_FONT_ENABLED:
+      state.chatSerifFontEnabled = value as boolean
+      return
+    case AppStorageKeys.CHAT_SERIF_FONT_FAMILY:
+      state.chatSerifFontFamily = value as string
+      return
     case AppStorageKeys.CHAT_INPUT_ENTER_KEY_SEND:
       state.chatInputEnterKeySend = value as boolean
       return
@@ -308,6 +316,10 @@ function createAppUiStateFromStorage(): AppUiState {
   applyAppUiStateValue(state, AppStorageKeys.THEME_MARKDOWN_TABLE_BORDER,
     readStorageValue<string>(AppStorageKeys.THEME_MARKDOWN_TABLE_BORDER, state.themeMarkdownTableBorder))
   applyAppUiStateValue(state, AppStorageKeys.CHAT_FONT_SIZE, readStorageValue<number>(AppStorageKeys.CHAT_FONT_SIZE, 15))
+  applyAppUiStateValue(state, AppStorageKeys.CHAT_SERIF_FONT_ENABLED,
+    readStorageValue<boolean>(AppStorageKeys.CHAT_SERIF_FONT_ENABLED, false))
+  applyAppUiStateValue(state, AppStorageKeys.CHAT_SERIF_FONT_FAMILY,
+    readStorageValue<string>(AppStorageKeys.CHAT_SERIF_FONT_FAMILY, 'common'))
   applyAppUiStateValue(state, AppStorageKeys.CHAT_INPUT_ENTER_KEY_SEND,
     readStorageValue<boolean>(AppStorageKeys.CHAT_INPUT_ENTER_KEY_SEND, false))
   applyAppUiStateValue(state, AppStorageKeys.MATERIAL_TYPE,
@@ -379,6 +391,8 @@ export function syncAppUiStateFromStorage(): void {
   state.themeMarkdownTableAltBg = freshState.themeMarkdownTableAltBg
   state.themeMarkdownTableBorder = freshState.themeMarkdownTableBorder
   state.chatFontSize = freshState.chatFontSize
+  state.chatSerifFontEnabled = freshState.chatSerifFontEnabled
+  state.chatSerifFontFamily = freshState.chatSerifFontFamily
   state.chatInputEnterKeySend = freshState.chatInputEnterKeySend
   state.materialType = freshState.materialType
   state.materialLevel = freshState.materialLevel
@@ -502,6 +516,10 @@ function resolveAppUiStatePath(path: string): string {
       return 'themeMarkdownTableBorder'
     case AppStorageKeys.CHAT_FONT_SIZE:
       return 'chatFontSize'
+    case AppStorageKeys.CHAT_SERIF_FONT_ENABLED:
+      return 'chatSerifFontEnabled'
+    case AppStorageKeys.CHAT_SERIF_FONT_FAMILY:
+      return 'chatSerifFontFamily'
     case AppStorageKeys.CHAT_INPUT_ENTER_KEY_SEND:
       return 'chatInputEnterKeySend'
     case AppStorageKeys.MATERIAL_TYPE:

@@ -2,6 +2,7 @@ import { uiMaterial } from '@kit.ArkUI'
 import { ToolPreviewEntry } from '../../utils/ToolPayloadSummaryUtils'
 import { getAppUiState } from '../../state/AppUiState'
 import { pickLocalizedText } from '../../utils/LocalizedTextUtils'
+import { ImmersiveSheetHeader } from '../ImmersiveSheetHeader'
 
 @ComponentV2
 export struct ChatToolExecutionApprovalSheetContent {
@@ -36,40 +37,38 @@ export struct ChatToolExecutionApprovalSheetContent {
   }
 
   build() {
-    Column({ space: 16 }) {
-      Row() {
-        Column({ space: 4 }) {
-          Text(this.titleText.trim() !== ''
-            ? this.titleText
-            : pickLocalizedText('确认工具调用', 'Approve Tool Call'))
-            .fontSize(20)
-            .fontWeight(FontWeight.Bold)
-            .fontColor($r('app.color.text_primary'))
+    Column() {
+      ImmersiveSheetHeader({
+        title: this.titleText.trim() !== ''
+          ? this.titleText
+          : pickLocalizedText('确认工具调用', 'Approve Tool Call'),
+        onLeadingClick: (): void => {
+          this.onCancel()
+        }
+      })
 
-          if (this.showWriteSafetyUi) {
+      Column({ space: 16 }) {
+        if (this.showWriteSafetyUi) {
+          Row({ space: 10 }) {
             Text(pickLocalizedText(
               '该工具可能修改外部状态，请确认后再继续。',
               'This tool may change external state. Confirm before continuing.'
             ))
               .fontSize(12)
               .fontColor($r('app.color.text_secondary'))
-          }
-        }
-        .layoutWeight(1)
-        .alignItems(HorizontalAlign.Start)
+              .layoutWeight(1)
 
-        if (this.showWriteSafetyUi) {
-          Text(pickLocalizedText('写操作', 'Write'))
-            .fontSize(11)
-            .fontWeight(FontWeight.Medium)
-            .fontColor(Color.White)
-            .padding({ left: 10, right: 10, top: 5, bottom: 5 })
-            .borderRadius(999)
-            .backgroundColor('#D9485F')
+            Text(pickLocalizedText('写操作', 'Write'))
+              .fontSize(11)
+              .fontWeight(FontWeight.Medium)
+              .fontColor(Color.White)
+              .padding({ left: 10, right: 10, top: 5, bottom: 5 })
+              .borderRadius(999)
+              .backgroundColor('#D9485F')
+          }
+          .width('100%')
+          .alignItems(VerticalAlign.Center)
         }
-      }
-      .width('100%')
-      .alignItems(VerticalAlign.Top)
 
       if (this.showWriteSafetyUi) {
         Column({ space: 10 }) {
@@ -328,9 +327,11 @@ export struct ChatToolExecutionApprovalSheetContent {
           })
       }
       .width('100%')
+      }
+      .width('100%')
+      .padding({ left: 20, right: 20, bottom: 24 })
     }
     .width('100%')
-    .padding({ left: 20, right: 20, top: 12, bottom: 24 })
     .backgroundColor(Color.Transparent)
   }
 

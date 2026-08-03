@@ -17,6 +17,7 @@ import {
 } from './AssistantAvatar'
 import { getAppUiState } from '../state/AppUiState'
 import { generateSoftColor, getAllSoftColors, TRANSPARENT_BG_COLOR } from '../utils/IconGeneratorUtils'
+import { ImmersiveSheetHeader } from './ImmersiveSheetHeader'
 
 const ASSISTANT_AVATAR_MODE_QQ: string = 'qq'
 const ASSISTANT_AVATAR_MODE_GALLERY: string = 'gallery'
@@ -231,61 +232,21 @@ export struct AssistantAvatarEditorSheet {
   }
 
   build() {
-    Column({ space: 18 }) {
-      Row() {
-        Button() {
-          SymbolGlyph($r('sys.symbol.xmark'))
-            .fontSize(16)
-            .fontColor([$r('app.color.text_secondary')])
-        }
-        .type(ButtonType.Circle)
-        .width(34)
-        .height(34)
-        .backgroundColor(Color.Transparent)
-        .stateEffect(false)
-        .systemMaterial(new uiMaterial.ImmersiveMaterial({
-          style: uiMaterial.ImmersiveStyle.REGULAR,
-          materialColor: Color.Transparent,
-          applyShadow: false,
-          interactive: true,
-          lightEffect: { color: undefined }
-        }))
-        .onClick(() => {
+    Column() {
+      ImmersiveSheetHeader({
+        title: $r('app.string.assistant_avatar_edit_title'),
+        showTrailing: true,
+        trailingColor: this.themePrimary,
+        onLeadingClick: (): void => {
           this.onClose()
-        })
-
-        Text($r('app.string.assistant_avatar_edit_title'))
-          .fontSize(17)
-          .fontWeight(FontWeight.Bold)
-          .fontColor($r('app.color.text_primary'))
-          .layoutWeight(1)
-          .textAlign(TextAlign.Center)
-
-        Button() {
-          SymbolGlyph($r('sys.symbol.checkmark'))
-            .fontSize(16)
-            .fontColor([this.themePrimary])
-        }
-        .type(ButtonType.Circle)
-        .width(34)
-        .height(34)
-        .backgroundColor(Color.Transparent)
-        .stateEffect(false)
-        .systemMaterial(new uiMaterial.ImmersiveMaterial({
-          style: uiMaterial.ImmersiveStyle.REGULAR,
-          materialColor: Color.Transparent,
-          applyShadow: false,
-          interactive: true,
-          lightEffect: { color: undefined }
-        }))
-        .onClick(() => {
+        },
+        onTrailingClick: (): void => {
           this.confirmAvatarValue()
-        })
-      }
-      .width('100%')
-      .alignItems(VerticalAlign.Center)
+        }
+      })
 
-      AssistantAvatarView({
+      Column({ space: 18 }) {
+        AssistantAvatarView({
         value: this.getPreviewValue(),
         color: this.tempAvatarColor,
         avatarSize: 88,
@@ -298,7 +259,7 @@ export struct AssistantAvatarEditorSheet {
         .alignSelf(ItemAlign.Center)
         .bindSheet($$this.showColorPicker, this.ColorPickerSheet(), {
           height: 400,
-          showClose: true,
+          showClose: false,
           backgroundColor: Color.Transparent,
           systemMaterial: new uiMaterial.ImmersiveMaterial({
             style: uiMaterial.ImmersiveStyle.REGULAR
@@ -478,9 +439,11 @@ export struct AssistantAvatarEditorSheet {
         .width('100%')
         .alignItems(HorizontalAlign.Start)
       }
+      }
+      .width('100%')
+      .padding({ left: 20, right: 20, top: 18, bottom: 28 })
     }
     .width('100%')
-    .padding({ left: 20, right: 20, top: 18, bottom: 28 })
     .backgroundColor(Color.Transparent)
   }
 
@@ -568,12 +531,15 @@ export struct AssistantAvatarEditorSheet {
 
   @Builder
   private ColorPickerSheet() {
-    Column({ space: 16 }) {
-      Text($r('app.string.icon_color_picker_title'))
-        .fontSize(18)
-        .fontWeight(FontWeight.Medium)
-        .fontColor($r('app.color.text_primary'))
-        .width('100%')
+    Column() {
+      ImmersiveSheetHeader({
+        title: $r('app.string.icon_color_picker_title'),
+        onLeadingClick: (): void => {
+          this.showColorPicker = false
+        }
+      })
+
+      Column({ space: 16 }) {
 
       Row() {
         Column() {
@@ -632,9 +598,11 @@ export struct AssistantAvatarEditorSheet {
       .width('100%')
       .height(250)
       .scrollBar(BarState.Off)
+      }
+      .width('100%')
+      .padding({ left: 20, right: 20, bottom: 20 })
     }
     .width('100%')
-    .padding(20)
     .backgroundColor(Color.Transparent)
   }
 

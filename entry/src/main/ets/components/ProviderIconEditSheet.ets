@@ -11,6 +11,7 @@ import {
 } from '../utils/IconGeneratorUtils'
 import { showToast } from '../utils/ToastUtil'
 import { getAppUiState } from '../state/AppUiState'
+import { ImmersiveSheetHeader } from './ImmersiveSheetHeader'
 
 const ICON_EDIT_MODE_TEXT: string = 'text'
 const ICON_EDIT_MODE_GALLERY: string = 'gallery'
@@ -213,45 +214,21 @@ export struct ProviderIconEditSheet {
   }
 
   build() {
-    Column({ space: 16 }) {
-      Row() {
-        Button() {
-          SymbolGlyph($r('sys.symbol.xmark'))
-            .fontSize(16)
-            .fontColor([$r('app.color.text_secondary')])
-        }
-        .type(ButtonType.Circle)
-        .width(34)
-        .height(34)
-        .backgroundColor($r('app.color.divider'))
-        .onClick(() => {
+    Column() {
+      ImmersiveSheetHeader({
+        title: $r('app.string.icon_edit_title'),
+        showTrailing: true,
+        trailingColor: this.themePrimary,
+        onLeadingClick: (): void => {
           this.onClose()
-        })
-
-        Text($r('app.string.icon_edit_title'))
-          .fontSize(17)
-          .fontWeight(FontWeight.Bold)
-          .fontColor($r('app.color.text_primary'))
-          .layoutWeight(1)
-          .textAlign(TextAlign.Center)
-
-        Button() {
-          SymbolGlyph($r('sys.symbol.checkmark'))
-            .fontSize(16)
-            .fontColor([Color.White])
-        }
-        .type(ButtonType.Circle)
-        .width(34)
-        .height(34)
-        .backgroundColor(this.themePrimary)
-        .onClick(() => {
+        },
+        onTrailingClick: (): void => {
           this.confirmSave()
-        })
-      }
-      .width('100%')
-      .alignItems(VerticalAlign.Center)
+        }
+      })
 
-      ProviderIcon({
+      Column({ space: 16 }) {
+        ProviderIcon({
         iconType: this.getPreviewIconType(),
         iconPath: '',
         textIcon: this.textValue,
@@ -266,7 +243,7 @@ export struct ProviderIconEditSheet {
         .alignSelf(ItemAlign.Center)
         .bindSheet($$this.showColorPicker, this.ColorPickerSheet(), {
           height: 400,
-          showClose: true,
+          showClose: false,
           onDisappear: () => {
             this.showColorPicker = false
           }
@@ -299,9 +276,11 @@ export struct ProviderIconEditSheet {
             this.onResetToPreset()
           })
       }
+      }
+      .width('100%')
+      .padding({ left: 20, right: 20, top: 18, bottom: 28 })
     }
     .width('100%')
-    .padding({ left: 20, right: 20, top: 18, bottom: 28 })
     .backgroundColor(getAppUiState().themeBackground)
   }
 
@@ -483,12 +462,15 @@ export struct ProviderIconEditSheet {
 
   @Builder
   private ColorPickerSheet() {
-    Column({ space: 16 }) {
-      Text($r('app.string.icon_color_picker_title'))
-        .fontSize(18)
-        .fontWeight(FontWeight.Medium)
-        .fontColor($r('app.color.text_primary'))
-        .width('100%')
+    Column() {
+      ImmersiveSheetHeader({
+        title: $r('app.string.icon_color_picker_title'),
+        onLeadingClick: (): void => {
+          this.showColorPicker = false
+        }
+      })
+
+      Column({ space: 16 }) {
 
       Row() {
         Column() {
@@ -547,9 +529,11 @@ export struct ProviderIconEditSheet {
       .width('100%')
       .height(250)
       .scrollBar(BarState.Off)
+      }
+      .width('100%')
+      .padding({ left: 20, right: 20, bottom: 20 })
     }
     .width('100%')
-    .padding(20)
     .backgroundColor(getAppUiState().themeBackground)
   }
 }

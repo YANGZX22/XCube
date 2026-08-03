@@ -1,7 +1,7 @@
 import { ModelProvider } from '../../models/ChatModels'
 import { ModelSelectorContent } from '../ModelSelector'
 import { getAppUiState } from '../../state/AppUiState'
-import { uiMaterial } from '@kit.ArkUI'
+import { ImmersiveSheetHeader } from '../ImmersiveSheetHeader'
 
 @ComponentV2
 export struct DefaultModelSelectSheetContent {
@@ -20,40 +20,12 @@ export struct DefaultModelSelectSheetContent {
 
   build() {
     Column() {
-      Row() {
-        Button() {
-          SymbolGlyph($r('sys.symbol.xmark'))
-            .fontSize(16)
-            .fontColor([$r('app.color.text_primary')])
-        }
-        .type(ButtonType.Circle)
-        .width(36)
-        .height(36)
-        .backgroundColor(Color.Transparent)
-        .systemMaterial(new uiMaterial.ImmersiveMaterial({
-          style: uiMaterial.ImmersiveStyle.REGULAR,
-          materialColor: Color.Transparent,
-          applyShadow: false,
-          interactive: true,
-          lightEffect: { color: undefined }
-        }))
-        .onClick(() => {
+      ImmersiveSheetHeader({
+        title: this.title,
+        onLeadingClick: (): void => {
           this.onClose()
-        })
-
-        Text(this.title)
-          .fontSize(17)
-          .fontWeight(FontWeight.Bold)
-          .fontColor($r('app.color.text_primary'))
-          .layoutWeight(1)
-          .textAlign(TextAlign.Center)
-
-        Blank()
-          .width(36)
-      }
-      .width('100%')
-      .height(56)
-      .padding({ left: 16, right: 16 })
+        }
+      })
 
       Row() {
         Text($r('app.string.default_model_current_selection'))

@@ -3,6 +3,7 @@ import { ToolConfig, ToolPermissionLevel, ToolSourceType } from '../../models/Ch
 import { getAppUiState } from '../../state/AppUiState'
 import { withColorAlpha } from '../../utils/ColorAlphaUtils'
 import { pickLocalizedText } from '../../utils/LocalizedTextUtils'
+import { ImmersiveSheetHeader } from '../ImmersiveSheetHeader'
 
 class McpToolGroup {
   sourceId: string = ''
@@ -230,76 +231,21 @@ export struct ChatToolPickerSheetContent {
 
   build() {
     Column() {
-      Row({ space: 12 }) {
-        Button({ type: ButtonType.Normal, stateEffect: false }) {
-          Stack({ alignContent: Alignment.Center }) {
-            SymbolGlyph($r('sys.symbol.xmark'))
-              .fontSize(18)
-              .fontColor([this.themePrimary])
-          }
-          .width('100%')
-          .height('100%')
-        }
-        .width(36)
-        .height(36)
-        .padding(0)
-        .borderRadius(18)
-        .clip(true)
-        .backgroundColor(Color.Transparent)
-        .systemMaterial(new uiMaterial.ImmersiveMaterial({
-          style: uiMaterial.ImmersiveStyle.REGULAR,
-          interactive: true,
-          lightEffect: { color: undefined }
-        }))
-        .onClick(() => {
+      ImmersiveSheetHeader({
+        title: pickLocalizedText('选择工具', 'Choose Tools'),
+        trailingSymbol: $r('sys.symbol.arrow_clockwise'),
+        showTrailing: true,
+        trailingButtonEnabled: !this.isRefreshingMcpToolAvailability,
+        trailingLoading: this.isRefreshingMcpToolAvailability,
+        leadingColor: this.themePrimary,
+        trailingColor: this.themePrimary,
+        onLeadingClick: (): void => {
           this.onClose()
-        })
-
-        Text(pickLocalizedText('选择工具', 'Choose Tools'))
-          .fontSize(18)
-          .fontWeight(FontWeight.Bold)
-          .fontColor($r('app.color.text_primary'))
-          .layoutWeight(1)
-          .textAlign(TextAlign.Start)
-
-        Button({ type: ButtonType.Normal, stateEffect: false }) {
-          Stack({ alignContent: Alignment.Center }) {
-            if (this.isRefreshingMcpToolAvailability) {
-              LoadingProgress()
-                .width(18)
-                .height(18)
-                .color(this.themePrimary)
-            } else {
-              SymbolGlyph($r('sys.symbol.arrow_clockwise'))
-                .fontSize(18)
-                .fontColor([this.themePrimary])
-            }
-          }
-          .width('100%')
-          .height('100%')
+        },
+        onTrailingClick: (): void => {
+          this.onRefresh()
         }
-        .width(36)
-        .height(36)
-        .padding(0)
-        .borderRadius(18)
-        .clip(true)
-        .backgroundColor(Color.Transparent)
-        .enabled(!this.isRefreshingMcpToolAvailability)
-        .opacity(this.isRefreshingMcpToolAvailability ? 0.72 : 1)
-        .systemMaterial(new uiMaterial.ImmersiveMaterial({
-          style: uiMaterial.ImmersiveStyle.REGULAR,
-          interactive: true,
-          lightEffect: { color: undefined }
-        }))
-        .onClick(() => {
-          if (!this.isRefreshingMcpToolAvailability) {
-            this.onRefresh()
-          }
-        })
-      }
-      .width('100%')
-      .padding({ left: 16, right: 16, top: 12, bottom: 8 })
-      .alignItems(VerticalAlign.Center)
+      })
 
       Scroll() {
         Column({ space: 18 }) {

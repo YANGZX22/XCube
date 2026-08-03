@@ -1,6 +1,7 @@
 import { ModelProvider, ModelInfo, ModelInfoExtendedJson } from '../../models/ChatModels'
 import { ModelSelectorContent } from '../ModelSelector'
 import { ModelEditSheet } from '../ModelEditSheet'
+import { ImmersiveSheetHeader } from '../ImmersiveSheetHeader'
 
 @ComponentV2
 export struct ChatModelSelectorSheetContent {
@@ -19,6 +20,7 @@ export struct ChatModelSelectorSheetContent {
   @Event onCancelEdit: () => void = (): void => {}
   @Event onEditAdvancedExpandedChange: (expanded: boolean) => void =
     (_expanded: boolean): void => {}
+  @Event onClose: () => void = (): void => {}
 
   @Builder
   private ModelEditSheetBuilder() {
@@ -41,25 +43,12 @@ export struct ChatModelSelectorSheetContent {
   build() {
     if (this.activePanel === 'selector') {
       Column() {
-        // 自定义标题栏
-        Row() {
-          Blank()
-            .layoutWeight(1)
-
-          Text($r('app.string.select_model'))
-            .fontSize(17)
-            .fontWeight(FontWeight.Bold)
-            .fontColor($r('app.color.text_primary'))
-            .layoutWeight(1)
-            .textAlign(TextAlign.Center)
-
-          Blank()
-            .layoutWeight(1)
-        }
-        .width('100%')
-        .height(56)
-        .padding({ left: 16, right: 16 })
-        .backgroundColor(Color.Transparent)
+        ImmersiveSheetHeader({
+          title: $r('app.string.select_model'),
+          onLeadingClick: (): void => {
+            this.onClose()
+          }
+        })
 
         ModelSelectorContent({
           providers: this.providers,

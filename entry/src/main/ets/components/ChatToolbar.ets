@@ -7,6 +7,7 @@ import { ReasoningLevel } from '../models/ChatModels'
 import { ReasoningControlMode } from '../services/ProviderCompatibilityRegistry'
 import { getAppUiState } from '../state/AppUiState'
 import { uiMaterial } from '@kit.ArkUI'
+import { ImmersiveSheetHeader } from './ImmersiveSheetHeader'
 
 @ComponentV2
 export struct ChatToolbar {
@@ -320,10 +321,20 @@ export struct ChatToolbar {
   @Builder
   private ReasoningSliderSheet() {
     Column() {
-      this.ReasoningSliderContent()
+      ImmersiveSheetHeader({
+        title: $r('app.string.chat_toolbar_reasoning'),
+        onLeadingClick: (): void => {
+          this.showReasoningPanel = false
+        }
+      })
+
+      Column() {
+        this.ReasoningSliderContent()
+      }
+      .width('100%')
+      .padding({ left: 16, right: 16, bottom: 12 })
     }
     .width('100%')
-    .padding({ left: 16, right: 16, top: 8, bottom: 12 })
     .backgroundColor(Color.Transparent)
   }
 

@@ -11,6 +11,7 @@ import { buildModelIconRenderData, ModelIconRenderData } from '../utils/ModelIco
 import { getAppUiState } from '../state/AppUiState'
 import { uiMaterial } from '@kit.ArkUI'
 import { withColorAlpha } from '../utils/ColorAlphaUtils'
+import { ImmersiveSheetHeader } from './ImmersiveSheetHeader'
 
 @ComponentV2
 export struct ModelPickerSheet {
@@ -260,59 +261,17 @@ export struct ModelPickerSheet {
 
   @Builder
   SheetHeader() {
-    Row() {
-      Button() {
-        SymbolGlyph($r('sys.symbol.xmark'))
-          .fontSize(16)
-          .fontColor([$r('app.color.text_secondary')])
-      }
-      .type(ButtonType.Circle)
-      .width(32)
-      .height(32)
-      .backgroundColor(Color.Transparent)
-      .systemMaterial(new uiMaterial.ImmersiveMaterial({
-        style: uiMaterial.ImmersiveStyle.REGULAR,
-        materialColor: Color.Transparent,
-        applyShadow: false,
-        interactive: true,
-        lightEffect: { color: undefined }
-      }))
-      .onClick(() => {
+    ImmersiveSheetHeader({
+      title: $r('app.string.select_models'),
+      showTrailing: true,
+      trailingColor: this.themePrimary,
+      onLeadingClick: (): void => {
         this.onCancel()
-      })
-
-      Column() {
-        Text($r('app.string.select_models'))
-          .fontSize(17)
-          .fontWeight(FontWeight.Bold)
-          .fontColor($r('app.color.text_primary'))
-      }
-      .layoutWeight(1)
-      .alignItems(HorizontalAlign.Center)
-
-      Button() {
-        SymbolGlyph($r('sys.symbol.checkmark'))
-          .fontSize(16)
-          .fontColor([this.themePrimary])
-      }
-      .type(ButtonType.Circle)
-      .width(32)
-      .height(32)
-      .backgroundColor(Color.Transparent)
-      .systemMaterial(new uiMaterial.ImmersiveMaterial({
-        style: uiMaterial.ImmersiveStyle.REGULAR,
-        materialColor: Color.Transparent,
-        applyShadow: false,
-        interactive: true,
-        lightEffect: { color: undefined }
-      }))
-      .onClick(() => {
+      },
+      onTrailingClick: (): void => {
         this.confirmSelection()
-      })
-    }
-    .width('100%')
-    .height(56)
-    .padding({ left: 16, right: 16 })
+      }
+    })
   }
 
   @Builder

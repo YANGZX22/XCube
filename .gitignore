@@ -34,5 +34,9 @@ docs/appgallery
 **/rawfile/sherpa-onnx-sense-voice-*/
 *.onnx
 
+# 仅限个人使用的字体，不公开
+**/rawfile/fonts/AnthropicSerif-Text-Regular-Static.otf
+**/rawfile/fonts/AnthropicSerif-Text-RegularItalic-Static.otf
+
 # Runtime JavaScript crash reports
 jscrash-*.txt
