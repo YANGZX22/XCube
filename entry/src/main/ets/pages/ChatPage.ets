@@ -117,6 +117,7 @@ import { getPdfTextExtractionService } from '../services/PdfTextExtractionServic
 import { getImageTextRecognitionService } from '../services/ImageTextRecognitionService'
 import { resolveKnowledgeToolExposure } from './chat/KnowledgeToolExposurePolicy'
 import { ImmersiveSheetHeader } from '../components/ImmersiveSheetHeader'
+import { AskUserCard } from '../components/AskUserCard'
 
 const DOMAIN = 0x0003
 const TAG = 'ChatPage'
@@ -258,6 +259,8 @@ export struct ChatPage {
   private pendingToolExecutionApprovalDecision: ToolApprovalResult | null = null
   private pendingToolExecutionApprovalToolCall: ToolCall | null = null
   private pendingToolExecutionApprovalToolId: string = ''
+  // ask_user 待回答栈：Map 插入顺序是到达顺序，界面始终展示最后一项。
+  @Local pendingAskUserCalls: ToolCall[] = []
   // 联网查询全局可用状态（工具中心控制）
   @Local webSearchAvailable: boolean = false
   @Local webSearchConversationEnabled: boolean = false
@@ -455,6 +458,10 @@ export struct ChatPage {
 
     // 注册内置工具
     registerBuiltinTools()
+    ServiceRegistry.toolExecution().setPendingAskUserChangedCallback((): void => {
+      this.syncPendingAskUserCalls()
+    })
+    this.syncPendingAskUserCalls()
     ServiceRegistry.toolExecution().setApprovalCallback(async (toolCall, tool) => {
       return await this.requestToolExecutionApproval(
         toolCall,
@@ -580,6 +587,7 @@ export struct ChatPage {
     this.isPageVisible = false
     this.cancelPendingToolExecutionApproval('页面已关闭，工具调用未执行。')
     ServiceRegistry.toolExecution().setApprovalCallback(null)
+    ServiceRegistry.toolExecution().setPendingAskUserChangedCallback(null)
     // 页面切换时只停止当前播报。系统 TextReader 由应用级共享服务持有，
     // 不在导航转场中 release，避免阻塞转场并与下一页面的 init 竞争。
     this.ttsRequestGeneration += 1
@@ -650,6 +658,7 @@ export struct ChatPage {
     await this.applyLoadedProviders(loadResult.providers)
 
     this.isLoading = false
+    this.syncPendingAskUserCalls()
 
     const elapsed = Date.now() - startTime
     hilog.info(DOMAIN, TAG, '✅ 聊天页面数据加载完成 (耗时: %{public}dms)', elapsed)
@@ -3103,6 +3112,55 @@ export struct ChatPage {
     })
   }
 
+  private getAskUserPromptMaxHeightVp(): number {
+    if (this.windowHeightVp <= 0) {
+      return 620
+    }
+    const safeAreaVp = this.px2vp(this.topAvoidHeight) + this.px2vp(this.bottomAvoidHeight)
+    return Math.max(280, this.windowHeightVp - safeAreaVp - 72)
+  }
+
+  @Builder
+  private AskUserPromptOverlayBuilder() {
+    Stack({ alignContent: Alignment.Center }) {
+      Column()
+        .width('100%')
+        .height('100%')
+        .backgroundColor(this.isDarkMode ? '#99000000' : '#66000000')
+
+      ForEach(this.pendingAskUserCalls, (toolCall: ToolCall, index: number) => {
+        Scroll() {
+          AskUserCard({
+            toolCall: toolCall,
+            isAnswered: false,
+            compactMode: false,
+            pendingCount: this.pendingAskUserCalls.length,
+            onAnswer: (toolCallId: string, answerJson: string): void => {
+              this.handleAskUserAnswer(toolCallId, answerJson)
+            }
+          })
+        }
+        .width('92%')
+        .constraintSize({ maxWidth: 560, maxHeight: this.getAskUserPromptMaxHeightVp() })
+        .scrollBar(BarState.Auto)
+        .opacity(index === this.pendingAskUserCalls.length - 1 ? 1 : 0)
+        .hitTestBehavior(index === this.pendingAskUserCalls.length - 1 ? HitTestMode.Default : HitTestMode.None)
+        .zIndex(index + 1)
+      }, (toolCall: ToolCall): string => toolCall.id)
+    }
+    .width('100%')
+    .height('100%')
+    .padding({
+      top: this.px2vp(this.topAvoidHeight) + 18,
+      bottom: this.px2vp(this.bottomAvoidHeight) + 18,
+      left: 12,
+      right: 12
+    })
+    .position({ x: 0, y: 0 })
+    .zIndex(80)
+    .transition(TransitionEffect.OPACITY.animation({ duration: 180, curve: Curve.EaseOut }))
+  }
+
   build() {
     HdsNavDestination() {
       Stack() {
@@ -3172,6 +3230,9 @@ export struct ChatPage {
           },
           onAskUserAnswer: (toolCallId: string, answerJson: string): void => {
             this.handleAskUserAnswer(toolCallId, answerJson)
+          },
+          onAskUserOpen: (toolCallId: string): void => {
+            this.handleOpenPendingAskUser(toolCallId)
           },
           onSelect: (messageId: string): void => {
             this.handleToggleMessageSelection(messageId)
@@ -3553,6 +3614,12 @@ export struct ChatPage {
             .transition(TransitionEffect.OPACITY.animation({ duration: 200 }))
         }
 
+        // ask_user 模态栈：所有待回答卡片都保持挂载，仅栈顶可见。
+        // 新请求到达时压到最上层；回答后自动露出前一张，不会覆盖其草稿状态。
+        if (this.pendingAskUserCalls.length > 0) {
+          this.AskUserPromptOverlayBuilder()
+        }
+
         // 隐藏的 Pyodide 运行时宿主（在 WebView 内运行真正的 CPython，供 python 工具使用）
         PyodideWebHost()
       }
@@ -3594,6 +3661,9 @@ export struct ChatPage {
       this.syncActiveSessionBinding()
     })
     .onBackPressed((): boolean => {
+      if (this.pendingAskUserCalls.length > 0) {
+        return true
+      }
       if (this.showImagePreview) {
         this.showImagePreview = false
         this.updateStatusBar()
@@ -5044,6 +5114,40 @@ export struct ChatPage {
     const resolved = ServiceRegistry.toolExecution().resolvePendingAskUserAnswer(toolCallId, answerJson)
     if (!resolved) {
       console.warn('ChatPage', `handleAskUserAnswer: no pending ask_user resolver for ${toolCallId}`)
+      this.syncPendingAskUserCalls()
+    }
+  }
+
+  private hasToolCallInCurrentMessages(toolCallId: string): boolean {
+    for (let i = 0; i < this.messages.length; i++) {
+      for (let j = 0; j < this.messages[i].toolCalls.length; j++) {
+        if (this.messages[i].toolCalls[j].id === toolCallId) {
+          return true
+        }
+      }
+    }
+    return false
+  }
+
+  private syncPendingAskUserCalls(): void {
+    const pending = ServiceRegistry.toolExecution().getPendingAskUserToolCalls()
+    const currentSessionPending: ToolCall[] = []
+    for (let i = 0; i < pending.length; i++) {
+      if (this.hasToolCallInCurrentMessages(pending[i].id)) {
+        currentSessionPending.push(pending[i])
+      }
+    }
+    this.pendingAskUserCalls = currentSessionPending
+    if (currentSessionPending.length > 0) {
+      this.safeStopInputSession()
+    }
+  }
+
+  private handleOpenPendingAskUser(toolCallId: string): void {
+    const promoted = ServiceRegistry.toolExecution().promotePendingAskUserAnswer(toolCallId)
+    if (!promoted) {
+      this.showChatSnack(pickLocalizedText('该问题已回答或已失效', 'This question is already answered or expired'))
+      this.syncPendingAskUserCalls()
     }
   }
 

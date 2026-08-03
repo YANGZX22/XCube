@@ -448,13 +448,35 @@ export struct ToolCallCard {
     }
   }
 
-  private hasAnyFailedResult(): boolean {
+  private getResolvedResultCount(): number {
+    let count = 0
     for (let i = 0; i < this.entries.length; i++) {
-      if (this.entryHasFailedResult(this.entries[i])) {
-        return true
+      if (this.entries[i].toolResult !== null) {
+        count++
       }
     }
-    return false
+    return count
+  }
+
+  private getFailedResultCount(): number {
+    let count = 0
+    for (let i = 0; i < this.entries.length; i++) {
+      if (this.entryHasFailedResult(this.entries[i])) {
+        count++
+      }
+    }
+    return count
+  }
+
+  private hasMixedResultStatus(): boolean {
+    const resolvedCount = this.getResolvedResultCount()
+    const failedCount = this.getFailedResultCount()
+    return failedCount > 0 && failedCount < resolvedCount
+  }
+
+  private haveAllResolvedResultsFailed(): boolean {
+    const resolvedCount = this.getResolvedResultCount()
+    return resolvedCount > 0 && this.getFailedResultCount() === resolvedCount
   }
 
   // Python 工具不展示成功/失败状态图标（按产品要求）
@@ -471,10 +493,20 @@ export struct ToolCallCard {
   }
 
   private getResultStatusSymbol(): Resource {
-    return this.hasAnyFailedResult() ? $r('sys.symbol.xmark_circle') : $r('sys.symbol.checkmark_circle')
+    if (this.hasMixedResultStatus()) {
+      return $r('sys.symbol.exclamationmark_circle')
+    }
+    return this.haveAllResolvedResultsFailed()
+      ? $r('sys.symbol.xmark_circle')
+      : $r('sys.symbol.checkmark_circle')
   }
 
   private getResultStatusColor(): ResourceColor {
-    return this.hasAnyFailedResult() ? $r('app.color.status_error') : $r('app.color.status_success')
+    if (this.hasMixedResultStatus()) {
+      return $r('app.color.status_warning')
+    }
+    return this.haveAllResolvedResultsFailed()
+      ? $r('app.color.status_error')
+      : $r('app.color.status_success')
   }
 }

@@ -34,7 +34,7 @@ export type SubAgentToolRunner = (
 ) => Promise<ToolResult>
 
 // 子智能体工具调用镜像回调：把子智能体的工具调用/结果同步进主对话的 AI 消息，
-// 让 ask_user 提问卡片、图表、Canvas、日程等交互式工具对用户可见
+// 让 ask_user 弹窗/结果栏、图表、Canvas、日程等交互式工具对用户可见
 export type SubAgentToolCallStarted = (toolCall: ToolCall) => void
 export type SubAgentToolCallCompleted = (toolCall: ToolCall, toolResult: ToolResult) => void
 
@@ -390,14 +390,14 @@ export class SubAgentService {
         toolEvent.argsPreview = this.truncateForPreview(toolCall.arguments, 300)
         live.toolEvents.push(toolEvent)
 
-        // 预先打上来源标签并镜像到主对话消息：ask_user 提问卡片、图表、
+        // 预先打上来源标签并镜像到主对话消息：ask_user 弹窗/结果栏、图表、
         // Canvas、日程审批等交互式工具由此对用户可见（ToolCall 为 @ObservedV2，
         // 执行过程中回填的显示名等字段会实时反映到卡片上）
         toolCall.sourceLabel = `${SUB_AGENT_SOURCE_LABEL_PREFIX}${report.name}`
         runtime.onToolCallStarted(toolCall)
 
         // ask_user 需要等待用户作答（可能耗时数分钟），不占用全局工具互斥锁，
-        // 以免阻塞其他子智能体和多个提问卡片并行等待
+        // 以免阻塞其他子智能体和多个提问请求并行等待
         const toolResult = this.isAskUserFunction(toolCall.functionName)
           ? await runtime.toolRunner(toolCall, allowedFunctionNames, budgetKey)
           : await this.executeToolCallExclusively(runtime, toolCall, allowedFunctionNames, budgetKey)

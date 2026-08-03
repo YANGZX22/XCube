@@ -49,11 +49,15 @@ interface WebSearchPaginationArgs {
 
 class PendingAskUserRuntime {
   resolve: (answerJson: string | null) => void
+  toolCall: ToolCall
 
-  constructor(resolve: (answerJson: string | null) => void) {
+  constructor(resolve: (answerJson: string | null) => void, toolCall: ToolCall) {
     this.resolve = resolve
+    this.toolCall = toolCall
   }
 }
+
+export type PendingAskUserChangedCallback = () => void
 
 // 工具执行服务 - 负责执行工具调用
 export class ToolExecutionService {
@@ -63,6 +67,7 @@ export class ToolExecutionService {
   private cancelCheckCallback: CancelCheckCallback | null = null
   private approvalCallback: ToolApprovalCallback | null = null
   private pendingAskUserAnswers: Map<string, PendingAskUserRuntime> = new Map()
+  private pendingAskUserChangedCallback: PendingAskUserChangedCallback | null = null
   private webSearchQueryCounts: Map<string, number> = new Map()
 
   private constructor() {
@@ -90,12 +95,42 @@ export class ToolExecutionService {
     this.approvalCallback = callback
   }
 
+  setPendingAskUserChangedCallback(callback: PendingAskUserChangedCallback | null): void {
+    this.pendingAskUserChangedCallback = callback
+  }
+
+  getPendingAskUserToolCalls(): ToolCall[] {
+    const calls: ToolCall[] = []
+    this.pendingAskUserAnswers.forEach((runtime: PendingAskUserRuntime) => {
+      calls.push(runtime.toolCall)
+    })
+    return calls
+  }
+
+  promotePendingAskUserAnswer(toolCallId: string): boolean {
+    const runtime = this.pendingAskUserAnswers.get(toolCallId)
+    if (runtime === undefined) {
+      return false
+    }
+    this.pendingAskUserAnswers.delete(toolCallId)
+    this.pendingAskUserAnswers.set(toolCallId, runtime)
+    this.notifyPendingAskUserChanged()
+    return true
+  }
+
+  private notifyPendingAskUserChanged(): void {
+    if (this.pendingAskUserChangedCallback !== null) {
+      this.pendingAskUserChangedCallback()
+    }
+  }
+
   resolvePendingAskUserAnswer(toolCallId: string, answerJson: string | null): boolean {
     const runtime = this.pendingAskUserAnswers.get(toolCallId)
     if (runtime === undefined) {
       return false
     }
     this.pendingAskUserAnswers.delete(toolCallId)
+    this.notifyPendingAskUserChanged()
     runtime.resolve(answerJson)
     return true
   }
@@ -330,7 +365,8 @@ export class ToolExecutionService {
           existing.resolve(null)
           this.pendingAskUserAnswers.delete(toolCall.id)
         }
-        this.pendingAskUserAnswers.set(toolCall.id, new PendingAskUserRuntime(resolve))
+        this.pendingAskUserAnswers.set(toolCall.id, new PendingAskUserRuntime(resolve, toolCall))
+        this.notifyPendingAskUserChanged()
       })
     } catch (error) {
       console.error('ToolExecutionService', `ask_user failed: ${JSON.stringify(error)}`)

@@ -56,7 +56,7 @@ interface MathChartToolPayload {
 class ToolCallRenderGroup {
   key: string = ''
   isAskUser: boolean = false
-  askUserCall: ToolCall = new ToolCall()
+  askUserCalls: ToolCall[] = []
   entries: ToolCallCardEntry[] = []
   anyExecuting: boolean = false
 }
@@ -203,6 +203,7 @@ export struct MessageBubble {
   @Event onTTSStop: () => void = () => {}
   @Event onAskUserAnswer: (toolCallId: string, answerJson: string) => void =
     (_toolCallId: string, _answerJson: string): void => {}
+  @Event onAskUserOpen: (toolCallId: string) => void = (_toolCallId: string): void => {}
   // 多选模式回调
   @Event onSelect: (messageId: string) => void = () => {}
   @Event onEnterMultiSelect: (messageId: string) => void = () => {}
@@ -936,18 +937,21 @@ export struct MessageBubble {
   }
 
   // 按工具身份（规范化函数名 + 来源标签）合并同一消息内的多次调用；
-  // AskUser 卡片保持逐次独立渲染，被隐藏的调用（如已有搜索引用的联网搜索）不入组
+  // 同一消息的 AskUser 调用合并成一个结果栏，被隐藏的调用（如已有搜索引用的联网搜索）不入组
   private getToolCallRenderGroups(): ToolCallRenderGroup[] {
     const groups: ToolCallRenderGroup[] = []
     const groupIndex = new Map<string, ToolCallRenderGroup>()
+    let askGroup: ToolCallRenderGroup | undefined = undefined
     for (let i = 0; i < this.message.toolCalls.length; i++) {
       const toolCall = this.message.toolCalls[i]
       if (this.isAskUserToolCall(toolCall)) {
-        const askGroup = new ToolCallRenderGroup()
-        askGroup.key = 'ask_' + toolCall.id + '_' + i.toString()
-        askGroup.isAskUser = true
-        askGroup.askUserCall = toolCall
-        groups.push(askGroup)
+        if (askGroup === undefined) {
+          askGroup = new ToolCallRenderGroup()
+          askGroup.key = 'ask_group'
+          askGroup.isAskUser = true
+          groups.push(askGroup)
+        }
+        askGroup.askUserCalls.push(toolCall)
         continue
       }
       if (this.shouldHideToolCallCard(toolCall)) {
@@ -975,6 +979,16 @@ export struct MessageBubble {
   // 分组卡片的入参是本次 build 里临时创建的普通对象，不具备 @Trace 可观察性；
   // 把结果数量与执行状态编入 ForEach 键值，状态变化时重建卡片以保证刷新
   private buildToolCallRenderGroupKey(group: ToolCallRenderGroup, index: number): string {
+    if (group.isAskUser) {
+      let resolvedResults = 0
+      for (let i = 0; i < group.askUserCalls.length; i++) {
+        if (this.findToolResultForCall(group.askUserCalls[i].id) !== null) {
+          resolvedResults++
+        }
+      }
+      return group.key + '_' + group.askUserCalls.length.toString() + '_' + resolvedResults.toString() + '_' +
+        index.toString()
+    }
     let resolvedResults = 0
     for (let i = 0; i < group.entries.length; i++) {
       if (group.entries[i].toolResult !== null) {
@@ -992,6 +1006,31 @@ export struct MessageBubble {
       }
     }
     return null
+  }
+
+  private getToolResultContentForCall(toolCallId: string): string {
+    const result = this.findToolResultForCall(toolCallId)
+    return result !== null ? result.content : ''
+  }
+
+  private getAskUserResultContents(toolCalls: ToolCall[]): string[] {
+    const contents: string[] = []
+    for (let i = 0; i < toolCalls.length; i++) {
+      contents.push(this.getToolResultContentForCall(toolCalls[i].id))
+    }
+    return contents
+  }
+
+  private areAllAskUserCallsAnswered(toolCalls: ToolCall[]): boolean {
+    if (toolCalls.length === 0) {
+      return false
+    }
+    for (let i = 0; i < toolCalls.length; i++) {
+      if (this.findToolResultForCall(toolCalls[i].id) === null) {
+        return false
+      }
+    }
+    return true
   }
 
   private parseMathChartToolPayload(content: string): MathChartToolPayload | null {
@@ -1913,10 +1952,16 @@ export struct MessageBubble {
               ForEach(this.getToolCallRenderGroups(), (group: ToolCallRenderGroup) => {
                 if (group.isAskUser) {
                   AskUserCard({
-                    toolCall: group.askUserCall,
-                    isAnswered: this.findToolResultForCall(group.askUserCall.id) !== null,
+                    toolCall: group.askUserCalls.length > 0 ? group.askUserCalls[0] : new ToolCall(),
+                    toolCalls: group.askUserCalls,
+                    isAnswered: this.areAllAskUserCallsAnswered(group.askUserCalls),
+                    compactMode: true,
+                    resultContents: this.getAskUserResultContents(group.askUserCalls),
                     onAnswer: (toolCallId: string, answerJson: string): void => {
                       this.onAskUserAnswer(toolCallId, answerJson)
+                    },
+                    onRequestAnswer: (toolCallId: string): void => {
+                      this.onAskUserOpen(toolCallId)
                     }
                   })
                     .margin({ bottom: 6 })
@@ -2381,7 +2426,7 @@ export struct MessageBubble {
 
   private shouldHideToolCallCard(toolCall: ToolCall): boolean {
     // 子智能体发起的工具调用不在主对话中渲染卡片（活动可在“实时预览”面板查看）；
-    // ask_user 提问卡片在分组前单独处理，不受此过滤影响，图表提取同样不走卡片渲染
+    // ask_user 结果栏在分组前单独处理，不受此过滤影响，图表提取同样不走卡片渲染
     if (this.isSubAgentOriginToolCall(toolCall)) {
       return true
     }

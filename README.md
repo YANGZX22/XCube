@@ -36,9 +36,10 @@ These screenshots reflect the current HarmonyOS 7 (API 26.0.0) build:
 
 <table>
   <tr>
-    <td align="center"><img src="docs/screenshots/IMAGE1.jpg" width="200" /><br/><sub>Chat</sub></td>
-    <td align="center"><img src="docs/screenshots/IMAGE2.jpg" width="200" /><br/><sub>Conversations</sub></td>
-    <td align="center"><img src="docs/screenshots/IMAGE3.jpg" width="200" /><br/><sub>Knowledge Base</sub></td>
+    <td align="center"><img src="docs/screenshots/IMAGE2.jpg" width="200" /><br/><sub>Conversation Lists</sub></td>
+    <td align="center"><img src="docs/screenshots/IMAGE3.jpg" width="200" /><br/><sub>Knowledge Base Page</sub></td>
+    <td align="center"><img src="docs/screenshots/IMAGE1.jpg" width="200" /><br/><sub>Chat Page</sub></td>
+    <td align="center"><img src="docs/screenshots/IMAGE4.jpg" width="200" /><br/><sub>Working with Sub-agents</sub></td>
   </tr>
 </table>
 
@@ -58,7 +59,7 @@ XCube includes a Sub-agent tool for decomposable work such as multi-topic resear
 
 - **Isolated contexts**: each sub-agent receives an independent conversation context containing only the self-contained task written for it by the main model. Sub-agents cannot recursively dispatch more sub-agents.
 - **Inherited tools and independent budgets**: sub-agents can use the tools enabled for the current conversation. The main model and every sub-agent each receive five default web searches of their own, with extra searches approved separately by the user. When Knowledge Base is on, each also receives up to five `knowledge_search` queries without consuming another agent's allowance.
-- **Live preview**: sub-agent output, tool calls, and execution status appear in the Sub-agent Live Preview panel. Question cards that require user input remain visible in the main conversation.
+- **Live preview**: sub-agent output, tool calls, and execution status appear in the Sub-agent Live Preview panel. `ask_user` prompts open one at a time as dialogs, while the main conversation retains only an expandable result row.
 
 Enable **Sub-agent** from the tool selector in the chat input area. The main model decides whether and how to split the request; the selected model must fully support tool calling.
 

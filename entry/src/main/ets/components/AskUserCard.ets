@@ -33,13 +33,20 @@ interface AskUserAnswerPayload {
 @ComponentV2
 export struct AskUserCard {
   @Param toolCall: ToolCall = new ToolCall()
+  @Param toolCalls: ToolCall[] = []
   @Param isAnswered: boolean = false
+  @Param compactMode: boolean = false
+  @Param resultContent: string = ''
+  @Param resultContents: string[] = []
+  @Param pendingCount: number = 1
   @Event onAnswer: (toolCallId: string, answerJson: string) => void =
     (_toolCallId: string, _answerJson: string): void => {}
+  @Event onRequestAnswer: (toolCallId: string) => void = (_toolCallId: string): void => {}
 
   @Local textAnswers: Map<string, string> = new Map()
   @Local multiAnswers: Map<string, Set<string>> = new Map()
   @Local customAnswers: Map<string, string> = new Map()
+  @Local isExpanded: boolean = false
 
   private get themePrimary(): string {
     return getAppUiState().themePrimary
@@ -57,10 +64,49 @@ export struct AskUserCard {
     return getAppUiState().isDarkMode
   }
 
+  private getDisplayedToolCalls(): ToolCall[] {
+    if (this.compactMode && this.toolCalls.length > 0) {
+      return this.toolCalls
+    }
+    return [this.toolCall]
+  }
+
+  private getResultContentAt(index: number): string {
+    if (this.compactMode && index >= 0 && index < this.resultContents.length) {
+      return this.resultContents[index]
+    }
+    return this.resultContent
+  }
+
+  private getPendingResultCount(): number {
+    const calls = this.getDisplayedToolCalls()
+    let pending = 0
+    for (let i = 0; i < calls.length; i++) {
+      if (this.getResultContentAt(i).trim() === '') {
+        pending++
+      }
+    }
+    return pending
+  }
+
+  private getLatestPendingToolCallId(): string {
+    const calls = this.getDisplayedToolCalls()
+    for (let i = calls.length - 1; i >= 0; i--) {
+      if (this.getResultContentAt(i).trim() === '') {
+        return calls[i].id
+      }
+    }
+    return calls.length > 0 ? calls[calls.length - 1].id : this.toolCall.id
+  }
+
   private parseQuestions(): AskUserQuestion[] {
+    return this.parseQuestionsFor(this.toolCall)
+  }
+
+  private parseQuestionsFor(toolCall: ToolCall): AskUserQuestion[] {
     const out: AskUserQuestion[] = []
     try {
-      const parsed = JSON.parse(this.toolCall.arguments) as AskUserArgs
+      const parsed = JSON.parse(toolCall.arguments) as AskUserArgs
       const rawQs = parsed.questions
       if (!Array.isArray(rawQs)) {
         return out
@@ -221,12 +267,56 @@ export struct AskUserCard {
     return selected ? this.themePrimary : $r('app.color.surface')
   }
 
-  private isOptionSelected(question: AskUserQuestion, option: string): boolean {
+  private isOptionSelected(question: AskUserQuestion, option: string, resultContent: string = ''): boolean {
+    if (this.compactMode && resultContent.trim() !== '') {
+      const answer = this.getResolvedAnswer(question.id, resultContent)
+      return answer !== undefined && Array.isArray(answer.selected_options) && answer.selected_options.includes(option)
+    }
     if (question.selectionType === 'multi') {
       const set = this.multiAnswers.get(question.id)
       return set !== undefined && set.has(option)
     }
     return this.textAnswers.get(question.id) === option
+  }
+
+  private getResolvedAnswer(questionId: string, resultContent: string): AskUserAnswerItem | undefined {
+    if (resultContent.trim() === '') {
+      return undefined
+    }
+    try {
+      const payload = JSON.parse(resultContent) as AskUserAnswerPayload
+      return payload.answers[questionId]
+    } catch (_error) {
+      return undefined
+    }
+  }
+
+  private getDisplayedTextAnswer(question: AskUserQuestion, resultContent: string = ''): string {
+    if (!this.compactMode) {
+      return this.textAnswers.get(question.id) ?? ''
+    }
+    const answer = this.getResolvedAnswer(question.id, resultContent)
+    if (answer === undefined) {
+      return ''
+    }
+    return answer.answer ?? ''
+  }
+
+  private getDisplayedCustomAnswer(question: AskUserQuestion, resultContent: string = ''): string {
+    if (!this.compactMode) {
+      return this.customAnswers.get(question.id) ?? ''
+    }
+    const answer = this.getResolvedAnswer(question.id, resultContent)
+    if (answer === undefined) {
+      return ''
+    }
+    return answer.custom_answer ?? ''
+  }
+
+  private toggleExpanded(): void {
+    this.getUIContext().animateTo({ duration: 180, curve: Curve.EaseOut }, () => {
+      this.isExpanded = !this.isExpanded
+    })
   }
 
   build() {
@@ -235,7 +325,9 @@ export struct AskUserCard {
         SymbolGlyph($r('sys.symbol.message'))
           .fontSize(14)
           .fontColor([this.themePrimary])
-        Text(this.parseQuestions().length > 1 ? '我有几个问题想确认一下' : '我有个问题想确认一下')
+        Text(this.compactMode
+          ? (this.isAnswered ? '向用户提问结果' : '等待用户回答')
+          : (this.parseQuestions().length > 1 ? '我有几个问题想确认一下' : '我有个问题想确认一下'))
           .fontSize(13)
           .fontWeight(FontWeight.Medium)
           .fontColor($r('app.color.text_primary'))
@@ -248,66 +340,79 @@ export struct AskUserCard {
             .backgroundColor($r('app.color.status_success'))
             .padding({ left: 6, right: 6, top: 2, bottom: 2 })
             .borderRadius(6)
+        } else if (this.compactMode) {
+          Text('回答')
+            .fontSize(10)
+            .fontWeight(FontWeight.Medium)
+            .fontColor(Color.White)
+            .backgroundColor(this.themePrimary)
+            .padding({ left: 8, right: 8, top: 3, bottom: 3 })
+            .borderRadius(8)
+            .onClick(() => {
+              this.onRequestAnswer(this.getLatestPendingToolCallId())
+            })
+        }
+
+        if (this.compactMode && this.getDisplayedToolCalls().length > 1) {
+          Text(this.getPendingResultCount() > 0
+            ? `${this.getPendingResultCount()} 待答`
+            : `${this.getDisplayedToolCalls().length} 次`)
+            .fontSize(10)
+            .fontColor($r('app.color.text_tertiary'))
+            .margin({ left: 8 })
+        }
+
+        if (!this.compactMode && this.pendingCount > 1) {
+          Text(`${this.pendingCount} 个待回答`)
+            .fontSize(10)
+            .fontColor(this.themePrimary)
+            .margin({ left: 8 })
+        }
+
+        if (this.compactMode) {
+          SymbolGlyph($r('sys.symbol.chevron_down'))
+            .fontSize(12)
+            .fontColor([$r('app.color.text_tertiary')])
+            .rotate({ angle: this.isExpanded ? 180 : 0 })
+            .animation({ duration: 180, curve: Curve.EaseOut })
+            .margin({ left: 8 })
+            .onClick(() => {
+              this.toggleExpanded()
+            })
         }
       }
       .width('100%')
 
-      ForEach(this.parseQuestions(), (question: AskUserQuestion, index: number) => {
-        Column({ space: 6 }) {
-          Text(question.question !== '' ? question.question : `问题 ${index + 1}`)
-            .fontSize(13)
-            .fontColor($r('app.color.text_primary'))
-            .width('100%')
-
-          if (question.options.length > 0) {
-            Flex({ wrap: FlexWrap.Wrap }) {
-              ForEach(question.options, (option: string) => {
-                this.OptionChip(question, option)
-              }, (option: string) => option)
+      if (!this.compactMode) {
+        ForEach(this.parseQuestions(), (question: AskUserQuestion, index: number) => {
+          this.QuestionBlock(question, index, '')
+        }, (question: AskUserQuestion) => question.id)
+      } else if (this.isExpanded) {
+        ForEach(this.getDisplayedToolCalls(), (toolCall: ToolCall, callIndex: number) => {
+          Column({ space: 8 }) {
+            if (callIndex > 0) {
+              Divider()
+                .color($r('app.color.divider'))
+                .margin({ top: 2, bottom: 2 })
             }
-          }
 
-          if (question.selectionType === 'text') {
-            TextInput({
-              text: this.textAnswers.get(question.id) ?? '',
-              placeholder: '输入你的回答'
-            })
-              .width('100%')
-              .height(36)
-              .fontSize(13)
-              .fontColor($r('app.color.text_primary'))
-              .placeholderColor($r('app.color.text_tertiary'))
-              .backgroundColor($r('app.color.background'))
-              .borderRadius(8)
-              .enabled(!this.isAnswered)
-              .onChange((value: string) => {
-                this.setTextAnswer(question.id, value)
-              })
-          } else {
-            TextInput({
-              text: this.customAnswers.get(question.id) ?? '',
-              placeholder: '自定义答案，可留空'
-            })
-              .width('100%')
-              .height(34)
-              .fontSize(12)
-              .fontColor($r('app.color.text_primary'))
-              .placeholderColor($r('app.color.text_tertiary'))
-              .backgroundColor($r('app.color.surface'))
-              .borderRadius(8)
-              .enabled(!this.isAnswered)
-              .onChange((value: string) => {
-                this.setCustomAnswer(question.id, value)
-              })
-          }
-        }
-        .width('100%')
-        .padding(10)
-        .backgroundColor(this.getQuestionBackgroundColor())
-        .borderRadius(10)
-      }, (question: AskUserQuestion) => question.id)
+            if (this.getDisplayedToolCalls().length > 1) {
+              Text(`第 ${callIndex + 1} 次提问`)
+                .fontSize(11)
+                .fontWeight(FontWeight.Medium)
+                .fontColor($r('app.color.text_secondary'))
+                .width('100%')
+            }
 
-      if (!this.isAnswered) {
+            ForEach(this.parseQuestionsFor(toolCall), (question: AskUserQuestion, questionIndex: number) => {
+              this.QuestionBlock(question, questionIndex, this.getResultContentAt(callIndex))
+            }, (question: AskUserQuestion) => question.id)
+          }
+          .width('100%')
+        }, (toolCall: ToolCall) => toolCall.id)
+      }
+
+      if (!this.isAnswered && !this.compactMode) {
         Row({ space: 8 }) {
           Button('跳过')
             .height(32)
@@ -336,7 +441,7 @@ export struct AskUserCard {
       }
     }
     .width('100%')
-    .padding(12)
+    .padding(this.compactMode ? 10 : 12)
     .backgroundColor(Color.Transparent)
     .borderRadius(12)
     .border({ width: 1, color: this.themePrimaryLight })
@@ -356,19 +461,77 @@ export struct AskUserCard {
   }
 
   @Builder
-  private OptionChip(question: AskUserQuestion, option: string) {
+  private QuestionBlock(question: AskUserQuestion, index: number, resultContent: string) {
+    Column({ space: 6 }) {
+      Text(question.question !== '' ? question.question : `问题 ${index + 1}`)
+        .fontSize(13)
+        .fontColor($r('app.color.text_primary'))
+        .width('100%')
+
+      if (question.options.length > 0) {
+        Flex({ wrap: FlexWrap.Wrap }) {
+          ForEach(question.options, (option: string) => {
+            this.OptionChip(question, option, resultContent)
+          }, (option: string) => option)
+        }
+      }
+
+      if (question.selectionType === 'text') {
+        TextInput({
+          text: this.getDisplayedTextAnswer(question, resultContent),
+          placeholder: this.compactMode ? '未回答' : '输入你的回答'
+        })
+          .width('100%')
+          .height(36)
+          .fontSize(13)
+          .fontColor($r('app.color.text_primary'))
+          .placeholderColor($r('app.color.text_tertiary'))
+          .backgroundColor($r('app.color.background'))
+          .borderRadius(8)
+          .enabled(!this.isAnswered && !this.compactMode)
+          .onChange((value: string) => {
+            this.setTextAnswer(question.id, value)
+          })
+      } else {
+        TextInput({
+          text: this.getDisplayedCustomAnswer(question, resultContent),
+          placeholder: this.compactMode ? '无自定义答案' : '自定义答案，可留空'
+        })
+          .width('100%')
+          .height(34)
+          .fontSize(12)
+          .fontColor($r('app.color.text_primary'))
+          .placeholderColor($r('app.color.text_tertiary'))
+          .backgroundColor($r('app.color.surface'))
+          .borderRadius(8)
+          .enabled(!this.isAnswered && !this.compactMode)
+          .onChange((value: string) => {
+            this.setCustomAnswer(question.id, value)
+          })
+      }
+    }
+    .width('100%')
+    .padding(10)
+    .backgroundColor(this.getQuestionBackgroundColor())
+    .borderRadius(10)
+  }
+
+  @Builder
+  private OptionChip(question: AskUserQuestion, option: string, resultContent: string) {
     Row() {
       Text(option)
         .fontSize(12)
-        .fontColor(this.isOptionSelected(question, option) ? Color.White : $r('app.color.text_primary'))
+        .fontColor(this.isOptionSelected(question, option, resultContent)
+          ? Color.White
+          : $r('app.color.text_primary'))
     }
     .padding({ left: 10, right: 10, top: 6, bottom: 6 })
     .margin({ right: 6, bottom: 6 })
-    .backgroundColor(this.getChipBackgroundColor(this.isOptionSelected(question, option)))
+    .backgroundColor(this.getChipBackgroundColor(this.isOptionSelected(question, option, resultContent)))
     .borderRadius(12)
     .border({ width: 0.5, color: $r('app.color.divider') })
     .onClick(() => {
-      if (this.isAnswered) {
+      if (this.isAnswered || this.compactMode) {
         return
       }
       if (question.selectionType === 'multi') {

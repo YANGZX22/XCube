@@ -36,9 +36,10 @@
 
 <table>
   <tr>
-    <td align="center"><img src="docs/screenshots/IMAGE1.jpg" width="200" /><br/><sub>对话</sub></td>
-    <td align="center"><img src="docs/screenshots/IMAGE2.jpg" width="200" /><br/><sub>会话</sub></td>
-    <td align="center"><img src="docs/screenshots/IMAGE3.jpg" width="200" /><br/><sub>知识库</sub></td>
+    <td align="center"><img src="docs/screenshots/IMAGE2.jpg" width="200" /><br/><sub>会话列表</sub></td>
+    <td align="center"><img src="docs/screenshots/IMAGE3.jpg" width="200" /><br/><sub>知识库界面</sub></td>
+    <td align="center"><img src="docs/screenshots/IMAGE1.jpg" width="200" /><br/><sub>对话界面</sub></td>
+    <td align="center"><img src="docs/screenshots/IMAGE4.jpg" width="200" /><br/><sub>和子智能体协同工作</sub></td>
   </tr>
 </table>
 
@@ -58,7 +59,7 @@ XCube 内置“子智能体”工具。对于多主题调研、多来源对比�
 
 - **隔离上下文**：每个子智能体获得独立对话上下文，只接收主模型为它编写的自包含任务，不会递归派生新的子智能体。
 - **继承工具与独立预算**：子智能体使用当前对话已开启的工具。主模型和每个子智能体各自拥有默认 5 次联网搜索额度，追加搜索也分别征求用户确认；开启知识库时，也各自拥有最多 5 次 `knowledge_search` 查询额度，不会相互挤占。
-- **实时预览**：子智能体的输出、工具调用和执行状态会显示在“子智能体实时预览”面板中；需要用户确认的提问卡片仍会出现在主对话。
+- **实时预览**：子智能体的输出、工具调用和执行状态会显示在“子智能体实时预览”面板中；`ask_user` 会以弹窗逐个询问，主对话仅保留可展开的结果栏。
 
 在对话输入区的工具选择中开启“子智能体”后即可使用。是否派出、如何拆分由主模型判断；所选模型需完整支持工具调用。
 

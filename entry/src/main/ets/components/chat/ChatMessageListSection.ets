@@ -50,6 +50,7 @@ export struct ChatMessageListSection {
   @Event onTTSStop: () => void = (): void => {}
   @Event onAskUserAnswer: (toolCallId: string, answerJson: string) => void =
     (_toolCallId: string, _answerJson: string): void => {}
+  @Event onAskUserOpen: (toolCallId: string) => void = (_toolCallId: string): void => {}
   @Event onSelect: (messageId: string) => void = (_messageId: string): void => {}
   @Event onEnterMultiSelect: (messageId: string) => void = (_messageId: string): void => {}
   @Event onSwitchVersion: (message: ChatMessage, delta: number) => void = (_message: ChatMessage, _delta: number): void => {}
@@ -371,6 +372,9 @@ export struct ChatMessageListSection {
                 },
                 onAskUserAnswer: (toolCallId: string, answerJson: string): void => {
                   this.onAskUserAnswer(toolCallId, answerJson)
+                },
+                onAskUserOpen: (toolCallId: string): void => {
+                  this.onAskUserOpen(toolCallId)
                 },
                 onSelect: (messageId: string): void => {
                   this.onSelect(messageId)

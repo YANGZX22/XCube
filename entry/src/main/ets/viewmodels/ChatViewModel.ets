@@ -2121,7 +2121,7 @@ ${limitedSearchContext}
         onAIMessageUpdated(aiMessage)
         return subToolResult
       },
-      // 镜像子智能体的工具调用到主对话消息：ask_user 提问卡片、图表由此渲染并可交互，
+      // 镜像子智能体的工具调用到主对话消息：ask_user 结果栏、图表由此渲染并可交互，
       // 普通工具卡片会按“子智能体”来源标签在 MessageBubble 中隐藏（活动见实时预览面板）；
       // 配对与图表提取均按 toolCallId 关联
       (subToolCall: ToolCall): void => {

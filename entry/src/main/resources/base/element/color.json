@@ -69,6 +69,10 @@
       "value": "#EF4444"
     },
     {
+      "name": "status_warning",
+      "value": "#F59E0B"
+    },
+    {
       "name": "chat_user_bubble",
       "value": "#7568DF"
     },

@@ -1797,7 +1797,7 @@ function createSubAgentToolDefinition(): ToolDefinition {
     "properties": {
       "tasks": {
         "type": "array",
-        "description": "1 to ${SUB_AGENT_MAX_TASKS} independent sub-tasks to run in parallel. Each sub-agent works in an isolated context with the same tools exposed to this conversation except sub_agent itself. Every sub-agent has its own web_search and knowledge_search budgets, independent from the main conversation and other sub-agents. Sub-agent ask_user questions and generated charts appear in the main conversation; other sub-agent tool activity is visible to the user in a live preview panel.",
+        "description": "1 to ${SUB_AGENT_MAX_TASKS} independent sub-tasks to run in parallel. Each sub-agent works in an isolated context with the same tools exposed to this conversation except sub_agent itself. Every sub-agent has its own web_search and knowledge_search budgets, independent from the main conversation and other sub-agents. Sub-agent ask_user questions open as queued dialogs and generated charts appear in the main conversation; other sub-agent tool activity is visible to the user in a live preview panel.",
         "items": {
           "type": "object",
           "properties": {
