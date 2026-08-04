@@ -1,7 +1,8 @@
 import { Markdown, MarkdownController } from '@luvi/lv-markdown-in'
 import { ChatMarkdownHybridRenderer } from './ChatMarkdownHybridRenderer'
+import { AppStorageKeys } from '../config/AppStorageKeys'
 import { MarkdownRenderer } from '../services/PreferencesService'
-import { getAppUiState } from '../state/AppUiState'
+import { getAppUiState, observeAppUiState } from '../state/AppUiState'
 import { ensureLvMarkdownCodeFont } from '../utils/LvMarkdownFontUtils'
 import {
   getMarkdownBlockSpacing,
@@ -32,6 +33,41 @@ struct ChatLvMarkdownRenderer {
   private controller: MarkdownController = new MarkdownController()
   private configuredSignature: string = ''
   private codeFontFamily: string = ensureLvMarkdownCodeFont()
+  @Local private themeRefreshVersion: number = 0
+  private themeObserverDisposer: (() => void) | null = null
+
+  aboutToAppear(): void {
+    if (this.themeObserverDisposer !== null) {
+      return
+    }
+    this.themeObserverDisposer = observeAppUiState([
+      AppStorageKeys.IS_DARK_MODE,
+      AppStorageKeys.THEME_MARKDOWN_TITLE,
+      AppStorageKeys.THEME_MARKDOWN_TEXT,
+      AppStorageKeys.THEME_MARKDOWN_LINK,
+      AppStorageKeys.THEME_MARKDOWN_LINK_BG,
+      AppStorageKeys.THEME_MARKDOWN_CODE_BG,
+      AppStorageKeys.THEME_MARKDOWN_CODE_TEXT,
+      AppStorageKeys.THEME_MARKDOWN_QUOTE_BG,
+      AppStorageKeys.THEME_MARKDOWN_TABLE_BG,
+      AppStorageKeys.THEME_MARKDOWN_TABLE_HEADER_BG,
+      AppStorageKeys.THEME_MARKDOWN_TABLE_ALT_BG,
+      AppStorageKeys.THEME_MARKDOWN_TABLE_BORDER
+    ], (): void => {
+      // lv 将主题保存在控制器里，列表复用或 Canvas 不重建时必须主动刷新控制器。
+      this.configuredSignature = ''
+      this.configureController()
+      this.themeRefreshVersion++
+    })
+  }
+
+  aboutToDisappear(): void {
+    if (this.themeObserverDisposer === null) {
+      return
+    }
+    this.themeObserverDisposer()
+    this.themeObserverDisposer = null
+  }
 
   private parseThemeColor(value: string, fallback: number): number {
     let color = value.trim()
@@ -90,6 +126,8 @@ struct ChatLvMarkdownRenderer {
     const textColor = this.textColorOverride !== '' ? this.textColorOverride : uiState.themeMarkdownText
     const titleColor = this.titleColorOverride !== '' ? this.titleColorOverride : uiState.themeMarkdownTitle
     const codeTheme = uiState.isDarkMode ? 'dark' : 'light'
+    const shouldRefreshCodeTheme = this.controller.getCodeBlockTheme() !== codeTheme
+    const shouldRefreshMermaidTheme = this.controller.getMermaidTheme() !== codeTheme
     const latexColor = this.parseThemeColor(textColor, uiState.isDarkMode ? 0xFFE7E0D4 : 0xFF3D3830)
 
     this.controller
@@ -110,7 +148,6 @@ struct ChatLvMarkdownRenderer {
       .setHyperlinkBackgroundColor(uiState.themeMarkdownLinkBg)
       .setInlineCodeColor(uiState.themeMarkdownCodeText)
       .setInlineCodeBackgroundColor(uiState.themeMarkdownCodeBg)
-      .setCodeBlockTheme(codeTheme)
       .setCodeBlockFontFamily(this.codeFontFamily)
       .setCodeBlockAutoCollapseEnable(false)
       .setLatexMathTextColor(latexColor)
@@ -131,7 +168,6 @@ struct ChatLvMarkdownRenderer {
       .setFootnoteTextColor(uiState.themeMarkdownLink)
       .setTodoSelectedColor(uiState.themeMarkdownLink)
       .setMermaidEnable(true)
-      .setMermaidTheme(codeTheme)
       .setSetextHeadingEnable(true)
       .setThreadRenderEnable(true)
       .setTextSelectionEnable(this.isInputEnded)
@@ -151,17 +187,28 @@ struct ChatLvMarkdownRenderer {
       })
       .setBlockSpacing(getMarkdownBlockSpacing(textSize, this.compact))
 
+    // 这两个 setter 会广播重绘事件，仅在主题方向改变时调用。
+    if (shouldRefreshCodeTheme) {
+      this.controller.setCodeBlockTheme(codeTheme)
+    }
+    if (shouldRefreshMermaidTheme) {
+      this.controller.setMermaidTheme(codeTheme)
+    }
+
     this.configuredSignature = signature
     return this.controller
   }
 
   build() {
-    Markdown({
-      controller: this.configureController(),
-      text: this.content
-    })
-      .width('100%')
-      .backgroundColor(Color.Transparent)
+    // 建立 themeRefreshVersion 的组件依赖，使非代码块节点也读取控制器中的新颜色。
+    if (this.themeRefreshVersion >= 0) {
+      Markdown({
+        controller: this.configureController(),
+        text: this.content
+      })
+        .width('100%')
+        .backgroundColor(Color.Transparent)
+    }
   }
 }
 
@@ -188,31 +235,41 @@ export struct ChatMarkdownRenderer {
   @Event onCodeFullScreen: (code: string, codeType: string) => void =
     (_code: string, _codeType: string): void => {}
 
+  @Builder
+  private LvMarkdownContent(themeMode: string) {
+    ChatLvMarkdownRenderer({
+      content: this.content,
+      isInputEnded: this.isInputEnded,
+      chatFontSize: this.chatFontSize,
+      compact: this.compact,
+      latexFontSize: this.latexFontSize,
+      textColorOverride: this.textColorOverride,
+      titleColorOverride: this.titleColorOverride,
+      textTypeface: this.textTypeface,
+      themeRenderKey: `${this.themeRenderKey}|${themeMode}`,
+      onOpenLink: (title: string, url: string): void => {
+        this.onOpenLink(title, url)
+      },
+      onImageClick: (src: string): void => {
+        this.onImageClick(src)
+      },
+      onCopyText: (text: string): void => {
+        this.onCopyText(text)
+      },
+      onCopyCode: (code: string): void => {
+        this.onCopyCode(code)
+      }
+    })
+  }
+
   build() {
     if (getAppUiState().markdownRenderer === MarkdownRenderer.LV_MARKDOWN_IN) {
-      ChatLvMarkdownRenderer({
-        content: this.content,
-        isInputEnded: this.isInputEnded,
-        chatFontSize: this.chatFontSize,
-        compact: this.compact,
-        latexFontSize: this.latexFontSize,
-        textColorOverride: this.textColorOverride,
-        titleColorOverride: this.titleColorOverride,
-        textTypeface: this.textTypeface,
-        themeRenderKey: this.themeRenderKey,
-        onOpenLink: (title: string, url: string): void => {
-          this.onOpenLink(title, url)
-        },
-        onImageClick: (src: string): void => {
-          this.onImageClick(src)
-        },
-        onCopyText: (text: string): void => {
-          this.onCopyText(text)
-        },
-        onCopyCode: (code: string): void => {
-          this.onCopyCode(code)
-        }
-      })
+      // lv 的已生成节点会缓存代码染色；用两个独立分支确保深浅切换时完整重建子树。
+      if (getAppUiState().isDarkMode) {
+        this.LvMarkdownContent('dark')
+      } else {
+        this.LvMarkdownContent('light')
+      }
     } else {
       ChatMarkdownHybridRenderer({
         content: this.content,
