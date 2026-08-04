@@ -1745,8 +1745,72 @@
       "value": " "
     },
     {
+      "name": "about_updates_section",
+      "value": "版本更新"
+    },
+    {
+      "name": "about_check_for_updates",
+      "value": "检查更新"
+    },
+    {
+      "name": "about_checking_for_updates",
+      "value": "正在检查 GitHub Releases…"
+    },
+    {
+      "name": "about_already_latest",
+      "value": "当前已是最新版本"
+    },
+    {
+      "name": "about_update_check_failed",
+      "value": "检查更新失败，请稍后重试"
+    },
+    {
+      "name": "about_update_later",
+      "value": "稍后"
+    },
+    {
+      "name": "about_view_releases",
+      "value": "查看更新"
+    },
+    {
+      "name": "about_open_releases_failed",
+      "value": "无法打开 GitHub Releases"
+    },
+    {
       "name": "about_contact_section",
       "value": "联系我们"
+    },
+    {
+      "name": "about_legal_section",
+      "value": "法律信息"
+    },
+    {
+      "name": "about_open_source_licenses",
+      "value": "许可证"
+    },
+    {
+      "name": "about_open_source_licenses_desc",
+      "value": "库、模型、字体与开发工具"
+    },
+    {
+      "name": "about_license_sheet_title",
+      "value": "许可证"
+    },
+    {
+      "name": "about_license_sheet_note",
+      "value": "XCube 使用了以下软件与资源。完整许可证和署名文件保留在项目及对应依赖包中。"
+    },
+    {
+      "name": "about_license_runtime_section",
+      "value": "应用与运行时组件"
+    },
+    {
+      "name": "about_license_assets_section",
+      "value": "内置模型与字体"
+    },
+    {
+      "name": "about_license_development_section",
+      "value": "开发依赖"
     },
     {
       "name": "about_qq_group",
@@ -1829,8 +1893,8 @@
       "value": "Common Serif"
     },
     {
-      "name": "chat_serif_font_anthropic",
-      "value": "Anthropic Serif Text（本地）"
+      "name": "chat_serif_font_import",
+      "value": "从本机导入…"
     },
     {
       "name": "settings_markdown_renderer",

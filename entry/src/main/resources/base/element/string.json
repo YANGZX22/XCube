@@ -1745,8 +1745,72 @@
       "value": ""
     },
     {
+      "name": "about_updates_section",
+      "value": "Updates"
+    },
+    {
+      "name": "about_check_for_updates",
+      "value": "Check for Updates"
+    },
+    {
+      "name": "about_checking_for_updates",
+      "value": "Checking GitHub Releases…"
+    },
+    {
+      "name": "about_already_latest",
+      "value": "You're using the latest version"
+    },
+    {
+      "name": "about_update_check_failed",
+      "value": "Unable to check for updates. Please try again later."
+    },
+    {
+      "name": "about_update_later",
+      "value": "Later"
+    },
+    {
+      "name": "about_view_releases",
+      "value": "View Releases"
+    },
+    {
+      "name": "about_open_releases_failed",
+      "value": "Unable to open GitHub Releases"
+    },
+    {
       "name": "about_contact_section",
       "value": "Contact Us"
+    },
+    {
+      "name": "about_legal_section",
+      "value": "Legal"
+    },
+    {
+      "name": "about_open_source_licenses",
+      "value": "Licenses"
+    },
+    {
+      "name": "about_open_source_licenses_desc",
+      "value": "Libraries, models, fonts, and development tools"
+    },
+    {
+      "name": "about_license_sheet_title",
+      "value": "Licenses"
+    },
+    {
+      "name": "about_license_sheet_note",
+      "value": "XCube is built with the following software and assets. License and attribution files remain available with their source packages."
+    },
+    {
+      "name": "about_license_runtime_section",
+      "value": "App and Runtime Components"
+    },
+    {
+      "name": "about_license_assets_section",
+      "value": "Bundled Models and Fonts"
+    },
+    {
+      "name": "about_license_development_section",
+      "value": "Development Dependencies"
     },
     {
       "name": "about_qq_group",
@@ -1829,8 +1893,8 @@
       "value": "Common Serif"
     },
     {
-      "name": "chat_serif_font_anthropic",
-      "value": "Anthropic Serif Text (Local)"
+      "name": "chat_serif_font_import",
+      "value": "Import from device…"
     },
     {
       "name": "settings_markdown_renderer",

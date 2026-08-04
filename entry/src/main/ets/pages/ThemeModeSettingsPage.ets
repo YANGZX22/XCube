@@ -6,6 +6,7 @@ import {
   HdsTabsFloatingStyle
 } from '@kit.UIDesignKit'
 import { curves, uiMaterial } from '@kit.ArkUI'
+import { picker } from '@kit.CoreFileKit'
 import { ALL_THEMES, ColorTheme, getThemeColors, ThemeColorConfig, ThemeInfo } from '../models/ThemeColors'
 import { MarkdownRenderer, ThemeMode } from '../services/PreferencesService'
 import { ServiceRegistry } from '../services/ServiceRegistry'
@@ -23,11 +24,15 @@ import {
   CompactTabsFloatingStyleOptions
 } from '../utils/HdsTabsFloatingStyleHelper'
 import { IndexBottomTabItem } from '../components/index/IndexBottomTabItem'
+import { showToast } from '../utils/ToastUtil'
+import { pickLocalizedText } from '../utils/LocalizedTextUtils'
 import {
-  CHAT_SERIF_FONT_ANTHROPIC,
   CHAT_SERIF_FONT_COMMON,
+  CHAT_SERIF_FONT_CUSTOM,
   ChatSerifFontAvailability,
   detectAndRegisterChatSerifFonts,
+  getImportedChatSerifFontName,
+  importChatSerifFont,
   resolveChatSerifFontFamily
 } from '../utils/ChatSerifFontUtils'
 
@@ -103,7 +108,8 @@ export struct ThemeAppearanceSettingsView {
   @Local chatSerifFontEnabled: boolean = false
   @Local chatSerifFontFamily: string = CHAT_SERIF_FONT_COMMON
   @Local markdownRenderer: MarkdownRenderer = MarkdownRenderer.CANGJIE
-  @Local anthropicSerifAvailable: boolean = false
+  @Local customSerifAvailable: boolean = false
+  @Local customSerifName: string = ''
   @Local materialType: number = 100
   @Local materialLevel: number = 10
   @Local lightColorMode: string = 'default'
@@ -124,15 +130,16 @@ export struct ThemeAppearanceSettingsView {
 
   aboutToAppear(): void {
     const fontAvailability: ChatSerifFontAvailability = detectAndRegisterChatSerifFonts(this.getUIContext())
-    this.anthropicSerifAvailable = fontAvailability.anthropicAvailable
+    this.customSerifAvailable = fontAvailability.customAvailable
+    this.customSerifName = getImportedChatSerifFontName()
     this.currentThemeMode = this.settingsManager.getThemeMode()
     this.currentColorTheme = this.settingsManager.getColorTheme()
     this.chatFontSize = this.settingsManager.getChatFontSize()
     this.chatSerifFontEnabled = this.settingsManager.getChatSerifFontEnabled()
     this.markdownRenderer = this.settingsManager.getMarkdownRenderer()
     const savedSerifFont = this.settingsManager.getChatSerifFontFamily()
-    this.chatSerifFontFamily = savedSerifFont === CHAT_SERIF_FONT_ANTHROPIC && this.anthropicSerifAvailable ?
-      CHAT_SERIF_FONT_ANTHROPIC : CHAT_SERIF_FONT_COMMON
+    this.chatSerifFontFamily = savedSerifFont === CHAT_SERIF_FONT_CUSTOM && this.customSerifAvailable ?
+      CHAT_SERIF_FONT_CUSTOM : CHAT_SERIF_FONT_COMMON
     this.materialType = this.settingsManager.getMaterialType()
     this.materialLevel = this.settingsManager.getMaterialLevel()
     this.lightColorMode = this.settingsManager.getLightColorMode()
@@ -286,7 +293,7 @@ export struct ThemeAppearanceSettingsView {
     try {
       if (enabled) {
         const availability = detectAndRegisterChatSerifFonts(this.getUIContext())
-        this.anthropicSerifAvailable = availability.anthropicAvailable
+        this.customSerifAvailable = availability.customAvailable
       }
       await this.settingsManager.setChatSerifFontEnabled(enabled)
     } catch (error) {
@@ -299,20 +306,23 @@ export struct ThemeAppearanceSettingsView {
   }
 
   private getSerifFontOptions(): SelectOption[] {
-    const options: SelectOption[] = [{ value: $r('app.string.chat_serif_font_common') }]
-    if (this.anthropicSerifAvailable) {
-      options.push({ value: $r('app.string.chat_serif_font_anthropic') })
-    }
-    return options
+    return [
+      { value: $r('app.string.chat_serif_font_common') },
+      { value: this.customSerifAvailable && this.customSerifName !== '' ?
+        this.customSerifName : $r('app.string.chat_serif_font_import') }
+    ]
   }
 
   private getSerifFontSelectedIndex(): number {
-    return this.chatSerifFontFamily === CHAT_SERIF_FONT_ANTHROPIC && this.anthropicSerifAvailable ? 1 : 0
+    return this.chatSerifFontFamily === CHAT_SERIF_FONT_CUSTOM && this.customSerifAvailable ? 1 : 0
   }
 
   private async handleChatSerifFontFamilyChanged(index: number): Promise<void> {
-    const nextFontFamily = index === 1 && this.anthropicSerifAvailable ?
-      CHAT_SERIF_FONT_ANTHROPIC : CHAT_SERIF_FONT_COMMON
+    if (index === 1) {
+      await this.importCustomSerifFont()
+      return
+    }
+    const nextFontFamily = CHAT_SERIF_FONT_COMMON
     const previous = this.chatSerifFontFamily
     this.chatSerifFontFamily = nextFontFamily
     try {
@@ -321,6 +331,37 @@ export struct ThemeAppearanceSettingsView {
       console.error('ThemeAppearanceSettingsView',
         `Failed to update chat serif font family: ${JSON.stringify(error)}`)
       this.chatSerifFontFamily = previous
+    }
+  }
+
+  private async importCustomSerifFont(): Promise<void> {
+    const previous = this.chatSerifFontFamily
+    try {
+      const context = this.getUIContext().getHostContext()
+      if (context === undefined || context === null) {
+        throw new Error('UI context unavailable')
+      }
+      const options = new picker.DocumentSelectOptions()
+      options.maxSelectNumber = 1
+      options.fileSuffixFilters = ['.ttf', '.otf']
+      const documentPicker = new picker.DocumentViewPicker(context)
+      const uris = await documentPicker.select(options)
+      if (uris.length === 0) {
+        return
+      }
+      importChatSerifFont(this.getUIContext(), uris[0])
+      this.customSerifAvailable = true
+      this.customSerifName = getImportedChatSerifFontName()
+      this.chatSerifFontFamily = CHAT_SERIF_FONT_CUSTOM
+      await this.settingsManager.setChatSerifFontFamily(CHAT_SERIF_FONT_CUSTOM)
+      showToast(this.getUIContext(), pickLocalizedText('字体导入成功', 'Font imported successfully'))
+    } catch (error) {
+      console.error('ThemeAppearanceSettingsView', `Failed to import serif font: ${JSON.stringify(error)}`)
+      this.chatSerifFontFamily = previous
+      showToast(this.getUIContext(), pickLocalizedText(
+        '字体导入失败，请选择有效的 TTF 或 OTF 文件',
+        'Could not import the font. Select a valid TTF or OTF file.'
+      ))
     }
   }
 
@@ -1017,7 +1058,7 @@ export struct ThemeAppearanceSettingsView {
               .menuSystemMaterial(new uiMaterial.ImmersiveMaterial({
                 style: uiMaterial.ImmersiveStyle.THICK
               }))
-              .enabled(this.chatSerifFontEnabled && this.getSerifFontOptions().length > 1)
+              .enabled(this.chatSerifFontEnabled)
               .onSelect((index: number, _value: string): void => {
                 this.handleChatSerifFontFamilyChanged(index)
               })

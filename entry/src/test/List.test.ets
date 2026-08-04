@@ -9,6 +9,7 @@ import knowledgeSemanticChunkerTest from './KnowledgeSemanticChunker.test';
 import chatMessageTreeHelperTest from './ChatMessageTreeHelper.test';
 import knowledgeVectorStartupCoordinatorTest from './KnowledgeVectorStartupCoordinator.test';
 import knowledgeVectorRecoveryPolicyTest from './KnowledgeVectorRecoveryPolicy.test';
+import appVersionUtilsTest from './AppVersionUtils.test';
 
 export default function testsuite() {
   localUnitTest();
@@ -22,4 +23,5 @@ export default function testsuite() {
   chatMessageTreeHelperTest();
   knowledgeVectorStartupCoordinatorTest();
   knowledgeVectorRecoveryPolicyTest();
+  appVersionUtilsTest();
 }
