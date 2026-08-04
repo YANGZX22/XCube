@@ -110,6 +110,7 @@ export struct ThemeAppearanceSettingsView {
   @Local markdownRenderer: MarkdownRenderer = MarkdownRenderer.CANGJIE
   @Local customSerifAvailable: boolean = false
   @Local customSerifName: string = ''
+  @Local serifFontSelectRevision: number = 0
   @Local materialType: number = 100
   @Local materialLevel: number = 10
   @Local lightColorMode: string = 'default'
@@ -306,11 +307,15 @@ export struct ThemeAppearanceSettingsView {
   }
 
   private getSerifFontOptions(): SelectOption[] {
-    return [
-      { value: $r('app.string.chat_serif_font_common') },
-      { value: this.customSerifAvailable && this.customSerifName !== '' ?
-        this.customSerifName : $r('app.string.chat_serif_font_import') }
+    const options: SelectOption[] = [
+      { value: $r('app.string.chat_serif_font_common') }
     ]
+    if (this.customSerifAvailable) {
+      options.push({ value: this.customSerifName !== '' ? this.customSerifName :
+        pickLocalizedText('已导入字体', 'Imported font') })
+    }
+    options.push({ value: $r('app.string.chat_serif_font_import') })
+    return options
   }
 
   private getSerifFontSelectedIndex(): number {
@@ -318,11 +323,13 @@ export struct ThemeAppearanceSettingsView {
   }
 
   private async handleChatSerifFontFamilyChanged(index: number): Promise<void> {
-    if (index === 1) {
+    const importOptionIndex = this.customSerifAvailable ? 2 : 1
+    if (index === importOptionIndex) {
       await this.importCustomSerifFont()
       return
     }
-    const nextFontFamily = CHAT_SERIF_FONT_COMMON
+    const nextFontFamily = index === 1 && this.customSerifAvailable ?
+      CHAT_SERIF_FONT_CUSTOM : CHAT_SERIF_FONT_COMMON
     const previous = this.chatSerifFontFamily
     this.chatSerifFontFamily = nextFontFamily
     try {
@@ -362,6 +369,9 @@ export struct ThemeAppearanceSettingsView {
         '字体导入失败，请选择有效的 TTF 或 OTF 文件',
         'Could not import the font. Select a valid TTF or OTF file.'
       ))
+    } finally {
+      // “从本机导入”是操作项；取消选择器后也要恢复当前字体对应的选中项。
+      this.serifFontSelectRevision += 1
     }
   }
 
@@ -1041,6 +1051,7 @@ export struct ThemeAppearanceSettingsView {
               .width('100%')
 
             Select(this.getSerifFontOptions())
+              .key(`serif_font_select_${this.serifFontSelectRevision.toString()}`)
               .selected(this.getSerifFontSelectedIndex())
               .value(this.getSerifFontOptions()[this.getSerifFontSelectedIndex()].value)
               .width('100%')
