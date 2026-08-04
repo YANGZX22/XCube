@@ -1013,20 +1013,20 @@
       "value": "Color Theme"
     },
     {
+      "name": "theme_color_atelier",
+      "value": "Atelier"
+    },
+    {
+      "name": "theme_color_atelier_desc",
+      "value": "Ink on linen: a warm studio-paper ground with a single pigment accent and serif chat type."
+    },
+    {
       "name": "theme_color_lavender",
       "value": "XCube Lavender"
     },
     {
       "name": "theme_color_lavender_desc",
-      "value": "Soft translucent violet"
-    },
-    {
-      "name": "theme_color_default",
-      "value": "Warm Paper"
-    },
-    {
-      "name": "theme_color_default_desc",
-      "value": "Muted blue gray"
+      "value": "Luminous violet glass: the airy brand default, cool and translucent."
     },
     {
       "name": "theme_color_claude",
@@ -1034,39 +1034,15 @@
     },
     {
       "name": "theme_color_claude_desc",
-      "value": "Warm paper brown"
+      "value": "Terracotta and paper: fired-clay warmth on a soft paper ground."
     },
     {
-      "name": "theme_color_chatgpt",
-      "value": "Soft Blue"
+      "name": "theme_color_porcelain",
+      "value": "Porcelain"
     },
     {
-      "name": "theme_color_chatgpt_desc",
-      "value": "Calm blue gray"
-    },
-    {
-      "name": "theme_color_violet",
-      "value": "Mist Violet"
-    },
-    {
-      "name": "theme_color_violet_desc",
-      "value": "Soft violet gray"
-    },
-    {
-      "name": "theme_color_mint",
-      "value": "Pine Mist"
-    },
-    {
-      "name": "theme_color_mint_desc",
-      "value": "Muted pine green"
-    },
-    {
-      "name": "theme_color_notion",
-      "value": "Notion"
-    },
-    {
-      "name": "theme_color_notion_desc",
-      "value": "Clean minimalist"
+      "name": "theme_color_porcelain_desc",
+      "value": "Glazed cool blue: the set's one cold theme, calm as ceramic."
     },
     {
       "name": "screenshot_banner_title",

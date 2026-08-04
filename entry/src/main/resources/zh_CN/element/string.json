@@ -1013,20 +1013,20 @@
       "value": "主题配色"
     },
     {
+      "name": "theme_color_atelier",
+      "value": "Atelier"
+    },
+    {
+      "name": "theme_color_atelier_desc",
+      "value": "亚麻纸上的墨色：温暖的画室纸张底色，一抹颜料点缀，搭配衬线对话字体。"
+    },
+    {
       "name": "theme_color_lavender",
-      "value": "XCube"
+      "value": "XCube Lavender"
     },
     {
       "name": "theme_color_lavender_desc",
-      "value": "轻柔通透浅紫"
-    },
-    {
-      "name": "theme_color_default",
-      "value": "暖纸"
-    },
-    {
-      "name": "theme_color_default_desc",
-      "value": "低饱和蓝灰"
+      "value": "通透的紫罗兰玻璃：轻盈、冷调而通透的品牌默认主题。"
     },
     {
       "name": "theme_color_claude",
@@ -1034,39 +1034,15 @@
     },
     {
       "name": "theme_color_claude_desc",
-      "value": "暖棕纸面"
+      "value": "赤陶与纸：柔和纸张底色上的窑烧陶土暖意。"
     },
     {
-      "name": "theme_color_chatgpt",
-      "value": "清爽蓝"
+      "name": "theme_color_porcelain",
+      "value": "Porcelain"
     },
     {
-      "name": "theme_color_chatgpt_desc",
-      "value": "冷静蓝灰"
-    },
-    {
-      "name": "theme_color_violet",
-      "value": "雾紫"
-    },
-    {
-      "name": "theme_color_violet_desc",
-      "value": "柔和紫灰"
-    },
-    {
-      "name": "theme_color_mint",
-      "value": "松雾绿"
-    },
-    {
-      "name": "theme_color_mint_desc",
-      "value": "低饱和松绿"
-    },
-    {
-      "name": "theme_color_notion",
-      "value": "Notion"
-    },
-    {
-      "name": "theme_color_notion_desc",
-      "value": "极简纯净"
+      "name": "theme_color_porcelain_desc",
+      "value": "釉面冷蓝：整套主题中唯一的冷色，静谧如陶瓷。"
     },
     {
       "name": "screenshot_banner_title",

@@ -38,9 +38,9 @@ struct UsageMetricCard {
   @Param title: ResourceStr = ''
   @Param value: number = 0
   @Param unit: ResourceStr = ''
-  @Param primaryColor: string = '#8576FF'
-  @Param primaryLightColor: string = '#E9E6FF'
-  @Param surfaceColor: string = '#FEFDFF'
+  @Param primaryColor: string = '#7A68F0'
+  @Param primaryLightColor: string = '#E6E1FD'
+  @Param surfaceColor: string = '#FDFCFF'
 
   build() {
     Column() {

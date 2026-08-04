@@ -235,7 +235,7 @@ export function getAssistantAvatarFallbackText(value: string): string {
 @ComponentV2
 export struct AssistantAvatarView {
   @Param value: string = 'AI'
-  @Param color: string = '#8576FF'
+  @Param color: string = '#7A68F0'
   @Param avatarSize: number = 44
   @Param radius: number = 15
   @Param fontSize: number = 23

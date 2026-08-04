@@ -1,4 +1,12 @@
-import { ColorTheme, ThemeColorConfig, getThemeColors, getThemeById, ThemeInfo, ALL_THEMES } from '../models/ThemeColors'
+import {
+  ALL_THEMES,
+  ColorTheme,
+  getThemeById,
+  getThemeColors,
+  resolveColorThemeId,
+  ThemeColorConfig,
+  ThemeInfo
+} from '../models/ThemeColors'
 import { getPreferencesService } from './PreferencesService'
 import { AppStorageKeys } from '../config/AppStorageKeys'
 import { applyThemeToAppUiState } from '../state/AppUiState'
@@ -39,18 +47,6 @@ export class ThemeStorageKeys {
 // 偏好设置键名
 const PREF_KEY_COLOR_THEME = AppStorageKeys.COLOR_THEME
 
-// 已废弃的旧主题 ID，需在升级时迁移到默认主题。
-const DEPRECATED_THEME_IDS: string[] = ['yuanbao', 'sunset', 'berry']
-
-function isDeprecatedTheme(value: string): boolean {
-  for (let i = 0; i < DEPRECATED_THEME_IDS.length; i++) {
-    if (DEPRECATED_THEME_IDS[i] === value) {
-      return true
-    }
-  }
-  return false
-}
-
 // 主题服务 - 单例模式
 export class ThemeService {
   private static instance: ThemeService | null = null
@@ -75,7 +71,7 @@ export class ThemeService {
       // 如果已初始化，只更新深浅模式
       if (this.currentIsDarkMode !== isDarkMode) {
         this.currentIsDarkMode = isDarkMode
-        this.applyThemeToStorage()
+        this.applyThemeToStorage(true)
         this.notifyCallbacks()
       }
       return
@@ -86,19 +82,10 @@ export class ThemeService {
     // 从偏好设置加载保存的主题
     const savedTheme = await getPreferencesService().getString(PREF_KEY_COLOR_THEME, ColorTheme.LAVENDER)
 
-    // 旧版本主题（yuanbao/sunset/berry）已下线，迁移到默认主题并写回偏好
-    if (isDeprecatedTheme(savedTheme)) {
-      console.info('ThemeService', `Migrating deprecated theme '${savedTheme}' to default`)
-      this.currentTheme = ColorTheme.LAVENDER
-      await getPreferencesService().setString(PREF_KEY_COLOR_THEME, ColorTheme.LAVENDER)
-    } else {
-      this.currentTheme = savedTheme as ColorTheme
-      // 验证主题是否有效
-      const validTheme = getThemeById(this.currentTheme)
-      if (validTheme.id !== this.currentTheme) {
-        this.currentTheme = ColorTheme.LAVENDER
-        await getPreferencesService().setString(PREF_KEY_COLOR_THEME, ColorTheme.LAVENDER)
-      }
+    this.currentTheme = resolveColorThemeId(savedTheme)
+    if ((this.currentTheme as string) !== savedTheme) {
+      console.info('ThemeService', `Migrating theme '${savedTheme}' to '${this.currentTheme}'`)
+      await getPreferencesService().setString(PREF_KEY_COLOR_THEME, this.currentTheme)
     }
 
     // 应用主题到 AppStorage
@@ -140,7 +127,7 @@ export class ThemeService {
     await getPreferencesService().setString(PREF_KEY_COLOR_THEME, theme)
 
     // 应用主题到 AppStorage
-    this.applyThemeToStorage()
+    this.applyThemeToStorage(true)
     await this.refreshDesktopForms()
 
     // 通知回调
@@ -153,23 +140,14 @@ export class ThemeService {
   async reloadTheme(): Promise<void> {
     const savedTheme = await getPreferencesService().getString(PREF_KEY_COLOR_THEME, ColorTheme.LAVENDER)
 
-    if (isDeprecatedTheme(savedTheme)) {
-      console.info('ThemeService', `Reload migrated deprecated theme '${savedTheme}' to default`)
-      this.currentTheme = ColorTheme.LAVENDER
-      await getPreferencesService().setString(PREF_KEY_COLOR_THEME, ColorTheme.LAVENDER)
-    } else {
-      const newTheme = savedTheme as ColorTheme
-      const validTheme = getThemeById(newTheme)
-      if (validTheme.id !== newTheme) {
-        this.currentTheme = ColorTheme.LAVENDER
-        await getPreferencesService().setString(PREF_KEY_COLOR_THEME, ColorTheme.LAVENDER)
-      } else {
-        this.currentTheme = newTheme
-      }
+    this.currentTheme = resolveColorThemeId(savedTheme)
+    if ((this.currentTheme as string) !== savedTheme) {
+      console.info('ThemeService', `Reload migrated theme '${savedTheme}' to '${this.currentTheme}'`)
+      await getPreferencesService().setString(PREF_KEY_COLOR_THEME, this.currentTheme)
     }
 
     // 强制刷新 AppStorage 和通知回调
-    this.applyThemeToStorage()
+    this.applyThemeToStorage(true)
     await this.refreshDesktopForms()
     this.notifyCallbacks()
 
@@ -185,7 +163,7 @@ export class ThemeService {
     this.currentIsDarkMode = isDarkMode
 
     // 重新应用主题到 AppStorage
-    this.applyThemeToStorage()
+    this.applyThemeToStorage(true)
     void this.refreshDesktopForms()
 
     // 通知回调
@@ -208,8 +186,14 @@ export class ThemeService {
   }
 
   // 应用主题颜色到 AppStorage
-  private applyThemeToStorage(): void {
+  private applyThemeToStorage(animated: boolean = false): void {
     const colors = this.getCurrentColors()
+    if (animated) {
+      animateTo({ duration: 450, curve: Curve.EaseInOut }, () => {
+        applyThemeToAppUiState(this.currentTheme, colors)
+      })
+      return
+    }
     applyThemeToAppUiState(this.currentTheme, colors)
   }
 

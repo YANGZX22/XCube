@@ -21,28 +21,19 @@ export function getSettingsSheetTitleText(sheetType: SettingsSheetType): Resourc
 }
 
 export function getColorThemeDisplayTextForIndex(theme: ColorTheme): Resource {
+  if (theme === ColorTheme.ATELIER) {
+    return $r('app.string.theme_color_atelier')
+  }
   if (theme === ColorTheme.LAVENDER) {
     return $r('app.string.theme_color_lavender')
-  }
-  if (theme === ColorTheme.DEFAULT) {
-    return $r('app.string.theme_color_default')
   }
   if (theme === ColorTheme.CLAUDE) {
     return $r('app.string.theme_color_claude')
   }
-  if (theme === ColorTheme.CHATGPT) {
-    return $r('app.string.theme_color_chatgpt')
+  if (theme === ColorTheme.PORCELAIN) {
+    return $r('app.string.theme_color_porcelain')
   }
-  if (theme === ColorTheme.VIOLET) {
-    return $r('app.string.theme_color_violet')
-  }
-  if (theme === ColorTheme.MINT) {
-    return $r('app.string.theme_color_mint')
-  }
-  if (theme === ColorTheme.NOTION) {
-    return $r('app.string.theme_color_notion')
-  }
-  return $r('app.string.theme_color_default')
+  return $r('app.string.theme_color_lavender')
 }
 
 export function getNotificationSummaryTextForIndex(notifyEnabled: boolean, notifyOnComplete: boolean,

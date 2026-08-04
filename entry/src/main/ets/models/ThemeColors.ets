@@ -1,12 +1,9 @@
 // 主题类型枚举
 export enum ColorTheme {
+  ATELIER = 'atelier',      // Atelier 亚麻墨色
   LAVENDER = 'lavender',    // XCube 浅紫
-  DEFAULT = 'default',      // 默认暖纸
   CLAUDE = 'claude',        // Claude 暖棕
-  CHATGPT = 'chatgpt',      // 清爽蓝
-  VIOLET = 'violet',        // 雾紫
-  MINT = 'mint',            // 松雾绿
-  NOTION = 'notion'         // Notion 极简
+  PORCELAIN = 'porcelain'   // 青瓷冷蓝
 }
 
 // 主题颜色配置接口
@@ -53,413 +50,260 @@ export interface ThemeInfo {
   dark: ThemeColorConfig
 }
 
-// XCube 浅紫主题：以品牌紫为强调色，整体保持轻盈、通透和低饱和。
+// Atelier 主题：亚麻纸底 + 靛墨点缀，聊天气泡默认衬线字体。
+const ATELIER_THEME: ThemeInfo = {
+  id: ColorTheme.ATELIER,
+  nameKey: 'theme_color_atelier',
+  descriptionKey: 'theme_color_atelier_desc',
+  previewColors: ['#F7F1E6', '#DDE0EF', '#44518A', '#3D4877'],
+  light: {
+    primary: '#44518A',
+    primaryLight: '#DDE0EF',
+    background: '#F7F1E6',
+    surface: '#FFFCF4',
+    divider: '#EADFCB',
+    userBubble: '#3D4877',
+    userBubbleText: '#FFF6EE',
+    aiBubble: '#FFFCF4',
+    textPrimary: '#2A231A',
+    textSecondary: '#6E6355',
+    textTertiary: '#9C8F7E',
+    markdownTitle: '#2A231A',
+    markdownText: '#3F3729',
+    markdownLink: '#44518A',
+    markdownLinkBg: '#DDE0EF',
+    markdownCodeBg: '#F3ECDD',
+    markdownCodeText: '#3E4979',
+    markdownQuoteBg: '#F3ECDD',
+    markdownTableBg: '#FFFCF4',
+    markdownTableHeaderBg: '#F3ECDD',
+    markdownTableAltBg: '#FAF4E8',
+    markdownTableBorder: '#DDE0EF'
+  },
+  dark: {
+    primary: '#97A3D9',
+    primaryLight: '#282D46',
+    background: '#211B14',
+    surface: '#2B241B',
+    divider: '#282D46',
+    userBubble: '#47528A',
+    userBubbleText: '#FFF3EA',
+    aiBubble: '#2B241B',
+    textPrimary: '#F4ECDF',
+    textSecondary: '#BCB09E',
+    textTertiary: '#877B6A',
+    markdownTitle: '#F4ECDF',
+    markdownText: '#E8DFCE',
+    markdownLink: '#A9B4E4',
+    markdownLinkBg: '#282D46',
+    markdownCodeBg: '#262019',
+    markdownCodeText: '#C3CCF0',
+    markdownQuoteBg: '#262019',
+    markdownTableBg: '#2B241B',
+    markdownTableHeaderBg: '#352D22',
+    markdownTableAltBg: '#302921',
+    markdownTableBorder: '#282D46'
+  }
+}
+
+// XCube Lavender：更冷、更通透的品牌紫，呈现玻璃般的明亮质感。
 const LAVENDER_THEME: ThemeInfo = {
   id: ColorTheme.LAVENDER,
   nameKey: 'theme_color_lavender',
   descriptionKey: 'theme_color_lavender_desc',
-  previewColors: ['#F8F7FF', '#E9E6FF', '#8576FF', '#7568DF'],
+  previewColors: ['#F7F5FF', '#E6E1FD', '#7A68F0', '#6D5CE0'],
   light: {
-    primary: '#8576FF',
-    primaryLight: '#E9E6FF',
-    background: '#F8F7FF',
-    surface: '#FEFDFF',
-    divider: '#E5E5E5',
-    userBubble: '#7568DF',
-    userBubbleText: '#FFFFFF',
-    aiBubble: '#FEFDFF',
-    textPrimary: '#252238',
-    textSecondary: '#686279',
-    textTertiary: '#958FA5',
-    markdownTitle: '#252238',
-    markdownText: '#3E394F',
-    markdownLink: '#7568DF',
-    markdownLinkBg: '#E9E6FF',
-    markdownCodeBg: '#F0EEFF',
-    markdownCodeText: '#6559C7',
-    markdownQuoteBg: '#F0EEFF',
-    markdownTableBg: '#FEFDFF',
-    markdownTableHeaderBg: '#F0EEFF',
-    markdownTableAltBg: '#F8F7FF',
-    markdownTableBorder: '#E9E6FF'
+    primary: '#7A68F0',
+    primaryLight: '#E6E1FD',
+    background: '#F7F5FF',
+    surface: '#FDFCFF',
+    divider: '#E6E1FD',
+    userBubble: '#6D5CE0',
+    userBubbleText: '#F7F4FF',
+    aiBubble: '#FDFCFF',
+    textPrimary: '#221E38',
+    textSecondary: '#645E7C',
+    textTertiary: '#948FA8',
+    markdownTitle: '#221E38',
+    markdownText: '#3B3554',
+    markdownLink: '#7A68F0',
+    markdownLinkBg: '#E6E1FD',
+    markdownCodeBg: '#F0EDFD',
+    markdownCodeText: '#5F50C7',
+    markdownQuoteBg: '#F0EDFD',
+    markdownTableBg: '#FDFCFF',
+    markdownTableHeaderBg: '#F0EDFD',
+    markdownTableAltBg: '#F8F6FF',
+    markdownTableBorder: '#E6E1FD'
   },
   dark: {
-    primary: '#A99FFF',
-    primaryLight: '#373251',
-    background: '#191725',
-    surface: '#242132',
-    divider: '#4A4A4A',
-    userBubble: '#7468D7',
-    userBubbleText: '#FFFFFF',
-    aiBubble: '#242132',
-    textPrimary: '#F3F0FF',
-    textSecondary: '#B9B3C9',
-    textTertiary: '#847E94',
-    markdownTitle: '#F3F0FF',
-    markdownText: '#E5E0F2',
-    markdownLink: '#B8AFFF',
-    markdownLinkBg: '#373251',
-    markdownCodeBg: '#211E2D',
-    markdownCodeText: '#C8C0FF',
-    markdownQuoteBg: '#211E2D',
-    markdownTableBg: '#242132',
-    markdownTableHeaderBg: '#2F2B40',
-    markdownTableAltBg: '#292638',
-    markdownTableBorder: '#373251'
+    primary: '#A99DFF',
+    primaryLight: '#332C52',
+    background: '#171422',
+    surface: '#211D31',
+    divider: '#332C52',
+    userBubble: '#6A5AD0',
+    userBubbleText: '#F4F0FF',
+    aiBubble: '#211D31',
+    textPrimary: '#F1EDFF',
+    textSecondary: '#B4ADCC',
+    textTertiary: '#7E7794',
+    markdownTitle: '#F1EDFF',
+    markdownText: '#E3DEEF',
+    markdownLink: '#B7ADFF',
+    markdownLinkBg: '#332C52',
+    markdownCodeBg: '#1D192B',
+    markdownCodeText: '#C6BEFF',
+    markdownQuoteBg: '#1D192B',
+    markdownTableBg: '#211D31',
+    markdownTableHeaderBg: '#2A253D',
+    markdownTableAltBg: '#262238',
+    markdownTableBorder: '#332C52'
   }
 }
 
-// 默认暖纸主题：中性色底盘，蓝灰只做小面积强调。
-const DEFAULT_THEME: ThemeInfo = {
-  id: ColorTheme.DEFAULT,
-  nameKey: 'theme_color_default',
-  descriptionKey: 'theme_color_default_desc',
-  previewColors: ['#FAF8F3', '#D8E2EE', '#4E6F9E', '#52688A'],
-  light: {
-    primary: '#4E6F9E',
-    primaryLight: '#D8E2EE',
-    background: '#FAF8F3',
-    surface: '#FFFDF8',
-    divider: '#D8E2EE',
-    userBubble: '#52688A',
-    userBubbleText: '#FFFFFF',
-    aiBubble: '#FFFDF8',
-    textPrimary: '#24211C',
-    textSecondary: '#6F6A60',
-    textTertiary: '#8A8178',
-    markdownTitle: '#24211C',
-    markdownText: '#3D3830',
-    markdownLink: '#4E6F9E',
-    markdownLinkBg: '#D8E2EE',
-    markdownCodeBg: '#F3EFE8',
-    markdownCodeText: '#8F5E45',
-    markdownQuoteBg: '#F3EFE8',
-    markdownTableBg: '#FFFDF8',
-    markdownTableHeaderBg: '#F3EFE8',
-    markdownTableAltBg: '#FAF7F0',
-    markdownTableBorder: '#D8E2EE'
-  },
-  dark: {
-    primary: '#7FA2CC',
-    primaryLight: '#273646',
-    background: '#1F1E1A',
-    surface: '#292722',
-    divider: '#273646',
-    userBubble: '#4F6886',
-    userBubbleText: '#F7FAFD',
-    aiBubble: '#292722',
-    textPrimary: '#F3EFE6',
-    textSecondary: '#B8B0A3',
-    textTertiary: '#837B70',
-    markdownTitle: '#F3EFE6',
-    markdownText: '#E7E0D4',
-    markdownLink: '#9CBFE8',
-    markdownLinkBg: '#273646',
-    markdownCodeBg: '#24221E',
-    markdownCodeText: '#D7C4A9',
-    markdownQuoteBg: '#24221E',
-    markdownTableBg: '#292722',
-    markdownTableHeaderBg: '#332F28',
-    markdownTableAltBg: '#2E2B25',
-    markdownTableBorder: '#273646'
-  }
-}
-
-// Claude 暖棕主题：参考暖纸面和锈棕点缀，避免大面积橙色。
+// Claude：更深的赤陶色与温暖纸面。
 const CLAUDE_THEME: ThemeInfo = {
   id: ColorTheme.CLAUDE,
   nameKey: 'theme_color_claude',
   descriptionKey: 'theme_color_claude_desc',
-  previewColors: ['#FAF7F0', '#F1E8E0', '#A65F3B', '#8F5E45'],
+  previewColors: ['#FAF6EF', '#F0E2D5', '#B15B33', '#9A5638'],
   light: {
-    primary: '#A65F3B',
-    primaryLight: '#F1E8E0',
-    background: '#FAF7F0',
-    surface: '#FFFDF8',
-    divider: '#F1E8E0',
-    userBubble: '#8F5E45',
-    userBubbleText: '#FFFFFF',
-    aiBubble: '#FFFDF8',
-    textPrimary: '#26211C',
-    textSecondary: '#6F665C',
-    textTertiary: '#9C9287',
-    markdownTitle: '#26211C',
-    markdownText: '#3F372F',
-    markdownLink: '#A65F3B',
-    markdownLinkBg: '#F1E8E0',
-    markdownCodeBg: '#F3EDE5',
-    markdownCodeText: '#8F5E45',
-    markdownQuoteBg: '#F3EDE5',
-    markdownTableBg: '#FFFDF8',
-    markdownTableHeaderBg: '#F3EDE5',
-    markdownTableAltBg: '#FAF4EC',
-    markdownTableBorder: '#F1E8E0'
+    primary: '#B15B33',
+    primaryLight: '#F0E2D5',
+    background: '#FAF6EF',
+    surface: '#FFFCF6',
+    divider: '#F0E2D5',
+    userBubble: '#9A5638',
+    userBubbleText: '#FFF6EE',
+    aiBubble: '#FFFCF6',
+    textPrimary: '#28211A',
+    textSecondary: '#6F6459',
+    textTertiary: '#9C9082',
+    markdownTitle: '#28211A',
+    markdownText: '#40372F',
+    markdownLink: '#B15B33',
+    markdownLinkBg: '#F0E2D5',
+    markdownCodeBg: '#F5EDE4',
+    markdownCodeText: '#914A2C',
+    markdownQuoteBg: '#F5EDE4',
+    markdownTableBg: '#FFFCF6',
+    markdownTableHeaderBg: '#F5EDE4',
+    markdownTableAltBg: '#FBF5ED',
+    markdownTableBorder: '#F0E2D5'
   },
   dark: {
-    primary: '#C87552',
-    primaryLight: '#3A2C25',
-    background: '#251F1A',
-    surface: '#292722',
-    divider: '#3A2C25',
-    userBubble: '#7A4E3D',
-    userBubbleText: '#FFF8F2',
-    aiBubble: '#292722',
-    textPrimary: '#F3EFE6',
-    textSecondary: '#B8B0A3',
-    textTertiary: '#837B70',
-    markdownTitle: '#F3EFE6',
-    markdownText: '#E7E0D4',
-    markdownLink: '#D48B68',
-    markdownLinkBg: '#3A2C25',
-    markdownCodeBg: '#24221E',
-    markdownCodeText: '#E0AA8A',
-    markdownQuoteBg: '#24221E',
-    markdownTableBg: '#292722',
-    markdownTableHeaderBg: '#332F28',
-    markdownTableAltBg: '#2E2B25',
-    markdownTableBorder: '#3A2C25'
+    primary: '#D98A5F',
+    primaryLight: '#40291D',
+    background: '#221B15',
+    surface: '#2C241C',
+    divider: '#40291D',
+    userBubble: '#87492F',
+    userBubbleText: '#FFEFE4',
+    aiBubble: '#2C241C',
+    textPrimary: '#F5ECE1',
+    textSecondary: '#BDAF9E',
+    textTertiary: '#87796A',
+    markdownTitle: '#F5ECE1',
+    markdownText: '#E8DED2',
+    markdownLink: '#E29A72',
+    markdownLinkBg: '#40291D',
+    markdownCodeBg: '#271F18',
+    markdownCodeText: '#F0B18D',
+    markdownQuoteBg: '#271F18',
+    markdownTableBg: '#2C241C',
+    markdownTableHeaderBg: '#382D22',
+    markdownTableAltBg: '#32291F',
+    markdownTableBorder: '#40291D'
   }
 }
 
-// 清爽蓝主题：保留冷静科技感，但降低蓝色饱和和面积。
-const CHATGPT_THEME: ThemeInfo = {
-  id: ColorTheme.CHATGPT,
-  nameKey: 'theme_color_chatgpt',
-  descriptionKey: 'theme_color_chatgpt_desc',
-  previewColors: ['#F7FAFC', '#E4EDF6', '#416FAD', '#4D719C'],
+// Porcelain：带釉面质感的冷蓝灰，也是精选集合中唯一的冷色主题。
+const PORCELAIN_THEME: ThemeInfo = {
+  id: ColorTheme.PORCELAIN,
+  nameKey: 'theme_color_porcelain',
+  descriptionKey: 'theme_color_porcelain_desc',
+  previewColors: ['#F4F7F9', '#DCE7EE', '#3E6E96', '#3A6285'],
   light: {
-    primary: '#416FAD',
-    primaryLight: '#E4EDF6',
-    background: '#F7FAFC',
+    primary: '#3E6E96',
+    primaryLight: '#DCE7EE',
+    background: '#F4F7F9',
     surface: '#FCFEFF',
-    divider: '#E4EDF6',
-    userBubble: '#4D719C',
-    userBubbleText: '#FFFFFF',
+    divider: '#DCE7EE',
+    userBubble: '#3A6285',
+    userBubbleText: '#F2F8FD',
     aiBubble: '#FCFEFF',
-    textPrimary: '#1F252B',
-    textSecondary: '#64707A',
-    textTertiary: '#8F9AA4',
-    markdownTitle: '#1F252B',
+    textPrimary: '#1D242B',
+    textSecondary: '#5F6C77',
+    textTertiary: '#8C99A4',
+    markdownTitle: '#1D242B',
     markdownText: '#34404A',
-    markdownLink: '#416FAD',
-    markdownLinkBg: '#E4EDF6',
-    markdownCodeBg: '#EDF3F7',
-    markdownCodeText: '#47627F',
-    markdownQuoteBg: '#EDF3F7',
+    markdownLink: '#3E6E96',
+    markdownLinkBg: '#DCE7EE',
+    markdownCodeBg: '#EAF1F5',
+    markdownCodeText: '#355F82',
+    markdownQuoteBg: '#EAF1F5',
     markdownTableBg: '#FCFEFF',
-    markdownTableHeaderBg: '#EDF3F7',
-    markdownTableAltBg: '#F4F8FA',
-    markdownTableBorder: '#E4EDF6'
+    markdownTableHeaderBg: '#EAF1F5',
+    markdownTableAltBg: '#F5F8FA',
+    markdownTableBorder: '#DCE7EE'
   },
   dark: {
-    primary: '#82A9D4',
-    primaryLight: '#24374A',
-    background: '#182027',
-    surface: '#202932',
-    divider: '#24374A',
-    userBubble: '#4D6F91',
-    userBubbleText: '#F6FAFF',
-    aiBubble: '#202932',
-    textPrimary: '#EEF4FA',
-    textSecondary: '#B1BCC7',
-    textTertiary: '#7E8A96',
-    markdownTitle: '#EEF4FA',
-    markdownText: '#DDE6EE',
-    markdownLink: '#9CBFE5',
-    markdownLinkBg: '#24374A',
-    markdownCodeBg: '#1B242C',
-    markdownCodeText: '#C2CEDA',
-    markdownQuoteBg: '#1B242C',
-    markdownTableBg: '#202932',
-    markdownTableHeaderBg: '#2A3540',
-    markdownTableAltBg: '#242E38',
-    markdownTableBorder: '#24374A'
-  }
-}
-
-// 雾紫主题：紫色只做灰紫点缀，避免大面积高饱和紫。
-const VIOLET_THEME: ThemeInfo = {
-  id: ColorTheme.VIOLET,
-  nameKey: 'theme_color_violet',
-  descriptionKey: 'theme_color_violet_desc',
-  previewColors: ['#FAF8FC', '#ECE8F2', '#7E5F92', '#675F82'],
-  light: {
-    primary: '#7E5F92',
-    primaryLight: '#ECE8F2',
-    background: '#FAF8FC',
-    surface: '#FFFDFF',
-    divider: '#ECE8F2',
-    userBubble: '#675F82',
-    userBubbleText: '#FFFFFF',
-    aiBubble: '#FFFDFF',
-    textPrimary: '#27232C',
-    textSecondary: '#6B6474',
-    textTertiary: '#9B93A3',
-    markdownTitle: '#27232C',
-    markdownText: '#3F3948',
-    markdownLink: '#71658F',
-    markdownLinkBg: '#ECE8F2',
-    markdownCodeBg: '#F1EDF5',
-    markdownCodeText: '#6E5D86',
-    markdownQuoteBg: '#F1EDF5',
-    markdownTableBg: '#FFFDFF',
-    markdownTableHeaderBg: '#F1EDF5',
-    markdownTableAltBg: '#FAF6FC',
-    markdownTableBorder: '#ECE8F2'
-  },
-  dark: {
-    primary: '#A897C5',
-    primaryLight: '#342D42',
-    background: '#1F1D24',
-    surface: '#2A2630',
-    divider: '#342D42',
-    userBubble: '#5F5476',
-    userBubbleText: '#FBF8FF',
-    aiBubble: '#2A2630',
-    textPrimary: '#F1ECF7',
-    textSecondary: '#B8AEC4',
-    textTertiary: '#83778F',
-    markdownTitle: '#F1ECF7',
-    markdownText: '#E3DBEC',
-    markdownLink: '#BEAFDA',
-    markdownLinkBg: '#342D42',
-    markdownCodeBg: '#25222B',
-    markdownCodeText: '#D0C1E5',
-    markdownQuoteBg: '#25222B',
-    markdownTableBg: '#2A2630',
-    markdownTableHeaderBg: '#352F3D',
-    markdownTableAltBg: '#302B37',
-    markdownTableBorder: '#342D42'
-  }
-}
-
-// 松雾绿主题：偏自然的低饱和松绿色，避免荧光薄荷感。
-const MINT_THEME: ThemeInfo = {
-  id: ColorTheme.MINT,
-  nameKey: 'theme_color_mint',
-  descriptionKey: 'theme_color_mint_desc',
-  previewColors: ['#F7FAF6', '#E5EFE9', '#4D8069', '#587A68'],
-  light: {
-    primary: '#4D8069',
-    primaryLight: '#E5EFE9',
-    background: '#F7FAF6',
-    surface: '#FEFFFC',
-    divider: '#E5EFE9',
-    userBubble: '#587A68',
-    userBubbleText: '#FFFFFF',
-    aiBubble: '#FEFFFC',
-    textPrimary: '#202820',
-    textSecondary: '#627064',
-    textTertiary: '#8C9A8E',
-    markdownTitle: '#202820',
-    markdownText: '#354238',
-    markdownLink: '#4D8069',
-    markdownLinkBg: '#E5EFE9',
-    markdownCodeBg: '#EEF4EF',
-    markdownCodeText: '#4D705E',
-    markdownQuoteBg: '#EEF4EF',
-    markdownTableBg: '#FEFFFC',
-    markdownTableHeaderBg: '#EEF4EF',
-    markdownTableAltBg: '#F5F9F5',
-    markdownTableBorder: '#E5EFE9'
-  },
-  dark: {
-    primary: '#79A88F',
-    primaryLight: '#25372D',
-    background: '#1B211D',
-    surface: '#242C26',
-    divider: '#25372D',
-    userBubble: '#4E6F5C',
-    userBubbleText: '#F6FFF9',
-    aiBubble: '#242C26',
-    textPrimary: '#EEF5EE',
-    textSecondary: '#AFBBAF',
-    textTertiary: '#7D8B80',
-    markdownTitle: '#EEF5EE',
-    markdownText: '#DDE8DE',
-    markdownLink: '#91BAA3',
-    markdownLinkBg: '#25372D',
-    markdownCodeBg: '#202722',
-    markdownCodeText: '#B9D1C2',
-    markdownQuoteBg: '#202722',
-    markdownTableBg: '#242C26',
-    markdownTableHeaderBg: '#2E3730',
-    markdownTableAltBg: '#29322B',
-    markdownTableBorder: '#25372D'
-  }
-}
-
-// Notion 极简主题：纯白/深灰底，蓝色强调；浅色 surface/aiBubble 用 Notion 标志性的米白做"块"层次。
-const NOTION_THEME: ThemeInfo = {
-  id: ColorTheme.NOTION,
-  nameKey: 'theme_color_notion',
-  descriptionKey: 'theme_color_notion_desc',
-  previewColors: ['#FFFFFF', '#E3E8EF', '#2E7AC2', '#1F6AB3'],
-  light: {
-    primary: '#2E7AC2',
-    primaryLight: '#E3E8EF',
-    background: '#FFFFFF',
-    surface: '#FBFBFA',
-    divider: '#E3E8EF',
-    userBubble: '#1F6AB3',
-    userBubbleText: '#FFFFFF',
-    aiBubble: '#F7F6F3',
-    textPrimary: '#37352F',
-    textSecondary: '#787774',
-    textTertiary: '#9B9A97',
-    markdownTitle: '#37352F',
-    markdownText: '#37352F',
-    markdownLink: '#2E7AC2',
-    markdownLinkBg: '#E3E8EF',
-    markdownCodeBg: '#F7F6F3',
-    markdownCodeText: '#EB5757',
-    markdownQuoteBg: '#F7F6F3',
-    markdownTableBg: '#FBFBFA',
-    markdownTableHeaderBg: '#F7F6F3',
-    markdownTableAltBg: '#FAFAF8',
-    markdownTableBorder: '#E3E8EF'
-  },
-  dark: {
-    primary: '#5B9DD9',
-    primaryLight: '#2C3E50',
-    background: '#191919',
-    surface: '#202020',
-    divider: '#2C3E50',
-    userBubble: '#3D6A99',
-    userBubbleText: '#FFFFFF',
-    aiBubble: '#202020',
-    textPrimary: '#FFFFFF',
-    textSecondary: '#9B9A97',
-    textTertiary: '#6F6E69',
-    markdownTitle: '#FFFFFF',
-    markdownText: '#E3E2E0',
-    markdownLink: '#71A7D9',
-    markdownLinkBg: '#2C3E50',
-    markdownCodeBg: '#2F2F2F',
-    markdownCodeText: '#FF6B6B',
-    markdownQuoteBg: '#2F2F2F',
-    markdownTableBg: '#202020',
-    markdownTableHeaderBg: '#2A2A2A',
-    markdownTableAltBg: '#252525',
-    markdownTableBorder: '#2C3E50'
+    primary: '#85AECF',
+    primaryLight: '#213648',
+    background: '#151C22',
+    surface: '#1E272F',
+    divider: '#213648',
+    userBubble: '#3D6484',
+    userBubbleText: '#EFF7FE',
+    aiBubble: '#1E272F',
+    textPrimary: '#EAF2F9',
+    textSecondary: '#A9B8C4',
+    textTertiary: '#748492',
+    markdownTitle: '#EAF2F9',
+    markdownText: '#D8E3EC',
+    markdownLink: '#9FC2DE',
+    markdownLinkBg: '#213648',
+    markdownCodeBg: '#192229',
+    markdownCodeText: '#BDD3E3',
+    markdownQuoteBg: '#192229',
+    markdownTableBg: '#1E272F',
+    markdownTableHeaderBg: '#28343D',
+    markdownTableAltBg: '#232E36',
+    markdownTableBorder: '#213648'
   }
 }
 
 // 精简后的可选主题列表
 export const ALL_THEMES: ThemeInfo[] = [
+  ATELIER_THEME,
   LAVENDER_THEME,
-  DEFAULT_THEME,
   CLAUDE_THEME,
-  CHATGPT_THEME,
-  MINT_THEME,
-  VIOLET_THEME,
-  NOTION_THEME
+  PORCELAIN_THEME
 ]
+
+// 将持久化的旧主题 ID 归一化到当前精选集合。
+export function resolveColorThemeId(themeId: string): ColorTheme {
+  if (themeId === ColorTheme.ATELIER) {
+    return ColorTheme.ATELIER
+  }
+  if (themeId === ColorTheme.LAVENDER) {
+    return ColorTheme.LAVENDER
+  }
+  if (themeId === ColorTheme.CLAUDE) {
+    return ColorTheme.CLAUDE
+  }
+  if (themeId === ColorTheme.PORCELAIN || themeId === 'chatgpt') {
+    return ColorTheme.PORCELAIN
+  }
+  return ColorTheme.LAVENDER
+}
 
 // 根据主题 ID 获取主题信息
 export function getThemeById(themeId: ColorTheme): ThemeInfo {
+  const resolvedThemeId = resolveColorThemeId(themeId as string)
   for (let i = 0; i < ALL_THEMES.length; i++) {
-    if (ALL_THEMES[i].id === themeId) {
+    if (ALL_THEMES[i].id === resolvedThemeId) {
       return ALL_THEMES[i]
     }
   }

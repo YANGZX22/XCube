@@ -83,7 +83,7 @@ export struct MessageBubble {
   @Param showHeader: boolean = true  // 是否显示消息头部（模型信息）
   @Param currentModelId: string = ''  // 当前会话的模型 ID（用于图标匹配回退）
   @Param assistantAvatarSymbol: string = 'AI'
-  @Param assistantAvatarColor: string = '#8576FF'
+  @Param assistantAvatarColor: string = '#7A68F0'
   @Param assistantAvatarCacheKey: number = 0
   @Param themeRenderKey: string = ''
   @Param isMultiSelectMode: boolean = false  // 是否处于多选模式

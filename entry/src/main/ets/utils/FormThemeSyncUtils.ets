@@ -17,7 +17,7 @@ class NewChatFormData {
   title: string = '新对话'
   subtitle: string = '点击开始聊天'
   themePrimary: string = DEFAULT_THEME_PRIMARY
-  surfaceColor: string = '#FEFDFF'
+  surfaceColor: string = '#FDFCFF'
   textPrimary: string = '#24211C'
   textColor: string = ''
   glassBgColor: string = 'rgba(255,253,248,0.62)'

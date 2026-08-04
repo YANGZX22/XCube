@@ -5,7 +5,7 @@ let storage = new LocalStorage();
 struct NewChatCard {
   @LocalStorageProp('title') title: string = '新对话';
   @LocalStorageProp('subtitle') subtitle: string = '点击开始聊天';
-  @LocalStorageProp('themePrimary') themePrimary: string = '#8576FF';
+  @LocalStorageProp('themePrimary') themePrimary: string = '#7A68F0';
   @LocalStorageProp('textPrimary') textPrimary: string = '#24211C';
   @LocalStorageProp('textColor') textColor: string = '';
   @LocalStorageProp('glassBgColor') glassBgColor: string = 'rgba(255,253,248,0.62)';

@@ -118,42 +118,30 @@ export struct ThemeColorPicker {
   }
 
   private getThemeName(themeId: ColorTheme): Resource {
-    if (themeId === ColorTheme.LAVENDER) {
+    if (themeId === ColorTheme.ATELIER) {
+      return $r('app.string.theme_color_atelier')
+    } else if (themeId === ColorTheme.LAVENDER) {
       return $r('app.string.theme_color_lavender')
-    } else if (themeId === ColorTheme.DEFAULT) {
-      return $r('app.string.theme_color_default')
     } else if (themeId === ColorTheme.CLAUDE) {
       return $r('app.string.theme_color_claude')
-    } else if (themeId === ColorTheme.CHATGPT) {
-      return $r('app.string.theme_color_chatgpt')
-    } else if (themeId === ColorTheme.VIOLET) {
-      return $r('app.string.theme_color_violet')
-    } else if (themeId === ColorTheme.MINT) {
-      return $r('app.string.theme_color_mint')
-    } else if (themeId === ColorTheme.NOTION) {
-      return $r('app.string.theme_color_notion')
+    } else if (themeId === ColorTheme.PORCELAIN) {
+      return $r('app.string.theme_color_porcelain')
     } else {
-      return $r('app.string.theme_color_default')
+      return $r('app.string.theme_color_lavender')
     }
   }
 
   private getThemeDescription(themeId: ColorTheme): Resource {
-    if (themeId === ColorTheme.LAVENDER) {
+    if (themeId === ColorTheme.ATELIER) {
+      return $r('app.string.theme_color_atelier_desc')
+    } else if (themeId === ColorTheme.LAVENDER) {
       return $r('app.string.theme_color_lavender_desc')
-    } else if (themeId === ColorTheme.DEFAULT) {
-      return $r('app.string.theme_color_default_desc')
     } else if (themeId === ColorTheme.CLAUDE) {
       return $r('app.string.theme_color_claude_desc')
-    } else if (themeId === ColorTheme.CHATGPT) {
-      return $r('app.string.theme_color_chatgpt_desc')
-    } else if (themeId === ColorTheme.VIOLET) {
-      return $r('app.string.theme_color_violet_desc')
-    } else if (themeId === ColorTheme.MINT) {
-      return $r('app.string.theme_color_mint_desc')
-    } else if (themeId === ColorTheme.NOTION) {
-      return $r('app.string.theme_color_notion_desc')
+    } else if (themeId === ColorTheme.PORCELAIN) {
+      return $r('app.string.theme_color_porcelain_desc')
     } else {
-      return $r('app.string.theme_color_default_desc')
+      return $r('app.string.theme_color_lavender_desc')
     }
   }
 }

@@ -5,7 +5,7 @@ import {
   HdsTabs,
   HdsTabsFloatingStyle
 } from '@kit.UIDesignKit'
-import { uiMaterial } from '@kit.ArkUI'
+import { curves, uiMaterial } from '@kit.ArkUI'
 import { ALL_THEMES, ColorTheme, getThemeColors, ThemeColorConfig, ThemeInfo } from '../models/ThemeColors'
 import { MarkdownRenderer, ThemeMode } from '../services/PreferencesService'
 import { ServiceRegistry } from '../services/ServiceRegistry'
@@ -89,6 +89,9 @@ export struct ThemeAppearanceSettingsView {
   }
   private get previewChatTypeface(): string {
     return this.chatSerifFontEnabled ? resolveChatSerifFontFamily(this.chatSerifFontFamily) : 'HarmonyOS Sans'
+  }
+  private get themeCardTypeface(): string {
+    return resolveChatSerifFontFamily(this.chatSerifFontFamily)
   }
 
   @Param compactTitle: string | Resource = $r('app.string.settings_appearance')
@@ -184,47 +187,35 @@ export struct ThemeAppearanceSettingsView {
   }
 
   private getThemeName(themeId: ColorTheme): Resource {
+    if (themeId === ColorTheme.ATELIER) {
+      return $r('app.string.theme_color_atelier')
+    }
     if (themeId === ColorTheme.LAVENDER) {
       return $r('app.string.theme_color_lavender')
     }
     if (themeId === ColorTheme.CLAUDE) {
       return $r('app.string.theme_color_claude')
     }
-    if (themeId === ColorTheme.CHATGPT) {
-      return $r('app.string.theme_color_chatgpt')
+    if (themeId === ColorTheme.PORCELAIN) {
+      return $r('app.string.theme_color_porcelain')
     }
-    if (themeId === ColorTheme.VIOLET) {
-      return $r('app.string.theme_color_violet')
-    }
-    if (themeId === ColorTheme.MINT) {
-      return $r('app.string.theme_color_mint')
-    }
-    if (themeId === ColorTheme.NOTION) {
-      return $r('app.string.theme_color_notion')
-    }
-    return $r('app.string.theme_color_default')
+    return $r('app.string.theme_color_lavender')
   }
 
   private getThemeDescription(themeId: ColorTheme): Resource {
+    if (themeId === ColorTheme.ATELIER) {
+      return $r('app.string.theme_color_atelier_desc')
+    }
     if (themeId === ColorTheme.LAVENDER) {
       return $r('app.string.theme_color_lavender_desc')
     }
     if (themeId === ColorTheme.CLAUDE) {
       return $r('app.string.theme_color_claude_desc')
     }
-    if (themeId === ColorTheme.CHATGPT) {
-      return $r('app.string.theme_color_chatgpt_desc')
+    if (themeId === ColorTheme.PORCELAIN) {
+      return $r('app.string.theme_color_porcelain_desc')
     }
-    if (themeId === ColorTheme.VIOLET) {
-      return $r('app.string.theme_color_violet_desc')
-    }
-    if (themeId === ColorTheme.MINT) {
-      return $r('app.string.theme_color_mint_desc')
-    }
-    if (themeId === ColorTheme.NOTION) {
-      return $r('app.string.theme_color_notion_desc')
-    }
-    return $r('app.string.theme_color_default_desc')
+    return $r('app.string.theme_color_lavender_desc')
   }
 
   private getThemePreviewSwatch(theme: ThemeInfo, index: number): string {
@@ -264,12 +255,19 @@ export struct ThemeAppearanceSettingsView {
 
   private async handleColorThemeSelected(theme: ColorTheme): Promise<void> {
     const previousTheme = this.currentColorTheme
-    this.currentColorTheme = theme
+    animateTo({ duration: 450, curve: Curve.EaseInOut }, () => {
+      this.currentColorTheme = theme
+    })
     try {
       await this.settingsManager.setColorTheme(theme)
+      if (theme === ColorTheme.ATELIER && !this.chatSerifFontEnabled) {
+        await this.handleChatSerifFontChanged(true)
+      }
     } catch (error) {
       console.error('ThemeAppearanceSettingsView', `Failed to set color theme: ${JSON.stringify(error)}`)
-      this.currentColorTheme = previousTheme
+      animateTo({ duration: 450, curve: Curve.EaseInOut }, () => {
+        this.currentColorTheme = previousTheme
+      })
     }
   }
 
@@ -282,7 +280,9 @@ export struct ThemeAppearanceSettingsView {
 
   private async handleChatSerifFontChanged(enabled: boolean): Promise<void> {
     const previous = this.chatSerifFontEnabled
-    this.chatSerifFontEnabled = enabled
+    animateTo({ duration: 280, curve: curves.springMotion(0.35, 0.8) }, () => {
+      this.chatSerifFontEnabled = enabled
+    })
     try {
       if (enabled) {
         const availability = detectAndRegisterChatSerifFonts(this.getUIContext())
@@ -292,7 +292,9 @@ export struct ThemeAppearanceSettingsView {
     } catch (error) {
       console.error('ThemeAppearanceSettingsView',
         `Failed to update chat serif font setting: ${JSON.stringify(error)}`)
-      this.chatSerifFontEnabled = previous
+      animateTo({ duration: 280, curve: curves.springMotion(0.35, 0.8) }, () => {
+        this.chatSerifFontEnabled = previous
+      })
     }
   }
 
@@ -348,25 +350,33 @@ export struct ThemeAppearanceSettingsView {
 
   private async handleChatListImmersiveMaterialChanged(enabled: boolean): Promise<void> {
     const previous = this.chatListImmersiveMaterial
-    this.chatListImmersiveMaterial = enabled
+    animateTo({ duration: 280, curve: curves.springMotion(0.35, 0.8) }, () => {
+      this.chatListImmersiveMaterial = enabled
+    })
     try {
       await this.settingsManager.setChatListImmersiveMaterial(enabled)
     } catch (error) {
       console.error('ThemeAppearanceSettingsView',
         `Failed to set chat list immersive material: ${JSON.stringify(error)}`)
-      this.chatListImmersiveMaterial = previous
+      animateTo({ duration: 280, curve: curves.springMotion(0.35, 0.8) }, () => {
+        this.chatListImmersiveMaterial = previous
+      })
     }
   }
 
   private async handleKnowledgeListImmersiveMaterialChanged(enabled: boolean): Promise<void> {
     const previous = this.knowledgeListImmersiveMaterial
-    this.knowledgeListImmersiveMaterial = enabled
+    animateTo({ duration: 280, curve: curves.springMotion(0.35, 0.8) }, () => {
+      this.knowledgeListImmersiveMaterial = enabled
+    })
     try {
       await this.settingsManager.setKnowledgeListImmersiveMaterial(enabled)
     } catch (error) {
       console.error('ThemeAppearanceSettingsView',
         `Failed to set knowledge list immersive material: ${JSON.stringify(error)}`)
-      this.knowledgeListImmersiveMaterial = previous
+      animateTo({ duration: 280, curve: curves.springMotion(0.35, 0.8) }, () => {
+        this.knowledgeListImmersiveMaterial = previous
+      })
     }
   }
 
@@ -536,15 +546,27 @@ export struct ThemeAppearanceSettingsView {
             Text(this.getThemeName(theme.id))
               .fontSize(13)
               .fontWeight(FontWeight.Medium)
+              .fontFamily(this.themeCardTypeface)
               .fontColor($r('app.color.text_primary'))
               .maxLines(1)
               .textOverflow({ overflow: TextOverflow.Ellipsis })
 
             Text(this.getThemeDescription(theme.id))
               .fontSize(11)
+              .fontFamily(this.themeCardTypeface)
               .fontColor($r('app.color.text_secondary'))
-              .maxLines(1)
-              .textOverflow({ overflow: TextOverflow.Ellipsis })
+              .lineHeight(16)
+              .width('100%')
+              .height(18)
+              .textOverflow({ overflow: TextOverflow.MARQUEE })
+              .marqueeOptions({
+                start: true,
+                step: 3,
+                loop: -1,
+                fromStart: true,
+                delay: 1200,
+                fadeout: true
+              })
           }
           .layoutWeight(1)
           .alignItems(HorizontalAlign.Start)
@@ -553,6 +575,10 @@ export struct ThemeAppearanceSettingsView {
             SymbolGlyph($r('sys.symbol.checkmark_circle_fill'))
               .fontSize(18)
               .fontColor([this.themePrimary])
+              .transition(
+                TransitionEffect.OPACITY.combine(TransitionEffect.scale({ x: 0.6, y: 0.6 }))
+                  .animation({ duration: 350, curve: curves.springMotion(0.35, 0.8) })
+              )
           }
         }
         .width('100%')
@@ -953,6 +979,7 @@ export struct ThemeAppearanceSettingsView {
               .selectedColor(this.themePrimary)
               .systemMaterial(new uiMaterial.Material())
               .switchPointColor(Color.White)
+              .animation({ duration: 280, curve: curves.springMotion(0.35, 0.8) })
               .onChange((enabled: boolean) => {
                 this.handleChatSerifFontChanged(enabled)
               })
@@ -1041,6 +1068,7 @@ export struct ThemeAppearanceSettingsView {
               .selectedColor(this.themePrimary)
               .systemMaterial(new uiMaterial.Material())
               .switchPointColor(Color.White)
+              .animation({ duration: 280, curve: curves.springMotion(0.35, 0.8) })
               .onChange((enabled: boolean) => {
                 this.handleChatListImmersiveMaterialChanged(enabled)
               })
@@ -1074,6 +1102,7 @@ export struct ThemeAppearanceSettingsView {
               .selectedColor(this.themePrimary)
               .systemMaterial(new uiMaterial.Material())
               .switchPointColor(Color.White)
+              .animation({ duration: 280, curve: curves.springMotion(0.35, 0.8) })
               .onChange((enabled: boolean) => {
                 this.handleKnowledgeListImmersiveMaterialChanged(enabled)
               })

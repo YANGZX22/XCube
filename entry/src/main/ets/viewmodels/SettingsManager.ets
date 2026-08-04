@@ -487,22 +487,16 @@ export class SettingsManager {
 
   // 获取主题配色显示文本
   getColorThemeDisplayText(theme: ColorTheme): Resource {
-    if (theme === ColorTheme.LAVENDER) {
+    if (theme === ColorTheme.ATELIER) {
+      return $r('app.string.theme_color_atelier')
+    } else if (theme === ColorTheme.LAVENDER) {
       return $r('app.string.theme_color_lavender')
-    } else if (theme === ColorTheme.DEFAULT) {
-      return $r('app.string.theme_color_default')
     } else if (theme === ColorTheme.CLAUDE) {
       return $r('app.string.theme_color_claude')
-    } else if (theme === ColorTheme.CHATGPT) {
-      return $r('app.string.theme_color_chatgpt')
-    } else if (theme === ColorTheme.VIOLET) {
-      return $r('app.string.theme_color_violet')
-    } else if (theme === ColorTheme.MINT) {
-      return $r('app.string.theme_color_mint')
-    } else if (theme === ColorTheme.NOTION) {
-      return $r('app.string.theme_color_notion')
+    } else if (theme === ColorTheme.PORCELAIN) {
+      return $r('app.string.theme_color_porcelain')
     } else {
-      return $r('app.string.theme_color_default')
+      return $r('app.string.theme_color_lavender')
     }
   }
 }
