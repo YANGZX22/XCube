@@ -83,6 +83,7 @@ export class PreferenceKeys {
   static readonly CHAT_FONT_SIZE: string = 'chat_font_size'
   static readonly CHAT_SERIF_FONT_ENABLED: string = 'chat_serif_font_enabled'
   static readonly CHAT_SERIF_FONT_FAMILY: string = 'chat_serif_font_family'
+  static readonly MARKDOWN_RENDERER: string = 'markdown_renderer'
 
   // 聊天输入设置
   static readonly CHAT_INPUT_ENTER_KEY_SEND: string = 'chat_input_enter_key_send'
@@ -131,6 +132,15 @@ export enum AppLanguage {
   SYSTEM = 'system',
   ZH_CN = 'zh-CN',
   EN_US = 'en-US'
+}
+
+export enum MarkdownRenderer {
+  CANGJIE = 'cangjie',
+  LV_MARKDOWN_IN = 'lv-markdown-in'
+}
+
+export function normalizeMarkdownRenderer(value: string): MarkdownRenderer {
+  return value === MarkdownRenderer.LV_MARKDOWN_IN ? MarkdownRenderer.LV_MARKDOWN_IN : MarkdownRenderer.CANGJIE
 }
 
 export function normalizeAppLanguageValue(value: string): AppLanguage {
@@ -481,6 +491,15 @@ export class PreferencesService {
 
   async setChatSerifFontFamily(fontFamily: string): Promise<void> {
     await this.setString(PreferenceKeys.CHAT_SERIF_FONT_FAMILY, fontFamily)
+  }
+
+  async getMarkdownRenderer(): Promise<MarkdownRenderer> {
+    const renderer = await this.getString(PreferenceKeys.MARKDOWN_RENDERER, MarkdownRenderer.CANGJIE)
+    return normalizeMarkdownRenderer(renderer)
+  }
+
+  async setMarkdownRenderer(renderer: MarkdownRenderer): Promise<void> {
+    await this.setString(PreferenceKeys.MARKDOWN_RENDERER, normalizeMarkdownRenderer(renderer))
   }
 
   // 获取聊天输入框回车键是否发送

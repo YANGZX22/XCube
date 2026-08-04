@@ -23,6 +23,7 @@
 
 # 签名配置（包含密钥密码和本地路径）
 build-profile.json5
+!third_party/lv-markdown-in/markdown/build-profile.json5
 /AGENTS.md
 docs/appgallery
 

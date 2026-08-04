@@ -33,6 +33,10 @@ export struct ChatToolbar {
     return getAppUiState().themePrimary
   }
 
+  private get themePrimaryLight(): string {
+    return getAppUiState().themePrimaryLight
+  }
+
   private get themeAiBubble(): string {
     return getAppUiState().themeAiBubble
   }
@@ -301,6 +305,13 @@ export struct ChatToolbar {
     return index < 0 ? 0 : index
   }
 
+  private getReasoningTrackGradient(): LinearGradient {
+    return new LinearGradient([
+      { color: this.withAlpha(this.themePrimaryLight, '99'), offset: 0 },
+      { color: this.withAlpha(this.themePrimary, 'CC'), offset: 1 }
+    ])
+  }
+
   private getReasoningLevelText(level: ReasoningLevel): ResourceStr {
     switch (level) {
       case ReasoningLevel.AUTO:
@@ -341,7 +352,6 @@ export struct ChatToolbar {
   @Builder
   private ReasoningSliderContent() {
     Column() {
-      // 顶部：图标 + 标题 + 当前档位文案
       Row() {
         SymbolGlyph($r('sys.symbol.lightbulb'))
           .fontSize(16)
@@ -363,25 +373,26 @@ export struct ChatToolbar {
       .width('100%')
       .alignItems(VerticalAlign.Center)
 
-      // 分档滑块
       Slider({
         value: this.getReasoningLevelIndex(),
         min: 0,
         max: this.getReasoningLevelOptions().length - 1,
         step: 1,
-        style: SliderStyle.InSet
+        style: SliderStyle.InSet,
+        direction: Axis.Horizontal
       })
         .width('100%')
-        .blockColor(Color.White)
-        .selectedColor(this.themePrimary)
         .trackColor(this.withAlpha(this.themeAiBubble, '66'))
         .trackThickness(20)
-        .blockSize({ width: 18, height: 18 })
-        .showSteps(true)
+        .blockSize({ width: 40, height: 40 })
+        .blockColor(Color.Transparent)
+        .blockBorderColor(Color.Transparent)
+        .blockBorderWidth(0)
+        .selectedColor(this.getReasoningTrackGradient())
         .systemMaterial(new uiMaterial.ImmersiveMaterial({
           style: uiMaterial.ImmersiveStyle.ULTRA_THIN
         }))
-        .margin({ top: 8, bottom: 2 })
+        .margin({ top: 8, bottom: 4 })
         .onChange((value: number, mode: SliderChangeMode) => {
           if (mode === SliderChangeMode.End || mode === SliderChangeMode.Click ||
             mode === SliderChangeMode.Moving) {
@@ -395,7 +406,6 @@ export struct ChatToolbar {
           }
         })
 
-      // 底部档位刻度文案
       Row() {
         ForEach(this.getReasoningLevelOptions(), (level: ReasoningLevel) => {
           Text(this.getReasoningLevelText(level))
@@ -403,12 +413,14 @@ export struct ChatToolbar {
             .fontColor(level === this.reasoningLevel
               ? this.themePrimary : $r('app.color.text_secondary'))
             .fontWeight(level === this.reasoningLevel ? FontWeight.Medium : FontWeight.Regular)
-            .layoutWeight(1)
+            .width(40)
             .textAlign(TextAlign.Center)
             .maxLines(1)
+            .textOverflow({ overflow: TextOverflow.Ellipsis })
         })
       }
       .width('100%')
+      .justifyContent(FlexAlign.SpaceBetween)
     }
     .width('100%')
     .constraintSize({ maxWidth: 560 })

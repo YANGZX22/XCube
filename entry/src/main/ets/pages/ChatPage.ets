@@ -66,7 +66,7 @@ import { ChatToolPickerSheetContent } from '../components/chat/ChatToolPickerShe
 import { ChatToolExecutionApprovalSheetContent } from '../components/chat/ChatToolExecutionApprovalSheetContent'
 import { VoiceInputSheet } from '../components/VoiceInputSheet'
 import { PyodideWebHost } from '../components/PyodideWebHost'
-import { ChatMarkdownHybridRenderer } from '../components/ChatMarkdownHybridRenderer'
+import { ChatMarkdownRenderer } from '../components/ChatMarkdownRenderer'
 import {
   ChatNavigationTitleContent,
   CHAT_NAVIGATION_TITLE_STACK_BUILDER_HEIGHT
@@ -1108,7 +1108,7 @@ export struct ChatPage {
                 .fontColor($r('app.color.text_tertiary'))
                 .width('100%')
             } else {
-              ChatMarkdownHybridRenderer({
+              ChatMarkdownRenderer({
                 content: this.canvasDocumentContent,
                 isInputEnded: true,
                 incrementalAnalysis: false,

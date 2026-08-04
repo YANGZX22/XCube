@@ -1857,6 +1857,22 @@
       "value": "Anthropic Serif Text（本地）"
     },
     {
+      "name": "settings_markdown_renderer",
+      "value": "Markdown 渲染器"
+    },
+    {
+      "name": "settings_markdown_renderer_desc",
+      "value": "选择消息气泡和 Canvas 预览使用的渲染器"
+    },
+    {
+      "name": "markdown_renderer_cangjie",
+      "value": "cangjie (仓颉)"
+    },
+    {
+      "name": "markdown_renderer_lv",
+      "value": "lv-markdown-in"
+    },
+    {
       "name": "font_size_small",
       "value": "小"
     },

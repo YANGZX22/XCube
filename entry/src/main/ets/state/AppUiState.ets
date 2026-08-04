@@ -53,6 +53,7 @@ export class AppUiState {
   @Trace chatFontSize: number = 15
   @Trace chatSerifFontEnabled: boolean = false
   @Trace chatSerifFontFamily: string = 'common'
+  @Trace markdownRenderer: string = 'cangjie'
   @Trace chatInputEnterKeySend: boolean = false
   @Trace ttsEnabled: boolean = true
   @Trace materialType: number = 100   // ADAPTIVE
@@ -210,6 +211,9 @@ function applyAppUiStateValue<T extends string | number | boolean>(state: AppUiS
     case AppStorageKeys.CHAT_SERIF_FONT_FAMILY:
       state.chatSerifFontFamily = value as string
       return
+    case AppStorageKeys.MARKDOWN_RENDERER:
+      state.markdownRenderer = value as string
+      return
     case AppStorageKeys.CHAT_INPUT_ENTER_KEY_SEND:
       state.chatInputEnterKeySend = value as boolean
       return
@@ -320,6 +324,8 @@ function createAppUiStateFromStorage(): AppUiState {
     readStorageValue<boolean>(AppStorageKeys.CHAT_SERIF_FONT_ENABLED, false))
   applyAppUiStateValue(state, AppStorageKeys.CHAT_SERIF_FONT_FAMILY,
     readStorageValue<string>(AppStorageKeys.CHAT_SERIF_FONT_FAMILY, 'common'))
+  applyAppUiStateValue(state, AppStorageKeys.MARKDOWN_RENDERER,
+    readStorageValue<string>(AppStorageKeys.MARKDOWN_RENDERER, 'cangjie'))
   applyAppUiStateValue(state, AppStorageKeys.CHAT_INPUT_ENTER_KEY_SEND,
     readStorageValue<boolean>(AppStorageKeys.CHAT_INPUT_ENTER_KEY_SEND, false))
   applyAppUiStateValue(state, AppStorageKeys.MATERIAL_TYPE,
@@ -393,6 +399,7 @@ export function syncAppUiStateFromStorage(): void {
   state.chatFontSize = freshState.chatFontSize
   state.chatSerifFontEnabled = freshState.chatSerifFontEnabled
   state.chatSerifFontFamily = freshState.chatSerifFontFamily
+  state.markdownRenderer = freshState.markdownRenderer
   state.chatInputEnterKeySend = freshState.chatInputEnterKeySend
   state.materialType = freshState.materialType
   state.materialLevel = freshState.materialLevel
@@ -520,6 +527,8 @@ function resolveAppUiStatePath(path: string): string {
       return 'chatSerifFontEnabled'
     case AppStorageKeys.CHAT_SERIF_FONT_FAMILY:
       return 'chatSerifFontFamily'
+    case AppStorageKeys.MARKDOWN_RENDERER:
+      return 'markdownRenderer'
     case AppStorageKeys.CHAT_INPUT_ENTER_KEY_SEND:
       return 'chatInputEnterKeySend'
     case AppStorageKeys.MATERIAL_TYPE:

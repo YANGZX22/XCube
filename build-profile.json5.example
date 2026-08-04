@@ -52,6 +52,10 @@
           ]
         }
       ]
+    },
+    {
+      "name": "markdown",
+      "srcPath": "./third_party/lv-markdown-in/markdown"
     }
   ]
 }

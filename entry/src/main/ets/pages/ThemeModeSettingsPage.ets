@@ -7,7 +7,7 @@ import {
 } from '@kit.UIDesignKit'
 import { uiMaterial } from '@kit.ArkUI'
 import { ALL_THEMES, ColorTheme, getThemeColors, ThemeColorConfig, ThemeInfo } from '../models/ThemeColors'
-import { ThemeMode } from '../services/PreferencesService'
+import { MarkdownRenderer, ThemeMode } from '../services/PreferencesService'
 import { ServiceRegistry } from '../services/ServiceRegistry'
 import { SettingsCompactTitleBarContent } from '../components/settings/SettingsCompactPageHeader'
 import { getSettingsPageContentMaxWidth, getSettingsPageCompactTabsTotalInset } from '../utils/SettingsPageLayoutHelper'
@@ -99,6 +99,7 @@ export struct ThemeAppearanceSettingsView {
   @Local chatFontSize: number = 15
   @Local chatSerifFontEnabled: boolean = false
   @Local chatSerifFontFamily: string = CHAT_SERIF_FONT_COMMON
+  @Local markdownRenderer: MarkdownRenderer = MarkdownRenderer.CANGJIE
   @Local anthropicSerifAvailable: boolean = false
   @Local materialType: number = 100
   @Local materialLevel: number = 10
@@ -125,6 +126,7 @@ export struct ThemeAppearanceSettingsView {
     this.currentColorTheme = this.settingsManager.getColorTheme()
     this.chatFontSize = this.settingsManager.getChatFontSize()
     this.chatSerifFontEnabled = this.settingsManager.getChatSerifFontEnabled()
+    this.markdownRenderer = this.settingsManager.getMarkdownRenderer()
     const savedSerifFont = this.settingsManager.getChatSerifFontFamily()
     this.chatSerifFontFamily = savedSerifFont === CHAT_SERIF_FONT_ANTHROPIC && this.anthropicSerifAvailable ?
       CHAT_SERIF_FONT_ANTHROPIC : CHAT_SERIF_FONT_COMMON
@@ -317,6 +319,30 @@ export struct ThemeAppearanceSettingsView {
       console.error('ThemeAppearanceSettingsView',
         `Failed to update chat serif font family: ${JSON.stringify(error)}`)
       this.chatSerifFontFamily = previous
+    }
+  }
+
+  private getMarkdownRendererOptions(): SelectOption[] {
+    return [
+      { value: $r('app.string.markdown_renderer_cangjie') },
+      { value: $r('app.string.markdown_renderer_lv') }
+    ]
+  }
+
+  private getMarkdownRendererSelectedIndex(): number {
+    return this.markdownRenderer === MarkdownRenderer.LV_MARKDOWN_IN ? 1 : 0
+  }
+
+  private async handleMarkdownRendererChanged(index: number): Promise<void> {
+    const nextRenderer = index === 1 ? MarkdownRenderer.LV_MARKDOWN_IN : MarkdownRenderer.CANGJIE
+    const previous = this.markdownRenderer
+    this.markdownRenderer = nextRenderer
+    try {
+      await this.settingsManager.setMarkdownRenderer(nextRenderer)
+    } catch (error) {
+      console.error('ThemeAppearanceSettingsView',
+        `Failed to update Markdown renderer: ${JSON.stringify(error)}`)
+      this.markdownRenderer = previous
     }
   }
 
@@ -858,6 +884,49 @@ export struct ThemeAppearanceSettingsView {
           }
           .width('100%')
           .padding(18)
+          .backgroundColor(Color.Transparent)
+          .borderRadius(24)
+          .border({ width: 1, color: this.themePrimaryLight })
+          .systemMaterial(this.getAppearanceBlockMaterial(false))
+
+          Column({ space: 10 }) {
+            Text($r('app.string.settings_markdown_renderer'))
+              .fontSize(16)
+              .fontWeight(FontWeight.Medium)
+              .fontColor($r('app.color.text_primary'))
+              .width('100%')
+
+            Text($r('app.string.settings_markdown_renderer_desc'))
+              .fontSize(12)
+              .fontColor($r('app.color.text_secondary'))
+              .lineHeight(18)
+              .width('100%')
+
+            Select(this.getMarkdownRendererOptions())
+              .selected(this.getMarkdownRendererSelectedIndex())
+              .value(this.getMarkdownRendererOptions()[this.getMarkdownRendererSelectedIndex()].value)
+              .width('100%')
+              .height(46)
+              .font({ size: 13 })
+              .fontColor($r('app.color.text_primary'))
+              .selectedOptionFontColor(this.themePrimary)
+              .backgroundColor(Color.Transparent)
+              .borderRadius(16)
+              .systemMaterial(new uiMaterial.ImmersiveMaterial({
+                style: uiMaterial.ImmersiveStyle.ULTRA_THIN,
+                materialColor: Color.Transparent,
+                applyShadow: false
+              }))
+              .menuSystemMaterial(new uiMaterial.ImmersiveMaterial({
+                style: uiMaterial.ImmersiveStyle.THICK
+              }))
+              .onSelect((index: number, _value: string): void => {
+                this.handleMarkdownRendererChanged(index)
+              })
+          }
+          .width('100%')
+          .padding(18)
+          .alignItems(HorizontalAlign.Start)
           .backgroundColor(Color.Transparent)
           .borderRadius(24)
           .border({ width: 1, color: this.themePrimaryLight })

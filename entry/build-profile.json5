@@ -5,6 +5,26 @@
       "copyCodeResource": {
         "enable": false
       }
+    },
+    "nativeLib": {
+      "filter": {
+        "select": [
+          {
+            "package": "@cangjie-tpc/formula_hybrid",
+            "version": "1.3.0",
+            "include": [
+              "liblatex.so"
+            ]
+          },
+          {
+            "package": "@cangjie-tpc/markdown_hybrid",
+            "version": "1.3.6",
+            "exclude": [
+              "liblatex.so"
+            ]
+          }
+        ]
+      }
     }
   },
   "buildOptionSet": [

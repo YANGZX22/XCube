@@ -7,6 +7,7 @@
   "license": "",
   "dependencies": {
     "@cangjie-tpc/markdown_hybrid": "^1.3.6",
+    "@luvi/lv-markdown-in": "file:../third_party/lv-markdown-in/markdown",
     "sherpa_onnx": "1.12.20",
     "@visactor/harmony-vchart": "^1.13.5"
   },

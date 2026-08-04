@@ -1,5 +1,11 @@
 import { ConfigurationConstant } from '@kit.AbilityKit'
-import { getPreferencesService, ThemeMode, AppLanguage, PreferenceKeys } from '../services/PreferencesService'
+import {
+  getPreferencesService,
+  ThemeMode,
+  AppLanguage,
+  MarkdownRenderer,
+  PreferenceKeys
+} from '../services/PreferencesService'
 import { ColorTheme, ThemeColorConfig } from '../models/ThemeColors'
 import { getThemeService } from '../services/ThemeService'
 import { setAppUiStateValue } from '../state/AppUiState'
@@ -27,6 +33,7 @@ export class SettingsManager {
   private chatFontSize: number = 15
   private chatSerifFontEnabled: boolean = false
   private chatSerifFontFamily: string = 'common'
+  private markdownRenderer: MarkdownRenderer = MarkdownRenderer.CANGJIE
   private chatInputEnterKeySend: boolean = false
   private ttsEnabled: boolean = true
   private materialType: number = 100    // ADAPTIVE
@@ -72,6 +79,7 @@ export class SettingsManager {
     this.chatFontSize = await preferencesService.getChatFontSize()
     this.chatSerifFontEnabled = await preferencesService.getChatSerifFontEnabled()
     this.chatSerifFontFamily = await preferencesService.getChatSerifFontFamily()
+    this.markdownRenderer = await preferencesService.getMarkdownRenderer()
     this.chatInputEnterKeySend = await preferencesService.getChatInputEnterKeySend()
     this.ttsEnabled = await preferencesService.getBoolean(PreferenceKeys.TTS_ENABLED, true)
     this.materialType = await preferencesService.getMaterialType()
@@ -81,6 +89,7 @@ export class SettingsManager {
     this.knowledgeListImmersiveMaterial = await preferencesService.getKnowledgeListImmersiveMaterial()
     setAppUiStateValue(AppStorageKeys.CHAT_SERIF_FONT_ENABLED, this.chatSerifFontEnabled)
     setAppUiStateValue(AppStorageKeys.CHAT_SERIF_FONT_FAMILY, this.chatSerifFontFamily)
+    setAppUiStateValue(AppStorageKeys.MARKDOWN_RENDERER, this.markdownRenderer)
     setAppUiStateValue(AppStorageKeys.CHAT_INPUT_ENTER_KEY_SEND, this.chatInputEnterKeySend)
     setAppUiStateValue(AppStorageKeys.TTS_ENABLED, this.ttsEnabled)
     setAppUiStateValue(AppStorageKeys.CHAT_LIST_IMMERSIVE_MATERIAL, this.chatListImmersiveMaterial)
@@ -99,6 +108,7 @@ export class SettingsManager {
     this.chatFontSize = await preferencesService.getChatFontSize()
     this.chatSerifFontEnabled = await preferencesService.getChatSerifFontEnabled()
     this.chatSerifFontFamily = await preferencesService.getChatSerifFontFamily()
+    this.markdownRenderer = await preferencesService.getMarkdownRenderer()
     this.chatInputEnterKeySend = await preferencesService.getChatInputEnterKeySend()
     this.ttsEnabled = await preferencesService.getBoolean(PreferenceKeys.TTS_ENABLED, true)
     this.materialType = await preferencesService.getMaterialType()
@@ -108,6 +118,7 @@ export class SettingsManager {
     this.knowledgeListImmersiveMaterial = await preferencesService.getKnowledgeListImmersiveMaterial()
     setAppUiStateValue(AppStorageKeys.CHAT_SERIF_FONT_ENABLED, this.chatSerifFontEnabled)
     setAppUiStateValue(AppStorageKeys.CHAT_SERIF_FONT_FAMILY, this.chatSerifFontFamily)
+    setAppUiStateValue(AppStorageKeys.MARKDOWN_RENDERER, this.markdownRenderer)
     setAppUiStateValue(AppStorageKeys.CHAT_INPUT_ENTER_KEY_SEND, this.chatInputEnterKeySend)
     setAppUiStateValue(AppStorageKeys.TTS_ENABLED, this.ttsEnabled)
     setAppUiStateValue(AppStorageKeys.CHAT_LIST_IMMERSIVE_MATERIAL, this.chatListImmersiveMaterial)
@@ -330,6 +341,20 @@ export class SettingsManager {
     await getPreferencesService().setChatSerifFontFamily(fontFamily)
     this.chatSerifFontFamily = fontFamily
     setAppUiStateValue(AppStorageKeys.CHAT_SERIF_FONT_FAMILY, fontFamily)
+  }
+
+  getMarkdownRenderer(): MarkdownRenderer {
+    return this.markdownRenderer
+  }
+
+  async setMarkdownRenderer(renderer: MarkdownRenderer): Promise<void> {
+    if (this.markdownRenderer === renderer) {
+      return
+    }
+
+    await getPreferencesService().setMarkdownRenderer(renderer)
+    this.markdownRenderer = renderer
+    setAppUiStateValue(AppStorageKeys.MARKDOWN_RENDERER, renderer)
   }
 
   // ========== 聊天输入设置相关方法 ==========

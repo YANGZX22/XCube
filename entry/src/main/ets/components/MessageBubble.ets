@@ -12,7 +12,7 @@ import { AskUserCard } from './AskUserCard'
 import { HtmlPreviewCard } from './HtmlPreviewCard'
 import { VChartCard } from './VChartCard'
 import { TypingDots } from './TypingDots'
-import { ChatMarkdownHybridRenderer } from './ChatMarkdownHybridRenderer'
+import { ChatMarkdownRenderer } from './ChatMarkdownRenderer'
 import { AssistantAvatarView } from './AssistantAvatar'
 import { hilog } from '@kit.PerformanceAnalysisKit'
 import { SymbolGlyphModifier, uiMaterial } from '@kit.ArkUI'
@@ -446,11 +446,11 @@ export struct MessageBubble {
   }
 
   // 流式正文渲染：必须在 Builder 内直接访问 this.message.content（@Trace 字段），
-  // 才能让 CJMarkdown 的 text 建立响应式依赖，流式增量追加才会实时刷新。
+  // 才能让当前 Markdown 组件的 text 建立响应式依赖，流式增量追加才会实时刷新。
   // 若把 content 在父 Builder 提取成 string 再传参，依赖会在参数边界断链，表现为正文流式不刷新。
   @Builder
   MessageContentMarkdown() {
-    ChatMarkdownHybridRenderer({
+    ChatMarkdownRenderer({
       content: this.message.content,
       isInputEnded: !this.message.isGenerating,
       incrementalAnalysis: this.message.isGenerating,
@@ -482,7 +482,7 @@ export struct MessageBubble {
   // 流式推理内容渲染：同样需在 Builder 内直接访问 this.message.reasoningContent（@Trace 字段）。
   @Builder
   ReasoningMarkdown() {
-    ChatMarkdownHybridRenderer({
+    ChatMarkdownRenderer({
       content: this.message.reasoningContent,
       isInputEnded: !this.message.isGenerating,
       incrementalAnalysis: this.message.isGenerating,
@@ -517,7 +517,7 @@ export struct MessageBubble {
   @Builder
   StaticMarkdown(content: string, compact: boolean, textColorOverride: string = '', titleColorOverride: string = '',
     useChatBubbleTypeface: boolean = false) {
-    ChatMarkdownHybridRenderer({
+    ChatMarkdownRenderer({
       content: content,
       isInputEnded: true,
       incrementalAnalysis: false,

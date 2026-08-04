@@ -1857,6 +1857,22 @@
       "value": "Anthropic Serif Text (Local)"
     },
     {
+      "name": "settings_markdown_renderer",
+      "value": "Markdown Renderer"
+    },
+    {
+      "name": "settings_markdown_renderer_desc",
+      "value": "Choose the renderer used in message bubbles and Canvas previews"
+    },
+    {
+      "name": "markdown_renderer_cangjie",
+      "value": "cangjie"
+    },
+    {
+      "name": "markdown_renderer_lv",
+      "value": "lv-markdown-in"
+    },
+    {
       "name": "font_size_small",
       "value": "Small"
     },

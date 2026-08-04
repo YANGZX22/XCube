@@ -46,13 +46,14 @@ export struct ChatMarkdownHybridRenderer {
   }
 
   /**
-   * markdown_hybrid 没有提供有序列表前缀的字体接口。使用衬线字体时保留原列表结构，
-   * 隐藏组件生成的前缀，并把同一编号放进列表正文，使编号与正文使用相同字体。
+   * 仓颉未提供有序列表前缀字体接口。使用衬线字体时，将编号转为转义后的普通正文，
+   * 并移除列表语法及源缩进，使编号继承段落字体且不再保留列表缩进槽位。
    */
   private getTypefaceAwareContent(): string {
     if (!this.isCustomTextTypeface() || this.content === '') {
       return this.content
     }
+
     const lines: Array<string> = this.content.split('\n')
     let inFencedCodeBlock: boolean = false
     const orderedListPattern = new RegExp('^(\\s*)([0-9]+)([.)])(\\s+)(.*)$')
@@ -66,10 +67,11 @@ export struct ChatMarkdownHybridRenderer {
       if (inFencedCodeBlock) {
         continue
       }
+
       const match = line.match(orderedListPattern)
       if (match !== null && match.length >= 6 && match[5] !== '') {
-        // 转义正文中的分隔符，避免复制出的 “1.” 再次被解析成一层嵌套列表。
-        lines[index] = match[1] + match[2] + match[3] + match[4] + match[2] + '\\' + match[3] + ' ' + match[5]
+        // 两个尾随空格是 Markdown hard break：转成普通正文后仍让每个编号项独占一行。
+        lines[index] = match[2] + '\\' + match[3] + match[4] + match[5].trimEnd() + '  '
       }
     }
     return lines.join('\n')
@@ -154,8 +156,7 @@ export struct ChatMarkdownHybridRenderer {
     theme.setBlockLeftMargin(listLeftMargin)
     theme.setBlockRightMargin(0)
     theme.setOrderedListItemPrefixBold(false)
-    // 自定义字体下，编号会作为正文绘制；组件自身不支持为此前缀指定字体。
-    theme.setOrderedListItemColor(this.isCustomTextTypeface() ? 0x00000000 : textColor)
+    theme.setOrderedListItemColor(textColor)
     theme.setOrderedListItemSize(textSize)
     theme.setOrderedListItemLineHeight(textLineHeight)
     theme.setBulletListItemColor(textColor)
