@@ -69,6 +69,21 @@ export const ASSET_LICENSES: LicenseCatalogItem[] = [
     'Copyright © 2022-2024 The Common Serif Project Authors.'
   ),
   new LicenseCatalogItem(
+    'Cinzel', '', 'SIL Open Font License 1.1',
+    'Copyright © 2020 The Cinzel Project Authors。',
+    'Copyright © 2020 The Cinzel Project Authors.'
+  ),
+  new LicenseCatalogItem(
+    'Domine', '', 'SIL Open Font License 1.1',
+    'Copyright © 2020 The Domine Project Authors；Copyright © 2012 Pablo Impallari、Rodrigo Fuenzalida、Brenda Gallo；保留字体名称 Domine。',
+    'Copyright © 2020 The Domine Project Authors; Copyright © 2012 Pablo Impallari, Rodrigo Fuenzalida and Brenda Gallo; Domine is a Reserved Font Name.'
+  ),
+  new LicenseCatalogItem(
+    'Libertinus Serif', '', 'SIL Open Font License 1.1',
+    'Copyright © 2025 The Libertinus Serif Project Authors。',
+    'Copyright © 2025 The Libertinus Serif Project Authors.'
+  ),
+  new LicenseCatalogItem(
     'JetBrains Mono', '2.304', 'SIL Open Font License 1.1',
     'Copyright © 2020 The JetBrains Mono Project Authors。',
     'Copyright © 2020 The JetBrains Mono Project Authors.'

@@ -3,6 +3,7 @@ import { ColorTheme, ThemeInfo, ALL_THEMES } from '../models/ThemeColors'
 import { getThemeService } from '../services/ThemeService'
 import { getAppUiState } from '../state/AppUiState'
 import {
+  CHAT_SERIF_FONT_CINZEL,
   CHAT_SERIF_FONT_COMMON,
   detectAndRegisterChatSerifFonts,
   resolveChatSerifFontFamily
@@ -16,6 +17,9 @@ export struct ThemeColorPicker {
   }
   private get themeCardTypeface(): string {
     return resolveChatSerifFontFamily(CHAT_SERIF_FONT_COMMON)
+  }
+  private get themeCardTitleTypeface(): string {
+    return resolveChatSerifFontFamily(CHAT_SERIF_FONT_CINZEL)
   }
   @Event onThemeSelected: (theme: ColorTheme) => void = () => {}
 
@@ -103,7 +107,7 @@ export struct ThemeColorPicker {
       Text(this.getThemeName(theme.id))
         .fontSize(14)
         .fontWeight(FontWeight.Medium)
-        .fontFamily(this.themeCardTypeface)
+        .fontFamily(this.themeCardTitleTypeface)
         .fontColor($r('app.color.text_primary'))
         .maxLines(1)
         .textOverflow({ overflow: TextOverflow.Ellipsis })

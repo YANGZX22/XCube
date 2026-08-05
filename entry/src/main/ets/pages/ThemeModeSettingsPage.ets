@@ -27,8 +27,11 @@ import { IndexBottomTabItem } from '../components/index/IndexBottomTabItem'
 import { showToast } from '../utils/ToastUtil'
 import { pickLocalizedText } from '../utils/LocalizedTextUtils'
 import {
+  CHAT_SERIF_FONT_CINZEL,
   CHAT_SERIF_FONT_COMMON,
   CHAT_SERIF_FONT_CUSTOM,
+  CHAT_SERIF_FONT_DOMINE,
+  CHAT_SERIF_FONT_LIBERTINUS,
   ChatSerifFontAvailability,
   detectAndRegisterChatSerifFonts,
   getImportedChatSerifFontName,
@@ -98,6 +101,9 @@ export struct ThemeAppearanceSettingsView {
   private get themeCardTypeface(): string {
     return resolveChatSerifFontFamily(this.chatSerifFontFamily)
   }
+  private get themeCardTitleTypeface(): string {
+    return resolveChatSerifFontFamily(CHAT_SERIF_FONT_CINZEL)
+  }
 
   @Param compactTitle: string | Resource = $r('app.string.settings_appearance')
   @Event onCompactBack: () => void = () => {}
@@ -139,8 +145,13 @@ export struct ThemeAppearanceSettingsView {
     this.chatSerifFontEnabled = this.settingsManager.getChatSerifFontEnabled()
     this.markdownRenderer = this.settingsManager.getMarkdownRenderer()
     const savedSerifFont = this.settingsManager.getChatSerifFontFamily()
-    this.chatSerifFontFamily = savedSerifFont === CHAT_SERIF_FONT_CUSTOM && this.customSerifAvailable ?
-      CHAT_SERIF_FONT_CUSTOM : CHAT_SERIF_FONT_COMMON
+    if (savedSerifFont === CHAT_SERIF_FONT_CINZEL || savedSerifFont === CHAT_SERIF_FONT_DOMINE ||
+      savedSerifFont === CHAT_SERIF_FONT_LIBERTINUS) {
+      this.chatSerifFontFamily = savedSerifFont
+    } else {
+      this.chatSerifFontFamily = savedSerifFont === CHAT_SERIF_FONT_CUSTOM && this.customSerifAvailable ?
+        CHAT_SERIF_FONT_CUSTOM : CHAT_SERIF_FONT_COMMON
+    }
     this.materialType = this.settingsManager.getMaterialType()
     this.materialLevel = this.settingsManager.getMaterialLevel()
     this.lightColorMode = this.settingsManager.getLightColorMode()
@@ -332,7 +343,10 @@ export struct ThemeAppearanceSettingsView {
 
   private getSerifFontOptions(): SelectOption[] {
     const options: SelectOption[] = [
-      { value: $r('app.string.chat_serif_font_common') }
+      { value: $r('app.string.chat_serif_font_common') },
+      { value: $r('app.string.chat_serif_font_cinzel') },
+      { value: $r('app.string.chat_serif_font_domine') },
+      { value: $r('app.string.chat_serif_font_libertinus') }
     ]
     if (this.customSerifAvailable) {
       options.push({ value: this.customSerifName !== '' ? this.customSerifName :
@@ -343,17 +357,34 @@ export struct ThemeAppearanceSettingsView {
   }
 
   private getSerifFontSelectedIndex(): number {
-    return this.chatSerifFontFamily === CHAT_SERIF_FONT_CUSTOM && this.customSerifAvailable ? 1 : 0
+    if (this.chatSerifFontFamily === CHAT_SERIF_FONT_CINZEL) {
+      return 1
+    }
+    if (this.chatSerifFontFamily === CHAT_SERIF_FONT_DOMINE) {
+      return 2
+    }
+    if (this.chatSerifFontFamily === CHAT_SERIF_FONT_LIBERTINUS) {
+      return 3
+    }
+    return this.chatSerifFontFamily === CHAT_SERIF_FONT_CUSTOM && this.customSerifAvailable ? 4 : 0
   }
 
   private async handleChatSerifFontFamilyChanged(index: number): Promise<void> {
-    const importOptionIndex = this.customSerifAvailable ? 2 : 1
+    const importOptionIndex = this.customSerifAvailable ? 5 : 4
     if (index === importOptionIndex) {
       await this.importCustomSerifFont()
       return
     }
-    const nextFontFamily = index === 1 && this.customSerifAvailable ?
-      CHAT_SERIF_FONT_CUSTOM : CHAT_SERIF_FONT_COMMON
+    let nextFontFamily = CHAT_SERIF_FONT_COMMON
+    if (index === 1) {
+      nextFontFamily = CHAT_SERIF_FONT_CINZEL
+    } else if (index === 2) {
+      nextFontFamily = CHAT_SERIF_FONT_DOMINE
+    } else if (index === 3) {
+      nextFontFamily = CHAT_SERIF_FONT_LIBERTINUS
+    } else if (index === 4 && this.customSerifAvailable) {
+      nextFontFamily = CHAT_SERIF_FONT_CUSTOM
+    }
     const previous = this.chatSerifFontFamily
     this.chatSerifFontFamily = nextFontFamily
     try {
@@ -621,7 +652,7 @@ export struct ThemeAppearanceSettingsView {
             Text(this.getThemeName(theme.id))
               .fontSize(13)
               .fontWeight(FontWeight.Medium)
-              .fontFamily(this.themeCardTypeface)
+              .fontFamily(this.themeCardTitleTypeface)
               .fontColor($r('app.color.text_primary'))
               .maxLines(1)
               .textOverflow({ overflow: TextOverflow.Ellipsis })

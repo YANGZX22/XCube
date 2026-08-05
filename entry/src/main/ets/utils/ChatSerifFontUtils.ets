@@ -3,9 +3,15 @@ import { common } from '@kit.AbilityKit'
 import { fileIo } from '@kit.CoreFileKit'
 
 export const CHAT_SERIF_FONT_COMMON: string = 'common'
+export const CHAT_SERIF_FONT_CINZEL: string = 'cinzel'
+export const CHAT_SERIF_FONT_DOMINE: string = 'domine'
+export const CHAT_SERIF_FONT_LIBERTINUS: string = 'libertinus'
 export const CHAT_SERIF_FONT_CUSTOM: string = 'custom'
 
 const COMMON_SERIF_ALIAS: string = 'XCubeCommonSerif'
+const CINZEL_ALIAS: string = 'XCubeCinzel'
+const DOMINE_ALIAS: string = 'XCubeDomine'
+const LIBERTINUS_SERIF_ALIAS: string = 'XCubeLibertinusSerif'
 const SOURCE_HAN_SERIF_SC_ALIAS: string = 'XCubeSourceHanSerifSC'
 const IMPORTED_SERIF_ALIAS: string = 'XCubeImportedSerif'
 const IMPORTED_SERIF_TTF_FILE: string = 'xcube_imported_serif.ttf'
@@ -19,6 +25,9 @@ export class ChatSerifFontAvailability {
 
 let cachedAvailability: ChatSerifFontAvailability | null = null
 let commonSerifRegistered: boolean = false
+let cinzelRegistered: boolean = false
+let domineRegistered: boolean = false
+let libertinusSerifRegistered: boolean = false
 let sourceHanSerifRegistered: boolean = false
 let importedSerifRegistered: boolean = false
 let activeImportedSerifAlias: string = IMPORTED_SERIF_ALIAS
@@ -158,10 +167,31 @@ export function detectAndRegisterChatSerifFonts(uiContext: UIContext): ChatSerif
   const fontCollection = text.FontCollection.getGlobalInstance()
   if (!commonSerifRegistered) {
     fontCollection.loadFontSync(COMMON_SERIF_ALIAS, $rawfile('fonts/CommonSerif-Regular.ttf'))
+    fontCollection.loadFontSync(COMMON_SERIF_ALIAS, $rawfile('fonts/CommonSerif-Bold.ttf'))
+    fontCollection.loadFontSync(COMMON_SERIF_ALIAS, $rawfile('fonts/CommonSerif-Italic.ttf'))
+    fontCollection.loadFontSync(COMMON_SERIF_ALIAS, $rawfile('fonts/CommonSerif-BoldItalic.ttf'))
     commonSerifRegistered = true
+  }
+  if (!cinzelRegistered) {
+    fontCollection.loadFontSync(CINZEL_ALIAS, $rawfile('fonts/Cinzel/static/Cinzel-Regular.ttf'))
+    fontCollection.loadFontSync(CINZEL_ALIAS, $rawfile('fonts/Cinzel/static/Cinzel-Bold.ttf'))
+    cinzelRegistered = true
+  }
+  if (!domineRegistered) {
+    fontCollection.loadFontSync(DOMINE_ALIAS, $rawfile('fonts/Domine/static/Domine-Regular.ttf'))
+    fontCollection.loadFontSync(DOMINE_ALIAS, $rawfile('fonts/Domine/static/Domine-Bold.ttf'))
+    domineRegistered = true
+  }
+  if (!libertinusSerifRegistered) {
+    fontCollection.loadFontSync(LIBERTINUS_SERIF_ALIAS, $rawfile('fonts/Libertinus/LibertinusSerif-Regular.ttf'))
+    fontCollection.loadFontSync(LIBERTINUS_SERIF_ALIAS, $rawfile('fonts/Libertinus/LibertinusSerif-Bold.ttf'))
+    fontCollection.loadFontSync(LIBERTINUS_SERIF_ALIAS, $rawfile('fonts/Libertinus/LibertinusSerif-Italic.ttf'))
+    fontCollection.loadFontSync(LIBERTINUS_SERIF_ALIAS, $rawfile('fonts/Libertinus/LibertinusSerif-BoldItalic.ttf'))
+    libertinusSerifRegistered = true
   }
   if (!sourceHanSerifRegistered) {
     fontCollection.loadFontSync(SOURCE_HAN_SERIF_SC_ALIAS, $rawfile('fonts/SourceHanSerifSC-Regular.otf'))
+    fontCollection.loadFontSync(SOURCE_HAN_SERIF_SC_ALIAS, $rawfile('fonts/SourceHanSerifSC-Bold.otf'))
     sourceHanSerifRegistered = true
   }
 
@@ -178,6 +208,15 @@ export function detectAndRegisterChatSerifFonts(uiContext: UIContext): ChatSerif
 export function resolveChatSerifFontFamily(fontId: string): string {
   if (fontId === CHAT_SERIF_FONT_CUSTOM && cachedAvailability?.customAvailable === true) {
     return `${activeImportedSerifAlias},${SOURCE_HAN_SERIF_SC_ALIAS}`
+  }
+  if (fontId === CHAT_SERIF_FONT_CINZEL) {
+    return `${CINZEL_ALIAS},${SOURCE_HAN_SERIF_SC_ALIAS}`
+  }
+  if (fontId === CHAT_SERIF_FONT_DOMINE) {
+    return `${DOMINE_ALIAS},${SOURCE_HAN_SERIF_SC_ALIAS}`
+  }
+  if (fontId === CHAT_SERIF_FONT_LIBERTINUS) {
+    return `${LIBERTINUS_SERIF_ALIAS},${SOURCE_HAN_SERIF_SC_ALIAS}`
   }
   return `${COMMON_SERIF_ALIAS},${SOURCE_HAN_SERIF_SC_ALIAS}`
 }

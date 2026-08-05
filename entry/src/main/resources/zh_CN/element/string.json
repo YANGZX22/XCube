@@ -1018,7 +1018,7 @@
     },
     {
       "name": "theme_color_atelier_desc",
-      "value": "亚麻纸上的墨色：温暖的画室纸张底色，一抹颜料点缀，搭配衬线对话字体。"
+      "value": "画室气质：亚麻纸底、靛蓝墨迹，衬线字体让长对话读起来像一本书。"
     },
     {
       "name": "theme_color_lavender",
@@ -1026,7 +1026,7 @@
     },
     {
       "name": "theme_color_lavender_desc",
-      "value": "通透的紫罗兰玻璃：轻盈、冷调而通透的品牌默认主题。"
+      "value": "品牌默认主题：冷调薰衣草紫，明亮通透，像晨光里的玻璃。"
     },
     {
       "name": "theme_color_claude",
@@ -1034,7 +1034,7 @@
     },
     {
       "name": "theme_color_claude_desc",
-      "value": "赤陶与纸：柔和纸张底色上的窑烧陶土暖意。"
+      "value": "赤陶暖棕落在米色纸面上，像被午后阳光晒暖的陶器，沉稳而亲切。"
     },
     {
       "name": "theme_color_porcelain",
@@ -1042,7 +1042,7 @@
     },
     {
       "name": "theme_color_porcelain_desc",
-      "value": "釉面冷蓝：整套主题中唯一的冷色，静谧如陶瓷。"
+      "value": "冷蓝灰罩着釉面光泽，如青瓷般清爽克制，是全组最冷静的主题。"
     },
     {
       "name": "theme_color_herbarium",
@@ -1050,7 +1050,7 @@
     },
     {
       "name": "theme_color_herbarium_desc",
-      "value": "压叶之绿：纸白之上的干燥植物静意。"
+      "value": "标本册里压干的叶片绿，衬着纸白底色，安静自然，久看不累。"
     },
     {
       "name": "theme_color_salon",
@@ -1058,7 +1058,7 @@
     },
     {
       "name": "theme_color_salon_desc",
-      "value": "扑粉玫瑰：带着丝绒边缘的朦胧暖意。"
+      "value": "灰调扑粉玫瑰带一点丝绒质感，温柔却不甜腻。"
     },
     {
       "name": "theme_color_gallery",
@@ -1066,7 +1066,7 @@
     },
     {
       "name": "theme_color_gallery_desc",
-      "value": "石墨单色：明度构建层级，色相悄然退场。"
+      "value": "美术馆白墙与暖石墨的无彩色组合，层次全靠明暗，内容自然成为焦点。"
     },
     {
       "name": "theme_color_nocturne",
@@ -1074,7 +1074,7 @@
     },
     {
       "name": "theme_color_nocturne_desc",
-      "value": "破晓前的靛蓝：为暗色而生，日间化作浅淡蓝色。"
+      "value": "破晓前的靛蓝：暗色下沉静护眼，日间化作清透的晨蓝。"
     },
     {
       "name": "screenshot_banner_title",
@@ -1918,11 +1918,23 @@
     },
     {
       "name": "settings_chat_serif_font_family",
-      "value": "字体样式"
+      "value": "字体样式（仅支持英文）"
     },
     {
       "name": "chat_serif_font_common",
       "value": "Common Serif"
+    },
+    {
+      "name": "chat_serif_font_cinzel",
+      "value": "Cinzel"
+    },
+    {
+      "name": "chat_serif_font_domine",
+      "value": "Domine"
+    },
+    {
+      "name": "chat_serif_font_libertinus",
+      "value": "Libertinus Serif"
     },
     {
       "name": "chat_serif_font_import",
@@ -1962,7 +1974,7 @@
     },
     {
       "name": "font_preview_ai_message",
-      "value": "你好！我是 AI 助手，很高兴为你服务。"
+      "value": "你好！我是 XCube，很高兴为你服务。"
     },
     {
       "name": "font_preview_user_message",
