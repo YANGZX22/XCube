@@ -1,3 +1,4 @@
+import { uiMaterial } from '@kit.ArkUI'
 import { ChatMarkdownHybridRenderer } from './ChatMarkdownHybridRenderer'
 import { ProviderIconSmall } from './ProviderIcon'
 import { getAppUiState } from '../state/AppUiState'
@@ -5,6 +6,10 @@ import { buildIconResourcePath, getModelIconPath, isNetworkIconPath, isSandboxIc
 
 export const CHAT_NAVIGATION_TITLE_STACK_BUILDER_HEIGHT = 56
 const CHAT_NAVIGATION_CONTENT_VERTICAL_OFFSET = -1
+// 标题栏尾部操作按钮尺寸，与 HDS 系统菜单图标保持一致
+const CHAT_NAVIGATION_ACTION_BUTTON_SIZE = 40
+const CHAT_NAVIGATION_ACTION_BUTTON_ICON_SIZE = 20
+const CHAT_NAVIGATION_ACTION_BUTTON_SPACE = 4
 
 @ComponentV2
 export struct ChatNavigationTitleContent {
@@ -21,18 +26,26 @@ export struct ChatNavigationTitleContent {
   @Param currentProviderBrandColor: ResourceColor = ''
   @Param isTitleGenerating: boolean = false
   @Param titleGenerateFailed: boolean = false
-  @Param editTitleRequestTick: number = 0
+  @Param isSending: boolean = false
   @Param titleStartInset: number = 64
-  @Param titleEndInset: number = 126
+  @Param titleEndInset: number = 16
+  // 尾部操作区：新对话、上下文长度窗口、更多菜单。
+  // 上下文用量以基础类型传入，保证压缩后父组件重算能可靠触发按钮重绘。
+  @Param showNewChatAction: boolean = false
+  @Param showContextProgress: boolean = false
+  @Param contextPercent: number = 0
+  @Param contextOverThreshold: boolean = false
 
   @Event onModelSelect: () => void = () => {}
   @Event onRegenerateTitle: () => void = () => {}
   @Event onWillEditTitle: () => void = () => {}
   @Event onTitleChanged: (newTitle: string) => void = (_newTitle: string): void => {}
+  @Event onNewChat: () => void = () => {}
+  @Event onContextProgressClick: () => void = () => {}
+  @Event onDeleteChat: () => void = () => {}
 
   @Local private isEditingTitle: boolean = false
   @Local private editingTitleInput: string = ''
-  private handledEditTitleRequestTick: number = 0
   private readonly titleInputFocusId: string = 'chat_navigation_title_input'
   private get themePrimary(): string {
     return getAppUiState().themePrimary
@@ -55,14 +68,6 @@ export struct ChatNavigationTitleContent {
 
   private hasCurrentModelIdentity(): boolean {
     return this.currentModelId !== '' || this.currentModelName !== ''
-  }
-
-  @Monitor('editTitleRequestTick')
-  onEditTitleRequestTickMonitor(): void {
-    if (this.editTitleRequestTick > 0 && this.editTitleRequestTick !== this.handledEditTitleRequestTick) {
-      this.handledEditTitleRequestTick = this.editTitleRequestTick
-      this.startEditingTitle()
-    }
   }
 
   private getCurrentModelIconPath(): string {
@@ -194,6 +199,133 @@ export struct ChatNavigationTitleContent {
     }
   }
 
+  // 上下文接近或超出窗口时用警示色，其余沿用主题色
+  private getContextProgressColor(): ResourceColor {
+    if (this.contextPercent >= 100) {
+      return $r('app.color.status_error')
+    }
+    if (this.contextOverThreshold) {
+      return $r('app.color.status_warning')
+    }
+    return this.themePrimary
+  }
+
+  // 超窗时进度环填满，具体数值由颜色和对话框呈现
+  private getContextProgressValue(): number {
+    return Math.min(100, Math.max(0, this.contextPercent))
+  }
+
+  @Builder
+  private MoreMenuBuilder() {
+    Menu() {
+      MenuItem({
+        startIcon: $r('sys.symbol.square_and_pencil'),
+        content: $r('app.string.edit_chat_title')
+      })
+        .onClick(() => {
+          this.startEditingTitle()
+        })
+
+      MenuItem({
+        startIcon: $r('sys.symbol.arrow_clockwise'),
+        content: $r('app.string.regenerate_title')
+      })
+        .enabled(!this.isTitleGenerating && !this.isSending)
+        .onClick(() => {
+          this.onRegenerateTitle()
+        })
+
+      MenuItemGroup({ header: $r('app.string.danger_zone') }) {
+        MenuItem({
+          startIcon: $r('sys.symbol.trash'),
+          content: $r('app.string.delete_chat')
+        })
+          .contentFontColor($r('app.color.status_error'))
+          .onClick(() => {
+            this.onDeleteChat()
+          })
+      }
+    }
+  }
+
+  @Builder
+  private TrailingActionsBuilder() {
+    Row({ space: CHAT_NAVIGATION_ACTION_BUTTON_SPACE }) {
+      if (this.showNewChatAction) {
+        Button({ type: ButtonType.Circle, stateEffect: false }) {
+          SymbolGlyph($r('sys.symbol.plus'))
+            .fontSize(CHAT_NAVIGATION_ACTION_BUTTON_ICON_SIZE)
+            .fontColor([$r('app.color.text_primary')])
+        }
+        .width(CHAT_NAVIGATION_ACTION_BUTTON_SIZE)
+        .height(CHAT_NAVIGATION_ACTION_BUTTON_SIZE)
+        .padding(0)
+        .backgroundColor(Color.Transparent)
+        .borderRadius(CHAT_NAVIGATION_ACTION_BUTTON_SIZE / 2)
+        .clip(true)
+        .onClick(() => {
+          this.onNewChat()
+        })
+        .systemMaterial(new uiMaterial.ImmersiveMaterial({
+          style: uiMaterial.ImmersiveStyle.REGULAR,
+          interactive: true,
+          lightEffect: { color: undefined }
+        }))
+      }
+
+      if (this.showContextProgress) {
+        Button({ type: ButtonType.Circle, stateEffect: false }) {
+          Progress({
+            value: this.getContextProgressValue(),
+            total: 100,
+            type: ProgressType.Eclipse
+          })
+            .color(this.getContextProgressColor())
+            .width(CHAT_NAVIGATION_ACTION_BUTTON_ICON_SIZE)
+            .height(CHAT_NAVIGATION_ACTION_BUTTON_ICON_SIZE)
+        }
+        .width(CHAT_NAVIGATION_ACTION_BUTTON_SIZE)
+        .height(CHAT_NAVIGATION_ACTION_BUTTON_SIZE)
+        .padding(0)
+        .backgroundColor(Color.Transparent)
+        .borderRadius(CHAT_NAVIGATION_ACTION_BUTTON_SIZE / 2)
+        .clip(true)
+        .accessibilityText(`${this.contextPercent}%`)
+        .onClick(() => {
+          this.onContextProgressClick()
+        })
+        .systemMaterial(new uiMaterial.ImmersiveMaterial({
+          style: uiMaterial.ImmersiveStyle.REGULAR,
+          interactive: true,
+          lightEffect: { color: undefined }
+        }))
+      }
+
+      Button({ type: ButtonType.Circle, stateEffect: false }) {
+        SymbolGlyph($r('sys.symbol.dot_grid_2x2'))
+          .fontSize(CHAT_NAVIGATION_ACTION_BUTTON_ICON_SIZE)
+          .fontColor([$r('app.color.text_primary')])
+      }
+      .width(CHAT_NAVIGATION_ACTION_BUTTON_SIZE)
+      .height(CHAT_NAVIGATION_ACTION_BUTTON_SIZE)
+      .padding(0)
+      .backgroundColor(Color.Transparent)
+      .borderRadius(CHAT_NAVIGATION_ACTION_BUTTON_SIZE / 2)
+      .clip(true)
+      .bindMenu(this.MoreMenuBuilder(), {
+        systemMaterial: new uiMaterial.ImmersiveMaterial({
+          style: uiMaterial.ImmersiveStyle.THICK
+        })
+      })
+      .systemMaterial(new uiMaterial.ImmersiveMaterial({
+        style: uiMaterial.ImmersiveStyle.REGULAR,
+        interactive: true,
+        lightEffect: { color: undefined }
+      }))
+    }
+    .alignItems(VerticalAlign.Center)
+  }
+
   build() {
     Row() {
       Column() {
@@ -319,9 +451,15 @@ export struct ChatNavigationTitleContent {
       })
       .justifyContent(FlexAlign.Center)
       .backgroundColor(Color.Transparent)
+
+      // 编辑标题时让输入框占满整行，尾部按钮暂时隐藏
+      if (!this.isEditingTitle) {
+        this.TrailingActionsBuilder()
+      }
     }
     .width('100%')
     .height(CHAT_NAVIGATION_TITLE_STACK_BUILDER_HEIGHT)
+    .alignItems(VerticalAlign.Center)
     .padding({ left: this.titleStartInset, right: this.titleEndInset })
     .translate({ y: CHAT_NAVIGATION_CONTENT_VERTICAL_OFFSET })
     .backgroundColor(Color.Transparent)

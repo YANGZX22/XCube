@@ -1,6 +1,7 @@
 import { preferences } from '@kit.ArkData'
 import { Context } from '@kit.AbilityKit'
 import { AppError, AppErrorCode, toErrorDetail } from '../models/AppError'
+import { DEFAULT_MAX_OUTPUT_TOKENS } from '../models/ChatModels'
 
 // 偏好设置键名常量
 export class PreferenceKeys {
@@ -62,6 +63,10 @@ export class PreferenceKeys {
   static readonly KNOWLEDGE_EMBEDDING_SELECTION_JSON: string = 'knowledge_embedding_selection_json'
   static readonly SKILL_TOOL_ENABLED: string = 'skill_tool_enabled'
   static readonly SKILL_CONFIGS_JSON: string = 'skill_configs_json'
+  // 上下文压缩（compact 工具）
+  static readonly CONTEXT_COMPACT_ENABLED: string = 'context_compact_enabled'
+  static readonly CONTEXT_COMPACT_THRESHOLD_PERCENT: string = 'context_compact_threshold_percent'
+  static readonly CONTEXT_COMPACT_MAX_TOKENS: string = 'context_compact_max_tokens'
   // 主题配色
   static readonly COLOR_THEME: string = 'color_theme'
 
@@ -405,7 +410,7 @@ export class PreferencesService {
 
   // 获取默认最大token数
   async getDefaultMaxTokens(): Promise<number> {
-    return await this.getNumber(PreferenceKeys.DEFAULT_MAX_TOKENS, 4096)
+    return await this.getNumber(PreferenceKeys.DEFAULT_MAX_TOKENS, DEFAULT_MAX_OUTPUT_TOKENS)
   }
 
   // 设置默认最大token数

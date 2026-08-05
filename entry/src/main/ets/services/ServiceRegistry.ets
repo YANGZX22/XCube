@@ -21,6 +21,7 @@ import { getWebDAVService, WebDAVService } from './WebDAVService'
 import { getWebDAVSyncService, WebDAVSyncService } from './WebDAVSyncService'
 import { getCalendarWriteService, CalendarWriteService } from './CalendarWriteService'
 import { getCanvasDocumentService, CanvasDocumentService } from './CanvasDocumentService'
+import { getContextCompactionService, ContextCompactionService } from './ContextCompactionService'
 import {
   getDocumentAttachmentRegistryService,
   DocumentAttachmentRegistryService
@@ -146,6 +147,10 @@ export class ServiceRegistry {
 
   static knowledgeDocuments(): KnowledgeDocumentService {
     return getKnowledgeDocumentService()
+  }
+
+  static contextCompaction(): ContextCompactionService {
+    return getContextCompactionService()
   }
 
   static chat(): ChatViewModel {

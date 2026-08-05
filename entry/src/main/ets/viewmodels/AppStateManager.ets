@@ -1,6 +1,8 @@
 import { getPreferencesService, PreferencesService } from '../services/PreferencesService'
 import { getDatabaseService, DatabaseService } from '../services/DatabaseService'
-import { ModelProvider, ModelInfo, ProviderType } from '../models/ChatModels'
+import { DEFAULT_MAX_OUTPUT_TOKENS, ModelProvider, ModelInfo, ProviderType } from '../models/ChatModels'
+
+const LEGACY_DEFAULT_MAX_OUTPUT_TOKENS: number = 4096
 
 // 全局应用状态管理器 - 单例模式
 export class AppStateManager {
@@ -15,7 +17,7 @@ export class AppStateManager {
 
   // 默认参数
   private defaultTemperature: number = 0.7
-  private defaultMaxTokens: number = 4096
+  private defaultMaxTokens: number = DEFAULT_MAX_OUTPUT_TOKENS
 
   private constructor() {
     this.preferencesService = getPreferencesService()
@@ -36,6 +38,10 @@ export class AppStateManager {
     this.currentProviderId = await this.preferencesService.getCurrentProviderId()
     this.defaultTemperature = await this.preferencesService.getDefaultTemperature()
     this.defaultMaxTokens = await this.preferencesService.getDefaultMaxTokens()
+    if (this.defaultMaxTokens === LEGACY_DEFAULT_MAX_OUTPUT_TOKENS) {
+      this.defaultMaxTokens = DEFAULT_MAX_OUTPUT_TOKENS
+      await this.preferencesService.setDefaultMaxTokens(this.defaultMaxTokens)
+    }
   }
 
   // 获取当前模型ID

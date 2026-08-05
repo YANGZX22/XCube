@@ -25,8 +25,15 @@ import {
   KNOWLEDGE_SEARCH_TOOL_ID,
   KnowledgeSearchExecutor
 } from './KnowledgeSearchTool'
+import {
+  COMPACT_TOOL_ID,
+  CompactExecutor,
+  createCompactToolConfig,
+  createCompactToolDefinition
+} from './CompactTool'
 
 export { KNOWLEDGE_SEARCH_TOOL_ID } from './KnowledgeSearchTool'
+export { COMPACT_TOOL_ID } from './CompactTool'
 export { SUB_AGENT_TOOL_ID } from '../services/SubAgentService'
 
 export const ASK_USER_TOOL_ID: string = 'ask_user'
@@ -35,6 +42,7 @@ export const WRITE_SCHEDULE_TOOL_ID: string = 'write_schedule'
 export const MATH_CHART_TOOL_ID: string = 'math_chart'
 export const PYTHON_SANDBOX_TOOL_ID: string = 'python_sandbox'
 export const CANVAS_DOCUMENT_TOOL_ID: string = 'canvas_document'
+export const CANVAS_DOCUMENT_MAX_WRITE_CHARACTERS: number = 4000
 export const PDF_TO_TEXT_TOOL_ID: string = 'pdf_to_text'
 export const IMAGE_TO_TEXT_TOOL_ID: string = 'image_to_text'
 export const USE_SKILL_TOOL_ID: string = 'use_skill'
@@ -1859,19 +1867,23 @@ function createCanvasDocumentToolDefinition(): ToolDefinition {
       },
       "content": {
         "type": "string",
-        "description": "replace/write/update/append/prepend 使用的文本内容。可以是 Markdown。"
+        "maxLength": ${CANVAS_DOCUMENT_MAX_WRITE_CHARACTERS},
+        "description": "replace/write/update/append/prepend 使用的文本内容，可以是 Markdown。单次最多 ${CANVAS_DOCUMENT_MAX_WRITE_CHARACTERS} 字符；更长内容必须首段 replace、后续分段 append。"
       },
       "text": {
         "type": "string",
-        "description": "content 的别名。"
+        "maxLength": ${CANVAS_DOCUMENT_MAX_WRITE_CHARACTERS},
+        "description": "content 的别名。单次最多 ${CANVAS_DOCUMENT_MAX_WRITE_CHARACTERS} 字符。"
       },
       "document": {
         "type": "string",
-        "description": "content 的别名。"
+        "maxLength": ${CANVAS_DOCUMENT_MAX_WRITE_CHARACTERS},
+        "description": "content 的别名。单次最多 ${CANVAS_DOCUMENT_MAX_WRITE_CHARACTERS} 字符。"
       },
       "value": {
         "type": "string",
-        "description": "content 的别名。"
+        "maxLength": ${CANVAS_DOCUMENT_MAX_WRITE_CHARACTERS},
+        "description": "content 的别名。单次最多 ${CANVAS_DOCUMENT_MAX_WRITE_CHARACTERS} 字符。"
       },
       "title": {
         "type": "string",
@@ -1879,19 +1891,23 @@ function createCanvasDocumentToolDefinition(): ToolDefinition {
       },
       "target": {
         "type": "string",
-        "description": "patch 时必填，要被替换的精确原文片段。"
+        "maxLength": ${CANVAS_DOCUMENT_MAX_WRITE_CHARACTERS},
+        "description": "patch 时必填，要被替换的精确原文片段。单次最多 ${CANVAS_DOCUMENT_MAX_WRITE_CHARACTERS} 字符。"
       },
       "old_text": {
         "type": "string",
-        "description": "target 的别名。"
+        "maxLength": ${CANVAS_DOCUMENT_MAX_WRITE_CHARACTERS},
+        "description": "target 的别名。单次最多 ${CANVAS_DOCUMENT_MAX_WRITE_CHARACTERS} 字符。"
       },
       "replacement": {
         "type": "string",
-        "description": "patch 时必填，用来替换 target 的新文本。"
+        "maxLength": ${CANVAS_DOCUMENT_MAX_WRITE_CHARACTERS},
+        "description": "patch 时必填，用来替换 target 的新文本。单次最多 ${CANVAS_DOCUMENT_MAX_WRITE_CHARACTERS} 字符。"
       },
       "new_text": {
         "type": "string",
-        "description": "replacement 的别名。"
+        "maxLength": ${CANVAS_DOCUMENT_MAX_WRITE_CHARACTERS},
+        "description": "replacement 的别名。单次最多 ${CANVAS_DOCUMENT_MAX_WRITE_CHARACTERS} 字符。"
       }
     },
     "required": []
@@ -1900,7 +1916,7 @@ function createCanvasDocumentToolDefinition(): ToolDefinition {
 
   const func = new ToolFunction(
     CANVAS_DOCUMENT_TOOL_ID,
-    '读写右侧 Canvas 文档。适合和用户共同起草、改写、整理同一份 Markdown/纯文本文档。要把内容写入 Canvas 时，直接调用 operation="replace" 并传 content；小改动优先 patch，新增段落用 append/prepend。若省略 operation 但提供 content/text，会按 replace 写入。该工具只修改应用内当前 Canvas 文档，不写入系统日历、文件或外部服务。',
+    `读写右侧 Canvas 文档。适合和用户共同起草、改写、整理同一份 Markdown/纯文本文档。每次调用的正文类文本参数最多 ${CANVAS_DOCUMENT_MAX_WRITE_CHARACTERS} 字符，禁止在一次调用中写入更长文本。新建或重写长文档时，第一段使用 operation="replace"，其余内容按顺序多次使用 operation="append"，每段均不得超过 ${CANVAS_DOCUMENT_MAX_WRITE_CHARACTERS} 字符，并完成全部分段后再向用户报告。小改动优先 patch，新增段落用 append/prepend。若省略 operation 但提供 content/text，会按 replace 写入。该工具只修改应用内当前 Canvas 文档，不写入系统日历、文件或外部服务。`,
     parameters
   )
 
@@ -2439,6 +2455,17 @@ export function registerBuiltinTools(): void {
     registeredNow += 1
   }
 
+  if (!registry.isToolRegistered(COMPACT_TOOL_ID)) {
+    const compactTool = new RegisteredTool(
+      COMPACT_TOOL_ID,
+      createCompactToolConfig(),
+      createCompactToolDefinition(),
+      new CompactExecutor()
+    )
+    registry.registerTool(compactTool)
+    registeredNow += 1
+  }
+
   if (!registry.isToolRegistered('web_search')) {
     const webSearchTool = new RegisteredTool(
       'web_search',
@@ -2584,6 +2611,7 @@ export function registerBuiltinTools(): void {
 export function getBuiltinToolIds(): string[] {
   return [
     KNOWLEDGE_SEARCH_TOOL_ID,
+    COMPACT_TOOL_ID,
     'web_search',
     ASK_USER_TOOL_ID,
     SUB_AGENT_TOOL_ID,

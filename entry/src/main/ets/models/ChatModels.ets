@@ -1,3 +1,6 @@
+// 复杂任务默认允许最多 32K 输出；具体可用额度仍由模型服务端上限决定。
+export const DEFAULT_MAX_OUTPUT_TOKENS: number = 32768
+
 // 消息角色类型
 export enum MessageRole {
   USER = 'user',
@@ -373,7 +376,7 @@ export class ModelParameters {
   constructor(
     temperature: number = 0.7,
     topP: number = 1.0,
-    maxTokens: number = 4096,
+    maxTokens: number = DEFAULT_MAX_OUTPUT_TOKENS,
     presencePenalty: number = 0,
     frequencyPenalty: number = 0
   ) {
@@ -411,7 +414,7 @@ export class ModelParameters {
   reset(): void {
     this.temperature = 0.7
     this.topP = 1.0
-    this.maxTokens = 4096
+    this.maxTokens = DEFAULT_MAX_OUTPUT_TOKENS
     this.presencePenalty = 0
     this.frequencyPenalty = 0
   }
@@ -874,6 +877,12 @@ export class ChatSession {
   @Trace branchPointIndex: number
   // 对话树当前活跃路径的叶子消息 ID（从此回溯 parentId 得到当前展示路径）
   @Trace activeLeafId: string
+  // 上下文压缩状态：摘要正文、摘要覆盖到的最后一条消息 ID、更新时间与累计压缩次数。
+  // 摘要只影响发送给模型的上下文，不改变界面上展示的聊天记录。
+  @Trace contextSummary: string
+  @Trace contextSummaryAnchorId: string
+  @Trace contextSummaryUpdatedAt: number
+  @Trace contextCompactCount: number
   // 同步相关字段(为 WebDAV 同步预留)
   @Trace syncVersion: number = 0
   @Trace lastModified: number = Date.now()
@@ -899,6 +908,10 @@ export class ChatSession {
     this.branchCount = 1
     this.branchPointIndex = -1
     this.activeLeafId = ''
+    this.contextSummary = ''
+    this.contextSummaryAnchorId = ''
+    this.contextSummaryUpdatedAt = 0
+    this.contextCompactCount = 0
     this.syncVersion = 0
     this.lastModified = Date.now()
     this.syncStatus = 'synced'

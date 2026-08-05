@@ -333,6 +333,8 @@ export class DatabaseService {
 	      await this.addSessionBranchColumnsIfNeeded()
 	      // 尝试添加会话 active_leaf_id 字段（用于消息级对话树版本）
 	      await this.addSessionActiveLeafColumnIfNeeded()
+	      // 尝试添加会话上下文压缩字段（用于 compact 工具）
+	      await this.addSessionContextCompactionColumnsIfNeeded()
 	      // 尝试添加搜索引用相关字段（用于联网搜索）
 	      await this.addSearchColumnsIfNeeded()
       // 尝试添加工具事件元数据字段（用于通用 tools/MCP）
@@ -704,6 +706,26 @@ export class DatabaseService {
 	      await this.rdbStore.executeSql(`ALTER TABLE ${TableNames.SESSIONS} ADD COLUMN active_leaf_id TEXT DEFAULT ''`)
 	    } catch (error) {
 	      console.info('DatabaseService', 'active_leaf_id column may already exist')
+	    }
+	  }
+
+	  // 添加会话上下文压缩字段（用于 compact 工具的摘要与锚点）
+	  private async addSessionContextCompactionColumnsIfNeeded(): Promise<void> {
+	    if (this.rdbStore === null) {
+	      return
+	    }
+	    const columns: string[] = [
+	      `context_summary TEXT DEFAULT ''`,
+	      `context_summary_anchor_id TEXT DEFAULT ''`,
+	      'context_summary_updated_at INTEGER DEFAULT 0',
+	      'context_compact_count INTEGER DEFAULT 0'
+	    ]
+	    for (let i = 0; i < columns.length; i++) {
+	      try {
+	        await this.rdbStore.executeSql(`ALTER TABLE ${TableNames.SESSIONS} ADD COLUMN ${columns[i]}`)
+	      } catch (error) {
+	        console.info('DatabaseService', `session context compaction column may already exist: ${columns[i]}`)
+	      }
 	    }
 	  }
 
@@ -1436,6 +1458,33 @@ export class DatabaseService {
     }
   }
 
+  // 更新会话上下文压缩状态（compact 工具执行后写入；传空摘要表示清除压缩）
+  async updateSessionContextCompaction(
+    sessionId: string,
+    contextSummary: string,
+    contextSummaryAnchorId: string,
+    contextSummaryUpdatedAt: number,
+    contextCompactCount: number
+  ): Promise<void> {
+    await this.waitForInitialization()
+    if (this.rdbStore === null || sessionId === '') {
+      return
+    }
+    const valueBucket: relationalStore.ValuesBucket = {
+      context_summary: contextSummary,
+      context_summary_anchor_id: contextSummaryAnchorId,
+      context_summary_updated_at: contextSummaryUpdatedAt,
+      context_compact_count: contextCompactCount
+    }
+    const predicates = new relationalStore.RdbPredicates(TableNames.SESSIONS)
+    predicates.equalTo('id', sessionId)
+    try {
+      await this.rdbStore.update(valueBucket, predicates)
+    } catch (error) {
+      console.error('DatabaseService', `Failed to update session context compaction: ${JSON.stringify(error)}`)
+    }
+  }
+
   async updateSessionDraft(sessionId: string, draftText: string, draftAttachments: MessageAttachment[]): Promise<void> {
     await this.waitForInitialization()
     if (this.rdbStore === null || sessionId === '') {
@@ -1709,6 +1758,11 @@ export class DatabaseService {
         session.branchCount = this.safeGetLong(resultSet, 'branch_count', 1)
         session.branchPointIndex = this.safeGetLong(resultSet, 'branch_point_index', -1)
         session.activeLeafId = this.safeGetString(resultSet, 'active_leaf_id')
+        // 压缩摘要只在打开会话时读取；会话列表不需要它，避免首屏多读长文本
+        session.contextSummary = this.safeGetString(resultSet, 'context_summary')
+        session.contextSummaryAnchorId = this.safeGetString(resultSet, 'context_summary_anchor_id')
+        session.contextSummaryUpdatedAt = this.safeGetLong(resultSet, 'context_summary_updated_at', 0)
+        session.contextCompactCount = this.safeGetLong(resultSet, 'context_compact_count', 0)
         resultSet.close()
         return session
       }

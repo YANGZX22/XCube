@@ -443,20 +443,22 @@ export struct AskUserCard {
     .width('100%')
     .padding(this.compactMode ? 10 : 12)
     .backgroundColor(Color.Transparent)
-    .borderRadius(12)
+    .borderRadius(this.compactMode ? 12 : 16)
     .border({ width: 1, color: this.themePrimaryLight })
     .systemMaterial(new uiMaterial.ImmersiveMaterial({
       style: uiMaterial.ImmersiveStyle.REGULAR,
-      materialColor: this.themeAiBubble,
-      applyShadow: false,
-      interactive: false,
-      lightEffect: { color: undefined }
+      materialColor: this.compactMode ? this.themeAiBubble : Color.Transparent,
+      applyShadow: !this.compactMode,
+      interactive: !this.compactMode,
+      lightEffect: { color: this.compactMode ? undefined : Color.White }
     }))
     .shadow({
-      radius: 12,
-      color: this.isDarkMode ? 'rgba(0, 0, 0, 0.32)' : 'rgba(15, 23, 42, 0.14)',
+      radius: this.compactMode ? 12 : 24,
+      color: this.compactMode
+        ? (this.isDarkMode ? 'rgba(0, 0, 0, 0.32)' : 'rgba(15, 23, 42, 0.14)')
+        : (this.isDarkMode ? 'rgba(0, 0, 0, 0.48)' : 'rgba(15, 23, 42, 0.22)'),
       offsetX: 0,
-      offsetY: 0
+      offsetY: this.compactMode ? 0 : 8
     })
   }
 
@@ -486,8 +488,10 @@ export struct AskUserCard {
           .fontSize(13)
           .fontColor($r('app.color.text_primary'))
           .placeholderColor($r('app.color.text_tertiary'))
-          .backgroundColor($r('app.color.background'))
+          .backgroundColor(Color.Transparent)
           .borderRadius(8)
+          .clip(true)
+          .backgroundBlurStyle(BlurStyle.COMPONENT_REGULAR)
           .enabled(!this.isAnswered && !this.compactMode)
           .onChange((value: string) => {
             this.setTextAnswer(question.id, value)
@@ -502,8 +506,10 @@ export struct AskUserCard {
           .fontSize(12)
           .fontColor($r('app.color.text_primary'))
           .placeholderColor($r('app.color.text_tertiary'))
-          .backgroundColor($r('app.color.surface'))
+          .backgroundColor(Color.Transparent)
           .borderRadius(8)
+          .clip(true)
+          .backgroundBlurStyle(BlurStyle.COMPONENT_REGULAR)
           .enabled(!this.isAnswered && !this.compactMode)
           .onChange((value: string) => {
             this.setCustomAnswer(question.id, value)
@@ -513,7 +519,7 @@ export struct AskUserCard {
     .width('100%')
     .padding(10)
     .backgroundColor(this.getQuestionBackgroundColor())
-    .borderRadius(10)
+    .borderRadius(16)
   }
 
   @Builder

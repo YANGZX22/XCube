@@ -6,10 +6,23 @@ import { McpService } from '../services/McpService'
 import { SkillConfig, SkillService } from '../services/SkillService'
 import { ServiceRegistry } from '../services/ServiceRegistry'
 import {
+  COMPACT_TOOL_ID,
   KNOWLEDGE_SEARCH_TOOL_ID,
   registerBuiltinTools,
   USE_SKILL_TOOL_ID
 } from '../config/BuiltinTools'
+import { ContextCompactionService } from '../services/ContextCompactionService'
+import {
+  COMPACT_THRESHOLD_PERCENT_STEP,
+  CONTEXT_LIMIT_TOKENS_STEP,
+  DEFAULT_COMPACT_THRESHOLD_PERCENT,
+  DEFAULT_CONTEXT_LIMIT_TOKENS,
+  MAX_COMPACT_THRESHOLD_PERCENT,
+  MAX_CONTEXT_LIMIT_TOKENS,
+  MIN_COMPACT_THRESHOLD_PERCENT,
+  MIN_CONTEXT_LIMIT_TOKENS,
+  formatTokenCount
+} from '../utils/ContextWindowUtils'
 import { getPreferencesService, PreferencesService, PreferenceKeys } from '../services/PreferencesService'
 import { showSnackBar, SnackBarDisplayOptions, SnackBarTone } from '../utils/ToastUtil'
 import { getAppUiState } from '../state/AppUiState'
@@ -38,6 +51,16 @@ class McpHeaderEntry {
   }
 }
 
+function createToolServiceCardMaterial(interactive: boolean = false): uiMaterial.Material {
+  return new uiMaterial.ImmersiveMaterial({
+    style: uiMaterial.ImmersiveStyle.ULTRA_THIN,
+    materialColor: Color.Transparent,
+    applyShadow: true,
+    interactive: interactive,
+    lightEffect: { color: undefined }
+  })
+}
+
 @ComponentV2
 export struct ToolsCenterPanel {
   @Param showHeader: boolean = true
@@ -60,6 +83,9 @@ export struct ToolsCenterPanel {
   @Local isLoading: boolean = false
   @Local isRefreshingMcpServers: boolean = false
   @Local showSearchConfigSheet: boolean = false
+  @Local contextCompactEnabled: boolean = true
+  @Local contextCompactThresholdPercent: number = DEFAULT_COMPACT_THRESHOLD_PERCENT
+  @Local contextCompactMaxTokens: number = DEFAULT_CONTEXT_LIMIT_TOKENS
   @Local skillToolEnabled: boolean = false
   @Local skills: SkillConfig[] = []
   @Local showSkillConfigSheet: boolean = false
@@ -83,6 +109,7 @@ export struct ToolsCenterPanel {
   @Local mcpFormAuthType: string = McpAuthType.NONE
   @Local mcpAuthTypeSelectedIndex: number = 0
   @Local isSavingMcpServer: boolean = false
+  @Local selectedToolIds: string[] = []
 
   private get themePrimary(): string {
     return getAppUiState().themePrimary
@@ -90,14 +117,6 @@ export struct ToolsCenterPanel {
 
   private get isDarkMode(): boolean {
     return getAppUiState().isDarkMode
-  }
-
-  private get backgroundHex(): string {
-    return getAppUiState().themeBackground
-  }
-
-  private get dividerHex(): string {
-    return getAppUiState().themeDivider
   }
 
   private toolRegistry: ToolRegistry = ServiceRegistry.toolRegistry()
@@ -150,12 +169,91 @@ export struct ToolsCenterPanel {
     const allTools = this.toolRegistry.getAllToolConfigs()
     const builtin: ToolConfig[] = []
     for (let i = 0; i < allTools.length; i++) {
+      // 联网搜索、Skill、上下文压缩各有独立卡片；知识库只在知识库页管理
       if (allTools[i].sourceType === ToolSourceType.BUILTIN && allTools[i].id !== this.searchToolId &&
-        allTools[i].id !== USE_SKILL_TOOL_ID && allTools[i].id !== KNOWLEDGE_SEARCH_TOOL_ID) {
+        allTools[i].id !== USE_SKILL_TOOL_ID && allTools[i].id !== KNOWLEDGE_SEARCH_TOOL_ID &&
+        allTools[i].id !== COMPACT_TOOL_ID) {
         builtin.push(allTools[i])
       }
     }
     this.builtinTools = builtin
+  }
+
+  private async loadSelectedToolIds(): Promise<void> {
+    this.selectedToolIds = [...await this.mcpService.loadSelectedToolIds()]
+  }
+
+  private isToolSelected(toolId: string): boolean {
+    return this.selectedToolIds.includes(toolId)
+  }
+
+  private handleToolSelectionChanged(toolId: string, enabled: boolean): void {
+    const previousToolIds = [...this.selectedToolIds]
+    const nextToolIds = [...this.selectedToolIds]
+    const index = nextToolIds.indexOf(toolId)
+    if (enabled && index < 0) {
+      nextToolIds.push(toolId)
+    }
+    if (!enabled && index >= 0) {
+      nextToolIds.splice(index, 1)
+    }
+    this.selectedToolIds = nextToolIds
+    this.mcpService.saveSelectedToolIds(nextToolIds)
+      .then((savedToolIds: string[]): void => {
+        this.selectedToolIds = [...savedToolIds]
+      })
+      .catch((error: Object): void => {
+        this.selectedToolIds = previousToolIds
+        console.error('ToolsCenterPanel', `Failed to save selected tools: ${JSON.stringify(error)}`)
+        this.showToolsSnack(pickLocalizedText('工具选择保存失败', 'Failed to save tool selection'),
+          2000, SnackBarTone.ERROR)
+      })
+  }
+
+  private async loadContextCompactSettings(): Promise<void> {
+    const compactionService = ContextCompactionService.getInstance()
+    await compactionService.loadPreferences()
+    this.contextCompactEnabled = compactionService.isEnabled()
+    this.contextCompactThresholdPercent = compactionService.getThresholdPercent()
+    this.contextCompactMaxTokens = compactionService.getMaxContextTokens()
+  }
+
+  private handleContextCompactEnabledChanged(enabled: boolean): void {
+    this.contextCompactEnabled = enabled
+    const compactTool = this.toolRegistry.getTool(COMPACT_TOOL_ID)
+    if (compactTool !== undefined) {
+      compactTool.config.enabled = enabled
+    }
+    this.handleToolSelectionChanged(COMPACT_TOOL_ID, enabled)
+    ContextCompactionService.getInstance().setEnabled(enabled)
+      .catch((error: Object): void => {
+        console.error('ToolsCenterPanel', `Failed to save compact enabled state: ${JSON.stringify(error)}`)
+        this.showToolsSnack(pickLocalizedText('保存失败，请重试', 'Failed to save, please try again'))
+      })
+  }
+
+  private handleContextCompactThresholdChanged(percent: number): void {
+    this.contextCompactThresholdPercent = percent
+    ContextCompactionService.getInstance().setThresholdPercent(percent)
+      .then((): void => {
+        this.contextCompactThresholdPercent = ContextCompactionService.getInstance().getThresholdPercent()
+      })
+      .catch((error: Object): void => {
+        console.error('ToolsCenterPanel', `Failed to save compact threshold: ${JSON.stringify(error)}`)
+        this.showToolsSnack(pickLocalizedText('保存失败，请重试', 'Failed to save, please try again'))
+      })
+  }
+
+  private handleContextCompactMaxTokensChanged(tokens: number): void {
+    this.contextCompactMaxTokens = tokens
+    ContextCompactionService.getInstance().setMaxContextTokens(tokens)
+      .then((): void => {
+        this.contextCompactMaxTokens = ContextCompactionService.getInstance().getMaxContextTokens()
+      })
+      .catch((error: Object): void => {
+        console.error('ToolsCenterPanel', `Failed to save compact max tokens: ${JSON.stringify(error)}`)
+        this.showToolsSnack(pickLocalizedText('保存失败，请重试', 'Failed to save, please try again'))
+      })
   }
 
   private async loadData(): Promise<void> {
@@ -165,7 +263,9 @@ export struct ToolsCenterPanel {
     this.syncBuiltinToolsFromRegistry()
     try {
       await this.loadToolEnabledStates()
+      await this.loadSelectedToolIds()
       await this.loadSearchSettings()
+      await this.loadContextCompactSettings()
       await this.loadSkills()
       await this.loadMcpServers()
       this.syncBuiltinToolsFromRegistry()
@@ -368,16 +468,8 @@ export struct ToolsCenterPanel {
   private handleSearchServiceEnabledChanged(enabled: boolean): void {
     this.applySearchServiceEnabledState(enabled)
     this.preferencesService.setBoolean(PreferenceKeys.SEARCH_SERVICE_ENABLED, enabled)
-    if (!enabled) {
-      this.preferencesService.setBoolean(PreferenceKeys.SEARCH_CONVERSATION_ENABLED, false)
-      this.mcpService.loadSelectedToolIds()
-        .then((toolIds: string[]): Promise<string[]> => {
-          return this.mcpService.saveSelectedToolIds(toolIds.filter((toolId: string) => toolId !== this.searchToolId))
-        })
-        .catch((error: Object): void => {
-          console.warn('ToolsCenterPanel', `Failed to remove web_search from selected tools: ${JSON.stringify(error)}`)
-        })
-    }
+    this.preferencesService.setBoolean(PreferenceKeys.SEARCH_CONVERSATION_ENABLED, enabled)
+    this.handleToolSelectionChanged(this.searchToolId, enabled)
   }
 
   private applySkillToolEnabledState(enabled: boolean): void {
@@ -410,28 +502,7 @@ export struct ToolsCenterPanel {
       this.showToolsSnack(pickLocalizedText('保存 Skill 工具状态失败', 'Failed to save Skill tool state'),
         2000, SnackBarTone.ERROR)
     })
-    if (enabled) {
-      this.mcpService.loadSelectedToolIds()
-        .then((toolIds: string[]): Promise<string[]> => {
-          const nextToolIds = [...toolIds]
-          if (!nextToolIds.includes(USE_SKILL_TOOL_ID)) {
-            nextToolIds.push(USE_SKILL_TOOL_ID)
-          }
-          return this.mcpService.saveSelectedToolIds(nextToolIds)
-        })
-        .catch((error: Object): void => {
-          console.warn('ToolsCenterPanel', `Failed to add use_skill to selected tools: ${JSON.stringify(error)}`)
-        })
-    }
-    if (!enabled) {
-      this.mcpService.loadSelectedToolIds()
-        .then((toolIds: string[]): Promise<string[]> => {
-          return this.mcpService.saveSelectedToolIds(toolIds.filter((toolId: string) => toolId !== USE_SKILL_TOOL_ID))
-        })
-        .catch((error: Object): void => {
-          console.warn('ToolsCenterPanel', `Failed to remove use_skill from selected tools: ${JSON.stringify(error)}`)
-        })
-    }
+    this.handleToolSelectionChanged(USE_SKILL_TOOL_ID, enabled)
   }
 
   private resetSkillForm(): void {
@@ -472,10 +543,6 @@ export struct ToolsCenterPanel {
   private getSkillFormHeroTitle(): string {
     const name = this.skillFormName.trim()
     return name !== '' ? name : pickLocalizedText('未命名 Skill', 'Untitled Skill')
-  }
-
-  private getSkillFormStatusText(): string {
-    return this.skillFormEnabled ? pickLocalizedText('已启用', 'Enabled') : pickLocalizedText('已停用', 'Disabled')
   }
 
   private buildSkillIdFromName(name: string): string {
@@ -1488,8 +1555,10 @@ export struct ToolsCenterPanel {
           }
           .width('100%')
           .padding(12)
-          .borderRadius(12)
-          .backgroundColor(getAppUiState().themeSurface)
+          .borderRadius(16)
+          .backgroundColor(Color.Transparent)
+          .border({ width: 0.5, color: getAppUiState().themePrimaryLight })
+          .systemMaterial(createToolServiceCardMaterial(false))
         }
         .width('100%')
         .padding({ left: 16, right: 16, bottom: 24 })
@@ -1596,9 +1665,10 @@ export struct ToolsCenterPanel {
           }
           .width('100%')
           .padding(16)
-          .borderRadius(20)
-          .backgroundColor(getAppUiState().themeSurface)
-          .border({ width: 1, color: withColorAlpha(this.themePrimary, this.isDarkMode ? '20' : '10') })
+          .borderRadius(16)
+          .backgroundColor(Color.Transparent)
+          .border({ width: 0.5, color: getAppUiState().themePrimaryLight })
+          .systemMaterial(createToolServiceCardMaterial(false))
 
           Column({ space: 12 }) {
             Column({ space: 4 }) {
@@ -1669,8 +1739,10 @@ export struct ToolsCenterPanel {
           }
           .width('100%')
           .padding(16)
-          .borderRadius(20)
-          .backgroundColor(getAppUiState().themeSurface)
+          .borderRadius(16)
+          .backgroundColor(Color.Transparent)
+          .border({ width: 0.5, color: getAppUiState().themePrimaryLight })
+          .systemMaterial(createToolServiceCardMaterial(false))
 
           Column({ space: 12 }) {
             Column({ space: 4 }) {
@@ -1786,8 +1858,10 @@ export struct ToolsCenterPanel {
           }
           .width('100%')
           .padding(16)
-          .borderRadius(20)
-          .backgroundColor(getAppUiState().themeSurface)
+          .borderRadius(16)
+          .backgroundColor(Color.Transparent)
+          .border({ width: 0.5, color: getAppUiState().themePrimaryLight })
+          .systemMaterial(createToolServiceCardMaterial(false))
 
           Column({ space: 12 }) {
             Row({ space: 8 }) {
@@ -1946,8 +2020,10 @@ export struct ToolsCenterPanel {
           }
           .width('100%')
           .padding(16)
-          .borderRadius(20)
-          .backgroundColor(getAppUiState().themeSurface)
+          .borderRadius(16)
+          .backgroundColor(Color.Transparent)
+          .border({ width: 0.5, color: getAppUiState().themePrimaryLight })
+          .systemMaterial(createToolServiceCardMaterial(false))
 
           Row({ space: 12 }) {
             Column({ space: 4 }) {
@@ -1978,8 +2054,10 @@ export struct ToolsCenterPanel {
           }
           .width('100%')
           .padding(16)
-          .borderRadius(20)
-          .backgroundColor(getAppUiState().themeSurface)
+          .borderRadius(16)
+          .backgroundColor(Color.Transparent)
+          .border({ width: 0.5, color: getAppUiState().themePrimaryLight })
+          .systemMaterial(createToolServiceCardMaterial(false))
         }
         .width('100%')
         .padding({ left: 16, right: 16, bottom: 24 })
@@ -2049,14 +2127,6 @@ export struct ToolsCenterPanel {
             .width('100%')
 
             Row({ space: 12 }) {
-              Text(this.getSkillFormStatusText())
-                .fontSize(11)
-                .fontWeight(FontWeight.Medium)
-                .fontColor(this.skillFormEnabled ? this.themePrimary : $r('app.color.text_secondary'))
-                .padding({ left: 10, right: 10, top: 6, bottom: 6 })
-                .borderRadius(999)
-                .backgroundColor(getAppUiState().themeBackground)
-
               Blank()
 
               Toggle({ type: ToggleType.Switch, isOn: this.skillFormEnabled })
@@ -2071,9 +2141,10 @@ export struct ToolsCenterPanel {
           }
           .width('100%')
           .padding(16)
-          .borderRadius(20)
-          .backgroundColor(getAppUiState().themeSurface)
-          .border({ width: 1, color: withColorAlpha(this.themePrimary, this.isDarkMode ? '20' : '10') })
+          .borderRadius(16)
+          .backgroundColor(Color.Transparent)
+          .border({ width: 0.5, color: getAppUiState().themePrimaryLight })
+          .systemMaterial(createToolServiceCardMaterial(false))
 
           Column({ space: 12 }) {
             Column({ space: 6 }) {
@@ -2123,8 +2194,10 @@ export struct ToolsCenterPanel {
           }
           .width('100%')
           .padding(16)
-          .borderRadius(20)
-          .backgroundColor(getAppUiState().themeSurface)
+          .borderRadius(16)
+          .backgroundColor(Color.Transparent)
+          .border({ width: 0.5, color: getAppUiState().themePrimaryLight })
+          .systemMaterial(createToolServiceCardMaterial(false))
 
           Column({ space: 8 }) {
             Text('SKILL.md')
@@ -2153,8 +2226,10 @@ export struct ToolsCenterPanel {
           }
           .width('100%')
           .padding(16)
-          .borderRadius(20)
-          .backgroundColor(getAppUiState().themeSurface)
+          .borderRadius(16)
+          .backgroundColor(Color.Transparent)
+          .border({ width: 0.5, color: getAppUiState().themePrimaryLight })
+          .systemMaterial(createToolServiceCardMaterial(false))
         }
         .width('100%')
         .padding({ left: 16, right: 16, bottom: 24 })
@@ -2228,6 +2303,21 @@ export struct ToolsCenterPanel {
                 }
               })
 
+              ContextCompactCardItem({
+                compactEnabled: this.contextCompactEnabled,
+                thresholdPercent: this.contextCompactThresholdPercent,
+                maxContextTokens: this.contextCompactMaxTokens,
+                onToggle: (enabled: boolean) => {
+                  this.handleContextCompactEnabledChanged(enabled)
+                },
+                onThresholdChange: (percent: number) => {
+                  this.handleContextCompactThresholdChanged(percent)
+                },
+                onMaxContextTokensChange: (tokens: number) => {
+                  this.handleContextCompactMaxTokensChanged(tokens)
+                }
+              })
+
               SkillServiceCardItem({
                 skillEnabled: this.skillToolEnabled,
                 totalSkillCount: this.skills.length,
@@ -2251,15 +2341,13 @@ export struct ToolsCenterPanel {
               })
 
               if (this.builtinTools.length > 0) {
-                Text($r('app.string.tools_builtin_section'))
-                  .fontSize(15)
-                  .fontWeight(FontWeight.Bold)
-                  .fontColor($r('app.color.text_primary'))
-                  .width('100%')
-
                 ForEach(this.builtinTools, (tool: ToolConfig) => {
                   BuiltinToolCardItem({
-                    tool: tool
+                    tool: tool,
+                    selected: this.isToolSelected(tool.id),
+                    onToggle: (enabled: boolean): void => {
+                      this.handleToolSelectionChanged(tool.id, enabled)
+                    }
                   })
                 }, (tool: ToolConfig) => tool.id)
               }
@@ -2352,15 +2440,10 @@ export struct ToolsCenterPanel {
                 }
                 .width('100%')
                 .padding(18)
-                .borderRadius(20)
-                .backgroundColor(getAppUiState().themeSurface)
-                .border({ width: 1, color: $r('app.color.divider') })
-                .shadow({
-                  radius: 14,
-                  color: this.isDarkMode ? 'rgba(0, 0, 0, 0.20)' : 'rgba(15, 23, 42, 0.05)',
-                  offsetX: 0,
-                  offsetY: 6
-                })
+                .borderRadius(16)
+                .backgroundColor(Color.Transparent)
+                .border({ width: 0.5, color: getAppUiState().themePrimaryLight })
+                .systemMaterial(createToolServiceCardMaterial(false))
               } else {
                 ForEach(this.mcpServers, (server: McpServerConfig) => {
                   McpServerCardItem({
@@ -2466,14 +2549,6 @@ struct SearchServiceCardItem {
     return getAppUiState().themePrimary
   }
 
-  private get isDarkMode(): boolean {
-    return getAppUiState().isDarkMode
-  }
-
-  private get dividerHex(): string {
-    return getAppUiState().themeDivider
-  }
-
   private getDisabledText(): string {
     return pickLocalizedText('未启用', 'Disabled')
   }
@@ -2551,19 +2626,217 @@ struct SearchServiceCardItem {
     }
     .width('100%')
     .padding(16)
-    .margin({ bottom: 8 })
-    .borderRadius(20)
-    .backgroundColor(getAppUiState().themeSurface)
-    .border({ width: 1, color: this.dividerHex })
-    .shadow({
-      radius: 16,
-      color: this.isDarkMode ? 'rgba(0, 0, 0, 0.20)' : 'rgba(15, 23, 42, 0.05)',
-      offsetX: 0,
-      offsetY: 6
-    })
+    .borderRadius(16)
+    .backgroundColor(Color.Transparent)
+    .border({ width: 0.5, color: getAppUiState().themePrimaryLight })
+    .systemMaterial(createToolServiceCardMaterial(false))
     .onClick(() => {
       this.onOpenConfig()
     })
+  }
+}
+
+// 上下文压缩（compact）设置卡片：控制是否在超过阈值时提醒模型压缩，以及触发阈值
+@ComponentV2
+struct ContextCompactCardItem {
+  @Param compactEnabled: boolean = true
+  @Param thresholdPercent: number = DEFAULT_COMPACT_THRESHOLD_PERCENT
+  @Param maxContextTokens: number = DEFAULT_CONTEXT_LIMIT_TOKENS
+  @Event onToggle: (enabled: boolean) => void = (_enabled: boolean): void => {}
+  @Event onThresholdChange: (percent: number) => void = (_percent: number): void => {}
+  @Event onMaxContextTokensChange: (tokens: number) => void = (_tokens: number): void => {}
+
+  // 拖动过程中的实时值，抬手（Moving/End）后才写入偏好
+  @Local draggingThresholdPercent: number = -1
+  @Local draggingMaxContextTokens: number = -1
+
+  private get themePrimary(): string {
+    return getAppUiState().themePrimary
+  }
+
+  private getDisplayThresholdPercent(): number {
+    return this.draggingThresholdPercent >= 0 ? this.draggingThresholdPercent : this.thresholdPercent
+  }
+
+  private getDisplayMaxContextTokens(): number {
+    return this.draggingMaxContextTokens >= 0 ? this.draggingMaxContextTokens : this.maxContextTokens
+  }
+
+  private getStatusText(): string {
+    if (!this.compactEnabled) {
+      return pickLocalizedText('未启用', 'Disabled')
+    }
+    return pickLocalizedText(
+      `上限 ${formatTokenCount(this.getDisplayMaxContextTokens())} · 超过 ${this.getDisplayThresholdPercent()}% 时提醒压缩`,
+      `Cap ${formatTokenCount(this.getDisplayMaxContextTokens())} · remind above ${this.getDisplayThresholdPercent()}%`
+    )
+  }
+
+  // 拖动中只更新显示，抬手或点击轨道时才落盘
+  private isSliderCommitted(mode: SliderChangeMode): boolean {
+    return mode === SliderChangeMode.End || mode === SliderChangeMode.Click
+  }
+
+  build() {
+    Column({ space: 12 }) {
+      Row({ space: 12 }) {
+        ChatFloatingImmersiveButton({
+          barWidth: 44,
+          barHeight: 44,
+          iconResource: $r('sys.symbol.wrench_and_screwdriver'),
+          iconSize: 20,
+          iconColor: [this.themePrimary],
+          responsePadding: 0,
+          onButtonClick: (): void => {}
+        }) {
+          Stack({ alignContent: Alignment.Center }) {
+            SymbolGlyph($r('sys.symbol.wrench_and_screwdriver'))
+              .renderingStrategy(SymbolRenderingStrategy.SINGLE)
+              .fontSize(20)
+              .fontColor([this.themePrimary])
+          }
+          .width(44)
+          .height(44)
+        }
+
+        Column({ space: 6 }) {
+          Text(pickLocalizedText('上下文压缩', 'Context Compaction'))
+            .fontSize(17)
+            .fontWeight(FontWeight.Bold)
+            .fontColor($r('app.color.text_primary'))
+            .width('100%')
+
+          Text(this.getStatusText())
+            .fontSize(12)
+            .fontColor($r('app.color.text_secondary'))
+            .width('100%')
+        }
+        .layoutWeight(1)
+        .alignItems(HorizontalAlign.Start)
+
+        Toggle({ type: ToggleType.Switch, isOn: this.compactEnabled })
+          .selectedColor(this.themePrimary)
+          .systemMaterial(new uiMaterial.Material())
+          .switchPointColor(Color.White)
+          .onChange((value: boolean) => {
+            this.onToggle(value)
+          })
+      }
+      .width('100%')
+
+      Text(pickLocalizedText(
+        '对话上下文超过所选比例时，应用会在下一次请求中提醒模型先调用 compact 工具，把更早的历史压缩成摘要。' +
+          '只影响发送给模型的内容，不会删除聊天记录。仅支持工具调用的模型可用。',
+        'When the conversation exceeds the selected share of the model context window, the next request reminds ' +
+          'the model to call the compact tool first. Only the request is shortened; your chat history is kept. ' +
+          'Requires a model that supports tools.'
+      ))
+        .fontSize(12)
+        .lineHeight(18)
+        .fontColor($r('app.color.text_secondary'))
+        .width('100%')
+
+      if (this.compactEnabled) {
+        Column({ space: 4 }) {
+          Row() {
+            Text(pickLocalizedText('上下文长度上限', 'Context length cap'))
+              .fontSize(12)
+              .fontWeight(FontWeight.Medium)
+              .fontColor($r('app.color.text_secondary'))
+              .layoutWeight(1)
+
+            Text(formatTokenCount(this.getDisplayMaxContextTokens()))
+              .fontSize(12)
+              .fontWeight(FontWeight.Medium)
+              .fontColor(this.themePrimary)
+          }
+          .width('100%')
+
+          Slider({
+            value: this.getDisplayMaxContextTokens(),
+            min: MIN_CONTEXT_LIMIT_TOKENS,
+            max: MAX_CONTEXT_LIMIT_TOKENS,
+            step: CONTEXT_LIMIT_TOKENS_STEP,
+            style: SliderStyle.OutSet
+          })
+            .width('100%')
+            .selectedColor(this.themePrimary)
+            .trackColor(getAppUiState().themeBackground)
+            .blockColor(Color.White)
+            .onChange((value: number, mode: SliderChangeMode) => {
+              this.draggingMaxContextTokens = value
+              if (this.isSliderCommitted(mode)) {
+                this.draggingMaxContextTokens = -1
+                this.onMaxContextTokensChange(value)
+              }
+            })
+
+          Text(pickLocalizedText(
+            `模型窗口大于该值时按该值计算用量，可选 ${formatTokenCount(MIN_CONTEXT_LIMIT_TOKENS)} ~ ` +
+              `${formatTokenCount(MAX_CONTEXT_LIMIT_TOKENS)}；窗口较小的模型不受影响。`,
+            `Models with a larger window are measured against this cap ` +
+              `(${formatTokenCount(MIN_CONTEXT_LIMIT_TOKENS)}–${formatTokenCount(MAX_CONTEXT_LIMIT_TOKENS)}). ` +
+              `Smaller models are unaffected.`
+          ))
+            .fontSize(11)
+            .lineHeight(16)
+            .fontColor($r('app.color.text_tertiary'))
+            .width('100%')
+        }
+        .width('100%')
+
+        Column({ space: 4 }) {
+          Row() {
+            Text(pickLocalizedText('触发阈值', 'Trigger threshold'))
+              .fontSize(12)
+              .fontWeight(FontWeight.Medium)
+              .fontColor($r('app.color.text_secondary'))
+              .layoutWeight(1)
+
+            Text(`${this.getDisplayThresholdPercent()}%`)
+              .fontSize(12)
+              .fontWeight(FontWeight.Medium)
+              .fontColor(this.themePrimary)
+          }
+          .width('100%')
+
+          Slider({
+            value: this.getDisplayThresholdPercent(),
+            min: MIN_COMPACT_THRESHOLD_PERCENT,
+            max: MAX_COMPACT_THRESHOLD_PERCENT,
+            step: COMPACT_THRESHOLD_PERCENT_STEP,
+            style: SliderStyle.OutSet
+          })
+            .width('100%')
+            .selectedColor(this.themePrimary)
+            .trackColor(getAppUiState().themeBackground)
+            .blockColor(Color.White)
+            .onChange((value: number, mode: SliderChangeMode) => {
+              this.draggingThresholdPercent = value
+              if (this.isSliderCommitted(mode)) {
+                this.draggingThresholdPercent = -1
+                this.onThresholdChange(value)
+              }
+            })
+
+          Text(pickLocalizedText(
+            `可选 ${MIN_COMPACT_THRESHOLD_PERCENT}% ~ ${MAX_COMPACT_THRESHOLD_PERCENT}%，默认 ${DEFAULT_COMPACT_THRESHOLD_PERCENT}%。`,
+            `Range ${MIN_COMPACT_THRESHOLD_PERCENT}%–${MAX_COMPACT_THRESHOLD_PERCENT}%, default ${DEFAULT_COMPACT_THRESHOLD_PERCENT}%.`
+          ))
+            .fontSize(11)
+            .lineHeight(16)
+            .fontColor($r('app.color.text_tertiary'))
+            .width('100%')
+        }
+        .width('100%')
+      }
+    }
+    .width('100%')
+    .padding(16)
+    .borderRadius(16)
+    .backgroundColor(Color.Transparent)
+    .border({ width: 0.5, color: getAppUiState().themePrimaryLight })
+    .systemMaterial(createToolServiceCardMaterial(false))
   }
 }
 
@@ -2587,10 +2860,6 @@ struct SkillServiceCardItem {
 
   private get isDarkMode(): boolean {
     return getAppUiState().isDarkMode
-  }
-
-  private get dividerHex(): string {
-    return getAppUiState().themeDivider
   }
 
   private getStatusText(): string {
@@ -2761,16 +3030,10 @@ struct SkillServiceCardItem {
     }
     .width('100%')
     .padding(16)
-    .margin({ bottom: 8 })
-    .borderRadius(20)
-    .backgroundColor(getAppUiState().themeSurface)
-    .border({ width: 1, color: this.dividerHex })
-    .shadow({
-      radius: 16,
-      color: this.isDarkMode ? 'rgba(0, 0, 0, 0.20)' : 'rgba(15, 23, 42, 0.05)',
-      offsetX: 0,
-      offsetY: 6
-    })
+    .borderRadius(16)
+    .backgroundColor(Color.Transparent)
+    .border({ width: 0.5, color: getAppUiState().themePrimaryLight })
+    .systemMaterial(createToolServiceCardMaterial(false))
     .animation({ duration: 220, curve: Curve.EaseInOut })
   }
 }
@@ -2790,20 +3053,12 @@ struct SkillListCardItem {
     return getAppUiState().isDarkMode
   }
 
-  private get dividerHex(): string {
-    return getAppUiState().themeDivider
-  }
-
   private getDescription(): string {
     const description = this.skill.description.trim()
     if (description !== '') {
       return description
     }
     return pickLocalizedText('无描述', 'No description')
-  }
-
-  private getStatusText(): string {
-    return this.skill.enabled ? pickLocalizedText('已启用', 'Enabled') : pickLocalizedText('已停用', 'Disabled')
   }
 
   build() {
@@ -2852,14 +3107,6 @@ struct SkillListCardItem {
       .width('100%')
 
       Row({ space: 8 }) {
-        Text(this.getStatusText())
-          .fontSize(11)
-          .fontWeight(FontWeight.Medium)
-          .fontColor(this.skill.enabled ? this.themePrimary : $r('app.color.text_secondary'))
-          .padding({ left: 10, right: 10, top: 6, bottom: 6 })
-          .borderRadius(999)
-          .backgroundColor(getAppUiState().themeBackground)
-
         Blank()
 
         Button(pickLocalizedText('编辑', 'Edit'))
@@ -2888,15 +3135,18 @@ struct SkillListCardItem {
     }
     .width('100%')
     .padding(14)
-    .borderRadius(18)
-    .backgroundColor(getAppUiState().themeSurface)
-    .border({ width: 1, color: this.dividerHex })
+    .borderRadius(16)
+    .backgroundColor(Color.Transparent)
+    .border({ width: 0.5, color: getAppUiState().themePrimaryLight })
+    .systemMaterial(createToolServiceCardMaterial(false))
   }
 }
 
 @ComponentV2
 struct BuiltinToolCardItem {
   @Param tool: ToolConfig = new ToolConfig()
+  @Param selected: boolean = false
+  @Event onToggle: (enabled: boolean) => void = (_enabled: boolean): void => {}
 
   private get themePrimary(): string {
     return getAppUiState().themePrimary
@@ -2912,22 +3162,6 @@ struct BuiltinToolCardItem {
 
   private get backgroundHex(): string {
     return getAppUiState().themeBackground
-  }
-
-  private get dividerHex(): string {
-    return getAppUiState().themeDivider
-  }
-
-  private getStatusText(): string {
-    return this.tool.enabled ? pickLocalizedText('已启用', 'Enabled') : pickLocalizedText('已停用', 'Disabled')
-  }
-
-  private getStatusBackgroundColor(): string {
-    return this.tool.enabled ? (this.isDarkMode ? '#183722' : '#EAF7EE') : (this.isDarkMode ? '#2D3138' : '#EEF1F5')
-  }
-
-  private getStatusFontColor(): string {
-    return this.tool.enabled ? '#2E8B57' : '#667085'
   }
 
   private isWriteTool(): boolean {
@@ -3027,13 +3261,13 @@ struct BuiltinToolCardItem {
         .layoutWeight(1)
         .alignItems(HorizontalAlign.Start)
 
-        Text(this.getStatusText())
-          .fontSize(10)
-          .fontWeight(FontWeight.Medium)
-          .fontColor(this.getStatusFontColor())
-          .padding({ left: 8, right: 8, top: 4, bottom: 4 })
-          .borderRadius(999)
-          .backgroundColor(this.getStatusBackgroundColor())
+        Toggle({ type: ToggleType.Switch, isOn: this.selected })
+          .selectedColor(this.themePrimary)
+          .systemMaterial(new uiMaterial.Material())
+          .switchPointColor(Color.White)
+          .onChange((value: boolean) => {
+            this.onToggle(value)
+          })
       }
       .width('100%')
       .alignItems(VerticalAlign.Center)
@@ -3062,16 +3296,10 @@ struct BuiltinToolCardItem {
     }
     .width('100%')
     .padding(16)
-    .margin({ bottom: 8 })
-    .borderRadius(20)
-    .backgroundColor(getAppUiState().themeSurface)
-    .border({ width: 1, color: this.dividerHex })
-    .shadow({
-      radius: 16,
-      color: this.isDarkMode ? 'rgba(0, 0, 0, 0.20)' : 'rgba(15, 23, 42, 0.05)',
-      offsetX: 0,
-      offsetY: 6
-    })
+    .borderRadius(16)
+    .backgroundColor(Color.Transparent)
+    .border({ width: 0.5, color: getAppUiState().themePrimaryLight })
+    .systemMaterial(createToolServiceCardMaterial(false))
   }
 }
 
@@ -3130,18 +3358,6 @@ struct McpServerCardItem {
     return `${names.join(' · ')}${suffix}`
   }
 
-  private getStatusText(): string {
-    return this.serverEnabled ? pickLocalizedText('已启用', 'Enabled') : pickLocalizedText('已停用', 'Disabled')
-  }
-
-  private getStatusBackgroundColor(): string {
-    return this.serverEnabled ? (this.isDarkMode ? '#183722' : '#EAF7EE') : (this.isDarkMode ? '#2D3138' : '#EEF1F5')
-  }
-
-  private getStatusFontColor(): string {
-    return this.serverEnabled ? '#2E8B57' : '#667085'
-  }
-
   private getToolToggleText(): string {
     return this.isToolsExpanded ? pickLocalizedText('收起工具', 'Collapse') : pickLocalizedText('展开工具', 'Expand')
   }
@@ -3185,24 +3401,13 @@ struct McpServerCardItem {
         }
 
         Column({ space: 6 }) {
-          Row() {
-            Text(this.serverName)
-              .fontSize(17)
-              .fontWeight(FontWeight.Bold)
-              .fontColor($r('app.color.text_primary'))
-              .maxLines(1)
-              .textOverflow({ overflow: TextOverflow.Ellipsis })
-
-            Text(this.getStatusText())
-              .fontSize(10)
-              .fontWeight(FontWeight.Medium)
-              .fontColor(this.getStatusFontColor())
-              .padding({ left: 8, right: 8, top: 4, bottom: 4 })
-              .borderRadius(999)
-              .backgroundColor(this.getStatusBackgroundColor())
-              .margin({ left: 8 })
-          }
-          .width('100%')
+          Text(this.serverName)
+            .fontSize(17)
+            .fontWeight(FontWeight.Bold)
+            .fontColor($r('app.color.text_primary'))
+            .width('100%')
+            .maxLines(1)
+            .textOverflow({ overflow: TextOverflow.Ellipsis })
 
           Text(this.serverBaseUrl)
             .fontSize(11)
@@ -3391,15 +3596,9 @@ struct McpServerCardItem {
     }
     .width('100%')
     .padding(16)
-    .margin({ bottom: 10 })
-    .borderRadius(20)
-    .backgroundColor(getAppUiState().themeSurface)
-    .border({ width: 1, color: this.dividerHex })
-    .shadow({
-      radius: 16,
-      color: this.isDarkMode ? 'rgba(0, 0, 0, 0.20)' : 'rgba(15, 23, 42, 0.05)',
-      offsetX: 0,
-      offsetY: 6
-    })
+    .borderRadius(16)
+    .backgroundColor(Color.Transparent)
+    .border({ width: 0.5, color: getAppUiState().themePrimaryLight })
+    .systemMaterial(createToolServiceCardMaterial(false))
   }
 }

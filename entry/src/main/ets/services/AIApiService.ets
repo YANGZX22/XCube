@@ -17,7 +17,8 @@ import {
   ToolDefinition,
   ToolCall,
   ToolResult,
-  OpenAITransport
+  OpenAITransport,
+  DEFAULT_MAX_OUTPUT_TOKENS
 } from '../models/ChatModels'
 import {
   AnthropicAuthStrategy,
@@ -1397,7 +1398,7 @@ export class AIApiService {
     messages: RequestMessage[],
     model: string,
     temperature: number = 0.7,
-    maxTokens: number = 4096,
+    maxTokens: number = DEFAULT_MAX_OUTPUT_TOKENS,
     reasoningLevel: ReasoningLevel = ReasoningLevel.OFF
   ): Promise<AIApiResult> {
     const url = this.buildChatUrl(config, model)
@@ -2840,7 +2841,7 @@ export class AIApiService {
     onComplete: () => void,
     onError: (error: string) => void,
     temperature: number = 0.7,
-    maxTokens: number = 4096,
+    maxTokens: number = DEFAULT_MAX_OUTPUT_TOKENS,
     onReasoningData?: (content: string) => void,
     onImageData?: (base64Data: string, mimeType: string) => void,
     reasoningLevel: ReasoningLevel = ReasoningLevel.OFF  // 推理级别参数
@@ -2945,7 +2946,7 @@ export class AIApiService {
     onComplete: (toolCalls: ToolCall[]) => void,
     onError: (error: string) => void,
     temperature: number = 0.7,
-    maxTokens: number = 4096,
+    maxTokens: number = DEFAULT_MAX_OUTPUT_TOKENS,
     onReasoningData?: (content: string) => void,
     onImageData?: (base64Data: string, mimeType: string) => void,
     reasoningLevel: ReasoningLevel = ReasoningLevel.OFF,

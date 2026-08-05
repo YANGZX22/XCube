@@ -295,11 +295,6 @@ export struct ChatToolPickerSheetContent {
             if (this.getBuiltinChatTools().length > 0) {
               Column({ space: 12 }) {
                 Column({ space: 4 }) {
-                  Text(pickLocalizedText('内置工具', 'Built-in Tools'))
-                    .fontSize(13)
-                    .fontWeight(FontWeight.Medium)
-                    .fontColor($r('app.color.text_primary'))
-
                   Text(pickLocalizedText(
                     '单个能力单独开关，启用后才会暴露给模型。',
                     'Each capability is toggled separately and only exposed to the model after enabling.'

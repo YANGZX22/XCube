@@ -55,6 +55,20 @@ import {
   KNOWLEDGE_SEARCH_MAX_CALLS_PER_USER_TURN,
   KNOWLEDGE_SEARCH_TOOL_ID
 } from '../config/KnowledgeSearchTool'
+import { COMPACT_TOOL_ID } from '../config/CompactTool'
+import {
+  COMPACT_SUMMARY_PROMPT_MARKER,
+  ContextCompactionResult,
+  ContextCompactionRuntime,
+  ContextCompactionService,
+  getContextCompactionService
+} from '../services/ContextCompactionService'
+import {
+  computeContextUsage,
+  ContextUsage,
+  formatTokenCount,
+  resolveContextWindowTokens
+} from '../utils/ContextWindowUtils'
 
 // 标题生成状态
 export interface TitleGenerationCallbacks {
@@ -194,6 +208,17 @@ interface ImageDownloadResult {
   mimeType: string
 }
 
+// 应用压缩摘要后，本次请求实际需要逐条发送的历史起点与摘要提示
+class CompactedHistoryPlan {
+  startIndex: number = 0
+  summaryPrompt: string = ''
+
+  constructor(startIndex: number, summaryPrompt: string = '') {
+    this.startIndex = startIndex
+    this.summaryPrompt = summaryPrompt
+  }
+}
+
 // 聊天状态管理
 export class ChatViewModel {
   private databaseService: DatabaseService
@@ -216,6 +241,8 @@ export class ChatViewModel {
   private pendingAIMessages: Map<string, PendingAIMessageInfo> = new Map()
   // 标题生成回调
   private titleCallbacks: TitleGenerationCallbacks | null = null
+  // 上下文压缩完成回调：压缩在一轮回答中途发生，UI 需要立刻重算上下文用量
+  private contextCompactedCallback: (() => void) | null = null
   // 最大重试次数
   private readonly MAX_TITLE_RETRY = 3
   private readonly DEFAULT_WEB_SEARCH_LIMIT = 5
@@ -626,9 +653,37 @@ export class ChatViewModel {
     }
   }
 
+  // 解析当前会话的压缩状态：锚点仍在本次历史中时，锚点之前的消息由摘要替代
+  private resolveCompactedHistoryPlan(messages: ChatMessage[], contextStartIndex: number): CompactedHistoryPlan {
+    const session = this.currentSession
+    if (session === null || session.contextSummary === '' || session.contextSummaryAnchorId === '') {
+      return new CompactedHistoryPlan(contextStartIndex)
+    }
+    for (let i = 0; i < messages.length; i++) {
+      if (messages[i].id !== session.contextSummaryAnchorId) {
+        continue
+      }
+      // 锚点之后已无消息时摘要没有意义（例如刚压缩完又切回旧分支）
+      if (i + 1 > messages.length) {
+        break
+      }
+      return new CompactedHistoryPlan(
+        Math.max(contextStartIndex, i + 1),
+        ContextCompactionService.buildSummaryRequestPrompt(session.contextSummary)
+      )
+    }
+    // 锚点已失效（消息被删除或切换到其他版本分支）：本次按未压缩发送
+    console.info('ChatViewModel', 'Context compaction anchor not found in current path, sending full history')
+    return new CompactedHistoryPlan(contextStartIndex)
+  }
+
   private buildConversationRequestHistory(messages: ChatMessage[], contextStartIndex: number): RequestMessage[] {
     const historyMessages: RequestMessage[] = []
-    for (let i = contextStartIndex; i < messages.length; i++) {
+    const plan = this.resolveCompactedHistoryPlan(messages, contextStartIndex)
+    if (plan.summaryPrompt !== '') {
+      historyMessages.push(new RequestMessage('system', plan.summaryPrompt))
+    }
+    for (let i = plan.startIndex; i < messages.length; i++) {
       const msg = messages[i]
       if (msg.role === MessageRole.SYSTEM) {
         continue
@@ -638,6 +693,179 @@ export class ChatViewModel {
       historyMessages.push(requestMessage)
     }
     return historyMessages
+  }
+
+  // ============ 上下文长度窗口与 compact 工具 ============
+
+  // 返回 0 表示当前模型的上下文窗口未知（供应商未加载完成或模型未配置 contextLength）。
+  // 此时不能用默认值冒充真实窗口，否则会把长会话误判成已满。
+  private getCurrentModelContextWindow(providerId: string, modelId: string): number {
+    const provider = this.providerViewModel.getProviderById(providerId)
+    if (provider === null) {
+      return 0
+    }
+    const maxContextTokens = getContextCompactionService().getMaxContextTokens()
+    for (let i = 0; i < provider.models.length; i++) {
+      if (provider.models[i].id === modelId) {
+        return resolveContextWindowTokens(provider.models[i].contextLength, maxContextTokens)
+      }
+    }
+    return 0
+  }
+
+  // 估算本次请求发送出去的上下文用量（已应用当前会话的压缩摘要）
+  private computeRequestContextUsage(
+    messages: ChatMessage[],
+    providerId: string,
+    modelId: string,
+    systemPrompt: string
+  ): ContextUsage {
+    const session = this.currentSession
+    const compactionService = getContextCompactionService()
+    return computeContextUsage(
+      messages,
+      this.getCurrentModelContextWindow(providerId, modelId),
+      compactionService.getThresholdPercent(),
+      session !== null ? session.contextSummary : '',
+      session !== null ? session.contextSummaryAnchorId : '',
+      [systemPrompt]
+    )
+  }
+
+  private buildCompactReminderPrompt(usage: ContextUsage): string {
+    return `
+上下文长度提醒(非常重要):
+- 当前对话上下文约占用 ${formatTokenCount(usage.usedTokens)} / ${formatTokenCount(usage.limitTokens)} tokens（约 ${usage.percent}%），已超过 ${usage.thresholdPercent}% 阈值。
+- 请在回答用户当前问题之前，先调用一次 compact 工具，把更早的对话历史压缩成结构化摘要。
+- compact 的 summary 必须自包含：写清用户目标与约束、已确认的结论、已产出的代码/文件/数据及其位置、已排除的方案与原因、当前进度和待办；被压缩掉的原文之后不再可见。
+- compact 返回后立即基于摘要继续回答用户当前的问题，不要向用户复述摘要，也不要重复调用 compact。`
+  }
+
+  private isCompactFunction(functionName: string): boolean {
+    return functionName.trim() === COMPACT_TOOL_ID
+  }
+
+  private hasCompactTool(tools: ToolDefinition[]): boolean {
+    for (let i = 0; i < tools.length; i++) {
+      if (this.isCompactFunction(tools[i].function.name)) {
+        return true
+      }
+    }
+    return false
+  }
+
+  private getToolsWithoutCompact(tools: ToolDefinition[]): ToolDefinition[] {
+    const remainingTools: ToolDefinition[] = []
+    for (let i = 0; i < tools.length; i++) {
+      if (!this.isCompactFunction(tools[i].function.name)) {
+        remainingTools.push(tools[i])
+      }
+    }
+    return remainingTools
+  }
+
+  // 本轮回答中是否已经完成过一次压缩（每次用户提问最多压缩一次）
+  private hasCompletedCompactCall(aiMessage: ChatMessage): boolean {
+    for (let i = 0; i < aiMessage.toolCalls.length; i++) {
+      if (!this.isCompactFunction(aiMessage.toolCalls[i].functionName)) {
+        continue
+      }
+      const result = this.findToolResult(aiMessage, aiMessage.toolCalls[i].id)
+      if (result !== null && !result.isError) {
+        return true
+      }
+    }
+    return false
+  }
+
+  // compact 执行成功后，把本次请求的历史就地替换为 [系统提示, 摘要, 最近保留部分]。
+  // 必须在 assistant(tool_calls) 与 tool result 追加进去之前调用，避免破坏配对顺序。
+  private applyCompactionToRequestMessages(
+    requestMessages: RequestMessage[],
+    result: ContextCompactionResult,
+    snapshotSession: ChatSession | null,
+    snapshotSessionId: string
+  ): void {
+    const leadingSystemMessages: RequestMessage[] = []
+    for (let i = 0; i < requestMessages.length; i++) {
+      if (requestMessages[i].role !== 'system') {
+        break
+      }
+      // 旧的摘要 system 消息会被本次摘要取代
+      if (requestMessages[i].content.indexOf(COMPACT_SUMMARY_PROMPT_MARKER) >= 0) {
+        continue
+      }
+      leadingSystemMessages.push(requestMessages[i])
+    }
+
+    // 保留最近若干轮原文：从末尾回退 (keptRecentTurns + 1) 条 user 消息，
+    // 其中最后一条是本轮用户提问，必须原样保留
+    let keepFromIndex = requestMessages.length
+    let remainingUserMessages = result.keptRecentTurns + 1
+    for (let i = requestMessages.length - 1; i >= 0; i--) {
+      if (requestMessages[i].role !== 'user') {
+        continue
+      }
+      keepFromIndex = i
+      remainingUserMessages -= 1
+      if (remainingUserMessages <= 0) {
+        break
+      }
+    }
+    if (keepFromIndex >= requestMessages.length) {
+      console.warn('ChatViewModel', 'Compaction skipped: no user message found in request history')
+      return
+    }
+
+    const rebuilt: RequestMessage[] = [...leadingSystemMessages]
+    rebuilt.push(new RequestMessage('system', ContextCompactionService.buildSummaryRequestPrompt(result.summary)))
+    for (let i = keepFromIndex; i < requestMessages.length; i++) {
+      rebuilt.push(requestMessages[i])
+    }
+    // 就地替换：后续轮次仍持有同一个数组引用
+    requestMessages.splice(0, requestMessages.length)
+    for (let i = 0; i < rebuilt.length; i++) {
+      requestMessages.push(rebuilt[i])
+    }
+
+    if (snapshotSession !== null) {
+      snapshotSession.contextSummary = result.summary
+      snapshotSession.contextSummaryAnchorId = result.anchorMessageId
+      snapshotSession.contextSummaryUpdatedAt = Date.now()
+      snapshotSession.contextCompactCount = snapshotSession.contextCompactCount + 1
+      this.databaseService.updateSessionContextCompaction(
+        snapshotSessionId,
+        snapshotSession.contextSummary,
+        snapshotSession.contextSummaryAnchorId,
+        snapshotSession.contextSummaryUpdatedAt,
+        snapshotSession.contextCompactCount
+      ).catch((error: Object): void => {
+        console.error('ChatViewModel', `Failed to persist context compaction: ${JSON.stringify(error)}`)
+      })
+    }
+    console.info(
+      'ChatViewModel',
+      `Applied context compaction to live request: kept ${requestMessages.length} request messages`
+    )
+    // 压缩发生在一轮回答的中途，此时 isSending 仍为 true，
+    // 必须主动通知 UI 重算，否则上下文进度要等整轮结束才会变化
+    if (this.contextCompactedCallback !== null) {
+      this.contextCompactedCallback()
+    }
+  }
+
+  // 供 UI 与发送前判定读取的上下文用量（基于已有历史，不含本轮尚未发送的输入）
+  getContextUsage(providerId: string, modelId: string, messages: ChatMessage[]): ContextUsage {
+    return this.computeRequestContextUsage(messages, providerId, modelId, '')
+  }
+
+  // 是否需要在本次请求中曝光 compact 工具并注入压缩提醒
+  shouldSuggestCompaction(providerId: string, modelId: string, messages: ChatMessage[]): boolean {
+    const compactionService = getContextCompactionService()
+    if (!compactionService.isEnabled()) {
+      return false
+    }
+    return this.getContextUsage(providerId, modelId, messages).overThreshold
   }
 
   // 判断待持久化消息是否包含有效内容（空占位消息不应跨会话残留）
@@ -1921,7 +2149,11 @@ ${limitedSearchContext}
     let hasSkillTool = false
     let hasSubAgentTool = false
     let hasKnowledgeSearchTool = false
+    let hasCompactTool = false
     for (let i = 0; i < tools.length; i++) {
+      if (tools[i].function.name === COMPACT_TOOL_ID) {
+        hasCompactTool = true
+      }
       if (tools[i].function.name === 'web_search') {
         hasWebSearchTool = true
       }
@@ -2008,6 +2240,26 @@ ${limitedSearchContext}
     toolUsageSystemPrompt += `
 - 若用户提到“今天/昨天/明天/现在/最新”等相对时间，请以当前时间为基准理解，不要编造不一致的绝对日期。
 - 工具返回后必须给出最终回答，不要在没有必要的情况下重复调用工具。`
+
+    // 上下文长度窗口检查：超过阈值且本次已曝光 compact 工具时，注入压缩提醒。
+    // 用量按“已应用当前摘要之后实际会发送的历史”估算，不含本轮新输入。
+    const compactionService = getContextCompactionService()
+    await compactionService.ensurePreferencesLoaded()
+    const contextUsage = this.computeRequestContextUsage(
+      historySource,
+      providerId,
+      modelId,
+      toolUsageSystemPrompt
+    )
+    if (hasCompactTool && compactionService.isEnabled() && contextUsage.overThreshold) {
+      toolUsageSystemPrompt += this.buildCompactReminderPrompt(contextUsage)
+      console.info(
+        'ChatViewModel',
+        `Context over threshold: ${contextUsage.usedTokens}/${contextUsage.limitTokens} ` +
+          `(${contextUsage.percent}% >= ${contextUsage.thresholdPercent}%), compact reminder injected`
+      )
+    }
+
     const finalToolUsageSystemPrompt = await this.buildRequestSystemPrompt(toolUsageSystemPrompt)
     requestMessages.push(new RequestMessage('system', finalToolUsageSystemPrompt))
     for (let i = 0; i < historyMessages.length; i++) {
@@ -2076,6 +2328,26 @@ ${limitedSearchContext}
       localContentThrottle.reset()
       localReasoningThrottle.reset()
     })
+
+    // 注册本次请求的压缩运行时：compact 执行器据此计算锚点。
+    // 传入的是已持久化的活跃路径（含本轮用户消息），锚点必须是真实存在的消息 ID。
+    const compactionSourceMessages: ChatMessage[] = [...historySource]
+    if (userMessage !== null) {
+      compactionSourceMessages.push(userMessage)
+    } else if (parentage.forkContext !== null) {
+      for (let i = 0; i < messages.length; i++) {
+        if (messages[i].id === parentage.forkContext.aiParentId) {
+          compactionSourceMessages.push(messages[i])
+          break
+        }
+      }
+    }
+    compactionService.beginRequest(new ContextCompactionRuntime(
+      requestId,
+      snapshotSessionId,
+      compactionSourceMessages,
+      this.getCurrentModelContextWindow(providerId, modelId)
+    ))
 
     // 每个子智能体拥有独立的联网搜索/知识库预算记录，
     // 不与主对话或其他子智能体相互扣减。
@@ -2311,6 +2583,7 @@ ${preview}`
       }
     }
     this.unregisterActiveRequest(requestId)
+    getContextCompactionService().endRequest(requestId)
     onComplete()
   }
 
@@ -2765,6 +3038,11 @@ ${preview}`
       toolsForThisRound = tools
       toolChoiceForThisRound = toolsForThisRound.length > 0 ? 'auto' : 'none'
     }
+    // 每次用户提问最多压缩一次：已压缩成功后从后续回合移除 compact，避免反复压缩摘要
+    if (this.hasCompactTool(toolsForThisRound) && this.hasCompletedCompactCall(aiMessage)) {
+      toolsForThisRound = this.getToolsWithoutCompact(toolsForThisRound)
+      toolChoiceForThisRound = toolsForThisRound.length > 0 ? toolChoiceForThisRound : 'none'
+    }
     const toolsEnabledInThisRound = toolsForThisRound.length > 0
     const requestMessagesForRound = forceKnowledgeSearchInThisRound && iteration > 0
       ? requestMessages.concat([new RequestMessage(
@@ -2957,6 +3235,7 @@ ${preview}`
           onAIMessageUpdated(aiMessage)
           this.clearPendingAIMessageIfMatches(aiMessage.id)
           this.unregisterActiveRequest(requestId)
+          getContextCompactionService().endRequest(requestId)
           this.toolExecutionService.clearCancelCheckCallback()
           onError(requiredToolError)
           return
@@ -3101,6 +3380,18 @@ ${preview}`
             toolCallbacks.onToolCallCompleted(toolResults)
           }
 
+          // compact 成功后，先把本次请求历史就地压缩，再追加本轮 assistant/tool 消息，
+          // 保证 tool_calls 与 tool result 的配对不被裁剪破坏
+          const compactionResult = getContextCompactionService().consumeResult(requestId)
+          if (compactionResult !== null && compactionResult.applied) {
+            this.applyCompactionToRequestMessages(
+              requestMessages,
+              compactionResult,
+              snapshotSession,
+              snapshotSessionId
+            )
+          }
+
           // 构建下一轮请求消息
           const assistantMsg = RequestMessage.createAssistantWithToolCalls(aiMessage.content, toolCalls)
           assistantMsg.reasoningContent = toolContinuationReasoningContent
@@ -3200,6 +3491,7 @@ ${preview}`
         }
         this.clearPendingAIMessageIfMatches(aiMessage.id)
         this.unregisterActiveRequest(requestId)
+        getContextCompactionService().endRequest(requestId)
       },
 	      requestTemperature,
       this.appStateManager.getDefaultMaxTokens(),
@@ -3934,6 +4226,10 @@ ${context !== '' ? context : '(无历史对话)'}
   }
 
   // 设置标题生成回调
+  setContextCompactedCallback(callback: (() => void) | null): void {
+    this.contextCompactedCallback = callback
+  }
+
   setTitleCallbacks(callbacks: TitleGenerationCallbacks | null): void {
     this.titleCallbacks = callbacks
   }

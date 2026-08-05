@@ -1,6 +1,10 @@
 import { http } from '@kit.NetworkKit'
 import { util } from '@kit.ArkTS'
 
+// NetStack readTimeout 最终使用 uint32_t；取有符号 32 位最大值可避免跨层溢出，
+// 对聊天流式请求等价于约 24.8 天，实际使用中视为不设应用侧时限。
+const CHAT_STREAM_READ_TIMEOUT_MS: number = 2147483647
+
 // HTTP 请求方法枚举
 export enum HttpMethod {
   GET = 'GET',
@@ -662,7 +666,7 @@ export class HttpService {
       method: HttpMethod.POST,
       headers: headers,
       body: body,
-      timeout: 300000
+      timeout: CHAT_STREAM_READ_TIMEOUT_MS
     }
 
     const options: http.HttpRequestOptions = {
@@ -670,7 +674,7 @@ export class HttpService {
       header: config.headers,
       extraData: config.body,
       connectTimeout: 15000,  // 连接超时 15 秒（断网场景更快响应）
-      readTimeout: config.timeout,  // 读取超时保持 300 秒
+      readTimeout: config.timeout,  // 流式读取近似无限；仍可由用户主动停止
       expectDataType: http.HttpDataType.ARRAY_BUFFER
     }
 

@@ -42,6 +42,7 @@ import { ToolApprovalResult } from '../services/ToolExecutionService'
 import {
   ASK_USER_TOOL_ID,
   CANVAS_DOCUMENT_TOOL_ID,
+  COMPACT_TOOL_ID,
   IMAGE_TO_TEXT_TOOL_ID,
   KNOWLEDGE_SEARCH_TOOL_ID,
   MATH_CHART_TOOL_ID,
@@ -116,6 +117,7 @@ import { DocumentAttachmentRegistryService } from '../services/DocumentAttachmen
 import { getPdfTextExtractionService } from '../services/PdfTextExtractionService'
 import { getImageTextRecognitionService } from '../services/ImageTextRecognitionService'
 import { resolveKnowledgeToolExposure } from './chat/KnowledgeToolExposurePolicy'
+import { ContextUsage, formatTokenCount } from '../utils/ContextWindowUtils'
 import { ImmersiveSheetHeader } from '../components/ImmersiveSheetHeader'
 import { AskUserCard } from '../components/AskUserCard'
 
@@ -160,8 +162,8 @@ interface ReadScheduleApprovalArgs {
 
 const HDS_NAV_DESTINATION_MINI_TITLE_BAR_HEIGHT: number = 56
 const HDS_NAV_TITLE_SYSTEM_BACK_INSET: number = 64
-const HDS_NAV_TITLE_SYSTEM_MENU_ITEM_WIDTH: number = 34
-const HDS_NAV_TITLE_SYSTEM_MENU_END_MARGIN: number = 10
+// 与 HdsNavigation 标题栏自身的 endPadding 对齐，保证自绘按钮和原生菜单图标位置一致
+const HDS_NAV_TITLE_SYSTEM_MENU_END_MARGIN: number = 16
 
 @ComponentV2
 export struct ChatPage {
@@ -228,7 +230,10 @@ export struct ChatPage {
   @Local sessionTitle: string = ''
   @Local isTitleGenerating: boolean = false
   @Local titleGenerateFailed: boolean = false
-  @Local titleEditRequestTick: number = 0
+  // 上下文长度窗口用量。估算需要遍历全部历史文本，只在消息列表或模型变化时刷新，
+  // 不随流式输出的每一帧重算。
+  @Local contextUsage: ContextUsage = new ContextUsage()
+  private contextUsageDialogId: number = -1
   // 图片预览状态
   @Local showImagePreview: boolean = false
   @Local previewImages: Array<string> = []
@@ -486,6 +491,9 @@ export struct ChatPage {
       }
     }
     this.chatViewModel.setTitleCallbacks(titleCallbacks)
+    this.chatViewModel.setContextCompactedCallback((): void => {
+      this.refreshContextUsage()
+    })
 
     // 初始化TTS服务
     this.initTTSService()
@@ -693,6 +701,7 @@ export struct ChatPage {
 
   private markMessageListChanged(): void {
     this.messageListSyncVersion = this.messageListSyncVersion + 1
+    this.refreshContextUsage()
   }
 
   // 重算当前展示消息的对话树版本信息（versionIndex / versionCount），并触发列表刷新
@@ -981,6 +990,76 @@ export struct ChatPage {
   private getCanvasButtonTranslateY(): number {
     return -this.getFloatingRightButtonBottomOffsetVp() +
       this.getHistoryPreviewButtonExtraOffsetY() - 48
+  }
+
+  // 点击标题栏上下文按钮后弹出的用量对话框
+  @Builder
+  private ContextUsageDialogBuilder() {
+    Column({ space: 16 }) {
+      Text(pickLocalizedText('上下文长度窗口', 'Context window'))
+        .fontSize(18)
+        .fontWeight(FontWeight.Bold)
+        .fontColor($r('app.color.text_primary'))
+
+      Stack({ alignContent: Alignment.Center }) {
+        Progress({
+          value: Math.min(100, this.contextUsage.percent),
+          total: 100,
+          type: ProgressType.Eclipse
+        })
+          .color(this.getContextUsageColor())
+          .width(100)
+          .height(100)
+      }
+      .width(100)
+      .height(100)
+
+      Text(`${this.contextUsage.percent}%`)
+        .fontSize(28)
+        .fontWeight(FontWeight.Bold)
+        .fontColor(this.getContextUsageColor())
+
+      Column({ space: 6 }) {
+        Text(pickLocalizedText(
+          `约 ${formatTokenCount(this.contextUsage.usedTokens)} / ${formatTokenCount(this.contextUsage.limitTokens)} tokens`,
+          `About ${formatTokenCount(this.contextUsage.usedTokens)} / ${formatTokenCount(this.contextUsage.limitTokens)} tokens`
+        ))
+          .fontSize(13)
+          .fontColor($r('app.color.text_secondary'))
+
+        Text(this.getContextUsageHintText())
+          .fontSize(12)
+          .lineHeight(18)
+          .fontColor($r('app.color.text_tertiary'))
+          .textAlign(TextAlign.Center)
+          .width('100%')
+      }
+      .width('100%')
+
+      Button({ type: ButtonType.Capsule, stateEffect: false }) {
+        Text(pickLocalizedText('知道了', 'Got it'))
+          .fontSize(15)
+          .fontWeight(FontWeight.Medium)
+          .fontColor(this.themePrimary)
+      }
+      .width('100%')
+      .height(40)
+      .padding(0)
+      .backgroundColor(Color.Transparent)
+      .borderRadius(20)
+      .clip(true)
+      .onClick(() => {
+        this.closeContextUsageDialog()
+      })
+      .systemMaterial(new uiMaterial.ImmersiveMaterial({
+        style: uiMaterial.ImmersiveStyle.REGULAR,
+        interactive: true,
+        lightEffect: { color: undefined }
+      }))
+    }
+    .width(280)
+    .padding({ left: 20, right: 20, top: 24, bottom: 20 })
+    .alignItems(HorizontalAlign.Center)
   }
 
   @Builder
@@ -1692,6 +1771,93 @@ export struct ChatPage {
       name.endsWith('.png') || name.endsWith('.webp') || name.endsWith('.bmp') || name.endsWith('.gif')
   }
 
+  // 上下文用量超过阈值时把 compact 加入本次请求的强制工具。
+  // 只有 OpenAI 风格且声明支持 tools 的模型才可能真正调用工具，其余模型只在指示器上显示用量。
+  private async appendCompactToolIfContextOverThreshold(
+    currentProvider: ModelProvider,
+    modelSupportsTools: boolean,
+    forcedToolIds: string[]
+  ): Promise<void> {
+    if (!modelSupportsTools || !this.toolRegistry.isToolRegistered(COMPACT_TOOL_ID)) {
+      return
+    }
+    await ServiceRegistry.contextCompaction().ensurePreferencesLoaded()
+    if (!this.chatViewModel.shouldSuggestCompaction(currentProvider.id, this.currentModelId, this.messages)) {
+      return
+    }
+    if (!forcedToolIds.includes(COMPACT_TOOL_ID)) {
+      forcedToolIds.push(COMPACT_TOOL_ID)
+    }
+  }
+
+  // 重新估算当前会话的上下文长度窗口用量（消息列表、模型或压缩状态变化后调用）
+  private refreshContextUsage(): void {
+    const providerId = this.currentProvider !== null ? this.currentProvider.id : ''
+    this.contextUsage = this.chatViewModel.getContextUsage(providerId, this.currentModelId, this.messages)
+  }
+
+  private getContextUsageColor(): ResourceColor {
+    if (this.contextUsage.percent >= 100) {
+      return $r('app.color.status_error')
+    }
+    if (this.contextUsage.overThreshold) {
+      return $r('app.color.status_warning')
+    }
+    return this.themePrimary
+  }
+
+  private getContextUsageHintText(): string {
+    if (this.contextUsage.compacted) {
+      return pickLocalizedText(
+        '更早的历史已压缩为摘要，聊天记录不受影响。',
+        'Earlier history is compacted into a summary; your chat records are unchanged.'
+      )
+    }
+    if (this.contextUsage.overThreshold) {
+      return pickLocalizedText(
+        `已超过 ${this.contextUsage.thresholdPercent}% 阈值，下次发送会提醒模型先调用 compact 压缩历史。`,
+        `Above the ${this.contextUsage.thresholdPercent}% threshold; the next request asks the model to run compact first.`
+      )
+    }
+    return pickLocalizedText(
+      `超过 ${this.contextUsage.thresholdPercent}% 后会提醒模型调用 compact 压缩历史。`,
+      `Above ${this.contextUsage.thresholdPercent}% the model is asked to run compact.`
+    )
+  }
+
+  private openContextUsageDialog(): void {
+    this.refreshContextUsage()
+    this.getUIContext().getPromptAction().openCustomDialog({
+      builder: (): void => {
+        this.ContextUsageDialogBuilder()
+      },
+      autoCancel: true,
+      alignment: DialogAlignment.Center,
+      cornerRadius: 24,
+      // 材质由 systemMaterial 提供，背景必须透明且关闭额外模糊
+      backgroundColor: Color.Transparent,
+      backgroundBlurStyle: BlurStyle.NONE,
+      systemMaterial: new uiMaterial.ImmersiveMaterial({
+        style: uiMaterial.ImmersiveStyle.THICK
+      })
+    })
+      .then((dialogId: number): void => {
+        this.contextUsageDialogId = dialogId
+      })
+      .catch((error: Object): void => {
+        console.error('ChatPage', `Failed to open context usage dialog: ${JSON.stringify(error)}`)
+      })
+  }
+
+  private closeContextUsageDialog(): void {
+    if (this.contextUsageDialogId < 0) {
+      return
+    }
+    const dialogId = this.contextUsageDialogId
+    this.contextUsageDialogId = -1
+    this.getUIContext().getPromptAction().closeCustomDialog(dialogId)
+  }
+
   private filterFallbackToolIdsForCurrentModel(toolIds: string[]): string[] {
     const modelSupportsDocuments = this.currentModelSupportsDocuments()
     const modelSupportsVision = this.currentModelSupportsVision()
@@ -1998,6 +2164,7 @@ export struct ChatPage {
       !this.toolRegistry.isToolRegistered(PDF_TO_TEXT_TOOL_ID) ||
       !this.toolRegistry.isToolRegistered(IMAGE_TO_TEXT_TOOL_ID) ||
       !this.toolRegistry.isToolRegistered(KNOWLEDGE_SEARCH_TOOL_ID) ||
+      !this.toolRegistry.isToolRegistered(COMPACT_TOOL_ID) ||
       !this.toolRegistry.isToolRegistered(USE_SKILL_TOOL_ID) ||
       !this.toolRegistry.isToolRegistered(MATH_CHART_TOOL_ID) ||
       !this.toolRegistry.isToolRegistered(READ_SCHEDULE_TOOL_ID) ||
@@ -2016,6 +2183,11 @@ export struct ChatPage {
     if (knowledgeSearchTool !== undefined) {
       knowledgeSearchTool.config.enabled = ServiceRegistry.knowledgeDocuments().isRetrievalReady()
     }
+    // 上下文压缩在设置-工具中心关闭时，也不在聊天工具面板中提供
+    const compactTool = this.toolRegistry.getTool(COMPACT_TOOL_ID)
+    if (compactTool !== undefined) {
+      compactTool.config.enabled = ServiceRegistry.contextCompaction().isEnabled()
+    }
     const skillTool = this.toolRegistry.getTool(USE_SKILL_TOOL_ID)
     if (skillTool !== undefined) {
       this.skillService.isToolEnabled()
@@ -2033,6 +2205,7 @@ export struct ChatPage {
     const configs = this.toolRegistry.getAllToolConfigs()
     const tools: ToolConfig[] = []
     for (let i = 0; i < configs.length; i++) {
+      // 知识库由输入区开关控制，不出现在工具选择器中
       if (configs[i].id === KNOWLEDGE_SEARCH_TOOL_ID) {
         continue
       }
@@ -2044,7 +2217,7 @@ export struct ChatPage {
   }
 
   private isSettingsControlledBuiltinTool(toolId: string): boolean {
-    return toolId === 'web_search' || toolId === USE_SKILL_TOOL_ID
+    return toolId === 'web_search' || toolId === USE_SKILL_TOOL_ID || toolId === COMPACT_TOOL_ID
   }
 
   private sortAvailableChatToolsForSettingsOrder(tools: ToolConfig[]): ToolConfig[] {
@@ -2109,6 +2282,8 @@ export struct ChatPage {
   }
 
   private async syncToolAvailabilityFromPreferences(): Promise<void> {
+    // compact 的可用性来自设置-工具中心的偏好，需在同步工具面板前读入缓存
+    await ServiceRegistry.contextCompaction().loadPreferences()
     const webSearchAvailable = await this.preferencesService.getBoolean(PreferenceKeys.SEARCH_SERVICE_ENABLED, false)
     this.webSearchAvailable = webSearchAvailable
     this.webSearchConversationEnabled = webSearchAvailable && await this.preferencesService.getBoolean(
@@ -2861,6 +3036,8 @@ export struct ChatPage {
     if (syncGlobalModel) {
       await this.appStateManager.setCurrentModel(model.id, modelName, provider.id)
     }
+    // 供应商/模型解析完成后窗口大小才可知，需要重算上下文用量
+    this.refreshContextUsage()
     await this.chatViewModel.updateCurrentSessionModelSelection(model.id, provider.id)
   }
 
@@ -2995,65 +3172,14 @@ export struct ChatPage {
     return !this.isNewChatTransition && this.sessionId.trim() !== ''
   }
 
-  private buildTitleBarMenuIcon(symbol: Resource, color: ResourceColor): SymbolGlyphModifier {
-    const icon = new SymbolGlyphModifier(symbol)
-    icon.fontSize(20)
-    icon.fontColor([color])
-    return icon
-  }
-
+  // 标题栏尾部操作全部由 ChatNavigationTitleContent 自绘（新对话 / 上下文用量 / 更多菜单），
+  // HDS 系统菜单保持为空，避免与自绘的“更多”按钮重复，也让上下文按钮可以使用 Progress 组件
   private getTitleBarMenuItems(): Array<HdsNavigationMenuItemOptions> {
-    const menus: Array<HdsNavigationMenuItemOptions> = []
-    if (this.shouldShowTitleBarNewChatAction()) {
-      menus.push({
-        content: {
-          label: $r('app.string.new_chat'),
-          icon: this.buildTitleBarMenuIcon($r('sys.symbol.plus'), $r('app.color.text_primary')),
-          action: () => {
-            void this.handleNewChat()
-          }
-        }
-      })
-    }
-
-    menus.push({
-      content: {
-        label: $r('app.string.edit_chat_title'),
-        icon: this.buildTitleBarMenuIcon($r('sys.symbol.square_and_pencil'), $r('app.color.text_primary')),
-        action: () => {
-          this.titleEditRequestTick += 1
-        }
-      }
-    })
-    menus.push({
-      content: {
-        label: $r('app.string.regenerate_title'),
-        icon: this.buildTitleBarMenuIcon($r('sys.symbol.arrow_clockwise'), $r('app.color.text_primary')),
-        isEnabled: !this.isTitleGenerating && !this.isSending,
-        action: () => {
-          void this.handleRegenerateTitle()
-        }
-      }
-    })
-    menus.push({
-      content: {
-        label: $r('app.string.delete_chat'),
-        icon: this.buildTitleBarMenuIcon($r('sys.symbol.trash'), $r('app.color.status_error')),
-        action: () => {
-          this.handleDeleteChat()
-        }
-      }
-    })
-    return menus
-  }
-
-  private getTitleBarMenuItemCount(): number {
-    return this.shouldShowTitleBarNewChatAction() ? 4 : 3
+    return []
   }
 
   private getTitleBarMenuEndInset(): number {
-    return this.getTitleBarMenuItemCount() * HDS_NAV_TITLE_SYSTEM_MENU_ITEM_WIDTH +
-      HDS_NAV_TITLE_SYSTEM_MENU_END_MARGIN
+    return HDS_NAV_TITLE_SYSTEM_MENU_END_MARGIN
   }
 
   private getTitleBarOptions(): HdsNavigationTitleBarOptions {
@@ -3088,9 +3214,23 @@ export struct ChatPage {
       currentProviderBrandColor: this.currentProvider?.brandColor ?? '',
       isTitleGenerating: this.isTitleGenerating,
       titleGenerateFailed: this.titleGenerateFailed,
-      editTitleRequestTick: this.titleEditRequestTick,
+      isSending: this.isSending,
       titleStartInset: HDS_NAV_TITLE_SYSTEM_BACK_INSET,
       titleEndInset: this.getTitleBarMenuEndInset(),
+      showNewChatAction: this.shouldShowTitleBarNewChatAction(),
+      // 窗口未知时不显示进度，避免用默认值算出误导性的 100%
+      showContextProgress: this.messages.length > 0 && this.contextUsage.resolved,
+      contextPercent: this.contextUsage.percent,
+      contextOverThreshold: this.contextUsage.overThreshold,
+      onNewChat: (): void => {
+        void this.handleNewChat()
+      },
+      onContextProgressClick: (): void => {
+        this.openContextUsageDialog()
+      },
+      onDeleteChat: (): void => {
+        this.handleDeleteChat()
+      },
       onModelSelect: (): void => {
         this.safeStopInputSession()
         this.isModelSelectorVisible = true
@@ -3112,53 +3252,32 @@ export struct ChatPage {
     })
   }
 
-  private getAskUserPromptMaxHeightVp(): number {
-    if (this.windowHeightVp <= 0) {
-      return 620
-    }
-    const safeAreaVp = this.px2vp(this.topAvoidHeight) + this.px2vp(this.bottomAvoidHeight)
-    return Math.max(280, this.windowHeightVp - safeAreaVp - 72)
-  }
-
   @Builder
   private AskUserPromptOverlayBuilder() {
-    Stack({ alignContent: Alignment.Center }) {
-      Column()
+    ForEach(this.pendingAskUserCalls, (toolCall: ToolCall, index: number) => {
+      Row() {
+        AskUserCard({
+          toolCall: toolCall,
+          isAnswered: false,
+          compactMode: false,
+          pendingCount: this.pendingAskUserCalls.length,
+          onAnswer: (toolCallId: string, answerJson: string): void => {
+            this.handleAskUserAnswer(toolCallId, answerJson)
+          }
+        })
+          .width('92%')
+          .constraintSize({ maxWidth: 560 })
+      }
         .width('100%')
-        .height('100%')
-        .backgroundColor(this.isDarkMode ? '#99000000' : '#66000000')
-
-      ForEach(this.pendingAskUserCalls, (toolCall: ToolCall, index: number) => {
-        Scroll() {
-          AskUserCard({
-            toolCall: toolCall,
-            isAnswered: false,
-            compactMode: false,
-            pendingCount: this.pendingAskUserCalls.length,
-            onAnswer: (toolCallId: string, answerJson: string): void => {
-              this.handleAskUserAnswer(toolCallId, answerJson)
-            }
-          })
-        }
-        .width('92%')
-        .constraintSize({ maxWidth: 560, maxHeight: this.getAskUserPromptMaxHeightVp() })
-        .scrollBar(BarState.Auto)
+        .padding({ left: 12, right: 12 })
+        .justifyContent(FlexAlign.Center)
+        .position({ x: 0, y: '50%' })
+        .translate({ y: '-50%' })
         .opacity(index === this.pendingAskUserCalls.length - 1 ? 1 : 0)
         .hitTestBehavior(index === this.pendingAskUserCalls.length - 1 ? HitTestMode.Default : HitTestMode.None)
-        .zIndex(index + 1)
-      }, (toolCall: ToolCall): string => toolCall.id)
-    }
-    .width('100%')
-    .height('100%')
-    .padding({
-      top: this.px2vp(this.topAvoidHeight) + 18,
-      bottom: this.px2vp(this.bottomAvoidHeight) + 18,
-      left: 12,
-      right: 12
-    })
-    .position({ x: 0, y: 0 })
-    .zIndex(80)
-    .transition(TransitionEffect.OPACITY.animation({ duration: 180, curve: Curve.EaseOut }))
+        .zIndex(80 + index)
+        .transition(TransitionEffect.OPACITY.animation({ duration: 180, curve: Curve.EaseOut }))
+    }, (toolCall: ToolCall): string => toolCall.id)
   }
 
   build() {
@@ -3614,7 +3733,7 @@ export struct ChatPage {
             .transition(TransitionEffect.OPACITY.animation({ duration: 200 }))
         }
 
-        // ask_user 模态栈：所有待回答卡片都保持挂载，仅栈顶可见。
+        // ask_user 悬浮卡片栈：直接挂在页面最外层 Stack，仅栈顶可见。
         // 新请求到达时压到最上层；回答后自动露出前一张，不会覆盖其草稿状态。
         if (this.pendingAskUserCalls.length > 0) {
           this.AskUserPromptOverlayBuilder()
@@ -3828,9 +3947,22 @@ export struct ChatPage {
     if (toolId === 'web_search') {
       this.rebuildAvailableChatTools()
     }
+    if (toolId === COMPACT_TOOL_ID) {
+      this.rebuildAvailableChatTools()
+    }
   }
 
   private applyToolSettingToggleBeforeSelection(toolId: string, enabled: boolean): void {
+    if (toolId === COMPACT_TOOL_ID) {
+      const compactTool = this.toolRegistry.getTool(COMPACT_TOOL_ID)
+      if (compactTool !== undefined) {
+        compactTool.config.enabled = enabled
+      }
+      ServiceRegistry.contextCompaction().setEnabled(enabled).catch((error: Object) => {
+        console.error('ChatPage', `Failed to sync compact tool state: ${JSON.stringify(error)}`)
+      })
+      return
+    }
     if (toolId === USE_SKILL_TOOL_ID) {
       const skillTool = this.toolRegistry.getTool(USE_SKILL_TOOL_ID)
       if (skillTool !== undefined) {
@@ -4642,6 +4774,12 @@ export struct ChatPage {
     this.getScrollUiFlow().onDraftContentChanged()
   }
 
+  // 切换模型会改变上下文窗口大小；一次发送结束后历史也已落库，都需要重算用量
+  @Monitor('currentModelId', 'isSending')
+  onContextUsageInputsChanged(): void {
+    this.refreshContextUsage()
+  }
+
   private handleComposerContentChanged(): void {
     this.scheduleDraftAutosave()
   }
@@ -4835,7 +4973,10 @@ export struct ChatPage {
         baseToolIds: this.filterFallbackToolIdsForCurrentModel(this.selectedToolIds)
       })
       const forcedToolIds = this.filterFallbackToolIdsForCurrentModel(this.forcedToolIdsOnce)
-        .filter((toolId: string): boolean => toolId !== KNOWLEDGE_SEARCH_TOOL_ID)
+        .filter((toolId: string): boolean => toolId !== KNOWLEDGE_SEARCH_TOOL_ID && toolId !== COMPACT_TOOL_ID)
+      // 上下文长度窗口：超过阈值时把 compact 强制加入本次请求，
+      // 即使用户没有选择任何工具也让模型有机会先压缩历史再回答
+      await this.appendCompactToolIfContextOverThreshold(currentProvider, modelSupportsTools, forcedToolIds)
       const fallbackHintTexts: string[] = []
       if (!modelSupportsDocuments) {
         const documentFallback = await this.prepareDocumentFallbackForSend(
