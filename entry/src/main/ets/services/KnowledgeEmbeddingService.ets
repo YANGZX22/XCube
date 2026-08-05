@@ -145,7 +145,7 @@ function trimTrailingSlashes(value: string): string {
   return trimmed
 }
 
-function buildStableStringFingerprint(value: string): string {
+export function buildStableStringFingerprint(value: string): string {
   let primaryHash = 2166136261
   let secondaryHash = 0
   for (let index = 0; index < value.length; index++) {
@@ -158,7 +158,7 @@ function buildStableStringFingerprint(value: string): string {
     secondaryHash.toString(16).padStart(8, '0')
 }
 
-function buildSafeModelKeyToken(value: string): string {
+export function buildSafeModelKeyToken(value: string): string {
   const safePrefix = value.replace(/[^A-Za-z0-9._-]+/g, '_').substring(0, 96)
   return `${safePrefix}_${buildStableStringFingerprint(value)}`
 }
@@ -183,7 +183,17 @@ function combineProviderBaseUrlAndPath(baseUrl: string, apiPath: string): string
   return normalizedBaseUrl + normalizedPath
 }
 
-export function buildKnowledgeEmbeddingEndpoint(baseUrl: string, apiPath: string = ''): string {
+/**
+ * 把服务商配置的 baseUrl/apiPath 归一到某个知识库 API 端点（`/embeddings`、`/rerank` 等）。
+ *
+ * endpointSuffix 必须以 `/` 开头。已经指向另一个已知端点（chat/completions、models、
+ * embeddings、rerank）的地址会先被剥掉再拼接目标后缀，避免出现 `/embeddings/rerank`。
+ */
+export function buildKnowledgeApiEndpoint(
+  baseUrl: string,
+  apiPath: string = '',
+  endpointSuffix: string = '/embeddings'
+): string {
   let normalizedBaseUrl = baseUrl.trim()
   let normalizedApiPath = apiPath.trim()
   const baseFragmentIndex = normalizedBaseUrl.indexOf('#')
@@ -220,11 +230,14 @@ export function buildKnowledgeEmbeddingEndpoint(baseUrl: string, apiPath: string
   normalized = trimTrailingSlashes(normalized)
 
   const lowerEndpoint = normalized.toLowerCase()
+  const lowerSuffix = endpointSuffix.toLowerCase()
   const replaceableSuffixes: string[] = [
     '/chat/completions',
     '/completions',
     '/responses',
-    '/models'
+    '/models',
+    '/embeddings',
+    '/rerank'
   ]
   let replacedKnownSuffix = false
   for (let index = 0; index < replaceableSuffixes.length; index++) {
@@ -237,17 +250,31 @@ export function buildKnowledgeEmbeddingEndpoint(baseUrl: string, apiPath: string
   }
 
   if (replacedKnownSuffix) {
-    normalized += '/embeddings'
-  } else if (!lowerEndpoint.endsWith('/embeddings')) {
+    normalized += endpointSuffix
+  } else if (!lowerEndpoint.endsWith(lowerSuffix)) {
     if (apiPath.trim() !== '') {
-      normalized += '/embeddings'
+      normalized += endpointSuffix
     } else if (/\/v\d+\w*$/.test(normalized) || normalized.includes('/compatible-mode/v1')) {
-      normalized += '/embeddings'
+      normalized += endpointSuffix
     } else {
-      normalized += '/v1/embeddings'
+      normalized += `/v1${endpointSuffix}`
     }
   }
   return normalized + query
+}
+
+export function buildKnowledgeEmbeddingEndpoint(baseUrl: string, apiPath: string = ''): string {
+  return buildKnowledgeApiEndpoint(baseUrl, apiPath, '/embeddings')
+}
+
+export function buildKnowledgeApiEndpointFingerprint(
+  baseUrl: string,
+  apiPath: string = '',
+  customHeadersJson: string = '',
+  endpointSuffix: string = '/embeddings'
+): string {
+  const endpointIdentity = buildKnowledgeApiEndpoint(baseUrl, apiPath, endpointSuffix)
+  return buildStableStringFingerprint(`${endpointIdentity}\n${customHeadersJson.trim()}`)
 }
 
 export function buildKnowledgeEmbeddingEndpointFingerprint(
@@ -255,8 +282,7 @@ export function buildKnowledgeEmbeddingEndpointFingerprint(
   apiPath: string = '',
   customHeadersJson: string = ''
 ): string {
-  const endpointIdentity = buildKnowledgeEmbeddingEndpoint(baseUrl, apiPath)
-  return buildStableStringFingerprint(`${endpointIdentity}\n${customHeadersJson.trim()}`)
+  return buildKnowledgeApiEndpointFingerprint(baseUrl, apiPath, customHeadersJson, '/embeddings')
 }
 
 function buildApiEmbeddingModelKey(selection: KnowledgeEmbeddingSelection): string {

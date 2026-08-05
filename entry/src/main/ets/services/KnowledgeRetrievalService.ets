@@ -11,6 +11,12 @@ import {
   getKnowledgeVectorStore,
   KnowledgeVectorSearchRecord
 } from './KnowledgeVectorStore'
+import {
+  getKnowledgeRerankService,
+  KNOWLEDGE_RERANK_MAX_DOCUMENTS,
+  KnowledgeRerankProvider,
+  KnowledgeRerankScore
+} from './KnowledgeRerankService'
 
 const DEFAULT_TOP_K: number = 5
 const MIN_TOP_K: number = 1
@@ -32,6 +38,10 @@ const HYBRID_RRF_RANK_CONSTANT: number = 60
 const HYBRID_KEYWORD_WEIGHT: number = 1.05
 const HYBRID_VECTOR_WEIGHT: number = 1.0
 const MAX_RETRIEVER_ATTEMPTS: number = 2
+// 启用重排序时向底层适配器多要几倍候选：RRF 只看排名位置，重排序模型需要
+// 一个足够宽的候选窗口才有价值，最终仍按用户/模型请求的 topK 截断。
+const RERANK_CANDIDATE_MULTIPLIER: number = 4
+const RERANK_MIN_CANDIDATES: number = 10
 
 // Data Augmentation Kit 在未设置时默认 1，只会保留近乎完全相同的向量。
 // 0.4 与 SDK 默认向量重排分层 [0.6, 0.45, 0.4] 的最低相关档一致。
@@ -88,6 +98,15 @@ export enum KnowledgeRetrievalFallbackReason {
   VECTOR_DIMENSION_MISMATCH = 'vector_dimension_mismatch',
   HYBRID_SNAPSHOT_CHANGED = 'hybrid_snapshot_changed',
   HYBRID_RETRIEVAL_FAILED = 'hybrid_retrieval_failed'
+}
+
+/** 重排序未生效的原因。命中仍按 RRF 融合顺序返回，检索本身不会因此失败。 */
+export enum KnowledgeRerankFallbackReason {
+  NONE = '',
+  NOT_CONFIGURED = 'rerank_not_configured',
+  NOT_ENOUGH_CANDIDATES = 'rerank_not_enough_candidates',
+  REQUEST_FAILED = 'rerank_request_failed',
+  INVALID_RESULT = 'rerank_invalid_result'
 }
 
 export interface KnowledgeRetrievalPlanInput {
@@ -211,6 +230,10 @@ export class KnowledgeSearchResponse {
   queryTruncated: boolean = false
   retrievalMode: string = KnowledgeRetrievalMode.KEYWORD
   fallbackReason: string = KnowledgeRetrievalFallbackReason.NONE
+  // rerankApplied=true 时 hits[].score 是重排序模型给出的相关性分数；
+  // 否则是 RRF 融合分（或关键词通道原始分），两者不可比较。
+  rerankApplied: boolean = false
+  rerankFallbackReason: string = KnowledgeRerankFallbackReason.NONE
 
   constructor(
     status: KnowledgeSearchStatus,
@@ -285,6 +308,19 @@ export interface DataAugmentationVectorIndexConfiguration {
 interface RetrievalBusinessError {
   code?: number
   message?: string
+}
+
+/** Provider 的自由文本异常可能回显私有查询，只允许记录稳定、短小的错误码。 */
+function buildSafeRetrievalFallbackCode(error: Object): string {
+  const businessError = error as RetrievalBusinessError
+  if (businessError.code === undefined) {
+    return ''
+  }
+  const code = `${businessError.code}`.trim()
+  if (code === '' || code.length > 64 || !/^[A-Za-z0-9_.:-]+$/.test(code)) {
+    return ''
+  }
+  return `code=${code}`
 }
 
 class KnowledgeRetrieverLease {
@@ -1119,17 +1155,8 @@ export class DataAugmentationHybridAdapter implements KnowledgeRetrievalAdapter 
     }
   }
 
-  /** Provider 的自由文本异常可能回显私有查询，只允许记录稳定、短小的错误码。 */
   private safeFallbackCode(error: Object): string {
-    const businessError = error as RetrievalBusinessError
-    if (businessError.code === undefined) {
-      return ''
-    }
-    const code = `${businessError.code}`.trim()
-    if (code === '' || code.length > 64 || !/^[A-Za-z0-9_.:-]+$/.test(code)) {
-      return ''
-    }
-    return `code=${code}`
+    return buildSafeRetrievalFallbackCode(error)
   }
 
   private validateInvertedConfiguration(
@@ -1476,7 +1503,11 @@ export class KnowledgeRetrievalService {
     // 且 FTS 的 UNINDEXED 列过滤在不同设备实现上会把正常召回压成 no_hits。
     // 未显式限定文件时先做全库召回，随后仍以 effectiveDocumentIds 做 fail-closed 过滤。
     const adapterDocumentIds = documentFilterRequested ? effectiveDocumentIds : []
-    const normalizedRequest = new KnowledgeSearchRequest(query, topK, adapterDocumentIds)
+    // 启用重排序时向下游多要候选，重排序后再由 normalizeResponse 截回 topK。
+    // 关键词回退路径同样受益，因此这里统一处理，而不是只挂在混合检索里。
+    const rerankProvider = await this.resolveRerankProvider()
+    const adapterTopK = rerankProvider !== null ? this.resolveRerankCandidateTopK(topK) : topK
+    const normalizedRequest = new KnowledgeSearchRequest(query, adapterTopK, adapterDocumentIds)
     const adapter = this.adapter
     if (adapter === null) {
       const unavailable = buildUnavailableResponse(
@@ -1503,8 +1534,16 @@ export class KnowledgeRetrievalService {
         return noHits
       }
       const finalRequest = new KnowledgeSearchRequest(query, topK, stillReadyDocumentIds)
-      const responseWithContext = await this.expandHitContextsBestEffort(
+      // 先重排序再扩展上下文：重排序只看召回到的原始片段，
+      // 上下文扩展则只需要作用在最终留下的少数命中上。
+      const rerankedResponse = await this.applyRerankBestEffort(
         response,
+        rerankProvider,
+        query,
+        topK
+      )
+      const responseWithContext = await this.expandHitContextsBestEffort(
+        rerankedResponse,
         finalRequest
       )
       return this.normalizeResponse(responseWithContext, finalRequest, queryTruncated)
@@ -1618,6 +1657,152 @@ export class KnowledgeRetrievalService {
     return normalized
   }
 
+  /**
+   * 解析本次检索可用的重排序 Provider。未配置或不可用时返回 null，
+   * 调用方据此退回原有的 RRF 顺序。
+   *
+   * 这里主动 initialize()：knowledge_search 可能在知识库页面从未展示过的情况下执行，
+   * 不能依赖 UI 去加载已持久化的重排序选择。
+   */
+  private async resolveRerankProvider(): Promise<KnowledgeRerankProvider | null> {
+    const service = getKnowledgeRerankService()
+    try {
+      await service.initialize()
+    } catch (error) {
+      console.warn(
+        'KnowledgeRetrievalService',
+        `Rerank service initialization failed: ${buildSafeRetrievalFallbackCode(error)}`
+      )
+      return null
+    }
+    return service.isAvailable() ? service : null
+  }
+
+  private resolveRerankCandidateTopK(topK: number): number {
+    const desired = Math.max(topK * RERANK_CANDIDATE_MULTIPLIER, RERANK_MIN_CANDIDATES)
+    return Math.min(desired, KNOWLEDGE_RERANK_MAX_DOCUMENTS)
+  }
+
+  /**
+   * 用重排序模型对召回结果重新排序。任何失败都不改变检索成败：
+   * 出错时保留 RRF 融合顺序，只在响应里记录 rerankFallbackReason。
+   *
+   * 不记录 query 原文、候选正文或返回分数。
+   */
+  private async applyRerankBestEffort(
+    response: KnowledgeSearchResponse,
+    provider: KnowledgeRerankProvider | null,
+    query: string,
+    topK: number
+  ): Promise<KnowledgeSearchResponse> {
+    if (provider === null) {
+      const untouched = this.copyResponseWithHits(response, response.hits)
+      untouched.rerankFallbackReason = KnowledgeRerankFallbackReason.NOT_CONFIGURED
+      return untouched
+    }
+    if (response.status !== KnowledgeSearchStatus.OK) {
+      return response
+    }
+    // 候选数不超过要返回的条数时重排序不会改变最终集合，省掉一次网络请求
+    if (response.hits.length <= 1 || response.hits.length <= topK) {
+      const untouched = this.copyResponseWithHits(response, response.hits)
+      untouched.rerankFallbackReason = KnowledgeRerankFallbackReason.NOT_ENOUGH_CANDIDATES
+      return untouched
+    }
+
+    const maxDocumentCharacters = provider.maxDocumentCharacters()
+    const documents: string[] = []
+    for (let index = 0; index < response.hits.length; index++) {
+      documents.push(this.buildRerankDocument(response.hits[index], maxDocumentCharacters))
+    }
+
+    let scores: KnowledgeRerankScore[]
+    try {
+      scores = await provider.rerank(query, documents)
+    } catch (error) {
+      console.warn(
+        'KnowledgeRetrievalService',
+        `Rerank failed, keeping fusion order: ${buildSafeRetrievalFallbackCode(error)}`
+      )
+      const untouched = this.copyResponseWithHits(response, response.hits)
+      untouched.rerankFallbackReason = KnowledgeRerankFallbackReason.REQUEST_FAILED
+      return untouched
+    }
+    if (!Array.isArray(scores) || scores.length === 0) {
+      const untouched = this.copyResponseWithHits(response, response.hits)
+      untouched.rerankFallbackReason = KnowledgeRerankFallbackReason.INVALID_RESULT
+      return untouched
+    }
+
+    const ordered = this.buildRerankedHits(response.hits, scores)
+    console.info(
+      'KnowledgeRetrievalService',
+      `Rerank applied: candidates=${response.hits.length}, scored=${scores.length}, topK=${topK}`
+    )
+    const reranked = this.copyResponseWithHits(response, ordered)
+    reranked.rerankApplied = true
+    reranked.rerankFallbackReason = KnowledgeRerankFallbackReason.NONE
+    return reranked
+  }
+
+  /**
+   * 重排序模型只判断相关性，不需要完整正文；标题一并带上以便区分同名片段。
+   */
+  private buildRerankDocument(hit: KnowledgeSearchHit, maxCharacters: number): string {
+    const title = hit.title.trim()
+    const content = hit.content.trim()
+    const combined = title === '' ? content : `${title}\n${content}`
+    if (combined.length <= maxCharacters) {
+      return combined === '' ? hit.chunkId : combined
+    }
+    return combined.substring(0, maxCharacters)
+  }
+
+  /**
+   * 按重排序分数降序重排；模型没有打分的候选保持原有 RRF 相对顺序接在后面，
+   * 保证重排序只调整顺序、永远不会丢结果。
+   */
+  private buildRerankedHits(
+    sourceHits: KnowledgeSearchHit[],
+    scores: KnowledgeRerankScore[]
+  ): KnowledgeSearchHit[] {
+    const sorted = scores.slice()
+    sorted.sort((left: KnowledgeRerankScore, right: KnowledgeRerankScore): number => {
+      if (left.score !== right.score) {
+        return right.score - left.score
+      }
+      return left.index - right.index
+    })
+
+    const ordered: KnowledgeSearchHit[] = []
+    const taken = new Array<boolean>(sourceHits.length)
+    for (let index = 0; index < taken.length; index++) {
+      taken[index] = false
+    }
+    for (let index = 0; index < sorted.length; index++) {
+      const entry = sorted[index]
+      if (entry.index < 0 || entry.index >= sourceHits.length || taken[entry.index]) {
+        continue
+      }
+      taken[entry.index] = true
+      const source = sourceHits[entry.index]
+      ordered.push(new KnowledgeSearchHit(
+        source.documentId,
+        source.chunkId,
+        source.title,
+        source.locator,
+        entry.score,
+        source.content
+      ))
+    }
+    for (let index = 0; index < sourceHits.length; index++) {
+      if (!taken[index]) {
+        ordered.push(sourceHits[index])
+      }
+    }
+    return ordered
+  }
+
   private async expandHitContextsBestEffort(
     response: KnowledgeSearchResponse,
     request: KnowledgeSearchRequest
@@ -1715,6 +1900,8 @@ export class KnowledgeRetrievalService {
     response.queryTruncated = source.queryTruncated
     response.retrievalMode = source.retrievalMode
     response.fallbackReason = source.fallbackReason
+    response.rerankApplied = source.rerankApplied
+    response.rerankFallbackReason = source.rerankFallbackReason
     return response
   }
 
@@ -1733,6 +1920,8 @@ export class KnowledgeRetrievalService {
       unavailable.queryTruncated = queryTruncated
       unavailable.retrievalMode = response.retrievalMode
       unavailable.fallbackReason = response.fallbackReason
+      unavailable.rerankApplied = response.rerankApplied
+      unavailable.rerankFallbackReason = response.rerankFallbackReason
       return unavailable
     }
     if (response.status === KnowledgeSearchStatus.ERROR) {
@@ -1745,6 +1934,8 @@ export class KnowledgeRetrievalService {
       failed.queryTruncated = queryTruncated
       failed.retrievalMode = response.retrievalMode
       failed.fallbackReason = response.fallbackReason
+      failed.rerankApplied = response.rerankApplied
+      failed.rerankFallbackReason = response.rerankFallbackReason
       return failed
     }
 
@@ -1752,6 +1943,8 @@ export class KnowledgeRetrievalService {
     budgeted.queryTruncated = queryTruncated
     budgeted.retrievalMode = response.retrievalMode
     budgeted.fallbackReason = response.fallbackReason
+    budgeted.rerankApplied = response.rerankApplied
+    budgeted.rerankFallbackReason = response.rerankFallbackReason
     return budgeted
   }
 

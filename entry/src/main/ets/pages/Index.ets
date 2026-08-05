@@ -123,6 +123,12 @@ import {
   KnowledgeEmbeddingSelection
 } from '../services/KnowledgeEmbeddingService'
 import { KnowledgeEmbeddingMigrationResult } from '../services/KnowledgeDocumentService'
+import {
+  buildKnowledgeRerankEndpointFingerprint,
+  getKnowledgeRerankService,
+  KnowledgeRerankSelection
+} from '../services/KnowledgeRerankService'
+import { KnowledgeRerankSelectSheetContent } from '../components/KnowledgeRerankSelectSheetContent'
 import { ImmersiveSheetHeader } from '../components/ImmersiveSheetHeader'
 
 @Entry
@@ -153,6 +159,12 @@ struct Index {
     KnowledgeEmbeddingSelection.createLocal()
   @Local knowledgeEmbeddingLoading: boolean = false
   @Local knowledgeEmbeddingApplying: boolean = false
+  @Local showKnowledgeRerankSheet: boolean = false
+  @Local knowledgeRerankProviders: ModelProvider[] = []
+  @Local knowledgeRerankSelection: KnowledgeRerankSelection =
+    KnowledgeRerankSelection.createDisabled()
+  @Local knowledgeRerankLoading: boolean = false
+  @Local knowledgeRerankApplying: boolean = false
   @Local sessions: ChatSession[] = []
   @Local isLoading: boolean = false
   @Local currentThemeMode: ThemeMode = ThemeMode.SYSTEM
@@ -688,6 +700,7 @@ struct Index {
     this.loadSessions()
     this.loadSettings()
     this.refreshKnowledgeEmbeddingSelection()
+    this.refreshKnowledgeRerankSelection()
     this.registerSettingsCallback()
     this.handleOpenSessionPayload(this.openSessionPayload)
     this.handleInAppTaskAlertPayload(this.inAppTaskAlertPayload)
@@ -699,6 +712,7 @@ struct Index {
     this.refreshSettingsState()
     this.loadHandAdaptiveSettings()
     this.refreshKnowledgeEmbeddingSelection()
+    this.refreshKnowledgeRerankSelection()
     this.processInAppTaskAlertPayload(this.inAppTaskAlertPayload)
   }
 
@@ -728,6 +742,13 @@ struct Index {
     if (this.showKnowledgeEmbeddingSheet) {
       if (!this.knowledgeEmbeddingApplying) {
         this.showKnowledgeEmbeddingSheet = false
+      }
+      return true
+    }
+
+    if (this.showKnowledgeRerankSheet) {
+      if (!this.knowledgeRerankApplying) {
+        this.showKnowledgeRerankSheet = false
       }
       return true
     }
@@ -1539,6 +1560,24 @@ struct Index {
           maskColor: '#66000000',
           onDisappear: () => {
             this.showKnowledgeEmbeddingSheet = false
+          }
+        })
+
+      Column()
+        .width(0)
+        .height(0)
+        .bindSheet($$this.showKnowledgeRerankSheet, this.KnowledgeRerankSheetBuilder(), {
+          height: SheetSize.LARGE,
+          dragBar: true,
+          showClose: false,
+          backgroundColor: Color.Transparent,
+          systemMaterial: new uiMaterial.ImmersiveMaterial({
+            style: uiMaterial.ImmersiveStyle.REGULAR
+          }),
+          preferType: SheetType.BOTTOM,
+          maskColor: '#66000000',
+          onDisappear: () => {
+            this.showKnowledgeRerankSheet = false
           }
         })
 
@@ -3037,6 +3076,187 @@ struct Index {
     return false
   }
 
+  // ===================== 重排序模型 =====================
+
+  private openKnowledgeRerankSelector(): void {
+    this.showKnowledgeRerankSheet = true
+    this.loadKnowledgeRerankOptions()
+  }
+
+  private refreshKnowledgeRerankSelection(): void {
+    this.performRefreshKnowledgeRerankSelection().catch((error: Object): void => {
+      console.warn('Index', `[refreshKnowledgeRerankSelection] Failed: ${JSON.stringify(error)}`)
+    })
+  }
+
+  private async performRefreshKnowledgeRerankSelection(): Promise<void> {
+    const rerankService = getKnowledgeRerankService()
+    await rerankService.initialize()
+    this.knowledgeRerankSelection = rerankService.getSelection()
+  }
+
+  private loadKnowledgeRerankOptions(): void {
+    this.performLoadKnowledgeRerankOptions().catch((error: Object): void => {
+      console.error('Index', `[loadKnowledgeRerankOptions] Failed: ${JSON.stringify(error)}`)
+      this.knowledgeRerankLoading = false
+      this.showIndexSnack(
+        pickLocalizedText('加载重排序模型失败', 'Failed to load rerank models'),
+        2400,
+        SnackBarTone.ERROR
+      )
+    })
+  }
+
+  private async performLoadKnowledgeRerankOptions(): Promise<void> {
+    this.knowledgeRerankLoading = true
+    const rerankService = getKnowledgeRerankService()
+    await rerankService.initialize()
+    this.knowledgeRerankSelection = rerankService.getSelection()
+    const providers = await this.providerViewModel.loadProviders()
+    this.knowledgeRerankProviders = this.buildKnowledgeRerankProviderProjection(providers)
+    this.knowledgeRerankLoading = false
+  }
+
+  // 与向量模型选择器同样的投影方式：疑似 Rerank 的模型排在前面，
+  // 其余模型仍然可选，避免服务商命名不规范时选不到。
+  private buildKnowledgeRerankProviderProjection(providers: ModelProvider[]): ModelProvider[] {
+    const projectedProviders: ModelProvider[] = []
+    for (let index = 0; index < providers.length; index++) {
+      const provider = providers[index]
+      if (provider.apiStyle !== ApiStyle.OPENAI ||
+        provider.type === ProviderType.AZURE ||
+        provider.baseUrl.trim() === '') {
+        continue
+      }
+      const likelyRerankModels: ModelInfo[] = []
+      const otherModels: ModelInfo[] = []
+      for (let modelIndex = 0; modelIndex < provider.models.length; modelIndex++) {
+        const model = provider.models[modelIndex]
+        if (!model.isEnabled) {
+          continue
+        }
+        if (this.isLikelyRerankModel(model)) {
+          likelyRerankModels.push(model)
+        } else {
+          otherModels.push(model)
+        }
+      }
+      if (likelyRerankModels.length === 0 && otherModels.length === 0) {
+        continue
+      }
+
+      const projected = new ModelProvider(
+        provider.id,
+        provider.name,
+        provider.type,
+        provider.iconSymbol,
+        provider.brandColor,
+        provider.baseUrl,
+        provider.apiStyle
+      )
+      this.providerViewModel.syncProviderProperties(projected, provider)
+      projected.models = likelyRerankModels.concat(otherModels)
+      projectedProviders.push(projected)
+    }
+    return projectedProviders
+  }
+
+  private isLikelyRerankModel(model: ModelInfo): boolean {
+    const identity = `${model.id} ${model.name}`.toLowerCase()
+    const markers: string[] = [
+      'rerank',
+      're-rank',
+      'reranker',
+      'cross-encoder'
+    ]
+    for (let index = 0; index < markers.length; index++) {
+      if (identity.includes(markers[index])) {
+        return true
+      }
+    }
+    return false
+  }
+
+  private selectApiKnowledgeRerank(providerId: string, modelId: string, modelName: string): void {
+    let provider: ModelProvider | null = null
+    for (let index = 0; index < this.knowledgeRerankProviders.length; index++) {
+      if (this.knowledgeRerankProviders[index].id === providerId) {
+        provider = this.knowledgeRerankProviders[index]
+        break
+      }
+    }
+    if (provider === null) {
+      this.showIndexSnack(
+        pickLocalizedText('未找到所选服务商', 'The selected provider was not found'),
+        2400,
+        SnackBarTone.ERROR
+      )
+      return
+    }
+    const selection = new KnowledgeRerankSelection(
+      provider.id,
+      provider.name,
+      modelId,
+      modelName,
+      buildKnowledgeRerankEndpointFingerprint(
+        provider.baseUrl,
+        provider.apiPath,
+        provider.customHeadersJson
+      )
+    )
+    this.applyKnowledgeRerankSelection(selection)
+  }
+
+  private applyKnowledgeRerankSelection(selection: KnowledgeRerankSelection): void {
+    if (this.knowledgeRerankApplying) {
+      return
+    }
+    this.performApplyKnowledgeRerankSelection(selection).catch((error: Object): void => {
+      const message: string = error instanceof Error && error.message.trim() !== ''
+        ? error.message
+        : pickLocalizedText('切换重排序模型失败', 'Failed to switch rerank model')
+      console.error('Index', `[applyKnowledgeRerankSelection] Failed: ${JSON.stringify(error)}`)
+      this.knowledgeRerankApplying = false
+      this.showIndexSnack(message, 3600, SnackBarTone.ERROR)
+    })
+  }
+
+  // 重排序只影响召回之后的排序，不涉及任何索引重建，因此切换后立即生效
+  private async performApplyKnowledgeRerankSelection(
+    selection: KnowledgeRerankSelection
+  ): Promise<void> {
+    this.knowledgeRerankApplying = true
+    let changed = false
+    try {
+      changed = await getKnowledgeRerankService().applySelection(selection)
+    } finally {
+      this.knowledgeRerankSelection = getKnowledgeRerankService().getSelection()
+      this.knowledgeRerankApplying = false
+    }
+    this.showKnowledgeRerankSheet = false
+
+    if (!changed) {
+      this.showIndexSnack(
+        pickLocalizedText('重排序设置未变化', 'The rerank setting is unchanged'),
+        2400,
+        SnackBarTone.SUCCESS
+      )
+      return
+    }
+    this.showIndexSnack(
+      selection.isEnabled()
+        ? pickLocalizedText(
+          `已启用重排序：${selection.displayName()}`,
+          `Reranking enabled: ${selection.displayName()}`
+        )
+        : pickLocalizedText('已关闭重排序', 'Reranking disabled'),
+      2800,
+      SnackBarTone.SUCCESS
+    )
+  }
+
+  // ===================== 向量模型 =====================
+
   private selectLocalKnowledgeEmbedding(): void {
     this.applyKnowledgeEmbeddingSelection(KnowledgeEmbeddingSelection.createLocal())
   }
@@ -3184,6 +3404,27 @@ struct Index {
     })
   }
 
+  @Builder
+  private KnowledgeRerankSheetBuilder() {
+    KnowledgeRerankSelectSheetContent({
+      providers: this.knowledgeRerankProviders,
+      currentSelection: this.knowledgeRerankSelection,
+      isLoading: this.knowledgeRerankLoading,
+      isApplying: this.knowledgeRerankApplying,
+      onSelectNone: (): void => {
+        this.applyKnowledgeRerankSelection(KnowledgeRerankSelection.createDisabled())
+      },
+      onSelectApi: (providerId: string, modelId: string, modelName: string): void => {
+        this.selectApiKnowledgeRerank(providerId, modelId, modelName)
+      },
+      onClose: (): void => {
+        if (!this.knowledgeRerankApplying) {
+          this.showKnowledgeRerankSheet = false
+        }
+      }
+    })
+  }
+
   private getKnowledgeContentTopPadding(): number {
     const topAvoidHeightVp = this.isExpandedLayout() ? 0 : this.px2vp(this.topAvoidHeight)
     return getHdsTopNavigationContentTopPadding(topAvoidHeightVp, this.windowWidthVp, this.windowHeightVp,
@@ -3221,6 +3462,9 @@ struct Index {
     options.maskExtraHeightVp = getHdsTopNavigationMaskExtraHeight(this.windowWidthVp, this.windowHeightVp)
     options.blurEffectiveEndOffsetVp = getHdsTopNavigationBlurEffectiveEndOffset(this.windowWidthVp,
       this.windowHeightVp)
+    // 向量模型与重排序模型是一对配置入口，和更新/用量一起平铺展示，
+    // 避免默认 maxCount=3 把已有的“更新知识库”折叠进“更多”
+    options.menuMaxCount = 4
     options.menuItems = [
       {
         content: {
@@ -3233,6 +3477,20 @@ struct Index {
           ),
           action: () => {
             this.openKnowledgeEmbeddingSelector()
+          }
+        }
+      },
+      {
+        content: {
+          label: pickLocalizedText('选择重排序模型', 'Select rerank model'),
+          icon: this.buildCompactChatTitleBarMenuIcon(
+            $r('sys.symbol.ranking'),
+            this.knowledgeRerankSelection.isEnabled()
+              ? this.themePrimary
+              : $r('app.color.text_primary')
+          ),
+          action: () => {
+            this.openKnowledgeRerankSelector()
           }
         }
       },

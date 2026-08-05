@@ -34,6 +34,9 @@ export class HdsTopNavigationBlurOptions {
   maskExtraHeightVp: number = 20
   blurEffectiveEndOffsetVp: number = TITLE_BAR_BLUR_EFFECTIVE_END_OFFSET
   menuItems: Array<HdsNavigationMenuItemOptions> = []
+  // HdsNavigation 默认最多展示 3 个菜单图标，超出的会折叠进“更多”。
+  // 需要平铺更多入口时由调用方显式抬高。
+  menuMaxCount: number = 3
   stackBuilder: () => void = (): void => {}
 }
 
@@ -101,7 +104,8 @@ export function buildHdsTopNavigationTitleBarOptions(
         mainTitle: ' '
       },
       menu: {
-        value: options.menuItems
+        value: options.menuItems,
+        maxCount: options.menuMaxCount
       },
       stackBuilder: options.stackBuilder
     },

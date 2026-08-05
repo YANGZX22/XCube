@@ -61,6 +61,7 @@ export class PreferenceKeys {
   static readonly CHAT_REASONING_LEVEL: string = 'chat_reasoning_level'
   static readonly KNOWLEDGE_CONVERSATION_ENABLED: string = 'knowledge_conversation_enabled'
   static readonly KNOWLEDGE_EMBEDDING_SELECTION_JSON: string = 'knowledge_embedding_selection_json'
+  static readonly KNOWLEDGE_RERANK_SELECTION_JSON: string = 'knowledge_rerank_selection_json'
   static readonly SKILL_TOOL_ENABLED: string = 'skill_tool_enabled'
   static readonly SKILL_CONFIGS_JSON: string = 'skill_configs_json'
   // 上下文压缩（compact 工具）
