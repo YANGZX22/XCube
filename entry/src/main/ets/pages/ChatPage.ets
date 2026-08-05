@@ -56,6 +56,7 @@ import {
 } from '../config/BuiltinTools'
 import { AppStorageKeys } from '../config/AppStorageKeys'
 import { inputMethod } from '@kit.IMEKit'
+import { pasteboard } from '@kit.BasicServicesKit'
 import { webview } from '@kit.ArkWeb'
 import { pdfService, pdfViewManager, PdfView } from '@kit.PDFKit'
 import { dismissActiveSnackBarOnBack, showSnackBar, SnackBarDisplayOptions, SnackBarTone } from '../utils/ToastUtil'
@@ -1078,6 +1079,23 @@ export struct ChatPage {
     .height('100%')
   }
 
+  private copyCanvasMarkdownToClipboard(text: string): void {
+    if (text === '') {
+      return
+    }
+    try {
+      const pasteboardData = pasteboard.createData(pasteboard.MIMETYPE_TEXT_PLAIN, text)
+      const writeTask = pasteboard.getSystemPasteboard().setData(pasteboardData)
+      writeTask.catch((error: Object): void => {
+        console.error('ChatPage', `Failed to copy Canvas Markdown: ${JSON.stringify(error)}`)
+        this.showError(pickLocalizedText('复制失败', 'Failed to copy'))
+      })
+    } catch (error) {
+      console.error('ChatPage', `Failed to copy Canvas Markdown: ${JSON.stringify(error)}`)
+      this.showError(pickLocalizedText('复制失败', 'Failed to copy'))
+    }
+  }
+
   @Builder
   private CanvasPanelBuilder() {
     Column({ space: 10 }) {
@@ -1202,7 +1220,8 @@ export struct ChatPage {
         .systemMaterial(new uiMaterial.ImmersiveMaterial({
           style: uiMaterial.ImmersiveStyle.ULTRA_THIN,
           materialColor: Color.Transparent,
-          applyShadow: false
+          applyShadow: false,
+          lightEffect: undefined
         }))
         .padding({ left: 12, right: 12 })
         .onChange((value: string) => {
@@ -1225,7 +1244,13 @@ export struct ChatPage {
                 useCangjieComponent: true,
                 chatFontSize: 14,
                 compact: false,
-                themeRenderKey: `canvas-${this.canvasDocumentRevision}-${this.canvasDocumentUpdatedAt}`
+                themeRenderKey: `canvas-${this.canvasDocumentRevision}-${this.canvasDocumentUpdatedAt}`,
+                onCopyText: (text: string): void => {
+                  this.copyCanvasMarkdownToClipboard(text)
+                },
+                onCopyCode: (code: string): void => {
+                  this.copyCanvasMarkdownToClipboard(code)
+                }
               })
             }
           }
@@ -1241,7 +1266,7 @@ export struct ChatPage {
           materialColor: Color.Transparent,
           applyShadow: false,
           interactive: false,
-          lightEffect: { color: undefined }
+          lightEffect: undefined
         }))
       } else {
         TextArea({
@@ -1258,7 +1283,8 @@ export struct ChatPage {
           .systemMaterial(new uiMaterial.ImmersiveMaterial({
             style: uiMaterial.ImmersiveStyle.ULTRA_THIN,
             materialColor: Color.Transparent,
-            applyShadow: false
+            applyShadow: false,
+            lightEffect: undefined
           }))
           .padding(12)
           .onChange((value: string) => {
@@ -1288,7 +1314,7 @@ export struct ChatPage {
             materialColor: Color.Transparent,
             applyShadow: false,
             interactive: false,
-            lightEffect: { color: undefined }
+            lightEffect: undefined
           }))
           .transition(
             TransitionEffect.OPACITY.combine(

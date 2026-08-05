@@ -207,7 +207,8 @@ export struct ChatInputBar {
     })
     .systemMaterial(new uiMaterial.ImmersiveMaterial({
       style: uiMaterial.ImmersiveStyle.REGULAR,
-      interactive: true,
+      // 输入栏底板只保留材质外观，禁用按压时的整体形变。
+      interactive: false,
       lightEffect: { color: undefined }
     }))
     .shadow({
