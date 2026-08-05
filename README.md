@@ -23,7 +23,7 @@
 - Ships with tools that connect the model to the device — web search, Canvas documents, PDF-to-text, a Python sandbox, math charts, and calendar read/write — while keeping tool permissions, confirmation flows, and privacy boundaries explicit.
 - Development continues on more native HarmonyOS SDK capabilities, richer interaction patterns, and new use cases.
 
-Current version: `1.2.2` (versionCode `1002002`)
+Current version: `1.2.3` (versionCode `1002003`)
 
 > [!NOTE]
 > XCube continues [YANGZX22/chatcube](https://github.com/YANGZX22/chatcube), which was originally forked from [LongLiveY96/ChatCube](https://github.com/LongLiveY96/ChatCube). Copyright and MIT license notices from both earlier versions are preserved in full.
