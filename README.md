@@ -34,10 +34,11 @@ These screenshots come from the current HarmonyOS 7 (API 26.0.0) build:
 
 <table>
   <tr>
-    <td align="center"><img src="docs/screenshots/IMAGE2.jpg" width="200" /><br/><sub>Conversation Lists</sub></td>
-    <td align="center"><img src="docs/screenshots/IMAGE3.jpg" width="200" /><br/><sub>Knowledge Base Page</sub></td>
-    <td align="center"><img src="docs/screenshots/IMAGE1.jpg" width="200" /><br/><sub>Chat Page</sub></td>
-    <td align="center"><img src="docs/screenshots/IMAGE4.jpg" width="200" /><br/><sub>Working with Sub-agents</sub></td>
+    <td align="center"><img src="docs/screenshots/IMAGE2.jpg" width="160" /><br/><sub>Conversation Lists</sub></td>
+    <td align="center"><img src="docs/screenshots/IMAGE3.jpg" width="160" /><br/><sub>Knowledge Base Page</sub></td>
+    <td align="center"><img src="docs/screenshots/IMAGE1.jpg" width="160" /><br/><sub>Chat Page</sub></td>
+    <td align="center"><img src="docs/screenshots/IMAGE4.jpg" width="160" /><br/><sub>Work with Sub Agents</sub></td>
+    <td align="center"><img src="docs/screenshots/IMAGE5.jpg" width="160" /><br/><sub>Contexts</sub></td>
   </tr>
 </table>
 

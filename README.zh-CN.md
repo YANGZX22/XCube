@@ -39,10 +39,11 @@
 
 <table>
   <tr>
-    <td align="center"><img src="docs/screenshots/IMAGE2.jpg" width="200" /><br/><sub>会话列表</sub></td>
-    <td align="center"><img src="docs/screenshots/IMAGE3.jpg" width="200" /><br/><sub>知识库界面</sub></td>
-    <td align="center"><img src="docs/screenshots/IMAGE1.jpg" width="200" /><br/><sub>对话界面</sub></td>
-    <td align="center"><img src="docs/screenshots/IMAGE4.jpg" width="200" /><br/><sub>和子智能体协同工作</sub></td>
+    <td align="center"><img src="docs/screenshots/IMAGE2.jpg" width="160" /><br/><sub>会话列表</sub></td>
+    <td align="center"><img src="docs/screenshots/IMAGE3.jpg" width="160" /><br/><sub>知识库界面</sub></td>
+    <td align="center"><img src="docs/screenshots/IMAGE1.jpg" width="160" /><br/><sub>对话界面</sub></td>
+    <td align="center"><img src="docs/screenshots/IMAGE4.jpg" width="160" /><br/><sub>和子智能体协同工作</sub></td>
+    <td align="center"><img src="docs/screenshots/IMAGE5.jpg" width="160" /><br/><sub>上下文</sub></td>
   </tr>
 </table>
 
