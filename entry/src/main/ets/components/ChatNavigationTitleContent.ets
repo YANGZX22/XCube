@@ -235,7 +235,7 @@ export struct ChatNavigationTitleContent {
           this.onRegenerateTitle()
         })
 
-      MenuItemGroup({ header: $r('app.string.danger_zone') }) {
+      MenuItemGroup() {
         MenuItem({
           startIcon: $r('sys.symbol.trash'),
           content: $r('app.string.delete_chat')

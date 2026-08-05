@@ -69,6 +69,10 @@ export class ToolExecutionService {
   private pendingAskUserAnswers: Map<string, PendingAskUserRuntime> = new Map()
   private pendingAskUserChangedCallback: PendingAskUserChangedCallback | null = null
   private webSearchQueryCounts: Map<string, number> = new Map()
+  // 全局工具互斥链：sub_agent 改为异步派发后，主智能体与后台子智能体会同时执行工具，
+  // 必须共用同一把锁来维持应用内“同一时刻只执行一个工具”的约定
+  // （避免审批弹窗并发弹出、Pyodide WebView 并发执行等问题）
+  private exclusiveChain: Promise<void> = Promise.resolve()
 
   private constructor() {
     this.registry = getToolRegistry()
@@ -147,6 +151,22 @@ export class ToolExecutionService {
 
   resetWebSearchQueryState(): void {
     this.webSearchQueryCounts.clear()
+  }
+
+  // 在全局工具互斥锁内执行 task（简单的 promise 链）。
+  // 会长时间挂起的调用（ask_user、sub_agent_result）不要走这里，否则会把锁一直占住。
+  async runExclusively<T>(task: () => Promise<T>): Promise<T> {
+    const previous = this.exclusiveChain
+    let release: () => void = () => {}
+    this.exclusiveChain = new Promise<void>((resolveLock) => {
+      release = resolveLock
+    })
+    await previous
+    try {
+      return await task()
+    } finally {
+      release()
+    }
   }
 
   // 检查是否已取消

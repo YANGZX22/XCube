@@ -14,9 +14,11 @@ import { getToolExecutionService, ToolExecutionService } from '../services/ToolE
 import {
   getSubAgentService,
   SubAgentRuntimeConfig,
+  SUB_AGENT_RESULT_TOOL_ID,
   SUB_AGENT_SOURCE_LABEL_PREFIX,
   SUB_AGENT_TOOL_ID
 } from '../services/SubAgentService'
+import { appendSubAgentResultTool } from '../config/BuiltinTools'
 import { getProviderViewModel, ProviderViewModel } from './ProviderViewModel'
 import { getAssistantService, AssistantService, AssistantRuntimeConfig } from '../services/AssistantService'
 import { getSkillService, SkillConfig } from '../services/SkillService'
@@ -2171,6 +2173,10 @@ ${limitedSearchContext}
       }
     }
 
+    // sub_agent 派发后立即返回，收取产出要靠配套的 sub_agent_result。
+    // 它不在工具面板中单独出现，始终随 sub_agent 一起曝光。
+    const requestTools: ToolDefinition[] = hasSubAgentTool ? appendSubAgentResultTool(tools) : tools
+
     onAIMessageAdded(aiMessage)
     this.addPendingAIMessage(aiMessage, snapshotSessionId)
 
@@ -2221,6 +2227,10 @@ ${limitedSearchContext}
     if (hasSubAgentTool) {
       toolUsageSystemPrompt += `
 - 当任务能拆成多个彼此独立、可并行的子任务（例如多主题调研、多来源对比、多份材料分别处理）时，可调用 sub_agent 一次性派出 1-3 个子智能体并行处理，再汇总它们的结果作答。
+- sub_agent 会立即返回 batchId，子智能体随后在后台继续运行。派发之后绝对不要空等：立刻着手你自己那部分工作（调用其它工具、整理已掌握的信息、起草回答框架），把能做的先做完。
+- 派任务时要有意识地给自己也留一份：把你能直接完成的部分留在主线程做，只把真正独立、耗时的部分交给子智能体。
+- 需要子智能体产出时才调用 sub_agent_result：省略参数即收取全部未收取的批次并等待完成；传 wait=false 只查看进度而不阻塞，可用来判断是否还能再做点别的。
+- 在拿到 sub_agent_result 的结果之前，不要给出依赖子智能体产出的最终回答。
 - 子智能体看不到本对话历史，每个任务的 prompt 必须自包含：写清目标、必要背景、约束和期望输出。
 - 简单任务或强依赖前后顺序的任务不要使用 sub_agent，自己直接完成更快。`
     }
@@ -2360,7 +2370,7 @@ ${limitedSearchContext}
       requestTemperature,
       this.appStateManager.getDefaultMaxTokens(),
       reasoningLevel,
-      tools,
+      requestTools,
       currentTime,
       async (
         toolCall: ToolCall,
@@ -2431,7 +2441,7 @@ ${limitedSearchContext}
       onAIMessageUpdated,
       onComplete,
       onError,
-      tools,
+      requestTools,
 	      toolCallbacks,
 	      reasoningLevel,
 	      requestTemperature,
@@ -2584,6 +2594,8 @@ ${preview}`
     }
     this.unregisterActiveRequest(requestId)
     getContextCompactionService().endRequest(requestId)
+    // 清空子智能体运行时：递增代号会让任何还在后台跑的子智能体在下一个检查点退出
+    getSubAgentService().clearRuntime()
     onComplete()
   }
 
@@ -2612,7 +2624,7 @@ ${preview}`
           ))
           continue
         }
-        const result = await this.toolExecutionService.executeToolCall(toolCall, allowedFunctionNames)
+        const result = await this.runToolCallGuarded(toolCall, allowedFunctionNames)
         results.push(result)
         if (!this.isWebSearchBudgetResult(result)) {
           executedSearchesInBatch += 1
@@ -2626,15 +2638,39 @@ ${preview}`
           results.push(this.buildKnowledgeSearchBudgetResult(toolCall, usedKnowledgeQueryCount))
           continue
         }
-        const result = await this.toolExecutionService.executeToolCall(toolCall, allowedFunctionNames)
+        const result = await this.runToolCallGuarded(toolCall, allowedFunctionNames)
         executedKnowledgeQueriesInBatch += 1
         this.decorateKnowledgeSearchResult(result, usedKnowledgeQueryCount + 1)
         results.push(result)
         continue
       }
-      results.push(await this.toolExecutionService.executeToolCall(toolCall, allowedFunctionNames))
+      results.push(await this.runToolCallGuarded(toolCall, allowedFunctionNames))
     }
     return results
+  }
+
+  // sub_agent 改为异步派发后，主智能体与后台子智能体会同时执行工具，
+  // 因此两条路径统一走 ToolExecutionService 的全局互斥锁，维持
+  // “同一时刻只执行一个工具”的约定（审批弹窗、Pyodide WebView 都不能并发）。
+  // 会长时间挂起的调用不能占锁，否则会把另一侧饿死。
+  private isNonExclusiveToolFunction(functionName: string): boolean {
+    const normalized = functionName.trim().toLowerCase().replace(/[\s\-]+/g, '_')
+    // ask_user 等用户作答（可能数分钟）；sub_agent_result 等子智能体跑完，
+    // 而子智能体自己还要抢这把锁——占着锁等它们必然死锁
+    return normalized === 'ask_user' || normalized === 'user_input' || normalized === 'ask' ||
+      normalized === SUB_AGENT_TOOL_ID || normalized === SUB_AGENT_RESULT_TOOL_ID
+  }
+
+  private async runToolCallGuarded(
+    toolCall: ToolCall,
+    allowedFunctionNames: string[]
+  ): Promise<ToolResult> {
+    if (this.isNonExclusiveToolFunction(toolCall.functionName)) {
+      return await this.toolExecutionService.executeToolCall(toolCall, allowedFunctionNames)
+    }
+    return await this.toolExecutionService.runExclusively<ToolResult>(
+      (): Promise<ToolResult> => this.toolExecutionService.executeToolCall(toolCall, allowedFunctionNames)
+    )
   }
 
   private buildAllowedToolFunctionNames(tools: ToolDefinition[]): string[] {
@@ -3236,6 +3272,7 @@ ${preview}`
           this.clearPendingAIMessageIfMatches(aiMessage.id)
           this.unregisterActiveRequest(requestId)
           getContextCompactionService().endRequest(requestId)
+          getSubAgentService().clearRuntime()
           this.toolExecutionService.clearCancelCheckCallback()
           onError(requiredToolError)
           return
@@ -3441,6 +3478,54 @@ ${preview}`
           if (toolCalls.length > 0) {
             console.warn('ChatViewModel', `Ignored ${toolCalls.length} tool calls because tools are disabled in this round`)
           }
+          // 主智能体结束本轮却没调用 sub_agent_result：后台子智能体的产出会被白白丢掉，
+          // 而这条回答又是在没有它们结果的前提下写出来的。兜底收取后回灌一轮重新作答。
+          const subAgentService = getSubAgentService()
+          if (subAgentService.canAutoCollect()) {
+            console.info('ChatViewModel', 'Turn ended with uncollected sub-agent batches; auto-collecting')
+            const collectedJson = await subAgentService.autoCollectPendingResults()
+            if (isCancelledFn()) {
+              return
+            }
+            // 本轮正文是在缺少子智能体结果时写出来的，回滚后重答
+            rollbackStreamedRoundOutput()
+            roundContentBuffer = ''
+            roundReasoningBuffer = ''
+            onAIMessageUpdated(aiMessage)
+            requestMessages.push(new RequestMessage(
+              'system',
+              '你派出的子智能体已全部结束，结果如下(JSON):\n' + collectedJson +
+                '\n\n请结合这些结果给出最终回答，不要再调用 sub_agent_result。'
+            ))
+            await this.executeToolCallLoop(
+              apiConfig,
+              requestMessages,
+              modelId,
+              aiMessage,
+              onAIMessageUpdated,
+              onComplete,
+              onError,
+              tools,
+              toolCallbacks,
+              reasoningLevel,
+              requestTemperature,
+              iteration + 1,
+              snapshotSessionId,
+              snapshotSession,
+              shouldAutoGenerateTitle,
+              requestId,
+              isCancelledFn,
+              isUserCancelledFn,
+              isToolCancelledFn,
+              setUserCancelled,
+              getHasReceivedFirstChunk,
+              setHasReceivedFirstChunk,
+              localFirstChunkThrottle,
+              localContentThrottle,
+              localReasoningThrottle
+            )
+            return
+          }
           // 没有工具调用，完成
           flushBufferedRoundOutput()
           await this.finalizeAIMessage(
@@ -3492,6 +3577,7 @@ ${preview}`
         this.clearPendingAIMessageIfMatches(aiMessage.id)
         this.unregisterActiveRequest(requestId)
         getContextCompactionService().endRequest(requestId)
+        getSubAgentService().clearRuntime()
       },
 	      requestTemperature,
       this.appStateManager.getDefaultMaxTokens(),

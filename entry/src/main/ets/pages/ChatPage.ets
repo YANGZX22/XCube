@@ -49,6 +49,7 @@ import {
   PDF_TO_TEXT_TOOL_ID,
   PYTHON_SANDBOX_TOOL_ID,
   READ_SCHEDULE_TOOL_ID,
+  SUB_AGENT_RESULT_TOOL_ID,
   USE_SKILL_TOOL_ID,
   WRITE_SCHEDULE_TOOL_ID,
   registerBuiltinTools
@@ -2165,6 +2166,7 @@ export struct ChatPage {
       !this.toolRegistry.isToolRegistered(IMAGE_TO_TEXT_TOOL_ID) ||
       !this.toolRegistry.isToolRegistered(KNOWLEDGE_SEARCH_TOOL_ID) ||
       !this.toolRegistry.isToolRegistered(COMPACT_TOOL_ID) ||
+      !this.toolRegistry.isToolRegistered(SUB_AGENT_RESULT_TOOL_ID) ||
       !this.toolRegistry.isToolRegistered(USE_SKILL_TOOL_ID) ||
       !this.toolRegistry.isToolRegistered(MATH_CHART_TOOL_ID) ||
       !this.toolRegistry.isToolRegistered(READ_SCHEDULE_TOOL_ID) ||
@@ -2205,8 +2207,9 @@ export struct ChatPage {
     const configs = this.toolRegistry.getAllToolConfigs()
     const tools: ToolConfig[] = []
     for (let i = 0; i < configs.length; i++) {
-      // 知识库由输入区开关控制，不出现在工具选择器中
-      if (configs[i].id === KNOWLEDGE_SEARCH_TOOL_ID) {
+      // 知识库由输入区开关控制，不出现在工具选择器中；
+      // sub_agent_result 是 sub_agent 的配套工具，随它一起曝光，不单独选择
+      if (configs[i].id === KNOWLEDGE_SEARCH_TOOL_ID || configs[i].id === SUB_AGENT_RESULT_TOOL_ID) {
         continue
       }
       if (configs[i].enabled || this.isSettingsControlledBuiltinTool(configs[i].id)) {

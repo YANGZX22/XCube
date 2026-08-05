@@ -18,7 +18,12 @@ import { CanvasDocumentMutationResult, CanvasDocumentState, getCanvasDocumentSer
 import { getPdfTextExtractionService, PdfTextExtractionRequest } from '../services/PdfTextExtractionService'
 import { getImageTextRecognitionService, ImageTextRecognitionRequest } from '../services/ImageTextRecognitionService'
 import { getSkillService } from '../services/SkillService'
-import { getSubAgentService, SUB_AGENT_MAX_TASKS, SUB_AGENT_TOOL_ID } from '../services/SubAgentService'
+import {
+  getSubAgentService,
+  SUB_AGENT_MAX_TASKS,
+  SUB_AGENT_RESULT_TOOL_ID,
+  SUB_AGENT_TOOL_ID
+} from '../services/SubAgentService'
 import {
   createKnowledgeSearchToolConfig,
   createKnowledgeSearchToolDefinition,
@@ -34,7 +39,7 @@ import {
 
 export { KNOWLEDGE_SEARCH_TOOL_ID } from './KnowledgeSearchTool'
 export { COMPACT_TOOL_ID } from './CompactTool'
-export { SUB_AGENT_TOOL_ID } from '../services/SubAgentService'
+export { SUB_AGENT_TOOL_ID, SUB_AGENT_RESULT_TOOL_ID } from '../services/SubAgentService'
 
 export const ASK_USER_TOOL_ID: string = 'ask_user'
 export const READ_SCHEDULE_TOOL_ID: string = 'read_schedule'
@@ -258,6 +263,12 @@ class AskUserExecutor implements ToolExecutor {
 class SubAgentExecutor implements ToolExecutor {
   async execute(args: string): Promise<string> {
     return await getSubAgentService().executeSubAgentToolCall(args)
+  }
+}
+
+class SubAgentResultExecutor implements ToolExecutor {
+  async execute(args: string): Promise<string> {
+    return await getSubAgentService().collectSubAgentResults(args)
   }
 }
 
@@ -1832,7 +1843,7 @@ function createSubAgentToolDefinition(): ToolDefinition {
 
   const func = new ToolFunction(
     SUB_AGENT_TOOL_ID,
-    `Dispatch 1-${SUB_AGENT_MAX_TASKS} autonomous sub-agents to handle independent sub-tasks in parallel. Use this when a request splits into separate research or processing tracks (e.g. comparing multiple topics, gathering info from different sources). Each sub-agent runs its own tool-call loop and returns a final report. Do NOT use it for simple tasks you can answer directly, and write each prompt fully self-contained.`,
+    `Dispatch 1-${SUB_AGENT_MAX_TASKS} autonomous sub-agents to handle independent sub-tasks in parallel. Use this when a request splits into separate research or processing tracks (e.g. comparing multiple topics, gathering info from different sources). This call returns IMMEDIATELY with a batchId while the sub-agents keep running in the background: do not idle after dispatching — keep working on your own part of the task (call other tools, organise what you already know, draft the answer structure), then call sub_agent_result to collect their reports. Do NOT use it for simple tasks you can answer directly, and write each prompt fully self-contained.`,
     parameters
   )
 
@@ -1843,7 +1854,7 @@ function createSubAgentToolConfig(): ToolConfig {
   return new ToolConfig(
     SUB_AGENT_TOOL_ID,
     '子智能体',
-    '模型可派出最多 3 个并行子智能体进行工作。可能消耗更多 Token',
+    '模型可派出最多 3 个并行子智能体进行工作，派出后主智能体继续同步工作。可能消耗更多 Token',
     null,
     true,
     false,
@@ -1853,6 +1864,65 @@ function createSubAgentToolConfig(): ToolConfig {
     '内置工具',
     ToolPermissionLevel.READ
   )
+}
+
+function createSubAgentResultToolDefinition(): ToolDefinition {
+  const parameters = new ToolParameters()
+  const rawSchemaJson: string = `{
+    "type": "object",
+    "properties": {
+      "batch_id": {
+        "type": "string",
+        "description": "Optional batchId returned by a previous sub_agent call. Omit to target every batch you have not collected yet."
+      },
+      "wait": {
+        "type": "boolean",
+        "description": "Default true: block until the targeted sub-agents finish and return their full reports. Pass false to peek at their current progress (status, rounds, tool-call count) without waiting, so you can keep working and collect later."
+      }
+    },
+    "required": []
+  }`
+  parameters.setRawSchema(JSON.parse(rawSchemaJson) as object)
+
+  const func = new ToolFunction(
+    SUB_AGENT_RESULT_TOOL_ID,
+    'Collect the reports of sub-agents previously dispatched with sub_agent. By default it waits until they are done and returns their final reports; pass wait=false to check progress without blocking. Only call this once you have finished the work you can do yourself, and never answer a question that depends on sub-agent output before collecting it.',
+    parameters
+  )
+
+  return new ToolDefinition(func)
+}
+
+function createSubAgentResultToolConfig(): ToolConfig {
+  return new ToolConfig(
+    SUB_AGENT_RESULT_TOOL_ID,
+    '收取子智能体结果',
+    '取回已派出子智能体的最终报告，随子智能体工具一同提供',
+    null,
+    true,
+    false,
+    ToolSourceType.BUILTIN,
+    'builtin',
+    SUB_AGENT_RESULT_TOOL_ID,
+    '内置工具',
+    ToolPermissionLevel.READ
+  )
+}
+
+// sub_agent_result 不在工具面板里单独出现，始终随 sub_agent 一起曝光给模型
+export function appendSubAgentResultTool(tools: ToolDefinition[]): ToolDefinition[] {
+  const result: ToolDefinition[] = []
+  let alreadyPresent = false
+  for (let i = 0; i < tools.length; i++) {
+    result.push(tools[i])
+    if (tools[i].function.name === SUB_AGENT_RESULT_TOOL_ID) {
+      alreadyPresent = true
+    }
+  }
+  if (!alreadyPresent) {
+    result.push(createSubAgentResultToolDefinition())
+  }
+  return result
 }
 
 function createCanvasDocumentToolDefinition(): ToolDefinition {
@@ -2496,6 +2566,17 @@ export function registerBuiltinTools(): void {
       new SubAgentExecutor()
     )
     registry.registerTool(subAgentTool)
+    registeredNow += 1
+  }
+
+  if (!registry.isToolRegistered(SUB_AGENT_RESULT_TOOL_ID)) {
+    const subAgentResultTool = new RegisteredTool(
+      SUB_AGENT_RESULT_TOOL_ID,
+      createSubAgentResultToolConfig(),
+      createSubAgentResultToolDefinition(),
+      new SubAgentResultExecutor()
+    )
+    registry.registerTool(subAgentResultTool)
     registeredNow += 1
   }
 

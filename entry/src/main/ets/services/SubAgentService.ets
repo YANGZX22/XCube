@@ -5,6 +5,10 @@ import { createThrottle } from '../utils/ThrottleUtil'
 
 export const SUB_AGENT_TOOL_ID: string = 'sub_agent'
 
+// sub_agent 的配套收取工具。sub_agent 只负责派发并立即返回，主智能体继续自己的工具
+// 循环，需要子智能体产出时再调用它取回结果。随 sub_agent 一起曝光，不单独出现在工具面板。
+export const SUB_AGENT_RESULT_TOOL_ID: string = 'sub_agent_result'
+
 // 子智能体发起的工具调用统一使用该来源标签前缀，
 // UI 依赖它识别调用来源（例如主对话中不渲染子智能体的工具卡片）
 export const SUB_AGENT_SOURCE_LABEL_PREFIX: string = '子智能体 · '
@@ -12,12 +16,14 @@ export const SUB_AGENT_SOURCE_LABEL_PREFIX: string = '子智能体 · '
 // 单次 sub_agent 调用允许并行派出的子智能体上限
 export const SUB_AGENT_MAX_TASKS = 3
 
-// 子智能体继承本次对话已经曝光的工具。只禁止 sub_agent 自身，避免递归派生；
-// knowledge_search 是否存在完全由主请求的知识库开关与曝光策略决定。
+// 子智能体继承本次对话已经曝光的工具。只禁止 sub_agent 与 sub_agent_result，
+// 避免递归派生和子智能体去收取同级批次；knowledge_search 是否存在完全由主请求
+// 的知识库开关与曝光策略决定。
 export function buildSubAgentToolSet(tools: ToolDefinition[]): ToolDefinition[] {
   const result: ToolDefinition[] = []
   for (let i = 0; i < tools.length; i++) {
-    if (tools[i].function.name === SUB_AGENT_TOOL_ID) {
+    const functionName = tools[i].function.name
+    if (functionName === SUB_AGENT_TOOL_ID || functionName === SUB_AGENT_RESULT_TOOL_ID) {
       continue
     }
     result.push(tools[i])
@@ -90,6 +96,12 @@ interface SubAgentToolArgs {
   tasks?: SubAgentTaskArgs[]
 }
 
+// sub_agent_result 工具入参
+interface SubAgentResultToolArgs {
+  batch_id?: string
+  wait?: boolean
+}
+
 // 单个子智能体的执行报告（序列化后回传给主智能体）
 class SubAgentTaskReport {
   name: string = ''
@@ -99,8 +111,35 @@ class SubAgentTaskReport {
   toolCallCount: number = 0
 }
 
-class SubAgentBatchResponse {
+// sub_agent 的返回：只确认派发，不含结果
+class SubAgentDispatchResponse {
+  status: string = 'dispatched'
+  batchId: string = ''
+  agents: string[] = []
+  note: string = ''
+}
+
+// sub_agent_result（wait=true）的返回：汇总一个或多个批次的最终报告
+class SubAgentCollectResponse {
+  status: string = 'completed'
+  batchIds: string[] = []
   results: SubAgentTaskReport[] = []
+  note: string = ''
+}
+
+// sub_agent_result（wait=false）的返回：只报进度，不阻塞
+class SubAgentProgressItem {
+  batchId: string = ''
+  name: string = ''
+  status: string = ''
+  rounds: number = 0
+  toolCallCount: number = 0
+}
+
+class SubAgentProgressResponse {
+  status: string = 'running'
+  batchIds: string[] = []
+  agents: SubAgentProgressItem[] = []
   note: string = ''
 }
 
@@ -161,18 +200,54 @@ export class SubAgentPreviewState {
   @Trace hasEverRun: boolean = false
 }
 
+// 一次 sub_agent 派发出去的批次句柄：pending 是后台运行的汇总 Promise，
+// 主智能体调用 sub_agent_result 时才 await 它
+class SubAgentBatch {
+  id: string
+  taskNames: string[]
+  liveStates: SubAgentLiveState[]
+  pending: Promise<SubAgentTaskReport[]>
+  note: string
+  settled: boolean = false
+  collected: boolean = false
+
+  constructor(
+    id: string,
+    taskNames: string[],
+    liveStates: SubAgentLiveState[],
+    pending: Promise<SubAgentTaskReport[]>,
+    note: string
+  ) {
+    this.id = id
+    this.taskNames = taskNames
+    this.liveStates = liveStates
+    this.pending = pending
+    this.note = note
+  }
+}
+
+// 主智能体结束本轮却没有收取子智能体结果时的兜底回灌次数上限，
+// 防止“派发 → 结束 → 回灌 → 再派发”无限循环
+const SUB_AGENT_MAX_AUTO_COLLECT_ROUNDS: number = 3
+
 // 子智能体服务：主智能体通过 sub_agent 工具一次派出 1-3 个子智能体并行处理子任务。
-// 每个子智能体拥有独立的对话上下文和不限轮次的工具调用循环，结束后把结果汇总回主智能体。
+// 每个子智能体拥有独立的对话上下文和不限轮次的工具调用循环。
+// sub_agent 只负责派发并立即返回 batch_id，子智能体在后台继续运行，主智能体因此
+// 可以在同一轮请求里继续做自己的工作；需要产出时再调用 sub_agent_result 收取。
 export class SubAgentService {
   private static instance: SubAgentService | null = null
   private runtime: SubAgentRuntimeConfig | null = null
-  // 串行化所有子智能体的工具执行，保持应用内“同一时刻只执行一个工具”的约定
-  // （避免审批弹窗并发弹出、Pyodide WebView 并发执行等问题）
-  private toolExecutionChain: Promise<void> = Promise.resolve()
   // 实时预览状态：始终保留最近一批子智能体的运行情况
   private previewState: SubAgentPreviewState = new SubAgentPreviewState()
   // 子智能体全局序号，用于给工具调用 id 加唯一后缀
   private agentSequence: number = 0
+  // 本次请求已派发、尚未（或已经）收取的批次，按派发顺序保存
+  private batches: Map<string, SubAgentBatch> = new Map()
+  private batchSequence: number = 0
+  private autoCollectRounds: number = 0
+  // 运行时代号：每次配置/清理运行时递增，后台仍在跑的子智能体据此自行退出，
+  // 避免请求结束（正常完成或出错）后还有子智能体继续消耗额度
+  private generation: number = 0
 
   private constructor() {}
 
@@ -184,18 +259,25 @@ export class SubAgentService {
   }
 
   configureRuntime(runtime: SubAgentRuntimeConfig): void {
+    this.generation += 1
     this.runtime = runtime
+    this.batches.clear()
+    this.autoCollectRounds = 0
   }
 
   clearRuntime(): void {
+    this.generation += 1
     this.runtime = null
+    this.batches.clear()
+    this.autoCollectRounds = 0
+    this.previewState.active = false
   }
 
   getPreviewState(): SubAgentPreviewState {
     return this.previewState
   }
 
-  // sub_agent 工具执行入口
+  // sub_agent 工具执行入口：派发后立即返回，不等待子智能体完成
   async executeSubAgentToolCall(argsJson: string): Promise<string> {
     const runtime = this.runtime
     if (runtime === null) {
@@ -225,42 +307,200 @@ export class SubAgentService {
       return JSON.stringify(new SubAgentErrorResponse('sub_agent 的每个任务都必须包含非空 prompt'))
     }
 
-    console.info('SubAgentService', `Dispatching ${tasks.length} sub-agent(s)`)
+    this.batchSequence += 1
+    const batchId = `batch_${this.batchSequence}`
+    console.info('SubAgentService', `Dispatching ${tasks.length} sub-agent(s) as ${batchId}`)
 
-    // 初始化本批次的实时预览状态（覆盖上一批）
+    // 上一批已全部结束时重置预览列表；批次重叠时追加，避免互相覆盖
+    const mergedAgents: SubAgentLiveState[] = []
+    if (this.hasRunningBatch()) {
+      for (let i = 0; i < this.previewState.agents.length; i++) {
+        mergedAgents.push(this.previewState.agents[i])
+      }
+    }
     const liveStates: SubAgentLiveState[] = []
+    const taskNames: string[] = []
     for (let i = 0; i < tasks.length; i++) {
       const live = new SubAgentLiveState()
       live.name = this.resolveTaskName(tasks[i], i)
       const taskPrompt = tasks[i].prompt
       live.promptPreview = this.truncateForPreview(taskPrompt !== undefined ? taskPrompt : '', 200)
       liveStates.push(live)
+      taskNames.push(live.name)
+      mergedAgents.push(live)
     }
-    this.previewState.agents = liveStates
+    this.previewState.agents = mergedAgents
     this.previewState.active = true
     this.previewState.hasEverRun = true
 
-    let reports: SubAgentTaskReport[] = []
-    try {
-      const pendingReports: Promise<SubAgentTaskReport>[] = []
-      for (let i = 0; i < tasks.length; i++) {
-        pendingReports.push(this.runSingleSubAgent(runtime, tasks[i], liveStates[i]))
+    const pendingReports: Promise<SubAgentTaskReport>[] = []
+    for (let i = 0; i < tasks.length; i++) {
+      pendingReports.push(this.runSingleSubAgent(runtime, tasks[i], liveStates[i]))
+    }
+    // 兜底成失败报告，保证 pending 永不 reject —— 它会被 sub_agent_result 延后 await，
+    // 未处理的 rejection 在这段时间里没有任何接收方
+    const pending: Promise<SubAgentTaskReport[]> = Promise.all(pendingReports)
+      .catch((error: Object): SubAgentTaskReport[] => {
+        console.error('SubAgentService', `Sub-agent batch ${batchId} failed: ${JSON.stringify(error)}`)
+        const failedReports: SubAgentTaskReport[] = []
+        for (let i = 0; i < taskNames.length; i++) {
+          const failed = new SubAgentTaskReport()
+          failed.name = taskNames[i]
+          failed.status = SUB_AGENT_STATUS_FAILED
+          failed.result = `子智能体执行异常: ${JSON.stringify(error)}`
+          failedReports.push(failed)
+        }
+        return failedReports
+      })
+
+    let note = ''
+    if (rawTasks.length > SUB_AGENT_MAX_TASKS) {
+      note = `一次最多派出 ${SUB_AGENT_MAX_TASKS} 个子智能体，多余任务已忽略；如有需要请在后续轮次继续派出。`
+    }
+    const batch = new SubAgentBatch(batchId, taskNames, liveStates, pending, note)
+    this.batches.set(batchId, batch)
+    pending.then((): void => {
+      batch.settled = true
+      this.refreshPreviewActive()
+    })
+
+    const response = new SubAgentDispatchResponse()
+    response.batchId = batchId
+    response.agents = taskNames
+    response.note = `已派出 ${tasks.length} 个子智能体，它们正在后台运行。` +
+      '不要空等：请立刻继续处理你自己那部分工作（调用其它工具、整理已有信息、起草回答框架）。' +
+      `需要它们的产出时调用 sub_agent_result 收取（默认等待全部完成；传 wait=false 只查看进度）。${note}`
+    return JSON.stringify(response)
+  }
+
+  // sub_agent_result 工具执行入口：收取（或查看）已派发批次的结果
+  async collectSubAgentResults(argsJson: string): Promise<string> {
+    let parsedArgs: SubAgentResultToolArgs = {}
+    if (argsJson !== undefined && argsJson !== null && argsJson.trim() !== '') {
+      try {
+        parsedArgs = JSON.parse(argsJson) as SubAgentResultToolArgs
+      } catch (_error) {
+        // 无参调用等价于“收取全部未收取批次”，不因为空参数或脏 JSON 直接失败
+        parsedArgs = {}
       }
-      reports = await Promise.all(pendingReports)
-    } finally {
-      this.previewState.active = false
+    }
+    const requestedBatchId = parsedArgs.batch_id !== undefined ? parsedArgs.batch_id.trim() : ''
+    const shouldWait = parsedArgs.wait !== false
+
+    const targets = this.resolveTargetBatches(requestedBatchId)
+    if (targets.length === 0) {
+      return JSON.stringify(new SubAgentErrorResponse(
+        requestedBatchId !== ''
+          ? `未找到 batch_id=${requestedBatchId} 的子智能体批次`
+          : '当前没有待收取的子智能体批次，请先调用 sub_agent 派发任务'
+      ))
     }
 
-    if (runtime.isCancelled()) {
+    if (!shouldWait) {
+      return JSON.stringify(this.buildProgressResponse(targets))
+    }
+
+    const response = new SubAgentCollectResponse()
+    for (let i = 0; i < targets.length; i++) {
+      const batch = targets[i]
+      const reports = await batch.pending
+      batch.settled = true
+      batch.collected = true
+      response.batchIds.push(batch.id)
+      for (let j = 0; j < reports.length; j++) {
+        response.results.push(reports[j])
+      }
+      if (batch.note !== '') {
+        response.note = batch.note
+      }
+    }
+    this.refreshPreviewActive()
+
+    const runtime = this.runtime
+    if (runtime !== null && runtime.isCancelled()) {
       return JSON.stringify(new SubAgentErrorResponse('子智能体执行已取消', true))
     }
-
-    const response = new SubAgentBatchResponse()
-    response.results = reports
-    if (rawTasks.length > SUB_AGENT_MAX_TASKS) {
-      response.note = `一次最多派出 ${SUB_AGENT_MAX_TASKS} 个子智能体，多余任务已忽略；如有需要请在后续轮次继续派出。`
-    }
     return JSON.stringify(response)
+  }
+
+  // 主智能体结束本轮时是否还有没被收取的子智能体产出
+  hasUncollectedBatches(): boolean {
+    let found = false
+    this.batches.forEach((batch: SubAgentBatch): void => {
+      if (!batch.collected) {
+        found = true
+      }
+    })
+    return found
+  }
+
+  canAutoCollect(): boolean {
+    return this.autoCollectRounds < SUB_AGENT_MAX_AUTO_COLLECT_ROUNDS && this.hasUncollectedBatches()
+  }
+
+  // 兜底收取：主智能体没主动调用 sub_agent_result 就结束了本轮，
+  // 由调用方把结果回灌成一轮上下文后让模型重新作答
+  async autoCollectPendingResults(): Promise<string> {
+    this.autoCollectRounds += 1
+    return await this.collectSubAgentResults('{}')
+  }
+
+  private resolveTargetBatches(batchId: string): SubAgentBatch[] {
+    const targets: SubAgentBatch[] = []
+    if (batchId !== '') {
+      const batch = this.batches.get(batchId)
+      if (batch !== undefined) {
+        targets.push(batch)
+      }
+      return targets
+    }
+    this.batches.forEach((batch: SubAgentBatch): void => {
+      if (!batch.collected) {
+        targets.push(batch)
+      }
+    })
+    return targets
+  }
+
+  private buildProgressResponse(targets: SubAgentBatch[]): SubAgentProgressResponse {
+    const response = new SubAgentProgressResponse()
+    let allSettled = true
+    for (let i = 0; i < targets.length; i++) {
+      const batch = targets[i]
+      response.batchIds.push(batch.id)
+      if (!batch.settled) {
+        allSettled = false
+      }
+      for (let j = 0; j < batch.liveStates.length; j++) {
+        const live = batch.liveStates[j]
+        const item = new SubAgentProgressItem()
+        item.batchId = batch.id
+        item.name = live.name
+        item.status = live.status
+        item.rounds = live.rounds
+        item.toolCallCount = live.toolEvents.length
+        response.agents.push(item)
+      }
+    }
+    response.status = allSettled ? 'ready' : SUB_AGENT_STATUS_RUNNING
+    response.note = allSettled
+      ? '子智能体已全部结束，再次调用 sub_agent_result（省略 wait 或传 wait=true）即可取回完整结果。'
+      : '子智能体仍在运行。请继续处理你自己那部分工作，稍后再调用 sub_agent_result 取回结果。'
+    return response
+  }
+
+  private hasRunningBatch(): boolean {
+    let running = false
+    this.batches.forEach((batch: SubAgentBatch): void => {
+      if (!batch.settled) {
+        running = true
+      }
+    })
+    return running
+  }
+
+  private refreshPreviewActive(): void {
+    this.previewState.active = this.hasRunningBatch()
   }
 
   private resolveTaskName(task: SubAgentTaskArgs, index: number): string {
@@ -288,6 +528,10 @@ export class SubAgentService {
     this.agentSequence += 1
     const agentSeq = this.agentSequence
     const budgetKey = `sub-agent-${agentSeq}`
+    // 子智能体现在会活过派发它的那次工具调用，必须同时盯住运行时代号：
+    // 请求正常结束或出错时 clearRuntime() 递增代号，后台子智能体据此自行退出
+    const myGeneration = this.generation
+    const isCancelled = (): boolean => runtime.isCancelled() || this.generation !== myGeneration
 
     const agentTools = buildSubAgentToolSet(runtime.tools)
     const allowedFunctionNames: string[] = []
@@ -336,7 +580,7 @@ export class SubAgentService {
     }
 
     while (true) {
-      if (runtime.isCancelled()) {
+      if (isCancelled()) {
         report.status = SUB_AGENT_STATUS_CANCELLED
         report.result = '任务被用户取消'
         live.status = SUB_AGENT_STATUS_CANCELLED
@@ -346,10 +590,17 @@ export class SubAgentService {
       report.rounds += 1
       live.rounds = report.rounds
       console.info('SubAgentService', `[${report.name}] round ${report.rounds}`)
-      const outcome = await this.performStreamRound(runtime, apiService, messages, agentTools, appendLiveContent)
+      const outcome = await this.performStreamRound(
+        runtime,
+        apiService,
+        messages,
+        agentTools,
+        appendLiveContent,
+        isCancelled
+      )
       flushLiveContent()
 
-      if (runtime.isCancelled()) {
+      if (isCancelled()) {
         report.status = SUB_AGENT_STATUS_CANCELLED
         report.result = '任务被用户取消'
         live.status = SUB_AGENT_STATUS_CANCELLED
@@ -396,11 +647,9 @@ export class SubAgentService {
         toolCall.sourceLabel = `${SUB_AGENT_SOURCE_LABEL_PREFIX}${report.name}`
         runtime.onToolCallStarted(toolCall)
 
-        // ask_user 需要等待用户作答（可能耗时数分钟），不占用全局工具互斥锁，
-        // 以免阻塞其他子智能体和多个提问请求并行等待
-        const toolResult = this.isAskUserFunction(toolCall.functionName)
-          ? await runtime.toolRunner(toolCall, allowedFunctionNames, budgetKey)
-          : await this.executeToolCallExclusively(runtime, toolCall, allowedFunctionNames, budgetKey)
+        // 工具互斥（“同一时刻只执行一个工具”）由 toolRunner 统一负责：主智能体与
+        // 子智能体现在会同时执行工具，两边必须共用同一把锁，不能各锁各的
+        const toolResult = await this.runToolCallSafely(runtime, toolCall, allowedFunctionNames, budgetKey)
 
         // executeToolCall 会把注册表里的显示名回填到 toolCall 上
         toolEvent.displayName = toolCall.displayName !== '' ? toolCall.displayName : toolCall.functionName
@@ -470,7 +719,8 @@ ${knowledgeSearchRule}
     apiService: AIApiService,
     messages: RequestMessage[],
     tools: ToolDefinition[],
-    onContentChunk: (chunk: string) => void
+    onContentChunk: (chunk: string) => void,
+    isCancelled: () => boolean
   ): Promise<SubAgentRoundOutcome> {
     return new Promise<SubAgentRoundOutcome>((resolve) => {
       const outcome = new SubAgentRoundOutcome()
@@ -494,7 +744,7 @@ ${knowledgeSearchRule}
         (contentChunk: string) => {
           contentBuffer += contentChunk
           onContentChunk(contentChunk)
-          if (!cancelHandled && runtime.isCancelled() && httpRequest !== null) {
+          if (!cancelHandled && isCancelled() && httpRequest !== null) {
             cancelHandled = true
             try {
               httpRequest.destroy()
@@ -524,19 +774,13 @@ ${knowledgeSearchRule}
     })
   }
 
-  // 跨子智能体串行执行工具（简单的 promise 链互斥锁）
-  private async executeToolCallExclusively(
+  // toolRunner 抛出时不能让整个子智能体崩掉，转成一条错误工具结果继续下一轮
+  private async runToolCallSafely(
     runtime: SubAgentRuntimeConfig,
     toolCall: ToolCall,
     allowedFunctionNames: string[],
     budgetKey: string
   ): Promise<ToolResult> {
-    const previous = this.toolExecutionChain
-    let release: () => void = () => {}
-    this.toolExecutionChain = new Promise<void>((resolveLock) => {
-      release = resolveLock
-    })
-    await previous
     try {
       return await runtime.toolRunner(toolCall, allowedFunctionNames, budgetKey)
     } catch (error) {
@@ -548,8 +792,6 @@ ${knowledgeSearchRule}
         toolCall.displayName,
         toolCall.sourceLabel
       )
-    } finally {
-      release()
     }
   }
 }
