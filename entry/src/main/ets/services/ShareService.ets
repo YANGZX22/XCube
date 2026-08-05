@@ -101,6 +101,35 @@ export class ShareService {
     return lines.join('\n')
   }
 
+  // 将 Canvas 文稿转换为 Markdown。标题单独存储，导出时补成一级标题。
+  convertDocumentToMarkdown(title: string, content: string): string {
+    const normalizedTitle = title.trim()
+    if (normalizedTitle === '') {
+      return content
+    }
+    const titleLine = `# ${normalizedTitle}`
+    const normalizedContent = content.trim()
+    if (normalizedContent === titleLine || normalizedContent.startsWith(`${titleLine}\n`)) {
+      return content
+    }
+    if (normalizedContent === '') {
+      return titleLine
+    }
+    return `${titleLine}\n\n${content}`
+  }
+
+  // 文本分享保留 Canvas 原文，仅在首部附上独立的文稿标题。
+  convertDocumentToPlainText(title: string, content: string): string {
+    const normalizedTitle = title.trim()
+    if (normalizedTitle === '') {
+      return content
+    }
+    if (content.trim() === '') {
+      return normalizedTitle
+    }
+    return `${normalizedTitle}\n\n${content}`
+  }
+
   // 分享文本内容
   async shareText(content: string, title: string = '分享对话'): Promise<ShareResult> {
     if (this.context === null) {

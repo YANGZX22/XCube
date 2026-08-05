@@ -234,7 +234,6 @@ export struct ChatPage {
   // 上下文长度窗口用量。估算需要遍历全部历史文本，只在消息列表或模型变化时刷新，
   // 不随流式输出的每一帧重算。
   @Local contextUsage: ContextUsage = new ContextUsage()
-  private contextUsageDialogId: number = -1
   // 图片预览状态
   @Local showImagePreview: boolean = false
   @Local previewImages: Array<string> = []
@@ -370,6 +369,10 @@ export struct ChatPage {
   // 分享预览弹窗状态
   @Local showSharePreview: boolean = false
   @Local shareMessages: ChatMessage[] = []
+  @Local shareDocumentMode: boolean = false
+  @Local shareDocumentTitle: string = ''
+  @Local shareDocumentContent: string = ''
+  @Local shareDocumentUpdatedAt: number = 0
   // 编辑消息相关状态（内联编辑模式）
   @Local isEditingMessage: boolean = false // 是否处于消息编辑模式
   @Local editingMessageId: string = '' // 正在编辑的消息ID
@@ -972,6 +975,28 @@ export struct ChatPage {
       `v${this.canvasDocumentRevision} · ${actor}`)
   }
 
+  private async handleCanvasShare(): Promise<void> {
+    if (this.canvasDocumentContent.trim() === '') {
+      this.showChatSnack(pickLocalizedText('Canvas 暂无可分享内容', 'No Canvas content to share'))
+      return
+    }
+
+    try {
+      await this.flushCanvasAutosave(true)
+    } catch (error) {
+      // 保存失败不应丢失用户当前可见的草稿，分享仍使用页面内容。
+      console.error('ChatPage', `Failed to flush canvas before sharing: ${JSON.stringify(error)}`)
+    }
+
+    this.safeStopInputSession()
+    this.shareMessages = []
+    this.shareDocumentMode = true
+    this.shareDocumentTitle = this.canvasDocumentTitle
+    this.shareDocumentContent = this.canvasDocumentContent
+    this.shareDocumentUpdatedAt = this.canvasDocumentUpdatedAt > 0 ? this.canvasDocumentUpdatedAt : Date.now()
+    this.showSharePreview = true
+  }
+
   private getCanvasPanelWidthVp(): number {
     if (this.windowWidthVp <= 380) {
       return Math.max(284, this.windowWidthVp - 24)
@@ -1036,27 +1061,6 @@ export struct ChatPage {
           .width('100%')
       }
       .width('100%')
-
-      Button({ type: ButtonType.Capsule, stateEffect: false }) {
-        Text(pickLocalizedText('知道了', 'Got it'))
-          .fontSize(15)
-          .fontWeight(FontWeight.Medium)
-          .fontColor(this.themePrimary)
-      }
-      .width('100%')
-      .height(40)
-      .padding(0)
-      .backgroundColor(Color.Transparent)
-      .borderRadius(20)
-      .clip(true)
-      .onClick(() => {
-        this.closeContextUsageDialog()
-      })
-      .systemMaterial(new uiMaterial.ImmersiveMaterial({
-        style: uiMaterial.ImmersiveStyle.REGULAR,
-        interactive: true,
-        lightEffect: { color: undefined }
-      }))
     }
     .width(280)
     .padding({ left: 20, right: 20, top: 24, bottom: 20 })
@@ -1113,6 +1117,32 @@ export struct ChatPage {
         }))
         .onClick(() => {
           this.setCanvasMarkdownPreview(!this.isCanvasMarkdownPreview)
+        })
+
+        Button({ type: ButtonType.Circle }) {
+          SymbolGlyph($r('sys.symbol.share'))
+            .fontSize(14)
+            .fontColor([this.themePrimary])
+        }
+        .width(32)
+        .height(32)
+        .padding(0)
+        .backgroundColor(Color.Transparent)
+        .stateEffect(false)
+        .enabled(this.canvasDocumentContent.trim() !== '')
+        .opacity(this.canvasDocumentContent.trim() !== '' ? 1 : 0.4)
+        .systemMaterial(new uiMaterial.ImmersiveMaterial({
+          style: uiMaterial.ImmersiveStyle.REGULAR,
+          materialColor: Color.Transparent,
+          applyShadow: false,
+          interactive: true,
+          lightEffect: { color: undefined }
+        }))
+        .onClick(() => {
+          this.handleCanvasShare().catch((error: Object): void => {
+            console.error('ChatPage', `Failed to open canvas share preview: ${JSON.stringify(error)}`)
+            this.showError(pickLocalizedText('Canvas 分享失败', 'Failed to share Canvas'))
+          })
         })
 
         Button({ type: ButtonType.Circle }) {
@@ -1842,21 +1872,9 @@ export struct ChatPage {
         style: uiMaterial.ImmersiveStyle.THICK
       })
     })
-      .then((dialogId: number): void => {
-        this.contextUsageDialogId = dialogId
-      })
       .catch((error: Object): void => {
         console.error('ChatPage', `Failed to open context usage dialog: ${JSON.stringify(error)}`)
       })
-  }
-
-  private closeContextUsageDialog(): void {
-    if (this.contextUsageDialogId < 0) {
-      return
-    }
-    const dialogId = this.contextUsageDialogId
-    this.contextUsageDialogId = -1
-    this.getUIContext().getPromptAction().closeCustomDialog(dialogId)
   }
 
   private filterFallbackToolIdsForCurrentModel(toolIds: string[]): string[] {
@@ -2853,6 +2871,10 @@ export struct ChatPage {
         this.getScrollUiFlow().setInputBarVisible(value)
       },
       onSetShareMessages: (messages: ChatMessage[]): void => {
+        this.shareDocumentMode = false
+        this.shareDocumentTitle = ''
+        this.shareDocumentContent = ''
+        this.shareDocumentUpdatedAt = 0
         this.shareMessages = messages
       },
       onSetShowSharePreview: (value: boolean): void => {
@@ -3627,14 +3649,20 @@ export struct ChatPage {
         .bindSheet($$this.showSharePreview, this.SharePreviewBuilder(), {
           height: SheetSize.LARGE,
           dragBar: true,
-            showClose: false,
-            backgroundColor: this.themeBackground,
-            blurStyle: BlurStyle.Thick,
-            preferType: SheetType.BOTTOM,
-            onDisappear: () => {
-              this.showSharePreview = false
-            }
-          })
+          showClose: false,
+          backgroundColor: Color.Transparent,
+          systemMaterial: new uiMaterial.ImmersiveMaterial({
+            style: uiMaterial.ImmersiveStyle.REGULAR,
+            materialColor: Color.Transparent,
+            applyShadow: true,
+            interactive: false,
+            lightEffect: { color: undefined }
+          }),
+          preferType: SheetType.BOTTOM,
+          onDisappear: () => {
+            this.showSharePreview = false
+          }
+        })
 
         Column()
           .width(0)
@@ -3924,6 +3952,10 @@ export struct ChatPage {
     SharePreviewSheet({
       messages: this.shareMessages,
       currentModelId: this.currentModelId,
+      documentMode: this.shareDocumentMode,
+      documentTitle: this.shareDocumentTitle,
+      documentContent: this.shareDocumentContent,
+      documentUpdatedAt: this.shareDocumentUpdatedAt,
       onClose: () => {
         this.showSharePreview = false
       }

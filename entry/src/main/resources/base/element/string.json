@@ -1045,6 +1045,38 @@
       "value": "Glazed cool blue: the set's one cold theme, calm as ceramic."
     },
     {
+      "name": "theme_color_herbarium",
+      "value": "Herbarium"
+    },
+    {
+      "name": "theme_color_herbarium_desc",
+      "value": "Pressed-leaf green: dried botanical calm on paper white."
+    },
+    {
+      "name": "theme_color_salon",
+      "value": "Salon"
+    },
+    {
+      "name": "theme_color_salon_desc",
+      "value": "Powdered rose: dusty warmth with a velvet edge."
+    },
+    {
+      "name": "theme_color_gallery",
+      "value": "Gallery"
+    },
+    {
+      "name": "theme_color_gallery_desc",
+      "value": "Graphite monochrome: value does the work, hue stays out."
+    },
+    {
+      "name": "theme_color_nocturne",
+      "value": "Nocturne"
+    },
+    {
+      "name": "theme_color_nocturne_desc",
+      "value": "Indigo before dawn: built for the dark, pale blue by day."
+    },
+    {
       "name": "screenshot_banner_title",
       "value": "New screenshot detected"
     },

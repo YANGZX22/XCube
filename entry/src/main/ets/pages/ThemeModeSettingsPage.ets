@@ -207,6 +207,18 @@ export struct ThemeAppearanceSettingsView {
     if (themeId === ColorTheme.PORCELAIN) {
       return $r('app.string.theme_color_porcelain')
     }
+    if (themeId === ColorTheme.HERBARIUM) {
+      return $r('app.string.theme_color_herbarium')
+    }
+    if (themeId === ColorTheme.SALON) {
+      return $r('app.string.theme_color_salon')
+    }
+    if (themeId === ColorTheme.GALLERY) {
+      return $r('app.string.theme_color_gallery')
+    }
+    if (themeId === ColorTheme.NOCTURNE) {
+      return $r('app.string.theme_color_nocturne')
+    }
     return $r('app.string.theme_color_lavender')
   }
 
@@ -222,6 +234,18 @@ export struct ThemeAppearanceSettingsView {
     }
     if (themeId === ColorTheme.PORCELAIN) {
       return $r('app.string.theme_color_porcelain_desc')
+    }
+    if (themeId === ColorTheme.HERBARIUM) {
+      return $r('app.string.theme_color_herbarium_desc')
+    }
+    if (themeId === ColorTheme.SALON) {
+      return $r('app.string.theme_color_salon_desc')
+    }
+    if (themeId === ColorTheme.GALLERY) {
+      return $r('app.string.theme_color_gallery_desc')
+    }
+    if (themeId === ColorTheme.NOCTURNE) {
+      return $r('app.string.theme_color_nocturne_desc')
     }
     return $r('app.string.theme_color_lavender_desc')
   }

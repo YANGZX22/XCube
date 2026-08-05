@@ -11,11 +11,17 @@ import { display } from '@kit.ArkUI'
 import { getAppUiState } from '../state/AppUiState'
 import { preloadModelIcon, resolveShareModelIdentity } from '../utils/ProviderIconUtils'
 import { ImmersiveSheetHeader } from './ImmersiveSheetHeader'
+import { ShareDocumentCard } from './ShareDocumentCard'
+import { pickLocalizedText } from '../utils/LocalizedTextUtils'
 
 @ComponentV2
 export struct SharePreviewSheet {
   @Param messages: ChatMessage[] = []
   @Param currentModelId: string = ''
+  @Param documentMode: boolean = false
+  @Param documentTitle: string = ''
+  @Param documentContent: string = ''
+  @Param documentUpdatedAt: number = 0
   @Local selectedMode: ShareMode = ShareMode.IMAGE
   @Local isSharing: boolean = false
   @Local previewText: string = ''
@@ -37,7 +43,8 @@ export struct SharePreviewSheet {
   }
 
   aboutToAppear(): void {
-    console.info('SharePreviewSheet', `[aboutToAppear] 消息数量: ${this.messages.length}, 分享模式: ${this.selectedMode}`)
+    console.info('SharePreviewSheet',
+      `[aboutToAppear] documentMode=${this.documentMode}, 消息数量: ${this.messages.length}, 分享模式: ${this.selectedMode}`)
     // 初始化预览文本
     this.updatePreviewText()
     void this.ensureShareModelIconsReady()
@@ -46,10 +53,34 @@ export struct SharePreviewSheet {
   // 更新预览文本
   private updatePreviewText(): void {
     if (this.selectedMode === ShareMode.MARKDOWN) {
-      this.previewText = this.shareService.convertToMarkdown(this.messages)
+      this.previewText = this.documentMode
+        ? this.shareService.convertDocumentToMarkdown(this.documentTitle, this.documentContent)
+        : this.shareService.convertToMarkdown(this.messages)
     } else if (this.selectedMode === ShareMode.TEXT) {
-      this.previewText = this.shareService.convertToPlainText(this.messages)
+      this.previewText = this.documentMode
+        ? this.shareService.convertDocumentToPlainText(this.documentTitle, this.documentContent)
+        : this.shareService.convertToPlainText(this.messages)
     }
+  }
+
+  private hasShareContent(): boolean {
+    return this.documentMode ? this.documentContent.trim() !== '' : this.messages.length > 0
+  }
+
+  private resolveDocumentTitle(): string {
+    const normalizedTitle = this.documentTitle.trim()
+    return normalizedTitle !== '' ? normalizedTitle : 'Canvas'
+  }
+
+  private resolveShareTitle(suffix: string = ''): string {
+    if (!this.documentMode) {
+      return suffix === '.md' ? 'conversation.md' : 'conversation'
+    }
+    const safeTitle = this.resolveDocumentTitle().replace(/[\\/:*?"<>|]/g, '_')
+    if (suffix !== '' && safeTitle.toLowerCase().endsWith(suffix)) {
+      return safeTitle
+    }
+    return `${safeTitle}${suffix}`
   }
 
   private extractErrorText(error: Object): string {
@@ -67,7 +98,9 @@ export struct SharePreviewSheet {
   build() {
     Column() {
       ImmersiveSheetHeader({
-        title: $r('app.string.share_title'),
+        title: this.documentMode
+          ? pickLocalizedText('分享 Canvas 文稿', 'Share Canvas document')
+          : $r('app.string.share_title'),
         onLeadingClick: (): void => {
           this.onClose()
         }
@@ -85,7 +118,7 @@ export struct SharePreviewSheet {
 
       // 预览区域
       Column() {
-        if (this.messages.length === 0) {
+        if (!this.hasShareContent()) {
           // 空状态提示
           Column() {
             SymbolGlyph($r('sys.symbol.exclamationmark_circle'))
@@ -103,16 +136,29 @@ export struct SharePreviewSheet {
           // 预览仍然允许滚动，但截图不再依赖这个滚动容器。
           Scroll() {
             Column() {
-              ShareMessageCard({
-                messages: this.messages,
-                appName: 'XCube',
-                currentModelId: this.currentModelId,
-                iconRenderVersion: this.iconRenderVersion
-              })
-                .margin(16)
-                .onAreaChange((_old: Area, newArea: Area) => {
-                  this.cardContentHeight = newArea.height as number
+              if (this.documentMode) {
+                ShareDocumentCard({
+                  title: this.resolveDocumentTitle(),
+                  content: this.documentContent,
+                  updatedAt: this.documentUpdatedAt,
+                  appName: 'XCube'
                 })
+                  .margin(16)
+                  .onAreaChange((_old: Area, newArea: Area) => {
+                    this.cardContentHeight = newArea.height as number
+                  })
+              } else {
+                ShareMessageCard({
+                  messages: this.messages,
+                  appName: 'XCube',
+                  currentModelId: this.currentModelId,
+                  iconRenderVersion: this.iconRenderVersion
+                })
+                  .margin(16)
+                  .onAreaChange((_old: Area, newArea: Area) => {
+                    this.cardContentHeight = newArea.height as number
+                  })
+              }
             }
             .width('100%')
             .alignItems(HorizontalAlign.Center)
@@ -146,22 +192,23 @@ export struct SharePreviewSheet {
 
       // 分享按钮
       Button(this.isSharing ? $r('app.string.sharing') : $r('app.string.share_button'))
-        .width('100%')
+        .width('68%')
+        .constraintSize({ minWidth: 200, maxWidth: 300 })
         .height(48)
         .fontSize(16)
         .fontWeight(FontWeight.Medium)
         .backgroundColor(this.themePrimary)
         .borderRadius(24)
-        .margin({ left: 20, right: 20, top: 12, bottom: 20 })
-        .enabled(!this.isSharing && this.messages.length > 0)
-        .opacity(this.messages.length > 0 ? 1 : 0.5)
+        .margin({ top: 12, bottom: 20 })
+        .enabled(!this.isSharing && this.hasShareContent())
+        .opacity(this.hasShareContent() ? 1 : 0.5)
         .onClick(() => {
           this.handleShare()
         })
     }
     .width('100%')
     .height('100%')
-    .backgroundColor($r('app.color.background'))
+    .backgroundColor(Color.Transparent)
   }
 
   @Builder
@@ -179,12 +226,21 @@ export struct SharePreviewSheet {
   @Builder
   private ShareCaptureCard() {
     Column() {
-      ShareMessageCard({
-        messages: this.messages,
-        appName: 'XCube',
-        currentModelId: this.currentModelId,
-        iconRenderVersion: this.iconRenderVersion
-      })
+      if (this.documentMode) {
+        ShareDocumentCard({
+          title: this.resolveDocumentTitle(),
+          content: this.documentContent,
+          updatedAt: this.documentUpdatedAt,
+          appName: 'XCube'
+        })
+      } else {
+        ShareMessageCard({
+          messages: this.messages,
+          appName: 'XCube',
+          currentModelId: this.currentModelId,
+          iconRenderVersion: this.iconRenderVersion
+        })
+      }
     }
     .width('100%')
     .padding(16)
@@ -210,6 +266,9 @@ export struct SharePreviewSheet {
   }
 
   private collectShareModelIds(): string[] {
+    if (this.documentMode) {
+      return []
+    }
     const ids: string[] = []
     for (let i = 0; i < this.messages.length; i++) {
       const message = this.messages[i]
@@ -287,14 +346,15 @@ export struct SharePreviewSheet {
 
   // 处理分享
   private async handleShare(): Promise<void> {
-    if (this.messages.length === 0) {
-      console.warn('SharePreviewSheet', '[handleShare] no message to share')
+    if (!this.hasShareContent()) {
+      console.warn('SharePreviewSheet', '[handleShare] no content to share')
       this.showShareToast($r('app.string.share_no_content'))
       return
     }
 
     this.isSharing = true
-    console.info('SharePreviewSheet', `[handleShare] 开始分享，模式: ${this.selectedMode}, 消息数: ${this.messages.length}`)
+    console.info('SharePreviewSheet',
+      `[handleShare] 开始分享，模式: ${this.selectedMode}, documentMode=${this.documentMode}, 消息数: ${this.messages.length}`)
 
     try {
       const context = this.getUIContext().getHostContext() as common.UIAbilityContext
@@ -311,8 +371,10 @@ export struct SharePreviewSheet {
         await this.shareAsImage()
       } else if (this.selectedMode === ShareMode.MARKDOWN) {
         // Markdown 分享
-        const content = this.shareService.convertToMarkdown(this.messages)
-        const result = await this.shareService.shareText(content, 'conversation.md')
+        const content = this.documentMode
+          ? this.shareService.convertDocumentToMarkdown(this.documentTitle, this.documentContent)
+          : this.shareService.convertToMarkdown(this.messages)
+        const result = await this.shareService.shareText(content, this.resolveShareTitle('.md'))
         if (!result.success) {
           if (result.errorMessage !== '') {
             this.showShareToast(result.errorMessage)
@@ -322,8 +384,10 @@ export struct SharePreviewSheet {
         }
       } else {
         // 纯文本分享
-        const content = this.shareService.convertToPlainText(this.messages)
-        const result = await this.shareService.shareText(content, 'conversation')
+        const content = this.documentMode
+          ? this.shareService.convertDocumentToPlainText(this.documentTitle, this.documentContent)
+          : this.shareService.convertToPlainText(this.messages)
+        const result = await this.shareService.shareText(content, this.resolveShareTitle())
         if (!result.success) {
           if (result.errorMessage !== '') {
             this.showShareToast(result.errorMessage)
@@ -353,7 +417,7 @@ export struct SharePreviewSheet {
       }, this.getUIContext(), scale)
       console.info('SharePreviewSheet', `[shareAsImage] image saved: ${filePath}`)
 
-      const result = await this.shareService.shareImage(filePath, 'conversation')
+      const result = await this.shareService.shareImage(filePath, this.resolveShareTitle())
       if (!result.success) {
         console.error('SharePreviewSheet', `[shareAsImage] 分享失败: ${result.errorMessage}`)
         if (result.errorMessage !== '') {

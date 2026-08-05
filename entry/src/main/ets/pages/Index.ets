@@ -1520,8 +1520,14 @@ struct Index {
           height: SheetSize.LARGE,
           dragBar: true,
           showClose: false,
-          backgroundColor: this.themeBackground,
-          blurStyle: BlurStyle.Thick,
+          backgroundColor: Color.Transparent,
+          systemMaterial: new uiMaterial.ImmersiveMaterial({
+            style: uiMaterial.ImmersiveStyle.REGULAR,
+            materialColor: Color.Transparent,
+            applyShadow: true,
+            interactive: false,
+            lightEffect: { color: undefined }
+          }),
           preferType: SheetType.BOTTOM,
           onDisappear: () => {
             this.showSharePreview = false
@@ -3470,7 +3476,9 @@ struct Index {
         content: {
           label: pickLocalizedText('选择向量模型', 'Select embedding model'),
           icon: this.buildCompactChatTitleBarMenuIcon(
-            $r('sys.symbol.square_stack_3d'),
+            this.knowledgeEmbeddingSelection.isApi()
+              ? $r('sys.symbol.square_stack_3d_fill')
+              : $r('sys.symbol.square_stack_3d'),
             this.knowledgeEmbeddingSelection.isApi()
               ? this.themePrimary
               : $r('app.color.text_primary')
@@ -3484,7 +3492,9 @@ struct Index {
         content: {
           label: pickLocalizedText('选择重排序模型', 'Select rerank model'),
           icon: this.buildCompactChatTitleBarMenuIcon(
-            $r('sys.symbol.ranking'),
+            this.knowledgeRerankSelection.isEnabled()
+              ? $r('sys.symbol.ranking_fill')
+              : $r('sys.symbol.ranking'),
             this.knowledgeRerankSelection.isEnabled()
               ? this.themePrimary
               : $r('app.color.text_primary')

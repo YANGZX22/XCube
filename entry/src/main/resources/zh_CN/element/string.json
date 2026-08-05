@@ -1045,6 +1045,38 @@
       "value": "釉面冷蓝：整套主题中唯一的冷色，静谧如陶瓷。"
     },
     {
+      "name": "theme_color_herbarium",
+      "value": "Herbarium"
+    },
+    {
+      "name": "theme_color_herbarium_desc",
+      "value": "压叶之绿：纸白之上的干燥植物静意。"
+    },
+    {
+      "name": "theme_color_salon",
+      "value": "Salon"
+    },
+    {
+      "name": "theme_color_salon_desc",
+      "value": "扑粉玫瑰：带着丝绒边缘的朦胧暖意。"
+    },
+    {
+      "name": "theme_color_gallery",
+      "value": "Gallery"
+    },
+    {
+      "name": "theme_color_gallery_desc",
+      "value": "石墨单色：明度构建层级，色相悄然退场。"
+    },
+    {
+      "name": "theme_color_nocturne",
+      "value": "Nocturne"
+    },
+    {
+      "name": "theme_color_nocturne_desc",
+      "value": "破晓前的靛蓝：为暗色而生，日间化作浅淡蓝色。"
+    },
+    {
       "name": "screenshot_banner_title",
       "value": "检测到新图片"
     },

@@ -495,6 +495,14 @@ export class SettingsManager {
       return $r('app.string.theme_color_claude')
     } else if (theme === ColorTheme.PORCELAIN) {
       return $r('app.string.theme_color_porcelain')
+    } else if (theme === ColorTheme.HERBARIUM) {
+      return $r('app.string.theme_color_herbarium')
+    } else if (theme === ColorTheme.SALON) {
+      return $r('app.string.theme_color_salon')
+    } else if (theme === ColorTheme.GALLERY) {
+      return $r('app.string.theme_color_gallery')
+    } else if (theme === ColorTheme.NOCTURNE) {
+      return $r('app.string.theme_color_nocturne')
     } else {
       return $r('app.string.theme_color_lavender')
     }

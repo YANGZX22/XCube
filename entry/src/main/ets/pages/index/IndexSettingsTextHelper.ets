@@ -33,6 +33,18 @@ export function getColorThemeDisplayTextForIndex(theme: ColorTheme): Resource {
   if (theme === ColorTheme.PORCELAIN) {
     return $r('app.string.theme_color_porcelain')
   }
+  if (theme === ColorTheme.HERBARIUM) {
+    return $r('app.string.theme_color_herbarium')
+  }
+  if (theme === ColorTheme.SALON) {
+    return $r('app.string.theme_color_salon')
+  }
+  if (theme === ColorTheme.GALLERY) {
+    return $r('app.string.theme_color_gallery')
+  }
+  if (theme === ColorTheme.NOCTURNE) {
+    return $r('app.string.theme_color_nocturne')
+  }
   return $r('app.string.theme_color_lavender')
 }
 

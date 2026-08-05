@@ -3,7 +3,11 @@ export enum ColorTheme {
   ATELIER = 'atelier',      // Atelier 亚麻墨色
   LAVENDER = 'lavender',    // XCube 浅紫
   CLAUDE = 'claude',        // Claude 暖棕
-  PORCELAIN = 'porcelain'   // 青瓷冷蓝
+  PORCELAIN = 'porcelain',  // 青瓷冷蓝
+  HERBARIUM = 'herbarium',  // 压叶绿
+  SALON = 'salon',          // 扑粉玫瑰
+  GALLERY = 'gallery',      // 石墨单色
+  NOCTURNE = 'nocturne'     // 破晓靛蓝
 }
 
 // 主题颜色配置接口
@@ -274,12 +278,240 @@ const PORCELAIN_THEME: ThemeInfo = {
   }
 }
 
+// Herbarium：干燥压叶般的植物绿，安静而自然。
+const HERBARIUM_THEME: ThemeInfo = {
+  id: ColorTheme.HERBARIUM,
+  nameKey: 'theme_color_herbarium',
+  descriptionKey: 'theme_color_herbarium_desc',
+  previewColors: ['#F4F8F2', '#DEEAE0', '#4E7A5A', '#486E55'],
+  light: {
+    primary: '#4E7A5A',
+    primaryLight: '#DEEAE0',
+    background: '#F4F8F2',
+    surface: '#FBFEFA',
+    divider: '#DEEAE0',
+    userBubble: '#486E55',
+    userBubbleText: '#F1FAF3',
+    aiBubble: '#FBFEFA',
+    textPrimary: '#1F271F',
+    textSecondary: '#61705F',
+    textTertiary: '#8C9A8A',
+    markdownTitle: '#1F271F',
+    markdownText: '#354238',
+    markdownLink: '#4E7A5A',
+    markdownLinkBg: '#DEEAE0',
+    markdownCodeBg: '#EBF2EB',
+    markdownCodeText: '#42684D',
+    markdownQuoteBg: '#EBF2EB',
+    markdownTableBg: '#FBFEFA',
+    markdownTableHeaderBg: '#EBF2EB',
+    markdownTableAltBg: '#F5F9F4',
+    markdownTableBorder: '#DEEAE0'
+  },
+  dark: {
+    primary: '#8CBB9A',
+    primaryLight: '#24382A',
+    background: '#161D17',
+    surface: '#202A21',
+    divider: '#24382A',
+    userBubble: '#3F6A4E',
+    userBubbleText: '#EDFAF0',
+    aiBubble: '#202A21',
+    textPrimary: '#ECF5EC',
+    textSecondary: '#ABBCAB',
+    textTertiary: '#77877A',
+    markdownTitle: '#ECF5EC',
+    markdownText: '#DCE8DC',
+    markdownLink: '#A4CFAF',
+    markdownLinkBg: '#24382A',
+    markdownCodeBg: '#1B241C',
+    markdownCodeText: '#B9D7C0',
+    markdownQuoteBg: '#1B241C',
+    markdownTableBg: '#202A21',
+    markdownTableHeaderBg: '#2A352B',
+    markdownTableAltBg: '#253026',
+    markdownTableBorder: '#24382A'
+  }
+}
+
+// Salon：温暖中性的灰粉玫瑰，柔和但不过分甜腻。
+const SALON_THEME: ThemeInfo = {
+  id: ColorTheme.SALON,
+  nameKey: 'theme_color_salon',
+  descriptionKey: 'theme_color_salon_desc',
+  previewColors: ['#FAF4F3', '#F2DDE1', '#A44E5E', '#8F4A57'],
+  light: {
+    primary: '#A44E5E',
+    primaryLight: '#F2DDE1',
+    background: '#FAF4F3',
+    surface: '#FFFBFA',
+    divider: '#F2DDE1',
+    userBubble: '#8F4A57',
+    userBubbleText: '#FFF2F2',
+    aiBubble: '#FFFBFA',
+    textPrimary: '#2A2022',
+    textSecondary: '#746165',
+    textTertiary: '#A08D91',
+    markdownTitle: '#2A2022',
+    markdownText: '#453438',
+    markdownLink: '#A44E5E',
+    markdownLinkBg: '#F2DDE1',
+    markdownCodeBg: '#F6E9EB',
+    markdownCodeText: '#8A4351',
+    markdownQuoteBg: '#F6E9EB',
+    markdownTableBg: '#FFFBFA',
+    markdownTableHeaderBg: '#F6E9EB',
+    markdownTableAltBg: '#FBF5F4',
+    markdownTableBorder: '#F2DDE1'
+  },
+  dark: {
+    primary: '#D98D9C',
+    primaryLight: '#402329',
+    background: '#221718',
+    surface: '#2C2022',
+    divider: '#402329',
+    userBubble: '#7E4250',
+    userBubbleText: '#FFEDEF',
+    aiBubble: '#2C2022',
+    textPrimary: '#F6EAEC',
+    textSecondary: '#C0AAAE',
+    textTertiary: '#8A767A',
+    markdownTitle: '#F6EAEC',
+    markdownText: '#E8DADD',
+    markdownLink: '#E9A5B2',
+    markdownLinkBg: '#402329',
+    markdownCodeBg: '#271B1D',
+    markdownCodeText: '#F0B6C1',
+    markdownQuoteBg: '#271B1D',
+    markdownTableBg: '#2C2022',
+    markdownTableHeaderBg: '#38282B',
+    markdownTableAltBg: '#322427',
+    markdownTableBorder: '#402329'
+  }
+}
+
+// Gallery：博物馆白与暖石墨构成的无彩色主题。
+const GALLERY_THEME: ThemeInfo = {
+  id: ColorTheme.GALLERY,
+  nameKey: 'theme_color_gallery',
+  descriptionKey: 'theme_color_gallery_desc',
+  previewColors: ['#F3F2F0', '#E4E1DB', '#3E3A34', '#33302B'],
+  light: {
+    primary: '#3E3A34',
+    primaryLight: '#E4E1DB',
+    background: '#F3F2F0',
+    surface: '#FBFAF8',
+    divider: '#E4E1DB',
+    userBubble: '#33302B',
+    userBubbleText: '#F4F2EE',
+    aiBubble: '#FBFAF8',
+    textPrimary: '#201F1D',
+    textSecondary: '#6B675F',
+    textTertiary: '#98938A',
+    markdownTitle: '#201F1D',
+    markdownText: '#3D3A35',
+    markdownLink: '#3E3A34',
+    markdownLinkBg: '#E4E1DB',
+    markdownCodeBg: '#ECE9E4',
+    markdownCodeText: '#4C4841',
+    markdownQuoteBg: '#ECE9E4',
+    markdownTableBg: '#FBFAF8',
+    markdownTableHeaderBg: '#ECE9E4',
+    markdownTableAltBg: '#F5F3F0',
+    markdownTableBorder: '#E4E1DB'
+  },
+  dark: {
+    primary: '#C9C3B8',
+    primaryLight: '#34312B',
+    background: '#191816',
+    surface: '#232220',
+    divider: '#34312B',
+    userBubble: '#4A463F',
+    userBubbleText: '#F2EFE9',
+    aiBubble: '#232220',
+    textPrimary: '#EFEDE8',
+    textSecondary: '#ADA89F',
+    textTertiary: '#7B766D',
+    markdownTitle: '#EFEDE8',
+    markdownText: '#DEDAD3',
+    markdownLink: '#D5D0C7',
+    markdownLinkBg: '#34312B',
+    markdownCodeBg: '#1E1D1B',
+    markdownCodeText: '#CEC8BD',
+    markdownQuoteBg: '#1E1D1B',
+    markdownTableBg: '#232220',
+    markdownTableHeaderBg: '#2D2B27',
+    markdownTableAltBg: '#282624',
+    markdownTableBorder: '#34312B'
+  }
+}
+
+// Nocturne：为夜间使用调校的深靛蓝，日间则呈现破晓前的浅蓝。
+const NOCTURNE_THEME: ThemeInfo = {
+  id: ColorTheme.NOCTURNE,
+  nameKey: 'theme_color_nocturne',
+  descriptionKey: 'theme_color_nocturne_desc',
+  previewColors: ['#F3F4F9', '#DCE0F0', '#3F4C7E', '#3A4670'],
+  light: {
+    primary: '#3F4C7E',
+    primaryLight: '#DCE0F0',
+    background: '#F3F4F9',
+    surface: '#FBFCFF',
+    divider: '#DCE0F0',
+    userBubble: '#3A4670',
+    userBubbleText: '#EFF2FF',
+    aiBubble: '#FBFCFF',
+    textPrimary: '#1E2130',
+    textSecondary: '#5F6478',
+    textTertiary: '#8B90A4',
+    markdownTitle: '#1E2130',
+    markdownText: '#363B50',
+    markdownLink: '#3F4C7E',
+    markdownLinkBg: '#DCE0F0',
+    markdownCodeBg: '#E9EBF5',
+    markdownCodeText: '#394570',
+    markdownQuoteBg: '#E9EBF5',
+    markdownTableBg: '#FBFCFF',
+    markdownTableHeaderBg: '#E9EBF5',
+    markdownTableAltBg: '#F5F6FA',
+    markdownTableBorder: '#DCE0F0'
+  },
+  dark: {
+    primary: '#9AA6E0',
+    primaryLight: '#262C4A',
+    background: '#14151E',
+    surface: '#1D1F2B',
+    divider: '#262C4A',
+    userBubble: '#39436E',
+    userBubbleText: '#ECF0FF',
+    aiBubble: '#1D1F2B',
+    textPrimary: '#EBEEFA',
+    textSecondary: '#A9AFC6',
+    textTertiary: '#757B93',
+    markdownTitle: '#EBEEFA',
+    markdownText: '#D9DDEC',
+    markdownLink: '#B0BAEC',
+    markdownLinkBg: '#262C4A',
+    markdownCodeBg: '#191A24',
+    markdownCodeText: '#C3CAF2',
+    markdownQuoteBg: '#191A24',
+    markdownTableBg: '#1D1F2B',
+    markdownTableHeaderBg: '#272A38',
+    markdownTableAltBg: '#222430',
+    markdownTableBorder: '#262C4A'
+  }
+}
+
 // 精简后的可选主题列表
 export const ALL_THEMES: ThemeInfo[] = [
   ATELIER_THEME,
   LAVENDER_THEME,
   CLAUDE_THEME,
-  PORCELAIN_THEME
+  PORCELAIN_THEME,
+  HERBARIUM_THEME,
+  SALON_THEME,
+  GALLERY_THEME,
+  NOCTURNE_THEME
 ]
 
 // 将持久化的旧主题 ID 归一化到当前精选集合。
@@ -295,6 +527,18 @@ export function resolveColorThemeId(themeId: string): ColorTheme {
   }
   if (themeId === ColorTheme.PORCELAIN || themeId === 'chatgpt') {
     return ColorTheme.PORCELAIN
+  }
+  if (themeId === ColorTheme.HERBARIUM) {
+    return ColorTheme.HERBARIUM
+  }
+  if (themeId === ColorTheme.SALON) {
+    return ColorTheme.SALON
+  }
+  if (themeId === ColorTheme.GALLERY) {
+    return ColorTheme.GALLERY
+  }
+  if (themeId === ColorTheme.NOCTURNE) {
+    return ColorTheme.NOCTURNE
   }
   return ColorTheme.LAVENDER
 }
