@@ -302,6 +302,7 @@ export struct ChatPage {
   @Local isSavingCanvasDocument: boolean = false
   @Local isCanvasMarkdownPreview: boolean = false
   @Local canvasMarkdownSwitchRotation: number = 0
+  @Local canvasMarkdownRenderToggle: boolean = false
   // 推理级别状态
   @Local reasoningLevel: ReasoningLevel = ReasoningLevel.OFF
   // 最近截图检测状态（由 ChatInputBar 回调设置，ScreenshotBanner 独立渲染）
@@ -786,6 +787,8 @@ export struct ChatPage {
     updatedBy: string,
     activated: boolean
   ): void {
+    const shouldRebuildMarkdown = updatedBy === 'assistant' &&
+      (revision !== this.canvasDocumentRevision || content !== this.canvasDocumentContent)
     if (this.canvasDocumentDirty && updatedBy === 'assistant' && revision > this.canvasDocumentRevision) {
       this.clearCanvasAutosaveTimer()
     }
@@ -799,6 +802,9 @@ export struct ChatPage {
     this.canvasPersistedTitle = title
     this.canvasPersistedContent = content
     this.suppressCanvasChangeUntil = Date.now() + 250
+    if (shouldRebuildMarkdown) {
+      this.canvasMarkdownRenderToggle = !this.canvasMarkdownRenderToggle
+    }
   }
 
   private shouldShowCanvasWorkspace(): boolean {
@@ -1097,6 +1103,25 @@ export struct ChatPage {
   }
 
   @Builder
+  private CanvasMarkdownPreviewRenderer(renderEpoch: string) {
+    ChatMarkdownRenderer({
+      content: this.canvasDocumentContent,
+      isInputEnded: true,
+      incrementalAnalysis: false,
+      useCangjieComponent: true,
+      chatFontSize: 14,
+      compact: false,
+      themeRenderKey: `canvas-${this.canvasDocumentRevision}-${this.canvasDocumentUpdatedAt}-${renderEpoch}`,
+      onCopyText: (text: string): void => {
+        this.copyCanvasMarkdownToClipboard(text)
+      },
+      onCopyCode: (code: string): void => {
+        this.copyCanvasMarkdownToClipboard(code)
+      }
+    })
+  }
+
+  @Builder
   private CanvasPanelBuilder() {
     Column({ space: 10 }) {
       Row({ space: 8 }) {
@@ -1237,21 +1262,12 @@ export struct ChatPage {
                 .fontColor($r('app.color.text_tertiary'))
                 .width('100%')
             } else {
-              ChatMarkdownRenderer({
-                content: this.canvasDocumentContent,
-                isInputEnded: true,
-                incrementalAnalysis: false,
-                useCangjieComponent: true,
-                chatFontSize: 14,
-                compact: false,
-                themeRenderKey: `canvas-${this.canvasDocumentRevision}-${this.canvasDocumentUpdatedAt}`,
-                onCopyText: (text: string): void => {
-                  this.copyCanvasMarkdownToClipboard(text)
-                },
-                onCopyCode: (code: string): void => {
-                  this.copyCanvasMarkdownToClipboard(code)
-                }
-              })
+              // AI 更新 Canvas 后切换独立分支，重新注册 Markdown 选区与复制回调。
+              if (this.canvasMarkdownRenderToggle) {
+                this.CanvasMarkdownPreviewRenderer('a')
+              } else {
+                this.CanvasMarkdownPreviewRenderer('b')
+              }
             }
           }
           .width('100%')

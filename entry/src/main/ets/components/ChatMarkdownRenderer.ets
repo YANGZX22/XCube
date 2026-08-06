@@ -262,44 +262,59 @@ export struct ChatMarkdownRenderer {
     })
   }
 
-  build() {
+  @Builder
+  private CangjieMarkdownContent(renderPhase: string) {
+    ChatMarkdownHybridRenderer({
+      content: this.content,
+      isInputEnded: this.isInputEnded,
+      incrementalAnalysis: this.incrementalAnalysis,
+      useCangjieComponent: this.useCangjieComponent,
+      chatFontSize: this.chatFontSize,
+      compact: this.compact,
+      latexFontSize: this.latexFontSize,
+      textColorOverride: this.textColorOverride,
+      titleColorOverride: this.titleColorOverride,
+      textTypeface: this.textTypeface,
+      themeRenderKey: `${this.themeRenderKey}|${renderPhase}`,
+      showCodeFullScreen: this.showCodeFullScreen,
+      onOpenLink: (title: string, url: string): void => {
+        this.onOpenLink(title, url)
+      },
+      onImageClick: (src: string): void => {
+        this.onImageClick(src)
+      },
+      onCopyText: (text: string): void => {
+        this.onCopyText(text)
+      },
+      onCopyCode: (code: string): void => {
+        this.onCopyCode(code)
+      },
+      onCodeFullScreen: (code: string, codeType: string): void => {
+        this.onCodeFullScreen(code, codeType)
+      }
+    })
+  }
+
+  @Builder
+  private MarkdownContent(renderPhase: string) {
     if (getAppUiState().markdownRenderer === MarkdownRenderer.LV_MARKDOWN_IN) {
       // lv 的已生成节点会缓存代码染色；用两个独立分支确保深浅切换时完整重建子树。
       if (getAppUiState().isDarkMode) {
-        this.LvMarkdownContent('dark')
+        this.LvMarkdownContent(`dark|${renderPhase}`)
       } else {
-        this.LvMarkdownContent('light')
+        this.LvMarkdownContent(`light|${renderPhase}`)
       }
     } else {
-      ChatMarkdownHybridRenderer({
-        content: this.content,
-        isInputEnded: this.isInputEnded,
-        incrementalAnalysis: this.incrementalAnalysis,
-        useCangjieComponent: this.useCangjieComponent,
-        chatFontSize: this.chatFontSize,
-        compact: this.compact,
-        latexFontSize: this.latexFontSize,
-        textColorOverride: this.textColorOverride,
-        titleColorOverride: this.titleColorOverride,
-        textTypeface: this.textTypeface,
-        themeRenderKey: this.themeRenderKey,
-        showCodeFullScreen: this.showCodeFullScreen,
-        onOpenLink: (title: string, url: string): void => {
-          this.onOpenLink(title, url)
-        },
-        onImageClick: (src: string): void => {
-          this.onImageClick(src)
-        },
-        onCopyText: (text: string): void => {
-          this.onCopyText(text)
-        },
-        onCopyCode: (code: string): void => {
-          this.onCopyCode(code)
-        },
-        onCodeFullScreen: (code: string, codeType: string): void => {
-          this.onCodeFullScreen(code, codeType)
-        }
-      })
+      this.CangjieMarkdownContent(renderPhase)
+    }
+  }
+
+  build() {
+    // 生成结束时切换独立分支，重建选区与复制能力，避免沿用 streaming 阶段的禁用状态。
+    if (this.isInputEnded) {
+      this.MarkdownContent('ended')
+    } else {
+      this.MarkdownContent('streaming')
     }
   }
 }

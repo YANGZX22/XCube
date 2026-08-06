@@ -6,7 +6,7 @@ export const MIN_CONTEXT_WINDOW_TOKENS: number = 2048
 
 // 用户可设置的上下文长度窗口上限：超大窗口模型（例如 1M）按该上限计算用量，
 // 避免把全部窗口都当成可用预算
-export const MIN_CONTEXT_LIMIT_TOKENS: number = 500000
+export const MIN_CONTEXT_LIMIT_TOKENS: number = 100000
 export const MAX_CONTEXT_LIMIT_TOKENS: number = 1000000
 export const DEFAULT_CONTEXT_LIMIT_TOKENS: number = 500000
 export const CONTEXT_LIMIT_TOKENS_STEP: number = 50000
