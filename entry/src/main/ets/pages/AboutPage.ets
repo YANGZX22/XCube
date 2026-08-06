@@ -30,7 +30,7 @@ let aboutPagePathStack: NavPathStack | null = null
 @Entry
 @ComponentV2
 struct AboutPage {
-  @Local versionName: string = '1.2.3'
+  @Local versionName: string = '1.2.4'
   @Local isCheckingUpdate: boolean = false
   @Local showLicensesSheet: boolean = false
 
