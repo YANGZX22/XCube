@@ -83,6 +83,15 @@ import {
 } from '../main/ets/utils/CustomHeaderUtils'
 import { shouldShowAssistantMessageToolbar } from '../main/ets/utils/MessageBubbleDisplayUtils'
 import {
+  matchSlashCommands,
+  resolveSlashCommandId,
+  SLASH_COMMAND_COMPACT
+} from '../main/ets/utils/SlashCommandUtils'
+import {
+  ContextCompactionStatus,
+  getContextCompactionService
+} from '../main/ets/services/ContextCompactionService'
+import {
   ReasoningControlMode,
   ReasoningRequestStrategy,
   normalizeReasoningLevelForControl,
@@ -1155,6 +1164,60 @@ export default function refactorGuardTest() {
 
       assistantMessage.isSearching = false
       expect(shouldShowAssistantMessageToolbar(assistantMessage, true)).assertFalse()
+    })
+
+    it('slashCommands_should_match_only_leading_slash_token', 0, () => {
+      expect(matchSlashCommands('/').length).assertEqual(1)
+      expect(matchSlashCommands('/comp')[0].id).assertEqual(SLASH_COMMAND_COMPACT)
+      expect(matchSlashCommands('/COMPACT')[0].name).assertEqual('/compact')
+      expect(matchSlashCommands('/unknown').length).assertEqual(0)
+      // 正文里的斜杠（路径、日期）不应该弹出命令面板
+      expect(matchSlashCommands('src/main/ets').length).assertEqual(0)
+      expect(matchSlashCommands('/compact 这段历史').length).assertEqual(0)
+      expect(matchSlashCommands('').length).assertEqual(0)
+    })
+
+    it('contextCompaction_should_compact_single_heavy_turn', 0, () => {
+      // 一条消息就吃掉大半个窗口（例如子智能体带回巨量结果）：即使只有一轮也要能压
+      const heavyContent = 'x'.repeat(8000)
+      const messages: ChatMessage[] = [
+        new ChatMessage('u1', MessageRole.USER, '跑一下子智能体', 'AI', 'model'),
+        new ChatMessage('a1', MessageRole.ASSISTANT, heavyContent, 'AI', 'model')
+      ]
+      const summary = '用户要求运行子智能体，子智能体返回了大量检索结果，关键结论已记录在案，下一步待用户确认。'
+
+      const applied = getContextCompactionService().buildManualCompaction('session-1', messages, summary, 4000)
+      expect(applied.status).assertEqual(ContextCompactionStatus.APPLIED)
+      expect(applied.anchorMessageId).assertEqual('a1')
+      expect(applied.keptRecentTurns).assertEqual(0)
+      expect(applied.keptMessageCount).assertEqual(0)
+
+      // 同样的历史放进超大窗口时用量低于下限，压缩收益小于摘要开销
+      const skipped = getContextCompactionService().buildManualCompaction('session-1', messages, summary, 10000000)
+      expect(skipped.status).assertEqual(ContextCompactionStatus.SKIPPED)
+    })
+
+    it('contextCompaction_should_keep_recent_turns_when_history_is_long', 0, () => {
+      const messages: ChatMessage[] = []
+      for (let i = 0; i < 4; i++) {
+        messages.push(new ChatMessage(`u${i}`, MessageRole.USER, `问题 ${i}`.repeat(200), 'AI', 'model'))
+        messages.push(new ChatMessage(`a${i}`, MessageRole.ASSISTANT, `回答 ${i}`.repeat(200), 'AI', 'model'))
+      }
+      const summary = '用户连续问了四个问题，助手逐条作答，结论与待办事项都已在摘要中完整保留，可以继续后续对话。'
+
+      const applied = getContextCompactionService().buildManualCompaction('session-1', messages, summary, 4000)
+      expect(applied.status).assertEqual(ContextCompactionStatus.APPLIED)
+      // 默认保留最近 2 轮原文：锚点停在 a1
+      expect(applied.anchorMessageId).assertEqual('a1')
+      expect(applied.keptRecentTurns).assertEqual(2)
+      expect(applied.keptMessageCount).assertEqual(4)
+    })
+
+    it('slashCommands_should_resolve_exact_command_on_send', 0, () => {
+      expect(resolveSlashCommandId('/compact')).assertEqual(SLASH_COMMAND_COMPACT)
+      expect(resolveSlashCommandId('  /Compact  ')).assertEqual(SLASH_COMMAND_COMPACT)
+      expect(resolveSlashCommandId('/compact now')).assertEqual('')
+      expect(resolveSlashCommandId('compact')).assertEqual('')
     })
   })
 }

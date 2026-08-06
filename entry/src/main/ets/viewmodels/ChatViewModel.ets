@@ -22,7 +22,7 @@ import { appendSubAgentResultTool } from '../config/BuiltinTools'
 import { getProviderViewModel, ProviderViewModel } from './ProviderViewModel'
 import { getAssistantService, AssistantService, AssistantRuntimeConfig } from '../services/AssistantService'
 import { getSkillService, SkillConfig } from '../services/SkillService'
-import { ChatMessage, ChatSession, MessageRole, ProviderType, ApiStyle, MessageAttachment, AttachmentType, ReasoningLevel, ToolDefinition, ToolCall, ToolResult, SearchReference, ModelParameters } from '../models/ChatModels'
+import { ChatMessage, ChatSession, MessageRole, ProviderType, ApiStyle, MessageAttachment, AttachmentType, ReasoningLevel, ToolDefinition, ToolCall, ToolResult, SearchReference, ModelParameters, ModelProvider } from '../models/ChatModels'
 import { WebSearchResult, SearchResult, getWebSearchService } from '../services/WebSearchService'
 import { http } from '@kit.NetworkKit'
 import { HttpRequestController } from '../services/HttpService'
@@ -63,8 +63,10 @@ import {
   ContextCompactionResult,
   ContextCompactionRuntime,
   ContextCompactionService,
+  ContextCompactionStatus,
   getContextCompactionService
 } from '../services/ContextCompactionService'
+import { ReasoningRequestStrategy } from '../services/ProviderCompatibilityRegistry'
 import {
   computeContextUsage,
   ContextUsage,
@@ -859,6 +861,149 @@ export class ChatViewModel {
   // 供 UI 与发送前判定读取的上下文用量（基于已有历史，不含本轮尚未发送的输入）
   getContextUsage(providerId: string, modelId: string, messages: ChatMessage[]): ContextUsage {
     return this.computeRequestContextUsage(messages, providerId, modelId, '')
+  }
+
+  // 用户在输入框执行 /compact：单独向当前模型请求一段摘要，
+  // 成功后把摘要与锚点写入会话，之后的请求即按压缩后的历史发送。
+  // 与工具链路不同，这里不产生任何聊天消息，界面上的记录也不受影响。
+  async compactContextManually(
+    providerId: string,
+    modelId: string,
+    messages: ChatMessage[]
+  ): Promise<ContextCompactionResult> {
+    const compactionService = getContextCompactionService()
+    await compactionService.ensurePreferencesLoaded()
+
+    const session = this.currentSession
+    if (session === null || session.id === '') {
+      return this.buildManualCompactionFailure(ContextCompactionStatus.UNAVAILABLE, '当前没有可压缩的会话上下文')
+    }
+    const provider = this.providerViewModel.getProviderById(providerId)
+    if (provider === null) {
+      return this.buildManualCompactionFailure(ContextCompactionStatus.UNAVAILABLE, `未找到供应商 ${providerId}`)
+    }
+    const effectiveApiKey = getEffectiveApiKey(providerId, provider.apiKey)
+    if (effectiveApiKey === '') {
+      return this.buildManualCompactionFailure(ContextCompactionStatus.UNAVAILABLE, `${provider.name} 未配置 API Key`)
+    }
+
+    const summary = await this.requestManualCompactionSummary(provider, effectiveApiKey, modelId, session, messages)
+    if (summary === '') {
+      return this.buildManualCompactionFailure(ContextCompactionStatus.INVALID, '模型未返回有效摘要')
+    }
+
+    // 已压缩过的会话只需要再压缩锚点之后的部分，用量与收益也按这一段计算
+    const result = compactionService.buildManualCompaction(
+      session.id,
+      ContextCompactionService.getEffectiveMessages(session, messages),
+      summary,
+      this.getCurrentModelContextWindow(providerId, modelId)
+    )
+    if (!result.applied) {
+      console.warn('ChatViewModel', `Manual compaction not applied: ${result.status} ${result.message}`)
+      return result
+    }
+
+    session.contextSummary = result.summary
+    session.contextSummaryAnchorId = result.anchorMessageId
+    session.contextSummaryUpdatedAt = Date.now()
+    session.contextCompactCount = session.contextCompactCount + 1
+    try {
+      await this.databaseService.updateSessionContextCompaction(
+        session.id,
+        session.contextSummary,
+        session.contextSummaryAnchorId,
+        session.contextSummaryUpdatedAt,
+        session.contextCompactCount
+      )
+    } catch (error) {
+      console.error('ChatViewModel', `Failed to persist manual compaction: ${JSON.stringify(error)}`)
+    }
+    if (this.contextCompactedCallback !== null) {
+      this.contextCompactedCallback()
+    }
+    return result
+  }
+
+  private buildManualCompactionFailure(status: string, message: string): ContextCompactionResult {
+    const result = new ContextCompactionResult()
+    result.status = status
+    result.message = message
+    console.warn('ChatViewModel', `Manual compaction failed: ${status} ${message}`)
+    return result
+  }
+
+  // 用当前对话模型跑一次非流式请求，只为拿到压缩摘要（不写入聊天记录）
+  private async requestManualCompactionSummary(
+    provider: ModelProvider,
+    apiKey: string,
+    modelId: string,
+    session: ChatSession,
+    messages: ChatMessage[]
+  ): Promise<string> {
+    const requestMessages: RequestMessage[] = [
+      new RequestMessage('system', ContextCompactionService.buildManualSummarySystemPrompt())
+    ]
+    // 已压缩过的会话：先带上旧摘要，保证新摘要仍然自包含
+    if (ContextCompactionService.isCompactionValidForMessages(session, messages)) {
+      requestMessages.push(
+        new RequestMessage('system', ContextCompactionService.buildSummaryRequestPrompt(session.contextSummary))
+      )
+    }
+    const effectiveMessages = ContextCompactionService.getEffectiveMessages(session, messages)
+    for (let i = 0; i < effectiveMessages.length; i++) {
+      const message = effectiveMessages[i]
+      if (message.role === MessageRole.SYSTEM || message.content.trim() === '') {
+        continue
+      }
+      // 摘要只需要文本，附件与推理过程不参与本次请求
+      requestMessages.push(new RequestMessage(message.role, message.content))
+    }
+    requestMessages.push(new RequestMessage('user', ContextCompactionService.buildManualSummaryUserPrompt()))
+
+    const apiConfig: AIApiConfig = {
+      providerId: provider.id,
+      providerType: provider.type,
+      apiStyle: provider.apiStyle,
+      apiKey: apiKey,
+      baseUrl: provider.baseUrl,
+      apiPath: provider.apiPath !== '' ? provider.apiPath : undefined,
+      openaiTransport: this.getOpenAITransportForProvider(provider.id),
+      customHeadersJson: provider.customHeadersJson !== '' ? provider.customHeadersJson : undefined
+    }
+    const modelParams = this.getCurrentModelParameters(provider.id, modelId)
+    if (modelParams !== null) {
+      apiConfig.topP = modelParams.topP
+      apiConfig.presencePenalty = modelParams.presencePenalty
+      apiConfig.frequencyPenalty = modelParams.frequencyPenalty
+    }
+    // 摘要是一次性的结构化输出，不需要推理过程，也不该为它多付一份思考 token
+    apiConfig.modelReasoningStrategyOverride = ReasoningRequestStrategy.NONE
+    apiConfig.modelSupportsReasoning = false
+
+    try {
+      // 流式解析状态是实例级的，摘要请求用独立实例，避免污染正在进行的对话请求
+      const apiResult = await AIApiService.createIsolated().sendChatRequest(
+        apiConfig,
+        requestMessages,
+        modelId,
+        0.3,
+        this.appStateManager.getDefaultMaxTokens()
+      )
+      if (!apiResult.success) {
+        console.error('ChatViewModel', `Manual compaction summary failed: ${apiResult.errorMessage}`)
+        return ''
+      }
+      return this.stripReasoningTags(apiResult.content).trim()
+    } catch (error) {
+      console.error('ChatViewModel', `Manual compaction summary error: ${JSON.stringify(error)}`)
+      return ''
+    }
+  }
+
+  // 部分模型会把思考过程以 <think> 标签内联在正文里，摘要不需要这部分
+  private stripReasoningTags(content: string): string {
+    return content.replace(/<think>[\s\S]*?<\/think>/g, '').trim()
   }
 
   // 是否需要在本次请求中曝光 compact 工具并注入压缩提醒

@@ -17,8 +17,24 @@ export const MIN_COMPACT_THRESHOLD_PERCENT: number = 50
 export const MAX_COMPACT_THRESHOLD_PERCENT: number = 95
 export const COMPACT_THRESHOLD_PERCENT_STEP: number = 5
 
-// 低于该条数的历史不值得压缩，压缩收益小于摘要本身的开销
+// 低于该条数的历史不值得压缩，压缩收益小于摘要本身的开销。
+// 只在模型窗口未知时作为唯一判据；窗口已知时以 MIN_COMPACT_USAGE_PERCENT 为准。
 export const MIN_COMPACTABLE_MESSAGE_COUNT: number = 6
+
+// 压缩下限（“绝不压缩”阈值）：用量低于窗口的该比例时压缩收益小于摘要开销。
+// 反过来，只要用量超过该比例，即使历史只有一两条消息也允许压缩——
+// 单条消息也可能很重（例如子智能体一次带回巨量工具结果）。
+export const MIN_COMPACT_USAGE_PERCENT: number = 15
+
+export function isContextHeavyEnoughToCompact(usedTokens: number, contextWindowTokens: number): boolean {
+  if (!Number.isFinite(contextWindowTokens) || contextWindowTokens <= 0) {
+    return false
+  }
+  if (!Number.isFinite(usedTokens) || usedTokens <= 0) {
+    return false
+  }
+  return usedTokens * 100 >= contextWindowTokens * MIN_COMPACT_USAGE_PERCENT
+}
 
 // 上下文用量快照。ratio 以 usedTokens / limitTokens 计算，
 // 输出预算不单独扣除，而是通过默认 80% 的阈值预留。

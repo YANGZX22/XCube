@@ -3,7 +3,9 @@ import { ChatToolbar } from '../ChatToolbar'
 import { ChatInputBar } from '../ChatInputBar'
 import { ScreenshotBanner } from '../ScreenshotBanner'
 import { AttachmentPicker } from '../AttachmentPicker'
+import { SlashCommandPanel } from './SlashCommandPanel'
 import { ReasoningControlMode } from '../../services/ProviderCompatibilityRegistry'
+import { matchSlashCommands, SlashCommandItem } from '../../utils/SlashCommandUtils'
 
 @ComponentV2
 export struct ChatInputAreaSection {
@@ -55,9 +57,18 @@ export struct ChatInputAreaSection {
   @Event onInputBlur: () => void = () => {}
   @Event onComposerContentChanged: () => void = () => {}
   @Event onRecentPhotoDetected: (detected: boolean) => void = (_detected: boolean): void => {}
+  @Event onSlashCommand: (commandId: string) => void = (_commandId: string): void => {}
 
   private getEffectiveContentMaxWidth(): number {
     return this.contentMaxWidth > 0 ? this.contentMaxWidth : 99999
+  }
+
+  // 编辑既有消息时不接受斜杠命令：那次输入的目标是改写消息本身
+  private getVisibleSlashCommands(): SlashCommandItem[] {
+    if (this.isEditing) {
+      return []
+    }
+    return matchSlashCommands(this.inputText)
   }
 
   private getBottomSpacerHeight(): number {
@@ -79,6 +90,15 @@ export struct ChatInputAreaSection {
         .width('100%')
         .justifyContent(FlexAlign.Center)
         .padding({ bottom: 8 })
+
+        if (this.getVisibleSlashCommands().length > 0) {
+          SlashCommandPanel({
+            commands: this.getVisibleSlashCommands(),
+            onSelectCommand: (commandId: string): void => {
+              this.onSlashCommand(commandId)
+            }
+          })
+        }
 
         ChatToolbar({
           toolSelectionAvailable: this.toolSelectionAvailable,

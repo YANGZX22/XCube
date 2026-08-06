@@ -119,7 +119,15 @@ import { DocumentAttachmentRegistryService } from '../services/DocumentAttachmen
 import { getPdfTextExtractionService } from '../services/PdfTextExtractionService'
 import { getImageTextRecognitionService } from '../services/ImageTextRecognitionService'
 import { resolveKnowledgeToolExposure } from './chat/KnowledgeToolExposurePolicy'
-import { ContextUsage, formatTokenCount } from '../utils/ContextWindowUtils'
+import {
+  ContextUsage,
+  formatTokenCount,
+  isContextHeavyEnoughToCompact,
+  MIN_COMPACTABLE_MESSAGE_COUNT,
+  MIN_COMPACT_USAGE_PERCENT
+} from '../utils/ContextWindowUtils'
+import { ContextCompactionStatus } from '../services/ContextCompactionService'
+import { resolveSlashCommandId, SLASH_COMMAND_COMPACT } from '../utils/SlashCommandUtils'
 import { ImmersiveSheetHeader } from '../components/ImmersiveSheetHeader'
 import { AskUserCard } from '../components/AskUserCard'
 
@@ -235,6 +243,8 @@ export struct ChatPage {
   // 上下文长度窗口用量。估算需要遍历全部历史文本，只在消息列表或模型变化时刷新，
   // 不随流式输出的每一帧重算。
   @Local contextUsage: ContextUsage = new ContextUsage()
+  // /compact 正在执行：一次只允许一个手动压缩请求
+  private isCompactingContext: boolean = false
   // 图片预览状态
   @Local showImagePreview: boolean = false
   @Local previewImages: Array<string> = []
@@ -3615,6 +3625,9 @@ export struct ChatPage {
               },
               onRecentPhotoDetected: (detected: boolean): void => {
                 this.hasRecentScreenshot = detected
+              },
+              onSlashCommand: (commandId: string): void => {
+                this.handleSlashCommand(commandId)
               }
             })
               .onAreaChange((_oldArea: Area, newArea: Area) => {
@@ -4959,10 +4972,113 @@ export struct ChatPage {
 
   // 同步包装方法，用于 onSend 回调
   handleSend(): void {
+    // 输入框里只有一条斜杠命令时按命令执行，而不是把命令原文发给模型
+    const slashCommandId = resolveSlashCommandId(this.inputText)
+    if (slashCommandId !== '' && this.pendingAttachments.length === 0 && !this.isEditingMessage) {
+      this.handleSlashCommand(slashCommandId)
+      return
+    }
     if (this.showAttachmentPicker) {
       this.closeAttachmentPanel()
     }
     this.sendMessage()
+  }
+
+  // 输入框斜杠命令入口（面板点选或直接发送 "/compact"）
+  private handleSlashCommand(commandId: string): void {
+    if (commandId !== SLASH_COMMAND_COMPACT) {
+      return
+    }
+    // 命令原文不该留在草稿里
+    this.clearDraftAutosaveTimer()
+    this.inputText = ''
+    this.compactContextFromCommand().catch((error: Object): void => {
+      console.error('ChatPage', `Manual compaction failed: ${JSON.stringify(error)}`)
+    })
+  }
+
+  // /compact：立刻把更早的历史压缩成摘要（只影响发送给模型的上下文，不动聊天记录）
+  private async compactContextFromCommand(): Promise<void> {
+    if (this.isCompactingContext) {
+      this.showChatSnack(pickLocalizedText('正在压缩上下文…', 'Compacting context…'), 2000)
+      return
+    }
+    if (this.isSending || this.isSendDispatching) {
+      this.showChatSnack(pickLocalizedText(
+        '正在生成回答，稍后再压缩上下文',
+        'Wait for the current reply before compacting'
+      ), 2000, SnackBarTone.ERROR)
+      return
+    }
+    if (this.currentProvider === null || this.currentModelId === '') {
+      this.showChatSnack(pickLocalizedText('请先选择模型', 'Select a model first'), 2000, SnackBarTone.ERROR)
+      return
+    }
+    this.refreshContextUsage()
+    if (!this.canCompactCurrentContext()) {
+      this.showChatSnack(this.getCompactionUnavailableText(), 2500)
+      return
+    }
+
+    this.isCompactingContext = true
+    this.showChatSnack(pickLocalizedText('正在压缩上下文…', 'Compacting context…'), 2000)
+    try {
+      const result = await this.chatViewModel.compactContextManually(
+        this.currentProvider.id,
+        this.currentModelId,
+        this.messages
+      )
+      if (result.applied) {
+        this.refreshContextUsage()
+        this.showChatSnack(pickLocalizedText(
+          `上下文已压缩，约节省 ${formatTokenCount(result.savedTokens)} tokens`,
+          `Context compacted, about ${formatTokenCount(result.savedTokens)} tokens freed`
+        ), 2500, SnackBarTone.SUCCESS)
+        return
+      }
+      const skipped = result.status === ContextCompactionStatus.SKIPPED
+      this.showChatSnack(
+        this.getCompactionFailureText(result.status),
+        2500,
+        skipped ? SnackBarTone.DEFAULT : SnackBarTone.ERROR
+      )
+    } catch (error) {
+      console.error('ChatPage', `compactContextFromCommand failed: ${JSON.stringify(error)}`)
+      this.showChatSnack(pickLocalizedText('压缩失败，请稍后重试', 'Compaction failed, try again'), 3000,
+        SnackBarTone.ERROR)
+    } finally {
+      this.isCompactingContext = false
+    }
+  }
+
+  // 是否值得压缩：模型窗口已知时只看用量——单条消息也可能很重（例如子智能体带回巨量结果），
+  // 窗口未知时退回按消息条数判断
+  private canCompactCurrentContext(): boolean {
+    if (this.contextUsage.resolved) {
+      return isContextHeavyEnoughToCompact(this.contextUsage.usedTokens, this.contextUsage.limitTokens)
+    }
+    return this.messages.length >= MIN_COMPACTABLE_MESSAGE_COUNT
+  }
+
+  private getCompactionUnavailableText(): string {
+    if (this.contextUsage.resolved) {
+      return pickLocalizedText(
+        `上下文用量不到 ${MIN_COMPACT_USAGE_PERCENT}%，可暂不必压缩`,
+        `Context usage is under ${MIN_COMPACT_USAGE_PERCENT}%; compacting would not help`
+      )
+    }
+    return pickLocalizedText('当前对话还太短，暂不需要压缩', 'This conversation is too short to compact')
+  }
+
+  // 压缩服务返回的 message 是给模型看的中文提示，这里按状态给用户一句本地化说明
+  private getCompactionFailureText(status: string): string {
+    if (status === ContextCompactionStatus.SKIPPED) {
+      return pickLocalizedText('没有可压缩的更早历史', 'There is no earlier history to compact yet')
+    }
+    if (status === ContextCompactionStatus.INVALID) {
+      return pickLocalizedText('模型没有返回有效摘要，请重试', 'The model returned no usable summary, try again')
+    }
+    return pickLocalizedText('暂时无法压缩上下文，请检查模型配置', 'Cannot compact right now, check the model settings')
   }
 
   // 处理停止生成
