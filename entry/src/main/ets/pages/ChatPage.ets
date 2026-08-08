@@ -177,9 +177,9 @@ const HDS_NAV_TITLE_SYSTEM_MENU_END_MARGIN: number = 16
 
 @ComponentV2
 export struct ChatPage {
-  @Local navPathStack: NavPathStack = new NavPathStack()
+  private navPathStack: NavPathStack = new NavPathStack()
   @Param routeParamsSeed: ChatPageRouteParams | null = null
-  @Local routeParams: ChatPageRouteParams | null = null
+  private routeParams: ChatPageRouteParams | null = null
   @Local messages: ChatMessage[] = []
   @Local inputText: string = ''
   @Local currentModel: string = ''
@@ -441,6 +441,23 @@ export struct ChatPage {
   private draftAutosaveTimerId: number = -1
   private readonly draftAutosaveDelayMs: number = 400
   private historyPreviewCollapseTimerId: number = -1
+  private scrollPreviewSyncTimerId: number = -1
+  private pendingScrollPreviewMessageIndex: number = -1
+  private scrollEventSyncTimerId: number = -1
+  private pendingScrollOffsetVp: number = 0
+  private pendingScrollState: ScrollState | null = null
+  private pendingScrollReachStart: boolean = false
+  private pendingScrollReachEnd: boolean = false
+  private inputAreaHeightSyncTimerId: number = -1
+  private pendingInputAreaHeightVp: number = -1
+  private multiSelectToolbarHeightSyncTimerId: number = -1
+  private pendingMultiSelectToolbarHeightVp: number = -1
+  private recentScreenshotSyncTimerId: number = -1
+  private pendingRecentScreenshot: boolean = false
+  private destinationReadySyncTimerId: number = -1
+  private pageVisibilitySyncTimerId: number = -1
+  private pendingPageVisible: boolean = false
+  private sheetDisappearSyncTimerIds: number[] = []
   private canvasAutosaveTimerId: number = -1
   private readonly canvasAutosaveDelayMs: number = 500
   private canvasDocumentDirty: boolean = false
@@ -622,6 +639,12 @@ export struct ChatPage {
     this.clearInitialBottomAlignmentRetries()
     this.clearRuntimeStateWatchdog()
     this.clearHistoryPreviewCollapseTimer()
+    this.clearScrollPreviewSyncTimer()
+    this.clearScrollEventSyncTimer()
+    this.clearLayoutFeedbackSyncTimers()
+    this.clearRecentScreenshotSyncTimer()
+    this.clearNavigationLifecycleSyncTimers()
+    this.clearSheetDisappearSyncTimers()
     this.clearCanvasAutosaveTimer()
     this.flushCanvasAutosave(true).catch((error: Error): void => {
       console.error('ChatPage', `Failed to flush canvas on disappear: ${JSON.stringify(error)}`)
@@ -1535,6 +1558,74 @@ export struct ChatPage {
     this.getTaskAlertFlow().handleInAppTaskAlertPayload(this.inAppTaskAlertPayload)
   }
 
+  /**
+   * NavDestination lifecycle callbacks can run while ArkUI is reconciling the
+   * component tree. Keep route handles non-observed and defer any @Local writes
+   * until the current render pass has completed.
+   */
+  private scheduleDestinationReady(context: NavDestinationContext): void {
+    this.navPathStack = context.pathStack
+    const param = context.pathInfo.param as ChatPageRouteParams
+    if (param !== null && param !== undefined) {
+      this.routeParams = param
+    }
+    if (this.hasInitializedRoute) {
+      return
+    }
+    if (this.destinationReadySyncTimerId >= 0) {
+      clearTimeout(this.destinationReadySyncTimerId)
+    }
+    this.destinationReadySyncTimerId = setTimeout((): void => {
+      this.destinationReadySyncTimerId = -1
+      if (!this.hasInitializedRoute) {
+        this.tryInitWithParams(this.routeParams)
+      }
+    }, 0)
+  }
+
+  private schedulePageVisibilityUpdate(visible: boolean): void {
+    this.isPageVisible = visible
+    this.pendingPageVisible = visible
+    if (this.pageVisibilitySyncTimerId >= 0) {
+      clearTimeout(this.pageVisibilitySyncTimerId)
+    }
+    this.pageVisibilitySyncTimerId = setTimeout((): void => {
+      this.pageVisibilitySyncTimerId = -1
+      const nextVisible = this.pendingPageVisible
+      if (nextVisible) {
+        this.handlePageShown()
+        return
+      }
+      if (this.isMultiSelectMode) {
+        this.handleExitMultiSelectMode()
+      }
+      this.syncActiveSessionBinding()
+    }, 0)
+  }
+
+  private clearNavigationLifecycleSyncTimers(): void {
+    if (this.destinationReadySyncTimerId >= 0) {
+      clearTimeout(this.destinationReadySyncTimerId)
+      this.destinationReadySyncTimerId = -1
+    }
+    if (this.pageVisibilitySyncTimerId >= 0) {
+      clearTimeout(this.pageVisibilitySyncTimerId)
+      this.pageVisibilitySyncTimerId = -1
+    }
+  }
+
+  private scheduleSheetDisappearCleanup(cleanup: () => void): void {
+    const timerId = setTimeout(cleanup, 0)
+    this.sheetDisappearSyncTimerIds.push(timerId)
+  }
+
+  private clearSheetDisappearSyncTimers(): void {
+    for (let i = 0; i < this.sheetDisappearSyncTimerIds.length; i++) {
+      clearTimeout(this.sheetDisappearSyncTimerIds[i])
+    }
+    this.sheetDisappearSyncTimerIds.splice(0, this.sheetDisappearSyncTimerIds.length)
+  }
+
   private activateCurrentSessionRuntimeState(): void {
     this.syncActiveSessionBinding()
     this.syncSendingStateFromRuntime()
@@ -1573,9 +1664,11 @@ export struct ChatPage {
     this.isAtBottom = false
     this.scrollProgress = 0
     this.scrollPreviewMessageIndex = -1
+    this.pendingScrollPreviewMessageIndex = -1
     this.isHistoryPreviewExpanded = false
     this.isHistoryPreviewContentVisible = false
     this.clearHistoryPreviewCollapseTimer()
+    this.clearScrollPreviewSyncTimer()
     this.firstVisibleListIndex = 0
     this.lastVisibleListIndex = 0
     this.maxScrollOffset = 0
@@ -3446,21 +3539,21 @@ export struct ChatPage {
             this.handleListAppear()
           },
           onReachStart: (): void => {
-            this.handleMessageListReachStart()
+            this.scheduleMessageListBoundaryUpdate(false)
           },
           onReachEnd: (): void => {
-            this.handleMessageListReachEnd()
+            this.scheduleMessageListBoundaryUpdate(true)
           },
           onContentAreaChange: (): void => {
             this.handleMessageListContentAreaChange()
           },
           onDidScroll: (scrollOffset: number, scrollState: ScrollState): void => {
-            this.handleMessageListDidScroll(scrollOffset, scrollState)
+            this.scheduleMessageListDidScroll(scrollOffset, scrollState)
           },
           onScrollIndex: (firstIndex: number, lastIndex: number): void => {
             this.firstVisibleListIndex = firstIndex
             this.lastVisibleListIndex = lastIndex
-            this.updateScrollPreviewIndex(firstIndex, lastIndex)
+            this.scheduleScrollPreviewIndexUpdate(firstIndex, lastIndex)
           }
         })
           .width('100%')
@@ -3624,7 +3717,7 @@ export struct ChatPage {
                 this.handleComposerContentChanged()
               },
               onRecentPhotoDetected: (detected: boolean): void => {
-                this.hasRecentScreenshot = detected
+                this.scheduleRecentScreenshotUpdate(detected)
               },
               onSlashCommand: (commandId: string): void => {
                 this.handleSlashCommand(commandId)
@@ -3664,11 +3757,13 @@ export struct ChatPage {
           }),
           preferType: SheetType.BOTTOM,
           onDisappear: () => {
-            this.isModelSelectorVisible = false
-            this.modelSheetActivePanel = 'selector'
-            this.editingModel = null
-            this.editingModelProvider = null
-            this.isModelEditAdvancedExpanded = false
+            this.scheduleSheetDisappearCleanup((): void => {
+              this.isModelSelectorVisible = false
+              this.modelSheetActivePanel = 'selector'
+              this.editingModel = null
+              this.editingModelProvider = null
+              this.isModelEditAdvancedExpanded = false
+            })
           }
         })
 
@@ -3681,9 +3776,11 @@ export struct ChatPage {
           dragBar: true,
           showClose: false,
           onDisappear: () => {
-            this.messageWebSheetUrl = ''
-            this.messageWebSheetTitle = ''
-            this.showMessageWebSheet = false
+            this.scheduleSheetDisappearCleanup((): void => {
+              this.messageWebSheetUrl = ''
+              this.messageWebSheetTitle = ''
+              this.showMessageWebSheet = false
+            })
           }
         })
       Column()
@@ -3695,7 +3792,9 @@ export struct ChatPage {
           dragBar: true,
           showClose: false,
           onDisappear: () => {
-            this.closePdfPreview()
+            this.scheduleSheetDisappearCleanup((): void => {
+              this.closePdfPreview()
+            })
           }
         })
       Column()
@@ -3715,7 +3814,9 @@ export struct ChatPage {
           }),
           preferType: SheetType.BOTTOM,
           onDisappear: () => {
-            this.showSharePreview = false
+            this.scheduleSheetDisappearCleanup((): void => {
+              this.showSharePreview = false
+            })
           }
         })
 
@@ -3732,7 +3833,9 @@ export struct ChatPage {
             }),
             preferType: SheetType.BOTTOM,
             onDisappear: () => {
-              this.showToolPickerSheet = false
+              this.scheduleSheetDisappearCleanup((): void => {
+                this.showToolPickerSheet = false
+              })
             }
           })
 
@@ -3750,7 +3853,9 @@ export struct ChatPage {
             preferType: SheetType.BOTTOM,
             maskColor: '#66000000',
             onDisappear: () => {
-              this.handleToolExecutionApprovalSheetDisappear()
+              this.scheduleSheetDisappearCleanup((): void => {
+                this.handleToolExecutionApprovalSheetDisappear()
+              })
             }
           })
 
@@ -3767,7 +3872,9 @@ export struct ChatPage {
             }),
             preferType: SheetType.BOTTOM,
             onDisappear: () => {
-              this.showVoiceInputSheet = false
+              this.scheduleSheetDisappearCleanup((): void => {
+                this.showVoiceInputSheet = false
+              })
             }
           })
 
@@ -3845,25 +3952,13 @@ export struct ChatPage {
     .ignoreLayoutSafeArea([LayoutSafeAreaType.SYSTEM], [LayoutSafeAreaEdge.TOP])
     .backgroundColor(this.themeBackground)
     .onReady((context: NavDestinationContext) => {
-      this.navPathStack = context.pathStack
-      const param = context.pathInfo.param as ChatPageRouteParams
-      if (param !== null && param !== undefined) {
-        this.routeParams = param
-      }
-      // 如果 aboutToAppear 时 routeParams 还没设置，这里触发初始化
-      if (!this.hasInitializedRoute) {
-        this.tryInitWithParams(this.routeParams)
-      }
+      this.scheduleDestinationReady(context)
     })
     .onShown(() => {
-      this.handlePageShown()
+      this.schedulePageVisibilityUpdate(true)
     })
     .onHidden(() => {
-      this.isPageVisible = false
-      if (this.isMultiSelectMode) {
-        this.handleExitMultiSelectMode()
-      }
-      this.syncActiveSessionBinding()
+      this.schedulePageVisibilityUpdate(false)
     })
     .onBackPressed((): boolean => {
       if (this.pendingAskUserCalls.length > 0) {
@@ -4413,12 +4508,30 @@ export struct ChatPage {
     return this.resolveMessageIndexFromListIndex(lastIndex)
   }
 
-  private updateScrollPreviewIndex(firstIndex: number, lastIndex: number): void {
-    const nextIndex = this.resolveVisibleMessageIndex(firstIndex, lastIndex)
-    if (this.scrollPreviewMessageIndex === nextIndex) {
+  private clearScrollPreviewSyncTimer(): void {
+    if (this.scrollPreviewSyncTimerId < 0) {
       return
     }
-    this.scrollPreviewMessageIndex = nextIndex
+    clearTimeout(this.scrollPreviewSyncTimerId)
+    this.scrollPreviewSyncTimerId = -1
+  }
+
+  private scheduleScrollPreviewIndexUpdate(firstIndex: number, lastIndex: number): void {
+    this.pendingScrollPreviewMessageIndex = this.resolveVisibleMessageIndex(firstIndex, lastIndex)
+    if (this.scrollPreviewSyncTimerId >= 0) {
+      return
+    }
+
+    // List.onScrollIndex can run while ArkUI is reconciling ChatPage. Writing an
+    // @Local value synchronously from that callback re-enqueues this component
+    // during its own render. Coalesce the observable write onto the next UI task.
+    this.scrollPreviewSyncTimerId = setTimeout(() => {
+      this.scrollPreviewSyncTimerId = -1
+      const nextIndex = this.pendingScrollPreviewMessageIndex
+      if (this.scrollPreviewMessageIndex !== nextIndex) {
+        this.scrollPreviewMessageIndex = nextIndex
+      }
+    }, 0)
   }
 
   private getMessageRoleLabel(role: MessageRole): string {
@@ -4712,6 +4825,60 @@ export struct ChatPage {
       !this.isMultiSelectMode && !this.isSending
   }
 
+  private ensureScrollEventSyncScheduled(): void {
+    if (this.scrollEventSyncTimerId >= 0) {
+      return
+    }
+    this.scrollEventSyncTimerId = setTimeout((): void => {
+      this.scrollEventSyncTimerId = -1
+      const scrollState = this.pendingScrollState
+      const scrollOffset = this.pendingScrollOffsetVp
+      const reachedStart = this.pendingScrollReachStart
+      const reachedEnd = this.pendingScrollReachEnd
+      this.pendingScrollState = null
+      this.pendingScrollReachStart = false
+      this.pendingScrollReachEnd = false
+
+      // AceScrollable callbacks may be emitted as part of list reconciliation.
+      // Only update observable ChatPage state after that render pass completes.
+      if (scrollState !== null) {
+        this.handleMessageListDidScroll(scrollOffset, scrollState)
+      }
+      // Boundary state wins over the last sampled scroll event.
+      if (reachedStart) {
+        this.handleMessageListReachStart()
+      }
+      if (reachedEnd) {
+        this.handleMessageListReachEnd()
+      }
+    }, 0)
+  }
+
+  private scheduleMessageListDidScroll(scrollOffset: number, scrollState: ScrollState): void {
+    this.pendingScrollOffsetVp = scrollOffset
+    this.pendingScrollState = scrollState
+    this.ensureScrollEventSyncScheduled()
+  }
+
+  private scheduleMessageListBoundaryUpdate(reachedEnd: boolean): void {
+    if (reachedEnd) {
+      this.pendingScrollReachEnd = true
+    } else {
+      this.pendingScrollReachStart = true
+    }
+    this.ensureScrollEventSyncScheduled()
+  }
+
+  private clearScrollEventSyncTimer(): void {
+    if (this.scrollEventSyncTimerId >= 0) {
+      clearTimeout(this.scrollEventSyncTimerId)
+      this.scrollEventSyncTimerId = -1
+    }
+    this.pendingScrollState = null
+    this.pendingScrollReachStart = false
+    this.pendingScrollReachEnd = false
+  }
+
   private handleMessageListDidScroll(scrollOffset: number, scrollState: ScrollState): void {
     if (this.showAttachmentPicker && (scrollState === ScrollState.Scroll || scrollState === ScrollState.Fling)) {
       if (!this.shouldIgnoreAttachmentAutoClose()) {
@@ -4757,9 +4924,7 @@ export struct ChatPage {
   }
 
   private syncCurrentScrollOffsetFromScroller(): number {
-    const offset = this.readCurrentScrollOffset()
-    this.currentScrollOffsetVp = offset
-    return offset
+    return this.readCurrentScrollOffset()
   }
 
   private syncIsAtBottomBoundaryFromScroller(): boolean {
@@ -4823,17 +4988,77 @@ export struct ChatPage {
 
   private handleInputAreaHeightChange(area: Area): void {
     const nextHeight = this.readMeasuredAreaHeight(area)
-    const previousHeight = this.inputAreaHeightVp
-    this.inputAreaHeightVp = nextHeight
-    this.syncBottomAlignmentAfterOverlayHeightChange(previousHeight, nextHeight,
-      !this.isMultiSelectMode)
+    this.pendingInputAreaHeightVp = nextHeight
+    if (this.inputAreaHeightSyncTimerId >= 0) {
+      return
+    }
+
+    // onAreaChange may be delivered while ChatPage is still reconciling the
+    // dynamic composer tree. Apply its observable result on the next UI task.
+    this.inputAreaHeightSyncTimerId = setTimeout(() => {
+      this.inputAreaHeightSyncTimerId = -1
+      const pendingHeight = this.pendingInputAreaHeightVp
+      if (pendingHeight < 0 || Math.abs(this.inputAreaHeightVp - pendingHeight) < 0.5) {
+        return
+      }
+      const previousHeight = this.inputAreaHeightVp
+      this.inputAreaHeightVp = pendingHeight
+      this.syncBottomAlignmentAfterOverlayHeightChange(previousHeight, pendingHeight,
+        !this.isMultiSelectMode)
+    }, 0)
   }
 
   private handleMultiSelectToolbarHeightChange(area: Area): void {
     const nextHeight = this.readMeasuredAreaHeight(area)
-    const previousHeight = this.multiSelectToolbarHeightVp
-    this.multiSelectToolbarHeightVp = nextHeight
-    this.syncBottomAlignmentAfterOverlayHeightChange(previousHeight, nextHeight, this.isMultiSelectMode)
+    this.pendingMultiSelectToolbarHeightVp = nextHeight
+    if (this.multiSelectToolbarHeightSyncTimerId >= 0) {
+      return
+    }
+
+    this.multiSelectToolbarHeightSyncTimerId = setTimeout(() => {
+      this.multiSelectToolbarHeightSyncTimerId = -1
+      const pendingHeight = this.pendingMultiSelectToolbarHeightVp
+      if (pendingHeight < 0 || Math.abs(this.multiSelectToolbarHeightVp - pendingHeight) < 0.5) {
+        return
+      }
+      const previousHeight = this.multiSelectToolbarHeightVp
+      this.multiSelectToolbarHeightVp = pendingHeight
+      this.syncBottomAlignmentAfterOverlayHeightChange(previousHeight, pendingHeight, this.isMultiSelectMode)
+    }, 0)
+  }
+
+  private clearLayoutFeedbackSyncTimers(): void {
+    if (this.inputAreaHeightSyncTimerId >= 0) {
+      clearTimeout(this.inputAreaHeightSyncTimerId)
+      this.inputAreaHeightSyncTimerId = -1
+    }
+    if (this.multiSelectToolbarHeightSyncTimerId >= 0) {
+      clearTimeout(this.multiSelectToolbarHeightSyncTimerId)
+      this.multiSelectToolbarHeightSyncTimerId = -1
+    }
+    this.pendingInputAreaHeightVp = -1
+    this.pendingMultiSelectToolbarHeightVp = -1
+  }
+
+  private clearRecentScreenshotSyncTimer(): void {
+    if (this.recentScreenshotSyncTimerId < 0) {
+      return
+    }
+    clearTimeout(this.recentScreenshotSyncTimerId)
+    this.recentScreenshotSyncTimerId = -1
+  }
+
+  private scheduleRecentScreenshotUpdate(detected: boolean): void {
+    this.pendingRecentScreenshot = detected
+    if (this.recentScreenshotSyncTimerId >= 0) {
+      return
+    }
+    this.recentScreenshotSyncTimerId = setTimeout(() => {
+      this.recentScreenshotSyncTimerId = -1
+      if (this.hasRecentScreenshot !== this.pendingRecentScreenshot) {
+        this.hasRecentScreenshot = this.pendingRecentScreenshot
+      }
+    }, 0)
   }
 
   private getActiveBottomOverlayHeight(): number {
