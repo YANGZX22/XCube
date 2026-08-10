@@ -28,6 +28,7 @@ export class AppUiState {
   @Trace settingsDetailPresentationMode: string = SettingsPagePresentationMode.PAGE
   @Trace settingsHandAdaptiveChangedAt: number = 0
   @Trace colorTheme: string = 'lavender'
+  @Trace visualEffectsMode: string = 'off'
   @Trace themePrimary: string = '#7A68F0'
   @Trace themePrimaryLight: string = '#E6E1FD'
   @Trace themeBackground: string = '#F7F5FF'
@@ -135,6 +136,9 @@ function applyAppUiStateValue<T extends string | number | boolean>(state: AppUiS
       return
     case AppStorageKeys.COLOR_THEME:
       state.colorTheme = value as string
+      return
+    case AppStorageKeys.VISUAL_EFFECTS_MODE:
+      state.visualEffectsMode = value as string
       return
     case AppStorageKeys.THEME_PRIMARY:
       state.themePrimary = value as string
@@ -275,6 +279,8 @@ function createAppUiStateFromStorage(): AppUiState {
   applyAppUiStateValue(state, AppStorageKeys.SETTINGS_HAND_ADAPTIVE_CHANGED_AT,
     readStorageValue<number>(AppStorageKeys.SETTINGS_HAND_ADAPTIVE_CHANGED_AT, 0))
   applyAppUiStateValue(state, AppStorageKeys.COLOR_THEME, readStorageValue<string>(AppStorageKeys.COLOR_THEME, ''))
+  applyAppUiStateValue(state, AppStorageKeys.VISUAL_EFFECTS_MODE,
+    readStorageValue<string>(AppStorageKeys.VISUAL_EFFECTS_MODE, 'off'))
   applyAppUiStateValue(state, AppStorageKeys.THEME_PRIMARY,
     readStorageValue<string>(AppStorageKeys.THEME_PRIMARY, state.themePrimary))
   applyAppUiStateValue(state, AppStorageKeys.THEME_PRIMARY_LIGHT,
@@ -374,6 +380,7 @@ export function syncAppUiStateFromStorage(): void {
   state.settingsDetailPresentationMode = freshState.settingsDetailPresentationMode
   state.settingsHandAdaptiveChangedAt = freshState.settingsHandAdaptiveChangedAt
   state.colorTheme = freshState.colorTheme
+  state.visualEffectsMode = freshState.visualEffectsMode
   state.themePrimary = freshState.themePrimary
   state.themePrimaryLight = freshState.themePrimaryLight
   state.themeBackground = freshState.themeBackground
@@ -405,6 +412,7 @@ export function syncAppUiStateFromStorage(): void {
   state.materialLevel = freshState.materialLevel
   state.lightColorMode = freshState.lightColorMode
   state.chatListImmersiveMaterial = freshState.chatListImmersiveMaterial
+  state.knowledgeListImmersiveMaterial = freshState.knowledgeListImmersiveMaterial
 }
 
 export function applyThemeToAppUiState(themeId: string, colors: ThemeColorConfig): void {
@@ -477,6 +485,8 @@ function resolveAppUiStatePath(path: string): string {
       return 'settingsHandAdaptiveChangedAt'
     case AppStorageKeys.COLOR_THEME:
       return 'colorTheme'
+    case AppStorageKeys.VISUAL_EFFECTS_MODE:
+      return 'visualEffectsMode'
     case AppStorageKeys.THEME_PRIMARY:
       return 'themePrimary'
     case AppStorageKeys.THEME_PRIMARY_LIGHT:

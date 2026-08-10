@@ -1,10 +1,17 @@
 import { bundleManager } from '@kit.AbilityKit'
 import { uiMaterial } from '@kit.ArkUI'
 import { SettingsRouteName } from '../../config/SettingsRouteName'
+import { VisualEffectsMode } from '../../models/ThemeColors'
 import { getAppUiState } from '../../state/AppUiState'
+import {
+  MANUSCRIPT_BODY_FONT,
+  MANUSCRIPT_HEADING_FONT,
+  toRomanNumeral
+} from '../../utils/ManuscriptVisualUtils'
 
 class SettingsListItemModel {
   key: string = ''
+  ordinal: number = 1
   icon: Resource = $r('sys.symbol.square_stack_3d')
   title: ResourceStr = ''
   subtitle: ResourceStr = ''
@@ -30,6 +37,9 @@ export struct IndexSettingsPanel {
   }
   private get themeDivider(): string {
     return getAppUiState().themeDivider
+  }
+  private get isManuscriptMode(): boolean {
+    return getAppUiState().visualEffectsMode === VisualEffectsMode.MANUSCRIPT
   }
   @Local versionName: string = ''
 
@@ -58,7 +68,7 @@ export struct IndexSettingsPanel {
       this.versionName = info.versionName
     } catch (err) {
       console.error('IndexSettingsPanel', `Get version failed: ${JSON.stringify(err)}`)
-      this.versionName = '1.2.4'
+      this.versionName = '1.3.0'
     }
   }
 
@@ -70,7 +80,7 @@ export struct IndexSettingsPanel {
   }
 
   private buildGroups(): SettingsGroupModel[] {
-    return [
+    const groups: SettingsGroupModel[] = [
       {
         key: 'model',
         title: $r('app.string.settings_model_config'),
@@ -204,16 +214,45 @@ export struct IndexSettingsPanel {
         ]
       } as SettingsGroupModel
     ]
+    let ordinal = 1
+    for (let groupIndex = 0; groupIndex < groups.length; groupIndex++) {
+      for (let itemIndex = 0; itemIndex < groups[groupIndex].items.length; itemIndex++) {
+        groups[groupIndex].items[itemIndex].ordinal = ordinal
+        ordinal += 1
+      }
+    }
+    return groups
   }
 
   @Builder
   private SectionTitle(title: Resource) {
-    Text(title)
-      .fontSize(this.sidebarMode ? 11 : 12)
-      .fontWeight(FontWeight.Medium)
-      .fontColor($r('app.color.text_secondary'))
-      .padding({ left: this.sidebarMode ? 6 : 4, bottom: this.sidebarMode ? 8 : 6 })
+    if (this.isManuscriptMode) {
+      Row({ space: 10 }) {
+        Text(title)
+          .fontFamily(MANUSCRIPT_BODY_FONT)
+          .fontSize(10)
+          .fontWeight(FontWeight.Medium)
+          .fontColor(getAppUiState().isDarkMode ? '#D9B274' : '#8A6228')
+          .letterSpacing(1.4)
+          .textCase(TextCase.UpperCase)
+          .maxLines(1)
+
+        Column()
+          .height(1)
+          .backgroundColor(this.themeDivider)
+          .layoutWeight(1)
+      }
       .width('100%')
+      .padding({ left: 4, right: 4, top: 16, bottom: 5 })
+      .alignItems(VerticalAlign.Center)
+    } else {
+      Text(title)
+        .fontSize(this.sidebarMode ? 11 : 12)
+        .fontWeight(FontWeight.Medium)
+        .fontColor($r('app.color.text_secondary'))
+        .padding({ left: this.sidebarMode ? 6 : 4, bottom: this.sidebarMode ? 8 : 6 })
+        .width('100%')
+    }
   }
 
   @Builder
@@ -278,36 +317,111 @@ export struct IndexSettingsPanel {
 
   @Builder
   private SettingsItemRow(item: SettingsListItemModel, isLast: boolean) {
-    Column() {
-      Row({ space: 12 }) {
-        this.PrefixIcon(item.icon)
-        this.ItemText(item)
+    if (this.isManuscriptMode) {
+      this.ManuscriptSettingsItemRow(item)
+    } else {
+      Column() {
+        Row({ space: 12 }) {
+          this.PrefixIcon(item.icon)
+          this.ItemText(item)
+          if (this.hasRowAction(item)) {
+            this.ChevronSuffix()
+          }
+        }
+        .width('100%')
+        .padding({
+          left: this.sidebarMode ? 18 : 16,
+          right: 12,
+          top: this.hasSubtitle(item) ? (this.sidebarMode ? 13 : 14) : (this.sidebarMode ? 15 : 16),
+          bottom: this.hasSubtitle(item) ? (this.sidebarMode ? 13 : 14) : (this.sidebarMode ? 15 : 16)
+        })
+        .backgroundColor(this.isSelectedItem(item) ? this.themePrimaryLight : Color.Transparent)
+        .borderRadius(this.sidebarMode ? 16 : 14)
+        .onClick(() => {
+          const rowAction = item.action
+          if (rowAction !== null && rowAction !== undefined) {
+            rowAction()
+          }
+        })
+
+        if (!isLast) {
+          Divider()
+            .color(this.themeDivider)
+            .margin({ left: this.sidebarMode ? 62 : 58, right: 12 })
+        }
+      }
+    }
+  }
+
+  @Builder
+  private ManuscriptSettingsItemRow(item: SettingsListItemModel) {
+    Column({ space: 5 }) {
+      Row({ space: 8 }) {
+        Text(toRomanNumeral(item.ordinal))
+          .width(26)
+          .fontFamily(MANUSCRIPT_HEADING_FONT)
+          .fontSize(15)
+          .fontWeight(600)
+          .fontColor(getAppUiState().isDarkMode ? '#D9B274' : '#8A6228')
+          .fontFeature('tnum')
+
+        Text(item.title)
+          .fontFamily(MANUSCRIPT_HEADING_FONT)
+          .fontSize(17.5)
+          .fontWeight(600)
+          .fontColor(getAppUiState().themeTextPrimary)
+          .maxLines(1)
+          .textOverflow({ overflow: TextOverflow.Ellipsis })
+          .constraintSize({ maxWidth: '58%' })
+
+        Column()
+          .height(1)
+          .border({
+            width: { top: 1 },
+            color: getAppUiState().isDarkMode ? '#4A463F' : '#C9C4BB',
+            style: BorderStyle.Dotted
+          })
+          .layoutWeight(1)
+          .constraintSize({ minWidth: 16 })
+
         if (this.hasRowAction(item)) {
-          this.ChevronSuffix()
+          SymbolGlyph($r('sys.symbol.chevron_right'))
+            .fontSize(13)
+            .fontColor([getAppUiState().themeTextTertiary])
         }
       }
       .width('100%')
-      .padding({
-        left: this.sidebarMode ? 18 : 16,
-        right: 12,
-        top: this.hasSubtitle(item) ? (this.sidebarMode ? 13 : 14) : (this.sidebarMode ? 15 : 16),
-        bottom: this.hasSubtitle(item) ? (this.sidebarMode ? 13 : 14) : (this.sidebarMode ? 15 : 16)
-      })
-      .backgroundColor(this.isSelectedItem(item) ? this.themePrimaryLight : Color.Transparent)
-      .borderRadius(this.sidebarMode ? 16 : 14)
-      .onClick(() => {
-        const rowAction = item.action
-        if (rowAction !== null && rowAction !== undefined) {
-          rowAction()
-        }
-      })
+      .alignItems(VerticalAlign.Center)
 
-      if (!isLast) {
-        Divider()
-          .color(this.themeDivider)
-          .margin({ left: this.sidebarMode ? 62 : 58, right: 12 })
+      if (this.hasSubtitle(item)) {
+        Text(item.subtitle)
+          .width('100%')
+          .fontFamily(MANUSCRIPT_BODY_FONT)
+          .fontSize(12)
+          .fontStyle(FontStyle.Italic)
+          .fontColor(getAppUiState().themeTextSecondary)
+          .maxLines(1)
+          .textOverflow({ overflow: TextOverflow.Ellipsis })
+          .padding({ left: 34, right: 18 })
       }
     }
+    .width('100%')
+    .padding({ left: 4, right: 4, top: 12, bottom: 11 })
+    .backgroundColor(this.isSelectedItem(item) ?
+      (getAppUiState().isDarkMode ? '#33291B' : '#F5EDE0') : Color.Transparent)
+    .border({
+      width: {
+        bottom: 0.5,
+        left: this.isSelectedItem(item) ? 2 : 0
+      },
+      color: this.isSelectedItem(item) ? this.themePrimary : this.themeDivider
+    })
+    .onClick(() => {
+      const rowAction = item.action
+      if (rowAction !== null && rowAction !== undefined) {
+        rowAction()
+      }
+    })
   }
 
   @Builder
@@ -319,9 +433,9 @@ export struct IndexSettingsPanel {
     }
     .width('100%')
     .backgroundColor(Color.Transparent)
-    .borderRadius(this.sidebarMode ? 20 : 22)
-    .clip(true)
-    .systemMaterial(new uiMaterial.ImmersiveMaterial({
+    .borderRadius(this.isManuscriptMode ? 0 : (this.sidebarMode ? 20 : 22))
+    .clip(!this.isManuscriptMode)
+    .systemMaterial(this.isManuscriptMode ? undefined : new uiMaterial.ImmersiveMaterial({
       style: uiMaterial.ImmersiveStyle.REGULAR,
       interactive: false,
       lightEffect: { color: undefined }
@@ -329,7 +443,7 @@ export struct IndexSettingsPanel {
   }
 
   build() {
-    Column({ space: this.sidebarMode ? 12 : 14 }) {
+    Column({ space: this.isManuscriptMode ? 0 : (this.sidebarMode ? 12 : 14) }) {
       ForEach(this.buildGroups(), (group: SettingsGroupModel) => {
         Column() {
           this.SectionTitle(group.title)
@@ -337,12 +451,22 @@ export struct IndexSettingsPanel {
         }
         .width('100%')
       }, (group: SettingsGroupModel) => group.key)
+
+      if (this.isManuscriptMode) {
+        Text('❦')
+          .fontFamily(MANUSCRIPT_HEADING_FONT)
+          .fontSize(18)
+          .fontColor(getAppUiState().isDarkMode ? '#C99A52' : '#B68235')
+          .width('100%')
+          .textAlign(TextAlign.Center)
+          .padding({ top: 18, bottom: 12 })
+      }
     }
     .width('100%')
     .padding({
-      left: 16,
-      right: 16,
-      top: this.sidebarMode ? 8 : 0,
+      left: this.isManuscriptMode ? 32 : 16,
+      right: this.isManuscriptMode ? 32 : 16,
+      top: this.isManuscriptMode ? 0 : (this.sidebarMode ? 8 : 0),
       bottom: 28
     })
     .backgroundColor(this.themeBackground)

@@ -72,6 +72,7 @@ import { PyodideWebHost } from '../components/PyodideWebHost'
 import { ChatMarkdownRenderer } from '../components/ChatMarkdownRenderer'
 import {
   ChatNavigationTitleContent,
+  CHAT_NAVIGATION_MANUSCRIPT_BOTTOM_EXTENSION_HEIGHT,
   CHAT_NAVIGATION_TITLE_STACK_BUILDER_HEIGHT
 } from '../components/ChatNavigationTitleContent'
 import {
@@ -128,6 +129,8 @@ import {
 } from '../utils/ContextWindowUtils'
 import { ContextCompactionStatus } from '../services/ContextCompactionService'
 import { resolveSlashCommandId, SLASH_COMMAND_COMPACT } from '../utils/SlashCommandUtils'
+import { VisualEffectsMode } from '../models/ThemeColors'
+import { ensureManuscriptFonts, MANUSCRIPT_COMPACT_BAR_HEIGHT } from '../utils/ManuscriptVisualUtils'
 import { ImmersiveSheetHeader } from '../components/ImmersiveSheetHeader'
 import { AskUserCard } from '../components/AskUserCard'
 
@@ -362,6 +365,9 @@ export struct ChatPage {
   private get isDarkMode(): boolean {
     return getAppUiState().isDarkMode
   }
+  private get isManuscriptMode(): boolean {
+    return getAppUiState().visualEffectsMode === VisualEffectsMode.MANUSCRIPT
+  }
   private get chatFontSize(): number {
     return getAppUiState().chatFontSize
   }
@@ -373,7 +379,7 @@ export struct ChatPage {
   }
   private get messageThemeRenderKey(): string {
     const uiState = getAppUiState()
-    return `${uiState.colorTheme}_${uiState.isDarkMode ? '1' : '0'}`
+    return `${uiState.colorTheme}_${uiState.visualEffectsMode}_${uiState.isDarkMode ? '1' : '0'}`
   }
   // 多选模式状态
   @Local isMultiSelectMode: boolean = false
@@ -480,6 +486,7 @@ export struct ChatPage {
   }
 
   aboutToAppear(): void {
+    ensureManuscriptFonts()
     if (this.routeParams === null && this.routeParamsSeed !== null) {
       this.routeParams = this.routeParamsSeed
       this.applyRouteDisplaySeed(this.routeParamsSeed)
@@ -1179,12 +1186,15 @@ export struct ChatPage {
             .fontColor([this.themePrimary])
             .rotate({ angle: this.canvasMarkdownSwitchRotation, centerX: '50%', centerY: '50%' })
         }
-        .width(32)
-        .height(32)
+        .width(this.isManuscriptMode ? MANUSCRIPT_COMPACT_BAR_HEIGHT : 32)
+        .height(this.isManuscriptMode ? MANUSCRIPT_COMPACT_BAR_HEIGHT : 32)
         .padding(0)
         .backgroundColor(Color.Transparent)
-        .stateEffect(false)
-        .systemMaterial(new uiMaterial.ImmersiveMaterial({
+        .borderRadius(this.isManuscriptMode ? 0 : 16)
+        .border({ width: 0, color: Color.Transparent })
+        .stateEffect(this.isManuscriptMode)
+        .responseRegion(this.isManuscriptMode ? { x: -4, y: -4, width: 44, height: 44 } : undefined)
+        .systemMaterial(this.isManuscriptMode ? undefined : new uiMaterial.ImmersiveMaterial({
           style: uiMaterial.ImmersiveStyle.REGULAR,
           materialColor: this.isCanvasMarkdownPreview ? this.themePrimaryLight : Color.Transparent,
           applyShadow: false,
@@ -1200,14 +1210,17 @@ export struct ChatPage {
             .fontSize(14)
             .fontColor([this.themePrimary])
         }
-        .width(32)
-        .height(32)
+        .width(this.isManuscriptMode ? MANUSCRIPT_COMPACT_BAR_HEIGHT : 32)
+        .height(this.isManuscriptMode ? MANUSCRIPT_COMPACT_BAR_HEIGHT : 32)
         .padding(0)
         .backgroundColor(Color.Transparent)
-        .stateEffect(false)
+        .borderRadius(this.isManuscriptMode ? 0 : 16)
+        .border({ width: 0, color: Color.Transparent })
+        .stateEffect(this.isManuscriptMode)
+        .responseRegion(this.isManuscriptMode ? { x: -4, y: -4, width: 44, height: 44 } : undefined)
         .enabled(this.canvasDocumentContent.trim() !== '')
         .opacity(this.canvasDocumentContent.trim() !== '' ? 1 : 0.4)
-        .systemMaterial(new uiMaterial.ImmersiveMaterial({
+        .systemMaterial(this.isManuscriptMode ? undefined : new uiMaterial.ImmersiveMaterial({
           style: uiMaterial.ImmersiveStyle.REGULAR,
           materialColor: Color.Transparent,
           applyShadow: false,
@@ -1226,12 +1239,15 @@ export struct ChatPage {
             .fontSize(14)
             .fontColor([$r('app.color.status_error')])
         }
-        .width(32)
-        .height(32)
+        .width(this.isManuscriptMode ? MANUSCRIPT_COMPACT_BAR_HEIGHT : 32)
+        .height(this.isManuscriptMode ? MANUSCRIPT_COMPACT_BAR_HEIGHT : 32)
         .padding(0)
         .backgroundColor(Color.Transparent)
-        .stateEffect(false)
-        .systemMaterial(new uiMaterial.ImmersiveMaterial({
+        .borderRadius(this.isManuscriptMode ? 0 : 16)
+        .border({ width: 0, color: Color.Transparent })
+        .stateEffect(this.isManuscriptMode)
+        .responseRegion(this.isManuscriptMode ? { x: -4, y: -4, width: 44, height: 44 } : undefined)
+        .systemMaterial(this.isManuscriptMode ? undefined : new uiMaterial.ImmersiveMaterial({
           style: uiMaterial.ImmersiveStyle.REGULAR,
           materialColor: Color.Transparent,
           applyShadow: false,
@@ -1247,12 +1263,15 @@ export struct ChatPage {
             .fontSize(13)
             .fontColor([$r('app.color.text_secondary')])
         }
-        .width(32)
-        .height(32)
+        .width(this.isManuscriptMode ? MANUSCRIPT_COMPACT_BAR_HEIGHT : 32)
+        .height(this.isManuscriptMode ? MANUSCRIPT_COMPACT_BAR_HEIGHT : 32)
         .padding(0)
         .backgroundColor(Color.Transparent)
-        .stateEffect(false)
-        .systemMaterial(new uiMaterial.ImmersiveMaterial({
+        .borderRadius(this.isManuscriptMode ? 0 : 16)
+        .border({ width: 0, color: Color.Transparent })
+        .stateEffect(this.isManuscriptMode)
+        .responseRegion(this.isManuscriptMode ? { x: -4, y: -4, width: 44, height: 44 } : undefined)
+        .systemMaterial(this.isManuscriptMode ? undefined : new uiMaterial.ImmersiveMaterial({
           style: uiMaterial.ImmersiveStyle.REGULAR,
           materialColor: Color.Transparent,
           applyShadow: false,
@@ -1264,8 +1283,13 @@ export struct ChatPage {
         })
       }
       .width('100%')
-      .height(38)
+      .height(this.isManuscriptMode ? MANUSCRIPT_COMPACT_BAR_HEIGHT : 38)
+      .padding(this.isManuscriptMode ? { left: 14, right: 8 } : 0)
       .alignItems(VerticalAlign.Center)
+      .border({
+        width: this.isManuscriptMode ? { bottom: 1 } : 0,
+        color: this.isManuscriptMode ? getAppUiState().themeDivider : Color.Transparent
+      })
 
       TextInput({ text: this.canvasDocumentTitle, placeholder: pickLocalizedText('文档标题', 'Document title') })
         .height(36)
@@ -1274,8 +1298,12 @@ export struct ChatPage {
         .fontColor($r('app.color.text_primary'))
         .placeholderColor($r('app.color.text_tertiary'))
         .backgroundColor(Color.Transparent)
-        .borderRadius(16)
-        .systemMaterial(new uiMaterial.ImmersiveMaterial({
+        .borderRadius(this.isManuscriptMode ? 0 : 16)
+        .border({
+          width: this.isManuscriptMode ? { bottom: 1 } : 0,
+          color: this.isManuscriptMode ? getAppUiState().themeDivider : this.themePrimary
+        })
+        .systemMaterial(this.isManuscriptMode ? undefined : new uiMaterial.ImmersiveMaterial({
           style: uiMaterial.ImmersiveStyle.ULTRA_THIN,
           materialColor: Color.Transparent,
           applyShadow: false,
@@ -1309,8 +1337,14 @@ export struct ChatPage {
         .layoutWeight(1)
         .width('100%')
         .backgroundColor(Color.Transparent)
-        .borderRadius(14)
-        .systemMaterial(new uiMaterial.ImmersiveMaterial({
+        .borderRadius(this.isManuscriptMode ? 0 : 14)
+        .border({
+          width: 0,
+          color: Color.Transparent
+        })
+        .margin(this.isManuscriptMode ? { left: 10, right: 10, bottom: 10 } : 0)
+        .backgroundColor(this.isManuscriptMode ? this.themeBackground : Color.Transparent)
+        .systemMaterial(this.isManuscriptMode ? undefined : new uiMaterial.ImmersiveMaterial({
           style: uiMaterial.ImmersiveStyle.ULTRA_THIN,
           materialColor: Color.Transparent,
           applyShadow: false,
@@ -1328,14 +1362,19 @@ export struct ChatPage {
           .fontColor($r('app.color.text_primary'))
           .placeholderColor($r('app.color.text_tertiary'))
           .backgroundColor(Color.Transparent)
-          .borderRadius(14)
-          .systemMaterial(new uiMaterial.ImmersiveMaterial({
+          .borderRadius(this.isManuscriptMode ? 0 : 14)
+          .border({
+            width: 0,
+            color: Color.Transparent
+          })
+          .systemMaterial(this.isManuscriptMode ? undefined : new uiMaterial.ImmersiveMaterial({
             style: uiMaterial.ImmersiveStyle.ULTRA_THIN,
             materialColor: Color.Transparent,
             applyShadow: false,
             lightEffect: undefined
           }))
-          .padding(12)
+          .padding(this.isManuscriptMode ? { left: 18, right: 18, top: 16, bottom: 16 } : 12)
+          .margin(this.isManuscriptMode ? { left: 10, right: 10, bottom: 10 } : 0)
           .onChange((value: string) => {
             this.handleCanvasContentChanged(value)
           })
@@ -1343,7 +1382,7 @@ export struct ChatPage {
     }
     .width('100%')
     .height('100%')
-    .padding({ left: 12, right: 12, top: 12, bottom: 12 })
+    .padding(this.isManuscriptMode ? 0 : { left: 12, right: 12, top: 12, bottom: 12 })
   }
 
   @Builder
@@ -1356,9 +1395,13 @@ export struct ChatPage {
           }
           .width(this.getCanvasPanelWidthVp())
           .height(this.getCanvasPanelHeightVp())
-          .backgroundColor(Color.Transparent)
-          .borderRadius(18)
-          .systemMaterial(new uiMaterial.ImmersiveMaterial({
+          .backgroundColor(this.isManuscriptMode ? this.themeSurface : Color.Transparent)
+          .borderRadius(this.isManuscriptMode ? 3 : 18)
+          .border({
+            width: this.isManuscriptMode ? 1 : 0,
+            color: this.isManuscriptMode ? getAppUiState().themeDivider : this.themePrimary
+          })
+          .systemMaterial(this.isManuscriptMode ? undefined : new uiMaterial.ImmersiveMaterial({
             style: uiMaterial.ImmersiveStyle.REGULAR,
             materialColor: Color.Transparent,
             applyShadow: false,
@@ -1377,7 +1420,7 @@ export struct ChatPage {
         .justifyContent(FlexAlign.End)
         .position({ x: 0, y: this.getMessageListTopSpacerHeight() + 8 })
         .zIndex(16)
-      } else {
+      } else if (!this.isManuscriptMode) {
         Row() {
           ChatFloatingImmersiveButton({
             barWidth: 40,
@@ -3320,6 +3363,11 @@ export struct ChatPage {
     return HDS_NAV_DESTINATION_MINI_TITLE_BAR_HEIGHT + this.getPageTopAvoidHeight()
   }
 
+  private getMessageListContentTopSpacerHeight(): number {
+    const manuscriptOpeningSpace = 36
+    return this.getMessageListTopSpacerHeight() + (this.isManuscriptMode ? manuscriptOpeningSpace : 0)
+  }
+
   private getStatusBarContentColor(): string {
     if (this.showImagePreview) {
       return '#F5F7FA'
@@ -3365,7 +3413,20 @@ export struct ChatPage {
       this.windowHeightVp)
     options.menuItems = this.getTitleBarMenuItems()
     options.stackBuilder = (): void => this.ChatTitleStackBuilder()
+    if (this.isManuscriptMode) {
+      options.bottomBuilder = (): void => this.ChatTitleBottomExtensionBuilder()
+      options.bottomBuilderHeightVp = CHAT_NAVIGATION_MANUSCRIPT_BOTTOM_EXTENSION_HEIGHT
+    }
     return buildHdsTopNavigationTitleBarOptions(options)
+  }
+
+  @Builder
+  private ChatTitleBottomExtensionBuilder() {
+    Column()
+      .width('100%')
+      .height(CHAT_NAVIGATION_MANUSCRIPT_BOTTOM_EXTENSION_HEIGHT)
+      .backgroundColor(Color.Transparent)
+      .hitTestBehavior(HitTestMode.None)
   }
 
   @Builder
@@ -3385,8 +3446,9 @@ export struct ChatPage {
       isTitleGenerating: this.isTitleGenerating,
       titleGenerateFailed: this.titleGenerateFailed,
       isSending: this.isSending,
-      titleStartInset: HDS_NAV_TITLE_SYSTEM_BACK_INSET,
+      titleStartInset: this.isManuscriptMode ? 8 : HDS_NAV_TITLE_SYSTEM_BACK_INSET,
       titleEndInset: this.getTitleBarMenuEndInset(),
+      showLeadingBackAction: this.isManuscriptMode,
       showNewChatAction: this.shouldShowTitleBarNewChatAction(),
       // 窗口未知时不显示进度，避免用默认值算出误导性的 100%
       showContextProgress: this.messages.length > 0 && this.contextUsage.resolved,
@@ -3400,6 +3462,9 @@ export struct ChatPage {
       },
       onDeleteChat: (): void => {
         this.handleDeleteChat()
+      },
+      onBack: (): void => {
+        this.handleBack()
       },
       onModelSelect: (): void => {
         this.safeStopInputSession()
@@ -3469,7 +3534,7 @@ export struct ChatPage {
           showDraftPreview: this.hasDraftContent(),
           draftPreviewTimeText: this.getPreviewTimeText(),
           bottomPadding: this.getListBottomPadding(),
-          topInsetHeight: this.getMessageListTopSpacerHeight(),
+          topInsetHeight: this.getMessageListContentTopSpacerHeight(),
           currentModelId: this.currentModelId,
           assistantAvatarSymbol: this.currentAssistantAvatarSymbol,
           assistantAvatarColor: this.currentAssistantColor,
@@ -3573,7 +3638,7 @@ export struct ChatPage {
 
         // 快速到顶部按钮
         ScrollToBottomButton({
-          isVisible: this.shouldShowScrollToTopButton(),
+          isVisible: !this.isManuscriptMode && this.shouldShowScrollToTopButton(),
           bottomAvoidHeight: 0,
           fixedBottomOffset: this.getFloatingRightButtonBottomOffsetVp(),
           buttonDirection: 1,
@@ -3586,7 +3651,7 @@ export struct ChatPage {
 
         // 回到底部按钮（非 AI 生成状态时显示）
         ScrollToBottomButton({
-          isVisible: this.shouldShowStandardScrollToBottomButton(),
+          isVisible: !this.isManuscriptMode && this.shouldShowStandardScrollToBottomButton(),
           bottomAvoidHeight: 0,
           fixedBottomOffset: this.getFloatingRightButtonBottomOffsetVp(),
           buttonDirection: 0,
@@ -3597,7 +3662,7 @@ export struct ChatPage {
 
         // AI 生成中的底部中间 loading 回到底部按钮
         ScrollToBottomLoadingButton({
-          isVisible: this.shouldShowScrollToBottomLoadingButton(),
+          isVisible: !this.isManuscriptMode && this.shouldShowScrollToBottomLoadingButton(),
           isInputBarVisible: true,
           bottomAvoidHeight: this.getFloatingOverlayBottomAvoidHeightVp(),
           onScrollToBottom: () => {
@@ -3721,6 +3786,24 @@ export struct ChatPage {
               },
               onSlashCommand: (commandId: string): void => {
                 this.handleSlashCommand(commandId)
+              },
+              showManuscriptScrollTop: this.shouldShowScrollToTopButton(),
+              showManuscriptScrollBottom: this.shouldShowStandardScrollToBottomButton() ||
+                this.shouldShowScrollToBottomLoadingButton(),
+              manuscriptScrollBottomLoading: this.shouldShowScrollToBottomLoadingButton(),
+              showManuscriptHistory: this.shouldShowHistoryPreviewFloatingBar(),
+              showManuscriptCanvas: this.shouldShowCanvasWorkspace(),
+              onManuscriptScrollTop: (): void => {
+                this.handleScrollToTopRequest()
+              },
+              onManuscriptScrollBottom: (): void => {
+                this.scrollToBottomWithAnimation()
+              },
+              onManuscriptHistory: (): void => {
+                this.setHistoryPreviewExpanded(!this.isHistoryPreviewExpanded)
+              },
+              onManuscriptCanvas: (): void => {
+                this.setCanvasPanelOpen(!this.isCanvasPanelOpen)
               }
             })
               .onAreaChange((_oldArea: Area, newArea: Area) => {
@@ -3901,7 +3984,9 @@ export struct ChatPage {
           }
           .width('100%')
           .alignItems(HorizontalAlign.Center)
-          .padding({ left: 12, right: 12, bottom: this.getMultiSelectToolbarBottomInsetVp() })
+          .padding(this.isManuscriptMode ?
+            { left: 0, right: 0, bottom: this.getMultiSelectToolbarBottomInsetVp() } :
+            { left: 12, right: 12, bottom: this.getMultiSelectToolbarBottomInsetVp() })
           .position({ x: 0, y: '100%' })
           .translate({ y: '-100%', x: 0 })
           .hitTestBehavior(HitTestMode.Default)
@@ -3948,7 +4033,7 @@ export struct ChatPage {
       { statusBarContentColor: this.getStatusBarContentColor() },
       { statusBarContentColor: this.getStatusBarContentColor() }
     )
-    .hideBackButton(false)
+    .hideBackButton(this.isManuscriptMode)
     .ignoreLayoutSafeArea([LayoutSafeAreaType.SYSTEM], [LayoutSafeAreaEdge.TOP])
     .backgroundColor(this.themeBackground)
     .onReady((context: NavDestinationContext) => {
@@ -4671,14 +4756,20 @@ export struct ChatPage {
         }
         .layoutWeight(1)
 
-        Button({ type: ButtonType.Circle }) {
+        Button({ type: this.isManuscriptMode ? ButtonType.Normal : ButtonType.Circle,
+          stateEffect: false }) {
           SymbolGlyph($r('sys.symbol.xmark'))
             .fontSize(12)
-            .fontColor([$r('app.color.text_secondary')])
+            .fontColor([this.isManuscriptMode ? this.themePrimary : $r('app.color.text_secondary')])
         }
-        .width(30)
-        .height(30)
-        .backgroundColor(this.isDarkMode ? 'rgba(255, 255, 255, 0.08)' : 'rgba(0, 0, 0, 0.05)')
+        .width(this.isManuscriptMode ? MANUSCRIPT_COMPACT_BAR_HEIGHT : 30)
+        .height(this.isManuscriptMode ? MANUSCRIPT_COMPACT_BAR_HEIGHT : 30)
+        .padding(0)
+        .backgroundColor(this.isManuscriptMode ? Color.Transparent :
+          (this.isDarkMode ? 'rgba(255, 255, 255, 0.08)' : 'rgba(0, 0, 0, 0.05)'))
+        .borderRadius(this.isManuscriptMode ? 0 : 15)
+        .border({ width: 0, color: Color.Transparent })
+        .responseRegion(this.isManuscriptMode ? { x: -4, y: -4, width: 44, height: 44 } : undefined)
         .onClick(() => {
           this.setHistoryPreviewExpanded(false)
         })
@@ -4759,14 +4850,18 @@ export struct ChatPage {
           }
           .width(this.getHistoryPreviewSurfaceWidthVp())
           .height(this.getHistoryPreviewSurfaceHeightVp())
-          .backgroundColor(Color.Transparent)
-          .borderRadius(this.getHistoryPreviewSurfaceRadiusVp())
+          .backgroundColor(this.isManuscriptMode ? this.themeSurface : Color.Transparent)
+          .borderRadius(this.isManuscriptMode ? 3 : this.getHistoryPreviewSurfaceRadiusVp())
+          .border({
+            width: this.isManuscriptMode ? 1 : 0,
+            color: this.isManuscriptMode ? getAppUiState().themeDivider : this.themePrimary
+          })
           .clip(true)
-          .systemMaterial(new uiMaterial.ImmersiveMaterial({
+          .systemMaterial(this.isManuscriptMode ? undefined : new uiMaterial.ImmersiveMaterial({
             style: uiMaterial.ImmersiveStyle.REGULAR
           }))
           .animation({ duration: 260, curve: Curve.FastOutSlowIn })
-        } else {
+        } else if (!this.isManuscriptMode) {
           ChatFloatingImmersiveButton({
             barWidth: 40,
             barHeight: 40,

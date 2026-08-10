@@ -31,6 +31,7 @@ export class AppStorageKeys {
 
   // 主题键
   static readonly COLOR_THEME: string = 'color_theme'
+  static readonly VISUAL_EFFECTS_MODE: string = 'visual_effects_mode'
   static readonly THEME_PRIMARY: string = 'theme_primary'
   static readonly THEME_PRIMARY_LIGHT: string = 'theme_primary_light'
   static readonly THEME_BACKGROUND: string = 'theme_background'

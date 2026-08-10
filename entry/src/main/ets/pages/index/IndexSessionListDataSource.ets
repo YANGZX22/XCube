@@ -10,13 +10,15 @@ export class SessionListItemData {
   session: ChatSession
   isSelected: boolean
   isActive: boolean
+  ordinal: number
   private readonly renderKey: string
 
-  constructor(session: ChatSession, isSelected: boolean, isActive: boolean) {
+  constructor(session: ChatSession, isSelected: boolean, isActive: boolean, ordinal: number = 1) {
     this.session = session
     this.isSelected = isSelected
     this.isActive = isActive
-    this.renderKey = buildSessionListItemRenderKey(session, isSelected, isActive)
+    this.ordinal = ordinal
+    this.renderKey = `${buildSessionListItemRenderKey(session, isSelected, isActive)}_${ordinal.toString()}`
   }
 
   get key(): string {
@@ -123,14 +125,15 @@ export class SessionListGroupViewModel {
 }
 
 function buildSessionListItems(group: SessionGroupData, selectedSessionIds: string[],
-  isMultiSelectMode: boolean, activeSessionId: string): SessionListItemData[] {
+  isMultiSelectMode: boolean, activeSessionId: string, startOrdinal: number): SessionListItemData[] {
   const items: SessionListItemData[] = []
   for (let i = 0; i < group.sessions.length; i++) {
     const session = group.sessions[i]
     items.push(new SessionListItemData(
       session,
       isMultiSelectMode && selectedSessionIds.includes(session.id),
-      !isMultiSelectMode && activeSessionId === session.id
+      !isMultiSelectMode && activeSessionId === session.id,
+      startOrdinal + i
     ))
   }
   return items
@@ -144,9 +147,11 @@ export function rebuildSessionListGroupViewModels(existingGroups: SessionListGro
   }
 
   const nextGroups: SessionListGroupViewModel[] = []
+  let nextOrdinal = 1
   for (let i = 0; i < sessionGroups.length; i++) {
     const group = sessionGroups[i]
-    const items = buildSessionListItems(group, selectedSessionIds, isMultiSelectMode, activeSessionId)
+    const items = buildSessionListItems(group, selectedSessionIds, isMultiSelectMode, activeSessionId, nextOrdinal)
+    nextOrdinal += group.sessions.length
     const existingGroup = existingGroupMap.get(group.key)
     if (existingGroup !== undefined) {
       existingGroup.setItems(items)

@@ -3,6 +3,9 @@ import { pasteboard } from '@kit.BasicServicesKit'
 import { hilog } from '@kit.PerformanceAnalysisKit'
 import { getAppUiState, observeAppUiState } from '../state/AppUiState'
 import { ImmersiveSheetHeader } from './ImmersiveSheetHeader'
+import { VisualEffectsMode } from '../models/ThemeColors'
+import { MANUSCRIPT_BODY_FONT, MANUSCRIPT_COMPACT_BAR_HEIGHT } from '../utils/ManuscriptVisualUtils'
+import { pickLocalizedText } from '../utils/LocalizedTextUtils'
 
 const DOMAIN = 0x0002
 const TAG = 'HtmlPreviewCard'
@@ -18,6 +21,9 @@ export struct HtmlPreviewCard {
   }
   private get themePrimaryLight(): string {
     return getAppUiState().themePrimaryLight
+  }
+  private get isManuscriptMode(): boolean {
+    return getAppUiState().visualEffectsMode === VisualEffectsMode.MANUSCRIPT
   }
   @Local activeTab: number = 1
   @Local showFullScreen: boolean = false
@@ -102,8 +108,186 @@ export struct HtmlPreviewCard {
     }
   }
 
-  build() {
+  @Builder
+  private ManuscriptTab(label: string, tab: number) {
+    Button({ type: ButtonType.Normal, stateEffect: false }) {
+      Text(label)
+        .fontFamily(MANUSCRIPT_BODY_FONT)
+        .fontSize(11)
+        .fontWeight(FontWeight.Medium)
+        .fontColor(this.activeTab === tab ? this.themePrimary : getAppUiState().themeTextSecondary)
+        .letterSpacing(2.2)
+        .padding({ bottom: 4 })
+        .border({
+          width: this.activeTab === tab ? { bottom: 1 } : 0,
+          color: this.themePrimary
+        })
+        .animation({ duration: 250, curve: Curve.EaseOut })
+    }
+    .height(MANUSCRIPT_COMPACT_BAR_HEIGHT)
+    .padding({ left: 2, right: 2 })
+    .backgroundColor(Color.Transparent)
+    .borderRadius(0)
+    .onClick(() => {
+      this.getUIContext().animateTo({ duration: 250, curve: Curve.EaseOut }, () => {
+        this.activeTab = tab
+      })
+    })
+  }
+
+  @Builder
+  private ManuscriptIconButton(symbol: Resource, pressed: boolean, onTap: () => void,
+    onPressed: (pressed: boolean) => void) {
+    Button({ type: ButtonType.Normal, stateEffect: false }) {
+      SymbolGlyph(symbol)
+        .fontSize(18)
+        .fontColor([pressed ? this.themePrimary : getAppUiState().themeTextSecondary])
+    }
+    .width(MANUSCRIPT_COMPACT_BAR_HEIGHT)
+    .height(MANUSCRIPT_COMPACT_BAR_HEIGHT)
+    .padding(0)
+    .backgroundColor(Color.Transparent)
+    .borderRadius(0)
+    .responseRegion({ x: -4, y: -4, width: 44, height: 44 })
+    .onTouch((event: TouchEvent) => {
+      onPressed(event.type === TouchType.Down)
+    })
+    .onClick(() => {
+      onTap()
+    })
+  }
+
+  @Builder
+  private ManuscriptCodeView() {
+    Scroll() {
+      Column() {
+        ForEach(this.htmlCode.split('\n'), (line: string, index: number) => {
+          Row() {
+            Text(`${index + 1}`)
+              .width(34)
+              .fontFamily('monospace')
+              .fontSize(11)
+              .fontColor(getAppUiState().themeTextTertiary)
+              .fontFeature('tnum')
+              .textAlign(TextAlign.End)
+              .padding({ right: 10 })
+
+            Text(line.length > 0 ? line : ' ')
+              .layoutWeight(1)
+              .fontFamily('monospace')
+              .fontSize(12.5)
+              .fontColor(getAppUiState().themeTextPrimary)
+              .lineHeight(20)
+              .padding({ left: 14 })
+              .border({ width: { left: 1 }, color: getAppUiState().themeDivider })
+          }
+          .width('100%')
+          .constraintSize({ minHeight: 20 })
+          .alignItems(VerticalAlign.Top)
+        }, (_line: string, index: number) => `${index}`)
+      }
+      .width('100%')
+    }
+    .width('100%')
+    .constraintSize({ maxHeight: 320 })
+    .padding({ left: 18, right: 18, top: 16, bottom: 16 })
+    .scrollBar(BarState.Auto)
+    .backgroundColor(Color.Transparent)
+  }
+
+  @Builder
+  private ManuscriptCard() {
     Column() {
+      Row({ space: 24 }) {
+        this.ManuscriptTab('CODE', 0)
+        this.ManuscriptTab('PREVIEW', 1)
+
+        Blank()
+
+        this.ManuscriptIconButton(
+          $r('sys.symbol.checkmark_square_on_square'),
+          this.copyBtnPressed,
+          (): void => {
+            this.copyToClipboard(this.htmlCode)
+            this.onCopyCode(this.htmlCode)
+          },
+          (pressed: boolean): void => {
+            this.copyBtnPressed = pressed
+          }
+        )
+        this.ManuscriptIconButton(
+          $r('sys.symbol.arrow_up_left_and_arrow_down_right'),
+          this.fullScreenBtnPressed,
+          (): void => {
+            this.showFullScreen = true
+          },
+          (pressed: boolean): void => {
+            this.fullScreenBtnPressed = pressed
+          }
+        )
+      }
+      .width('100%')
+      .height(MANUSCRIPT_COMPACT_BAR_HEIGHT)
+      .padding({ left: 14, right: 8 })
+      .alignItems(VerticalAlign.Center)
+      .border({ width: { bottom: 1 }, color: getAppUiState().themeDivider })
+
+      if (this.activeTab === 0) {
+        this.ManuscriptCodeView()
+      }
+
+      Column() {
+        Web({ src: this.getDataUrl(), controller: this.previewWebController })
+          .width('100%')
+          .height(this.activeTab === 1 ? 300 : 0)
+          .visibility(this.activeTab === 1 ? Visibility.Visible : Visibility.Hidden)
+          .onControllerAttached(() => {
+            this.isPreviewWebReady = true
+          })
+          .javaScriptAccess(true)
+          .domStorageAccess(true)
+          .backgroundColor(this.isDarkMode ? '#1a1a1a' : '#ffffff')
+      }
+      .width('100%')
+      .height(this.activeTab === 1 ? 320 : 0)
+      .padding(this.activeTab === 1 ? 10 : 0)
+      .visibility(this.activeTab === 1 ? Visibility.Visible : Visibility.Hidden)
+      .backgroundColor(getAppUiState().themeBackground)
+      .animation({ duration: 250, curve: Curve.EaseOut })
+
+      Row() {
+        Text('— fig. 1 · HTML —')
+          .fontFamily(MANUSCRIPT_BODY_FONT)
+          .fontSize(10)
+          .fontColor(getAppUiState().themeTextTertiary)
+          .fontFeature('tnum')
+          .letterSpacing(1.8)
+      }
+      .width('100%')
+      .height(32)
+      .justifyContent(FlexAlign.Center)
+      .alignItems(VerticalAlign.Center)
+      .border({ width: { top: 1 }, color: getAppUiState().themeDivider })
+    }
+    .width('100%')
+    .backgroundColor(getAppUiState().themeSurface)
+    .borderRadius(3)
+    .border({ width: 1, color: getAppUiState().themeDivider })
+    .clip(true)
+    .margin({ top: 18, bottom: 18 })
+    .bindSheet($$this.showFullScreen, this.FullScreenBuilder(), {
+      height: SheetSize.LARGE,
+      detents: [SheetSize.LARGE],
+      dragBar: true,
+      showClose: false
+    })
+  }
+
+  build() {
+    if (this.isManuscriptMode) {
+      this.ManuscriptCard()
+    } else {
+      Column() {
       // Tab 栏
       Row() {
         // 代码 Tab
@@ -112,7 +296,7 @@ export struct HtmlPreviewCard {
             .fontSize(11)
             .fontWeight(FontWeight.Bold)
             .fontColor(this.activeTab === 0 ? this.themePrimary : $r('app.color.text_tertiary'))
-          Text('代码')
+          Text(pickLocalizedText('代码', 'Code'))
             .fontSize(13)
             .fontWeight(this.activeTab === 0 ? FontWeight.Medium : FontWeight.Normal)
             .fontColor(this.activeTab === 0 ? this.themePrimary : $r('app.color.text_secondary'))
@@ -131,7 +315,7 @@ export struct HtmlPreviewCard {
           SymbolGlyph($r('sys.symbol.eye'))
             .fontSize(14)
             .fontColor([this.activeTab === 1 ? this.themePrimary : $r('app.color.text_tertiary')])
-          Text('预览')
+          Text(pickLocalizedText('预览', 'Preview'))
             .fontSize(13)
             .fontWeight(this.activeTab === 1 ? FontWeight.Medium : FontWeight.Normal)
             .fontColor(this.activeTab === 1 ? this.themePrimary : $r('app.color.text_secondary'))
@@ -243,19 +427,20 @@ export struct HtmlPreviewCard {
     .border({ width: 1, color: $r('app.color.divider') })
     .clip(true)
     .margin({ top: 8, bottom: 4 })
-    .bindSheet($$this.showFullScreen, this.FullScreenBuilder(), {
-      height: SheetSize.LARGE,
-      detents: [SheetSize.LARGE],
-      dragBar: true,
-      showClose: false
-    })
+      .bindSheet($$this.showFullScreen, this.FullScreenBuilder(), {
+        height: SheetSize.LARGE,
+        detents: [SheetSize.LARGE],
+        dragBar: true,
+        showClose: false
+      })
+    }
   }
 
   @Builder
   FullScreenBuilder() {
     Column() {
       ImmersiveSheetHeader({
-        title: 'HTML 预览',
+        title: pickLocalizedText('HTML 预览', 'HTML Preview'),
         onLeadingClick: (): void => {
           this.showFullScreen = false
         }

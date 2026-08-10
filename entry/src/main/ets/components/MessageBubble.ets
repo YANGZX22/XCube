@@ -1,4 +1,5 @@
 import { ChatMessage, MessageRole, MessageAttachment, AttachmentType, ToolCall, ToolResult } from '../models/ChatModels'
+import { VisualEffectsMode } from '../models/ThemeColors'
 import { pasteboard } from '@kit.BasicServicesKit'
 import { image } from '@kit.ImageKit'
 import { showToast } from '../utils/ToastUtil'
@@ -22,6 +23,13 @@ import { MATH_CHART_TOOL_ID } from '../config/BuiltinTools'
 import { formatBillingAmount } from '../utils/ModelBillingUtils'
 import { ImmersiveSheetHeader } from './ImmersiveSheetHeader'
 import { resolveChatSerifFontFamily } from '../utils/ChatSerifFontUtils'
+import {
+  ensureManuscriptFonts,
+  MANUSCRIPT_BODY_FONT,
+  MANUSCRIPT_HEADING_FONT,
+  MANUSCRIPT_COMPACT_BAR_HEIGHT
+} from '../utils/ManuscriptVisualUtils'
+import { pickLocalizedText } from '../utils/LocalizedTextUtils'
 
 const DOMAIN = 0x0002
 const TAG = 'MessageBubble'
@@ -91,6 +99,7 @@ export struct MessageBubble {
   @Param isEditing: boolean = false  // 是否处于编辑状态（被编辑的消息高亮显示）
   @Param previewContent: string = ''  // 编辑时的实时预览内容
   @Param previewAttachments: MessageAttachment[] = []  // 编辑时的实时预览附件
+  @Param isFirstAssistantMessage: boolean = false
   @Local isReasoningExpanded: boolean = false  // 推理内容是否展开
   @Local translatedText: string = ''  // 翻译结果
   @Local isTranslating: boolean = false  // 是否正在翻译
@@ -127,7 +136,22 @@ export struct MessageBubble {
   }
   private get chatBubbleTypeface(): string {
     const uiState = getAppUiState()
+    if (uiState.visualEffectsMode === VisualEffectsMode.MANUSCRIPT) {
+      return MANUSCRIPT_BODY_FONT
+    }
     return uiState.chatSerifFontEnabled ? resolveChatSerifFontFamily(uiState.chatSerifFontFamily) : 'HarmonyOS Sans'
+  }
+  private get isManuscriptMode(): boolean {
+    return getAppUiState().visualEffectsMode === VisualEffectsMode.MANUSCRIPT
+  }
+  private get manuscriptAccent(): string {
+    return this.isDarkMode ? '#C99A52' : '#B68235'
+  }
+  private get manuscriptAccentDeep(): string {
+    return this.isDarkMode ? '#D9B274' : '#8A6228'
+  }
+  private get messageToolbarIconColor(): ResourceColor {
+    return this.isManuscriptMode ? this.manuscriptAccentDeep : $r('app.color.text_tertiary')
   }
   private get translationLightSurface(): string {
     return '#FFFFFF'
@@ -305,6 +329,7 @@ export struct MessageBubble {
   }
 
   aboutToAppear(): void {
+    ensureManuscriptFonts()
     this.syncMessageScopedState()
     this.syncDerivedRenderCaches()
     this.isReasoningExpanded = false
@@ -468,7 +493,7 @@ export struct MessageBubble {
       onCopyText: (text: string): void => {
         this.copyToClipboard(text)
       },
-      onCopyCode: (code: string): void => {
+      onCopyCode: (code: string,): void => {
         this.copyToClipboard(code)
       },
       onCodeFullScreen: (code: string, _codeType: string): void => {
@@ -554,6 +579,13 @@ export struct MessageBubble {
     return this.isReasoningExpanded || (this.message.isGenerating && this.message.reasoningContent.length > 0)
   }
 
+  private isPlainManuscriptContent(content: string): boolean {
+    if (content === '') {
+      return true
+    }
+    return !/(^|\n)\s{0,3}(#{1,6}|>|[-+*]|[0-9]+[.)])\s|[`\[\]_*~]|https?:\/\//m.test(content)
+  }
+
   build() {
     Column() {
       // 编辑状态标签（点击可取消编辑）
@@ -579,7 +611,11 @@ export struct MessageBubble {
       }
 
       if (this.message.role === MessageRole.USER) {
-        this.UserMessage()
+        if (this.isManuscriptMode) {
+          this.ManuscriptUserMessage()
+        } else {
+          this.UserMessage()
+        }
       } else {
         this.AssistantMessage()
       }
@@ -589,12 +625,12 @@ export struct MessageBubble {
     .transition(
       TransitionEffect.asymmetric(
         // 入场：滑入 + 淡入
-        TransitionEffect.translate({
+        TransitionEffect.translate(this.isManuscriptMode ? { y: 12 } : {
           x: this.message.role === MessageRole.USER ? 30 : -30
         }).combine(TransitionEffect.OPACITY),
         // 退场：仅淡出
         TransitionEffect.OPACITY
-      ).animation({ duration: 250, curve: Curve.EaseOut })
+      ).animation({ duration: this.isManuscriptMode ? 500 : 250, curve: Curve.EaseOut })
     )
     .bindSheet($$this.showLatexPreview, this.LatexPreviewSheet(), {
       height: '25%',
@@ -602,6 +638,208 @@ export struct MessageBubble {
       dragBar: true,
       showClose: false,
       maskColor: '#00000000'
+    })
+  }
+
+  @Builder
+  ManuscriptUserMessage() {
+    Column({ space: 5 }) {
+      Text($r('app.string.manuscript_you'))
+        .fontFamily(MANUSCRIPT_BODY_FONT)
+        .fontSize(10)
+        .fontWeight(FontWeight.Medium)
+        .fontColor(this.manuscriptAccentDeep)
+        .letterSpacing(2)
+        .width('100%')
+        .textAlign(TextAlign.End)
+
+      if (this.hasDisplayAttachments()) {
+        Row() {
+          if (this.isEditing) {
+            this.PreviewAttachments()
+          } else {
+            this.UserAttachments()
+          }
+        }
+        .width('100%')
+        .justifyContent(FlexAlign.End)
+      }
+
+      if (this.getDisplayContent().length > 0) {
+        Text(this.getDisplayContent())
+          .fontFamily(MANUSCRIPT_BODY_FONT)
+          .fontSize(15)
+          .fontStyle(FontStyle.Italic)
+          .fontColor(getAppUiState().themeTextPrimary)
+          .lineHeight(25)
+          .textAlign(TextAlign.End)
+          .width('100%')
+      }
+
+      if (this.shouldShowUserToolbar()) {
+        Row({ space: 0 }) {
+          if (this.shouldShowVersionSwitcher()) {
+            Button({ type: ButtonType.Circle, stateEffect: true }) {
+              SymbolGlyph($r('sys.symbol.chevron_left'))
+                .fontSize(this.getMessageToolbarIconSize())
+                .fontColor([this.canSwitchToPreviousVersion() ? this.manuscriptAccentDeep :
+                  getAppUiState().themeDivider])
+            }
+            .width(this.getMessageToolbarButtonSize())
+            .height(this.getMessageToolbarButtonSize())
+            .padding(0)
+            .backgroundColor(Color.Transparent)
+            .onClick(() => {
+              if (this.canSwitchToPreviousVersion()) {
+                this.onSwitchVersion(-1)
+              }
+            })
+
+            Text(`${this.message.versionIndex + 1}/${this.message.versionCount}`)
+              .fontFamily(MANUSCRIPT_BODY_FONT)
+              .fontSize(11)
+              .fontColor(this.manuscriptAccentDeep)
+              .width(this.getMessageToolbarButtonSize())
+              .textAlign(TextAlign.Center)
+
+            Button({ type: ButtonType.Circle, stateEffect: true }) {
+              SymbolGlyph($r('sys.symbol.chevron_right'))
+                .fontSize(this.getMessageToolbarIconSize())
+                .fontColor([this.canSwitchToNextVersion() ? this.manuscriptAccentDeep :
+                  getAppUiState().themeDivider])
+            }
+            .width(this.getMessageToolbarButtonSize())
+            .height(this.getMessageToolbarButtonSize())
+            .padding(0)
+            .backgroundColor(Color.Transparent)
+            .onClick(() => {
+              if (this.canSwitchToNextVersion()) {
+                this.onSwitchVersion(1)
+              }
+            })
+
+            Divider()
+              .vertical(true)
+              .height(14)
+              .color(getAppUiState().themeDivider)
+              .margin(0)
+          }
+
+          if (this.canCopyMessageContent()) {
+            Button({ type: ButtonType.Circle, stateEffect: true }) {
+              SymbolGlyph($r('sys.symbol.checkmark_square_on_square'))
+                .fontSize(this.getMessageToolbarIconSize())
+                .fontColor([this.manuscriptAccentDeep])
+            }
+            .width(this.getMessageToolbarButtonSize())
+            .height(this.getMessageToolbarButtonSize())
+            .padding(0)
+            .backgroundColor(Color.Transparent)
+            .onClick(() => {
+              this.handleCopy()
+            })
+          }
+
+          Button({ type: ButtonType.Circle, stateEffect: true }) {
+            SymbolGlyph($r('sys.symbol.arrow_clockwise'))
+              .fontSize(this.getMessageToolbarIconSize())
+              .fontColor([this.manuscriptAccentDeep])
+          }
+          .width(this.getMessageToolbarButtonSize())
+          .height(this.getMessageToolbarButtonSize())
+          .padding(0)
+          .backgroundColor(Color.Transparent)
+          .onClick(() => {
+            this.onRegenerate()
+          })
+
+          Button({ type: ButtonType.Circle, stateEffect: true }) {
+            SymbolGlyph($r('sys.symbol.square_and_pencil'))
+              .fontSize(this.getMessageToolbarIconSize())
+              .fontColor([this.manuscriptAccentDeep])
+          }
+          .width(this.getMessageToolbarButtonSize())
+          .height(this.getMessageToolbarButtonSize())
+          .padding(0)
+          .backgroundColor(Color.Transparent)
+          .onClick(() => {
+            this.onEdit()
+          })
+
+          Button({ type: ButtonType.Circle, stateEffect: true }) {
+            SymbolGlyph($r('sys.symbol.dot_grid_2x2'))
+              .fontSize(this.getMessageToolbarIconSize())
+              .fontColor([this.manuscriptAccentDeep])
+          }
+          .width(this.getMessageToolbarButtonSize())
+          .height(this.getMessageToolbarButtonSize())
+          .padding(0)
+          .backgroundColor(Color.Transparent)
+          .bindMenu(this.UserMoreMenu(), {
+            systemMaterial: new uiMaterial.ImmersiveMaterial({
+              style: uiMaterial.ImmersiveStyle.THICK
+            })
+          })
+        }
+        .height(this.getMessageToolbarHeight())
+        .padding({ left: 3, right: 3 })
+        .justifyContent(FlexAlign.End)
+        .alignItems(VerticalAlign.Center)
+        .borderRadius(0)
+        .border({ width: 0, color: Color.Transparent })
+        .clip(false)
+      }
+    }
+    .width('100%')
+    .padding({ left: 34, right: 34 })
+    .alignItems(HorizontalAlign.End)
+    .onTouch((event: TouchEvent) => {
+      this.handleMultiSelectTouch(event)
+    })
+  }
+
+  @Builder
+  ManuscriptAssistantMessage() {
+    Row() {
+      if (this.isMultiSelectMode && this.isSelected) {
+        Column()
+          .width(2)
+          .backgroundColor(this.manuscriptAccentDeep)
+          .alignSelf(ItemAlign.Stretch)
+          .margin({ right: 8 })
+      }
+
+      Column({ space: 8 }) {
+        if (this.message.hasAttachments()) {
+          this.AssistantAttachments()
+        }
+
+        if (this.message.content.length === 0 && (this.message.isGenerating || this.message.isSearching)) {
+          Text('…')
+            .fontFamily(MANUSCRIPT_BODY_FONT)
+            .fontSize(15)
+            .fontColor(getAppUiState().themeTextTertiary)
+        } else if (this.isPlainManuscriptContent(this.message.content)) {
+          Text(this.message.content)
+            .width('100%')
+            .fontFamily(MANUSCRIPT_BODY_FONT)
+            .fontSize(15)
+            .fontWeight(FontWeight.Regular)
+            .fontColor(getAppUiState().themeTextPrimary)
+            .lineHeight(25)
+            .textAlign(TextAlign.JUSTIFY)
+        } else {
+          this.MessageContentMarkdown()
+        }
+      }
+      .layoutWeight(1)
+      .padding({ left: 34, right: 34 })
+      .alignItems(HorizontalAlign.Start)
+    }
+    .width('100%')
+    .alignItems(VerticalAlign.Top)
+    .onTouch((event: TouchEvent) => {
+      this.handleMultiSelectTouch(event)
     })
   }
 
@@ -1173,11 +1411,15 @@ export struct MessageBubble {
   }
 
   private getMessageToolbarHeight(): number {
-    return 34
+    return this.isManuscriptMode ? 30 : 34
   }
 
   private getMessageToolbarButtonSize(): number {
-    return 28
+    return this.isManuscriptMode ? 26 : 28
+  }
+
+  private getMessageToolbarIconSize(): number {
+    return this.isManuscriptMode ? 14 : 13
   }
 
   @Builder
@@ -1714,13 +1956,13 @@ export struct MessageBubble {
 
   @Builder
   private AssistantActionToolbar() {
-    Row({ space: 2 }) {
+    Row({ space: this.isManuscriptMode ? 0 : 2 }) {
       if (this.shouldShowVersionSwitcher()) {
-        Button({ type: ButtonType.Circle, stateEffect: false }) {
+        Button({ type: ButtonType.Circle, stateEffect: this.isManuscriptMode }) {
           SymbolGlyph($r('sys.symbol.chevron_left'))
-            .fontSize(13)
+            .fontSize(this.getMessageToolbarIconSize())
             .fontColor([this.canSwitchToPreviousVersion()
-              ? $r('app.color.text_tertiary') : $r('app.color.divider')])
+              ? this.messageToolbarIconColor : $r('app.color.divider')])
         }
         .width(this.getMessageToolbarButtonSize())
         .height(this.getMessageToolbarButtonSize())
@@ -1734,15 +1976,15 @@ export struct MessageBubble {
 
         Text(`${this.message.versionIndex + 1}/${this.message.versionCount}`)
           .fontSize(12)
-          .fontColor($r('app.color.text_tertiary'))
+          .fontColor(this.messageToolbarIconColor)
           .width(this.getMessageToolbarButtonSize())
           .textAlign(TextAlign.Center)
 
-        Button({ type: ButtonType.Circle, stateEffect: false }) {
+        Button({ type: ButtonType.Circle, stateEffect: this.isManuscriptMode }) {
           SymbolGlyph($r('sys.symbol.chevron_right'))
-            .fontSize(13)
+            .fontSize(this.getMessageToolbarIconSize())
             .fontColor([this.canSwitchToNextVersion()
-              ? $r('app.color.text_tertiary') : $r('app.color.divider')])
+              ? this.messageToolbarIconColor : $r('app.color.divider')])
         }
         .width(this.getMessageToolbarButtonSize())
         .height(this.getMessageToolbarButtonSize())
@@ -1758,14 +2000,14 @@ export struct MessageBubble {
           .vertical(true)
           .height(14)
           .color($r('app.color.divider'))
-          .margin({ left: 3, right: 3 })
+          .margin(this.isManuscriptMode ? 0 : { left: 3, right: 3 })
       }
 
       if (this.canCopyMessageContent()) {
-        Button({ type: ButtonType.Circle, stateEffect: false }) {
+        Button({ type: ButtonType.Circle, stateEffect: this.isManuscriptMode }) {
           SymbolGlyph($r('sys.symbol.checkmark_square_on_square'))
-            .fontSize(13)
-            .fontColor([$r('app.color.text_tertiary')])
+            .fontSize(this.getMessageToolbarIconSize())
+            .fontColor([this.messageToolbarIconColor])
         }
         .width(this.getMessageToolbarButtonSize())
         .height(this.getMessageToolbarButtonSize())
@@ -1776,10 +2018,10 @@ export struct MessageBubble {
         })
       }
 
-      Button({ type: ButtonType.Circle, stateEffect: false }) {
+      Button({ type: ButtonType.Circle, stateEffect: this.isManuscriptMode }) {
         SymbolGlyph($r('sys.symbol.arrow_clockwise'))
-          .fontSize(13)
-          .fontColor([$r('app.color.text_tertiary')])
+          .fontSize(this.getMessageToolbarIconSize())
+          .fontColor([this.messageToolbarIconColor])
       }
       .width(this.getMessageToolbarButtonSize())
       .height(this.getMessageToolbarButtonSize())
@@ -1790,18 +2032,18 @@ export struct MessageBubble {
       })
 
       if (this.canReadMessageContent()) {
-        Button({ type: ButtonType.Circle, stateEffect: false }) {
+        Button({ type: ButtonType.Circle, stateEffect: this.isManuscriptMode }) {
           if (this.ttsLoadingMessageId === this.message.id) {
             LoadingProgress()
-              .width(13)
-              .height(13)
+              .width(this.getMessageToolbarIconSize())
+              .height(this.getMessageToolbarIconSize())
               .color(this.themePrimary)
           } else {
             SymbolGlyph((this.speakingMessageId === this.message.id)
               ? $r('sys.symbol.pause') : $r('sys.symbol.speaker_wave_2'))
-              .fontSize(13)
+              .fontSize(this.getMessageToolbarIconSize())
               .fontColor([(this.speakingMessageId === this.message.id)
-                ? this.themePrimary : $r('app.color.text_tertiary')])
+                ? this.themePrimary : this.messageToolbarIconColor])
           }
         }
         .width(this.getMessageToolbarButtonSize())
@@ -1819,10 +2061,10 @@ export struct MessageBubble {
       }
 
       if (this.canTranslateMessageContent()) {
-        Button({ type: ButtonType.Circle, stateEffect: false }) {
+        Button({ type: ButtonType.Circle, stateEffect: this.isManuscriptMode }) {
           SymbolGlyph($r('sys.symbol.translate'))
-            .fontSize(13)
-            .fontColor([$r('app.color.text_tertiary')])
+            .fontSize(this.getMessageToolbarIconSize())
+            .fontColor([this.messageToolbarIconColor])
         }
         .width(this.getMessageToolbarButtonSize())
         .height(this.getMessageToolbarButtonSize())
@@ -1840,12 +2082,12 @@ export struct MessageBubble {
           .vertical(true)
           .height(14)
           .color($r('app.color.divider'))
-          .margin({ left: 3, right: 3 })
+          .margin(this.isManuscriptMode ? 0 : { left: 3, right: 3 })
 
-        Button({ type: ButtonType.Circle, stateEffect: false }) {
+        Button({ type: ButtonType.Circle, stateEffect: this.isManuscriptMode }) {
           SymbolGlyph($r('sys.symbol.yuansign_coupon'))
-            .fontSize(13)
-            .fontColor([$r('app.color.text_tertiary')])
+            .fontSize(this.getMessageToolbarIconSize())
+            .fontColor([this.messageToolbarIconColor])
         }
         .width(this.getMessageToolbarButtonSize())
         .height(this.getMessageToolbarButtonSize())
@@ -1866,10 +2108,10 @@ export struct MessageBubble {
         })
       }
 
-      Button({ type: ButtonType.Circle, stateEffect: false }) {
+      Button({ type: ButtonType.Circle, stateEffect: this.isManuscriptMode }) {
         SymbolGlyph($r('sys.symbol.dot_grid_2x2'))
-          .fontSize(13)
-          .fontColor([$r('app.color.text_tertiary')])
+          .fontSize(this.getMessageToolbarIconSize())
+          .fontColor([this.messageToolbarIconColor])
       }
       .width(this.getMessageToolbarButtonSize())
       .height(this.getMessageToolbarButtonSize())
@@ -1883,10 +2125,14 @@ export struct MessageBubble {
     }
     .height(this.getMessageToolbarHeight())
     .padding({ left: 3, right: 3 })
-    .borderRadius(this.getMessageToolbarHeight() / 2)
-    .clip(true)
+    .borderRadius(this.isManuscriptMode ? 0 : this.getMessageToolbarHeight() / 2)
+    .border({
+      width: 0,
+      color: this.isManuscriptMode ? this.manuscriptAccent : this.manuscriptAccentDeep
+    })
+    .clip(!this.isManuscriptMode)
     .alignItems(VerticalAlign.Center)
-    .systemMaterial(new uiMaterial.ImmersiveMaterial({
+    .systemMaterial(this.isManuscriptMode ? undefined : new uiMaterial.ImmersiveMaterial({
       style: uiMaterial.ImmersiveStyle.REGULAR,
       interactive: true,
       lightEffect: { color: undefined }
@@ -1910,7 +2156,7 @@ export struct MessageBubble {
       Column() {
         // 消息头部：图标 + 模型名 + 时间（水平排列）
         // 只在 showHeader 为 true 时显示
-        if (this.showHeader) {
+        if (this.showHeader && !this.isManuscriptMode) {
           Row() {
             // 助手头像
             Column() {
@@ -2070,19 +2316,21 @@ export struct MessageBubble {
           })
         }
         .width('100%')
-        .margin({ top: this.showHeader ? 8 : 0 })
-        .padding({ left: 14, right: 14, top: 12, bottom: 10 })
+        .margin({ top: this.showHeader && !this.isManuscriptMode ? 8 : 0 })
+        .padding(this.isManuscriptMode ? { left: 34, right: 34 } :
+          { left: 14, right: 14, top: 12, bottom: 10 })
           .backgroundColor(this.isMultiSelectMode && this.isSelected
             ? this.themePrimaryLight
-            : this.themeAiBubble)
-          .borderRadius(16)
+            : (this.isManuscriptMode ? Color.Transparent : this.themeAiBubble))
+          .borderRadius(this.isManuscriptMode ? 0 : 16)
           .border({
-            width: this.isMultiSelectMode && this.isSelected ? 1.2 : (this.hasAskUserToolCall() ? 1 : 0.5),
+            width: this.isManuscriptMode ? 0 :
+              (this.isMultiSelectMode && this.isSelected ? 1.2 : (this.hasAskUserToolCall() ? 1 : 0.5)),
             color: this.isMultiSelectMode && this.isSelected ? this.themePrimary :
               (this.hasAskUserToolCall() ? this.themePrimaryLight : $r('app.color.bubble_border'))
           })
           .clip(false)
-          .systemMaterial(new uiMaterial.ImmersiveMaterial({
+          .systemMaterial(this.isManuscriptMode ? undefined : new uiMaterial.ImmersiveMaterial({
             style: uiMaterial.ImmersiveStyle.REGULAR,
             materialColor: this.isMultiSelectMode && this.isSelected
               ? this.themePrimaryLight
@@ -2094,8 +2342,9 @@ export struct MessageBubble {
             this.AssistantActionToolbar()
           }
           .width('100%')
-          .justifyContent(FlexAlign.Start)
-          .margin({ top: 6 })
+          .justifyContent(this.isManuscriptMode ? FlexAlign.End : FlexAlign.Start)
+          .margin({ top: this.isManuscriptMode ? 10 : 6 })
+          .padding(this.isManuscriptMode ? { left: 34, right: 34 } : 0)
         }
       }
       .enabled(!this.isMultiSelectMode)
@@ -2103,7 +2352,7 @@ export struct MessageBubble {
       .alignItems(HorizontalAlign.Start)
     }
     .width('100%')
-    .constraintSize({ maxWidth: '92%' })
+    .constraintSize({ maxWidth: this.isManuscriptMode ? '100%' : '92%' })
     .alignItems(VerticalAlign.Top)
     .onTouch((event: TouchEvent) => {
       this.handleMultiSelectTouch(event)
@@ -2131,8 +2380,12 @@ export struct MessageBubble {
       }
       .constraintSize({ maxWidth: 220 })
       .padding({ left: 10, right: 10, top: 5, bottom: 5 })
-      .backgroundColor(this.themeAiBubble)
-      .borderRadius(14)
+      .backgroundColor(this.isManuscriptMode ? Color.Transparent : this.themeAiBubble)
+      .borderRadius(this.isManuscriptMode ? 0 : 14)
+      .border({
+        width: this.isManuscriptMode ? { top: 1, bottom: 1 } : 0,
+        color: this.isManuscriptMode ? getAppUiState().themeDivider : this.manuscriptAccentDeep
+      })
       .clip(true)
     }
     .width('100%')
@@ -2212,10 +2465,13 @@ export struct MessageBubble {
     .width('100%')
     .margin({ top: 8 })
     .backgroundColor(Color.Transparent)
-    .border({ width: 0.5, color: this.getTimelineRailColor() })
-    .borderRadius(12)
+    .border({
+      width: this.isManuscriptMode ? { top: 1, bottom: 1 } : 0.5,
+      color: this.isManuscriptMode ? getAppUiState().themeDivider : this.getTimelineRailColor()
+    })
+    .borderRadius(this.isManuscriptMode ? 0 : 12)
     .clip(false)
-    .systemMaterial(new uiMaterial.ImmersiveMaterial({
+    .systemMaterial(this.isManuscriptMode ? undefined : new uiMaterial.ImmersiveMaterial({
       style: uiMaterial.ImmersiveStyle.REGULAR,
       materialColor: this.getTimelineBackgroundColor(),
       applyShadow: false,
@@ -2223,8 +2479,9 @@ export struct MessageBubble {
       lightEffect: { color: undefined }
     }))
     .shadow({
-      radius: 12,
-      color: this.isDarkMode ? 'rgba(0, 0, 0, 0.32)' : 'rgba(15, 23, 42, 0.14)',
+      radius: this.isManuscriptMode ? 0 : 12,
+      color: this.isManuscriptMode ? Color.Transparent :
+        (this.isDarkMode ? 'rgba(0, 0, 0, 0.32)' : 'rgba(15, 23, 42, 0.14)'),
       offsetX: 0,
       offsetY: 0
     })
@@ -2244,78 +2501,64 @@ export struct MessageBubble {
     })
   }
 
-  // 推理内容区域（timeline 串珠样式：左竖线 + 圆形串珠图标 + 标题 + 可展开正文）
+  // 推理内容区域：标题栏与工具结果栏使用同一套披露式结构。
   @Builder
   ReasoningSection() {
     Column() {
-      Stack({ alignContent: Alignment.TopStart }) {
-        // 贯穿竖线：由图标内圆（20×20）遮挡，形成"线串珠"时间线
-        // left=11.5 = (图标列 24 - 线宽 1) / 2，与图标圆心对齐
-        Column()
-          .width(1)
+      Row() {
+        SymbolGlyph($r('sys.symbol.AI_deep_thinking'))
+          .fontSize(14)
+          .fontColor([this.isManuscriptMode || this.message.isGenerating
+            ? this.themePrimary : $r('app.color.text_secondary')])
+
+        Text(this.message.isGenerating ? $r('app.string.reasoning_thinking') : $r('app.string.reasoning_process'))
+          .fontSize(13)
+          .fontWeight(FontWeight.Medium)
+          .fontColor(this.isManuscriptMode || this.message.isGenerating
+            ? this.themePrimary : $r('app.color.text_secondary'))
+          .margin({ left: 6 })
+
+        Blank()
           .layoutWeight(1)
-          .margin({ left: 11.5, top: 6, bottom: 6 })
-          .backgroundColor(this.getTimelineRailColor())
 
-        // 单条 reasoning step：左图标 + 右内容
-        Row({ space: 10 }) {
-          Stack() {
-            Column()
-              .width(20)
-              .height(20)
-              .borderRadius(10)
-              .backgroundColor(this.getTimelineBackgroundColor())
-            SymbolGlyph($r('sys.symbol.AI_deep_thinking'))
-              .fontSize(13)
-              .fontColor([$r('app.color.text_secondary')])
-          }
-          .width(22)
-          .height(22)
+        Row() {
+          Text(this.isReasoningExpanded ? $r('app.string.common_collapse') : $r('app.string.common_details'))
+            .fontSize(11)
+            .fontColor(this.isManuscriptMode ? this.themePrimary : $r('app.color.text_tertiary'))
 
-          Column() {
-            // 标题行
-            Row({ space: 6 }) {
-              Text(this.message.isGenerating ? $r('app.string.reasoning_thinking') : $r('app.string.reasoning_process'))
-                .fontSize(13)
-                .fontWeight(FontWeight.Medium)
-                .fontColor($r('app.color.text_primary'))
-                .layoutWeight(1)
-
-              SymbolGlyph($r('sys.symbol.chevron_down'))
-                .fontSize(12)
-                .fontColor([$r('app.color.text_secondary')])
-                .rotate({ angle: this.isReasoningExpanded ? 0 : -90 })
-                .animation({ duration: 200, curve: Curve.EaseOut })
-            }
-            .width('100%')
-            .height(22)
-            .alignItems(VerticalAlign.Center)
-
-            // 展开时显示推理正文
-            if (this.isReasoningExpanded && this.message.reasoningContent.length > 0) {
-              Column() {
-                this.ReasoningMarkdown()
-              }
-              .width('100%')
-              .margin({ top: 6 })
-              .transition(TransitionEffect.OPACITY.animation({ duration: 200 }))
-            }
-          }
-          .layoutWeight(1)
-          .alignItems(HorizontalAlign.Start)
+          SymbolGlyph($r('sys.symbol.chevron_down'))
+            .fontSize(12)
+            .fontColor([this.isManuscriptMode ? this.themePrimary : $r('app.color.text_tertiary')])
+            .rotate({ angle: this.isReasoningExpanded ? 180 : 0 })
+            .animation({ duration: 200, curve: Curve.EaseOut })
+            .margin({ left: 2 })
         }
-        .width('100%')
-        .padding({ top: 1, bottom: 1 })
-        .alignItems(VerticalAlign.Top)
       }
       .width('100%')
+      .height(this.isManuscriptMode ? MANUSCRIPT_COMPACT_BAR_HEIGHT : 36)
+      .padding({ left: this.isManuscriptMode ? 14 : 10, right: this.isManuscriptMode ? 14 : 10 })
+      .alignItems(VerticalAlign.Center)
+      .onClick(() => {
+        this.toggleReasoningExpansion()
+      })
+
+      if (this.isReasoningExpanded && this.message.reasoningContent.length > 0) {
+        Column() {
+          this.ReasoningMarkdown()
+        }
+        .width('100%')
+        .padding({ left: 10, right: 10, bottom: 8 })
+        .transition(TransitionEffect.OPACITY.animation({ duration: 200 }))
+      }
     }
     .width('100%')
-    .padding({ left: 10, right: 10, top: 6, bottom: 6 })
     .backgroundColor(Color.Transparent)
-    .borderRadius(12)
-    .border({ width: 0.5, color: this.getTimelineRailColor() })
-    .systemMaterial(new uiMaterial.ImmersiveMaterial({
+    .borderRadius(this.isManuscriptMode ? 0 : 12)
+    .border({
+      width: this.isManuscriptMode ? { top: 1, bottom: 1 } : 0.5,
+      color: this.isManuscriptMode ? getAppUiState().themeDivider : this.getTimelineRailColor()
+    })
+    .systemMaterial(this.isManuscriptMode ? undefined : new uiMaterial.ImmersiveMaterial({
       style: uiMaterial.ImmersiveStyle.REGULAR,
       materialColor: this.getTimelineBackgroundColor(),
       applyShadow: false,
@@ -2323,15 +2566,13 @@ export struct MessageBubble {
       lightEffect: { color: undefined }
     }))
     .shadow({
-      radius: 12,
-      color: this.isDarkMode ? 'rgba(0, 0, 0, 0.32)' : 'rgba(15, 23, 42, 0.14)',
+      radius: this.isManuscriptMode ? 0 : 12,
+      color: this.isManuscriptMode ? Color.Transparent :
+        (this.isDarkMode ? 'rgba(0, 0, 0, 0.32)' : 'rgba(15, 23, 42, 0.14)'),
       offsetX: 0,
       offsetY: 0
     })
     .margin({ bottom: 8 })
-    .onClick(() => {
-      this.toggleReasoningExpansion()
-    })
   }
 
   /**
@@ -2419,7 +2660,7 @@ export struct MessageBubble {
       return this.message.searchQuery
     }
     if (this.message.searchReferences.length > 0) {
-      return '搜索结果'
+      return pickLocalizedText('搜索结果', 'Search Results')
     }
     return ''
   }
@@ -2457,27 +2698,30 @@ export struct MessageBubble {
   private getSearchSourceLabel(): string {
     const source = this.message.searchSource.trim()
     if (source === 'tool') {
-      return '工具调用'
+      return pickLocalizedText('工具调用', 'Tool Call')
     }
     if (source === 'manual') {
       return ''
     }
     // 兼容旧数据：没有持久化 searchSource 时，只展示工具调用，不暴露手动执行链路。
-    return this.message.hasToolCalls() ? '工具调用' : ''
+    return this.message.hasToolCalls() ? pickLocalizedText('工具调用', 'Tool Call') : ''
   }
 
   private getSearchingIndicatorText(): string {
     const engine = this.message.searchEngine.trim()
     if (this.message.searchQuery !== '') {
       if (engine !== '') {
-        return `我将为你通过${engine}查询：${this.message.searchQuery}`
+        return pickLocalizedText(
+          `我将为你通过${engine}查询：${this.message.searchQuery}`,
+          `I'll search with ${engine}: ${this.message.searchQuery}`)
       }
-      return `我将为你查询：${this.message.searchQuery}`
+      return pickLocalizedText(`我将为你查询：${this.message.searchQuery}`,
+        `I'll search for: ${this.message.searchQuery}`)
     }
     if (engine !== '') {
-      return `正在通过${engine}查询...`
+      return pickLocalizedText(`正在通过${engine}查询...`, `Searching with ${engine}...`)
     }
-    return '正在查询...'
+    return pickLocalizedText('正在查询...', 'Searching...')
   }
 
   private handleCopy() {

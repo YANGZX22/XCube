@@ -2607,6 +2607,78 @@
     {
       "name": "tts_test_failed",
       "value": "Unable to start test playback"
+    },
+    {
+      "name": "visual_effects_title",
+      "value": "New Visual Effects"
+    },
+    {
+      "name": "visual_effects_manuscript",
+      "value": "Manuscript"
+    },
+    {
+      "name": "visual_effects_desc",
+      "value": "Conversations set as a typeset page. Overrides color themes while active."
+    },
+    {
+      "name": "visual_effects_themes_locked",
+      "value": "Color themes are disabled while New Visual Effects is on."
+    },
+    {
+      "name": "visual_effects_new",
+      "value": "BETA"
+    },
+    {
+      "name": "manuscript_reply_placeholder",
+      "value": "Write your reply…"
+    },
+    {
+      "name": "manuscript_contents",
+      "value": "TABLE OF CONTENTS"
+    },
+    {
+      "name": "manuscript_conversations",
+      "value": "Conversations"
+    },
+    {
+      "name": "manuscript_conversation_kicker",
+      "value": "CONVERSATION · N° XII"
+    },
+    {
+      "name": "manuscript_you",
+      "value": "YOU"
+    },
+    {
+      "name": "manuscript_send",
+      "value": "SEND"
+    },
+    {
+      "name": "manuscript_stop",
+      "value": "STOP"
+    },
+    {
+      "name": "manuscript_folio",
+      "value": "folio"
+    },
+    {
+      "name": "manuscript_folio_label",
+      "value": "— Page X —"
+    },
+    {
+      "name": "manuscript_tab_assistants",
+      "value": "ASSISTANTS"
+    },
+    {
+      "name": "manuscript_tab_chat",
+      "value": "CHAT"
+    },
+    {
+      "name": "manuscript_tab_knowledge",
+      "value": "KNOWLEDGE"
+    },
+    {
+      "name": "manuscript_tab_settings",
+      "value": "SETTINGS"
     }
   ]
 }

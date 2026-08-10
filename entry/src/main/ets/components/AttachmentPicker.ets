@@ -13,6 +13,7 @@ import { BusinessError } from '@kit.BasicServicesKit'
 import { getAttachmentStorageService, AttachmentStorageService } from '../services/AttachmentStorageService'
 import { getAppUiState } from '../state/AppUiState'
 import { uiMaterial } from '@kit.ArkUI'
+import { VisualEffectsMode } from '../models/ThemeColors'
 
 @ComponentV2
 export struct AttachmentPicker {
@@ -28,6 +29,9 @@ export struct AttachmentPicker {
 
   private get themePrimary(): string {
     return getAppUiState().themePrimary
+  }
+  private get isManuscriptMode(): boolean {
+    return getAppUiState().visualEffectsMode === VisualEffectsMode.MANUSCRIPT
   }
 
   build() {
@@ -64,6 +68,10 @@ export struct AttachmentPicker {
       .width('100%')
       .justifyContent(FlexAlign.SpaceBetween)
       .padding({ top: this.showDragBar ? 0 : 10, bottom: 10 })
+      .border({
+        width: this.isManuscriptMode ? { top: 1, bottom: 1 } : 0,
+        color: this.isManuscriptMode ? getAppUiState().themeDivider : Color.Transparent
+      })
     }
     .width('100%')
     .backgroundColor(Color.Transparent)
@@ -83,16 +91,19 @@ export struct AttachmentPicker {
 
   @Builder
   OptionButton(icon: Resource, label: string, action: () => void) {
-    Button({ type: ButtonType.Normal, stateEffect: false }) {
+    Button({
+      type: ButtonType.Normal,
+      stateEffect: false
+    }) {
       Column() {
         SymbolGlyph(icon)
           .fontSize(22)
-          .fontColor([this.themePrimary])
+          .fontColor([this.isManuscriptMode ? getAppUiState().themeTextSecondary : this.themePrimary])
 
         Text(label)
           .fontSize(12)
           .fontWeight(FontWeight.Medium)
-          .fontColor(this.themePrimary)
+          .fontColor(this.isManuscriptMode ? getAppUiState().themeTextSecondary : this.themePrimary)
           .maxLines(1)
           .margin({ top: 4 })
       }
@@ -105,8 +116,8 @@ export struct AttachmentPicker {
     .height(this.getOptionButtonHeight())
     .padding(0)
     .backgroundColor(Color.Transparent)
-    .borderRadius(this.getOptionButtonRadius())
-    .systemMaterial(new uiMaterial.ImmersiveMaterial({
+    .borderRadius(this.isManuscriptMode ? 0 : this.getOptionButtonRadius())
+    .systemMaterial(this.isManuscriptMode ? undefined : new uiMaterial.ImmersiveMaterial({
       style: uiMaterial.ImmersiveStyle.REGULAR,
       materialColor: Color.Transparent,
       applyShadow: false,

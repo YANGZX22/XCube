@@ -13,6 +13,12 @@ import { uiMaterial } from '@kit.ArkUI'
 import { getAttachmentStorageService } from '../services/AttachmentStorageService'
 import { getAppUiState } from '../state/AppUiState'
 import { withColorAlpha } from '../utils/ColorAlphaUtils'
+import { VisualEffectsMode } from '../models/ThemeColors'
+import {
+  ensureManuscriptFonts,
+  MANUSCRIPT_BODY_FONT,
+  MANUSCRIPT_HEADING_FONT
+} from '../utils/ManuscriptVisualUtils'
 
 @ComponentV2
 export struct ChatInputBar {
@@ -26,6 +32,7 @@ export struct ChatInputBar {
   @Local sendBtnScale: number = 1
   @Local sendBtnRotation: number = 0
   @Local modelBtnPressed: boolean = false
+  @Local attachmentBtnPressed: boolean = false
   @Local immersiveBarHeightVp: number = 52
   private readonly editingHeaderHeightVp: number = 28
   @Param inputText: string = ''
@@ -69,6 +76,15 @@ export struct ChatInputBar {
   private get chatInputEnterKeySend(): boolean {
     return getAppUiState().chatInputEnterKeySend
   }
+  private get isManuscriptMode(): boolean {
+    return getAppUiState().visualEffectsMode === VisualEffectsMode.MANUSCRIPT
+  }
+  private get manuscriptAccent(): string {
+    return getAppUiState().isDarkMode ? '#C99A52' : '#B68235'
+  }
+  private get manuscriptAccentDeep(): string {
+    return getAppUiState().isDarkMode ? '#D9B274' : '#8A6228'
+  }
   // ========== 最近截图相关 ==========
   private recentPhotoOptions: RecentPhotoOptions = new RecentPhotoOptions()
   @Local hasRecentPhoto: boolean = false // 当前是否存在符合时间条件的截图
@@ -91,6 +107,16 @@ export struct ChatInputBar {
   } // 输入框失去焦点回调
   @Event onComposerContentChanged: () => void = () => {
   }
+  // 书稿模式页脚快捷操作：由聊天页沿用原有显示条件与业务回调。
+  @Param showManuscriptScrollTop: boolean = false
+  @Param showManuscriptScrollBottom: boolean = false
+  @Param manuscriptScrollBottomLoading: boolean = false
+  @Param showManuscriptHistory: boolean = false
+  @Param showManuscriptCanvas: boolean = false
+  @Event onManuscriptScrollTop: () => void = () => {}
+  @Event onManuscriptScrollBottom: () => void = () => {}
+  @Event onManuscriptHistory: () => void = () => {}
+  @Event onManuscriptCanvas: () => void = () => {}
   // 最近截图检测回调（通知父组件渲染 banner）
   @Event onRecentPhotoDetected: (detected: boolean) => void = () => {
   }
@@ -119,6 +145,7 @@ export struct ChatInputBar {
   }
 
   aboutToAppear(): void {
+    ensureManuscriptFonts()
     this.lastHasContent = this.computeHasContent()
     this.updateBreathing()
     this.initRecentPhotoOptions()
@@ -134,7 +161,7 @@ export struct ChatInputBar {
     if (this.autoFocus) {
       // 延迟聚焦，确保组件已渲染
       setTimeout(() => {
-        focusControl.requestFocus('chatInputTextArea')
+        focusControl.requestFocus(this.isManuscriptMode ? 'manuscriptChatInputTextArea' : 'chatInputTextArea')
       }, 50)
     }
   }
@@ -147,7 +174,9 @@ export struct ChatInputBar {
       // 附件预览区域
       this.AttachmentPreview()
 
-      if (this.isEditing) {
+      if (this.isManuscriptMode) {
+        this.ManuscriptBar()
+      } else if (this.isEditing) {
         Stack({ alignContent: Alignment.Top }) {
           // 编辑态底板始终比当前输入栏高一个标题区，并随多行输入实时撑高。
           Column()
@@ -188,6 +217,213 @@ export struct ChatInputBar {
     .width('100%')
     .backgroundColor(Color.Transparent)
     .clip(false)
+  }
+
+  @Builder
+  private ManuscriptFooterIconButton(icon: Resource, isLoading: boolean, onClick: () => void) {
+    Button({ type: ButtonType.Normal, stateEffect: false }) {
+      Stack({ alignContent: Alignment.Center }) {
+        if (isLoading) {
+          Progress({ value: 25, total: 100, type: ProgressType.Ring })
+            .width(28)
+            .height(28)
+            .color(this.manuscriptAccent)
+            .backgroundColor(Color.Transparent)
+            .style({ strokeWidth: 1.5 })
+            .hitTestBehavior(HitTestMode.None)
+        }
+
+        SymbolGlyph(icon)
+          .fontSize(isLoading ? 14 : 16)
+          .fontColor([this.manuscriptAccentDeep])
+      }
+      .width(36)
+      .height(36)
+    }
+    .width(40)
+    .height(40)
+    .padding(0)
+    .backgroundColor(Color.Transparent)
+    .borderRadius(0)
+    .border({ width: 0, color: Color.Transparent })
+    .responseRegion({ x: -2, y: -2, width: 44, height: 44 })
+    .onClick(onClick)
+  }
+
+  @Builder
+  ManuscriptBar() {
+    Column({ space: 9 }) {
+      if (this.isEditing) {
+        Row({ space: 5 }) {
+          SymbolGlyph($r('sys.symbol.square_and_pencil'))
+            .fontSize(11)
+            .fontColor([this.manuscriptAccentDeep])
+          Text($r('app.string.editing_message'))
+            .fontFamily(MANUSCRIPT_BODY_FONT)
+            .fontSize(11)
+            .fontStyle(FontStyle.Italic)
+            .fontColor(this.manuscriptAccentDeep)
+        }
+        .width('100%')
+        .justifyContent(FlexAlign.Center)
+        .onClick(() => {
+          this.onCancelEdit()
+        })
+      }
+
+      Row({ space: 8 }) {
+        Button({ type: ButtonType.Normal, stateEffect: false }) {
+          if (this.currentModelId !== '' && this.hasCurrentModelIcon()) {
+            Image(this.getCurrentModelIconResourcePath())
+              .width(18)
+              .height(18)
+              .objectFit(ImageFit.Contain)
+              .fillColor(this.modelBtnPressed ? this.manuscriptAccentDeep : getAppUiState().themeTextSecondary)
+          } else {
+            SymbolGlyph($r('sys.symbol.ai_edit'))
+              .fontSize(18)
+              .fontColor([this.modelBtnPressed ? this.manuscriptAccentDeep : getAppUiState().themeTextSecondary])
+          }
+        }
+        .width(44)
+        .height(44)
+        .padding(0)
+        .backgroundColor(Color.Transparent)
+        .borderRadius(0)
+        .onTouch((event: TouchEvent) => {
+          this.modelBtnPressed = event.type === TouchType.Down
+        })
+        .onClick(() => {
+          this.onModelIconClick()
+        })
+
+        TextArea({ text: this.inputText, placeholder: $r('app.string.manuscript_reply_placeholder') })
+          .id('manuscriptChatInputTextArea')
+          .placeholderColor(getAppUiState().themeTextTertiary)
+          .placeholderFont({ size: 15, style: FontStyle.Italic, family: MANUSCRIPT_BODY_FONT })
+          .fontFamily(MANUSCRIPT_BODY_FONT)
+          .fontSize(15)
+          .fontColor(getAppUiState().themeTextPrimary)
+          .caretColor(this.manuscriptAccentDeep)
+          .enterKeyType(this.chatInputEnterKeySend ? EnterKeyType.Send : EnterKeyType.NEW_LINE)
+          .backgroundColor(Color.Transparent)
+          .border({ width: { bottom: 1 }, color: getAppUiState().themeTextSecondary })
+          .borderRadius(0)
+          .padding({ left: 0, right: 4, top: 8, bottom: 7 })
+          .layoutWeight(1)
+          .constraintSize({ minHeight: 44, maxHeight: 112 })
+          .onChange((value: string) => {
+            this.onInputTextChange(value)
+          })
+          .onSubmit(() => {
+            if (this.chatInputEnterKeySend && !this.isSendBusy() && this.computeHasContent()) {
+              this.onSend()
+            }
+          })
+          .onFocus(() => {
+            this.onInputFocus()
+          })
+          .onBlur(() => {
+            this.onInputBlur()
+          })
+
+        Button({ type: ButtonType.Normal, stateEffect: false }) {
+          SymbolGlyph(this.getAttachmentButtonSymbol())
+            .fontSize(18)
+            .fontColor([this.attachmentBtnPressed ? this.manuscriptAccentDeep :
+              getAppUiState().themeTextSecondary])
+            .symbolEffect(new ReplaceSymbolEffect(EffectScope.WHOLE), this.attachIconTrigger)
+        }
+        .width(44)
+        .height(44)
+        .padding(0)
+        .backgroundColor(Color.Transparent)
+        .borderRadius(0)
+        .onTouch((event: TouchEvent) => {
+          this.attachmentBtnPressed = event.type === TouchType.Down
+        })
+        .onClick(() => {
+          this.onAttachmentClick()
+        })
+
+        Button({ type: ButtonType.Normal, stateEffect: false }) {
+          Text(this.isSending ? $r('app.string.manuscript_stop') : $r('app.string.manuscript_send'))
+            .fontFamily(MANUSCRIPT_HEADING_FONT)
+            .fontSize(13)
+            .fontWeight(FontWeight.Medium)
+            .fontColor(this.sendBtnPressed ? this.manuscriptAccent : this.manuscriptAccentDeep)
+            .letterSpacing(2)
+            .padding({ left: 2, right: 2 })
+        }
+        .width(58)
+        .height(44)
+        .padding(0)
+        .backgroundColor(Color.Transparent)
+        .borderRadius(0)
+        .opacity(this.isSending || (!this.isSendDispatching && this.computeHasContent()) ? 1 : 0.45)
+        .onTouch((event: TouchEvent) => {
+          this.sendBtnPressed = event.type === TouchType.Down
+        })
+        .onClick(() => {
+          if (this.isSending) {
+            this.onStop()
+          } else if (!this.isSendDispatching && this.computeHasContent()) {
+            this.onSend()
+          }
+        })
+      }
+      .width('100%')
+      .alignItems(VerticalAlign.Bottom)
+
+      Row() {
+        Text($r('app.string.manuscript_folio_label'))
+          .fontFamily(MANUSCRIPT_BODY_FONT)
+          .fontSize(10)
+          .fontColor(getAppUiState().themeTextTertiary)
+          .fontFeature('tnum')
+
+        Blank()
+
+        Row({ space: 4 }) {
+          if (this.showManuscriptScrollTop) {
+            this.ManuscriptFooterIconButton($r('sys.symbol.arrow_up_to_line'), false, () => {
+              this.onManuscriptScrollTop()
+            })
+          }
+
+          if (this.showManuscriptScrollBottom) {
+            this.ManuscriptFooterIconButton($r('sys.symbol.chevron_down'),
+              this.manuscriptScrollBottomLoading, () => {
+                this.onManuscriptScrollBottom()
+              })
+          }
+
+          if (this.showManuscriptHistory) {
+            this.ManuscriptFooterIconButton($r('sys.symbol.ellipsis_message'), false, () => {
+              this.onManuscriptHistory()
+            })
+          }
+
+          if (this.showManuscriptCanvas) {
+            this.ManuscriptFooterIconButton($r('sys.symbol.paintbrush_pointed_waveform'), false, () => {
+              this.onManuscriptCanvas()
+            })
+          }
+        }
+        .height(40)
+        .alignItems(VerticalAlign.Center)
+      }
+      .width('100%')
+      .height(44)
+      .alignItems(VerticalAlign.Center)
+    }
+    .width('100%')
+    .padding({ left: 4, right: 4, top: 4, bottom: 2 })
+    .backgroundColor(Color.Transparent)
+    .transition(
+      TransitionEffect.OPACITY.combine(TransitionEffect.translate({ y: 12 }))
+        .animation({ duration: 550, curve: Curve.EaseInOut })
+    )
   }
 
   // 整条输入栏作为单一沉浸光感浮动面（Row + systemMaterial）；高度随输入内容自适应展开

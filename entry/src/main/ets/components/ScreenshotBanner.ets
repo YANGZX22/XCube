@@ -5,6 +5,8 @@ import { util } from '@kit.ArkTS'
 import { uiMaterial } from '@kit.ArkUI'
 import { getAttachmentStorageService } from '../services/AttachmentStorageService'
 import { AppStorageKeys } from '../config/AppStorageKeys'
+import { getAppUiState } from '../state/AppUiState'
+import { VisualEffectsMode } from '../models/ThemeColors'
 
 @ComponentV2
 export struct ScreenshotBanner {
@@ -14,6 +16,12 @@ export struct ScreenshotBanner {
   @Local dismissed: boolean = false
   @Local bannerHeight: number = 0
   private recentPhotoOptions: RecentPhotoOptions = new RecentPhotoOptions()
+  private get isManuscriptMode(): boolean {
+    return getAppUiState().visualEffectsMode === VisualEffectsMode.MANUSCRIPT
+  }
+  private get themePrimary(): string {
+    return getAppUiState().themePrimary
+  }
 
   aboutToAppear(): void {
     this.recentPhotoOptions.MIMEType = photoAccessHelper.PhotoViewMIMETypes.IMAGE_TYPE
@@ -37,18 +45,18 @@ export struct ScreenshotBanner {
             .fontColor($r('app.color.text_primary'))
             .fontWeight(FontWeight.Medium)
           Blank()
-          Button({ type: ButtonType.Circle }) {
+          Button({ type: ButtonType.Circle, stateEffect: this.isManuscriptMode }) {
             SymbolGlyph($r('sys.symbol.xmark'))
               .fontSize(9)
               .fontColor([$r('app.color.text_secondary')])
           }
-          .width(20)
-          .height(20)
+          .width(this.isManuscriptMode ? 44 : 20)
+          .height(this.isManuscriptMode ? 44 : 20)
           .padding(0)
           .backgroundColor(Color.Transparent)
-          .borderRadius(10)
-          .stateEffect(false)
-          .systemMaterial(new uiMaterial.ImmersiveMaterial({
+          .borderRadius(this.isManuscriptMode ? 0 : 10)
+          .border({ width: 0, color: Color.Transparent })
+          .systemMaterial(this.isManuscriptMode ? undefined : new uiMaterial.ImmersiveMaterial({
             style: uiMaterial.ImmersiveStyle.ULTRA_THIN,
             materialColor: Color.Transparent,
             applyShadow: false,
@@ -86,16 +94,25 @@ export struct ScreenshotBanner {
       .width(140)
       .alignItems(HorizontalAlign.Center)
       .backgroundColor(Color.Transparent)
-      .borderRadius(14)
+      .borderRadius(this.isManuscriptMode ? 0 : 14)
+      .border({
+        width: this.isManuscriptMode ? { top: 1, bottom: 1 } : 0,
+        color: this.isManuscriptMode ? getAppUiState().themeDivider : this.themePrimary
+      })
       .clip(false)
-      .systemMaterial(new uiMaterial.ImmersiveMaterial({
+      .systemMaterial(this.isManuscriptMode ? undefined : new uiMaterial.ImmersiveMaterial({
         style: uiMaterial.ImmersiveStyle.REGULAR,
         materialColor: Color.Transparent,
         applyShadow: false,
         interactive: false,
         lightEffect: { color: undefined }
       }))
-      .shadow({ radius: 20, color: 'rgba(0, 0, 0, 0.12)', offsetX: 0, offsetY: 6 })
+      .shadow({
+        radius: this.isManuscriptMode ? 0 : 20,
+        color: this.isManuscriptMode ? Color.Transparent : 'rgba(0, 0, 0, 0.12)',
+        offsetX: 0,
+        offsetY: 6
+      })
       .onAreaChange((_oldArea: Area, newArea: Area) => {
         let h = newArea.height
         if (typeof h === 'number') {

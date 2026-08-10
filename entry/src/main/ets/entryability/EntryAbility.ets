@@ -213,6 +213,9 @@ export default class EntryAbility extends UIAbility {
       },
       onColorThemeChanged: (): void => {
         this.updateWindowAppearance();
+      },
+      onVisualEffectsModeChanged: (): void => {
+        this.updateWindowAppearance();
       }
     };
     ServiceRegistry.settings().registerCallback(this.settingsCallback);

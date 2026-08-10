@@ -1,4 +1,4 @@
-import { uiMaterial } from '@kit.ArkUI'
+import { curves, uiMaterial } from '@kit.ArkUI'
 import { HdsNavigation, HdsNavigationTitleBarOptions, HdsNavigationTitleMode } from '@kit.UIDesignKit'
 import { AppStorageKeys } from '../config/AppStorageKeys'
 import { SettingsPagePresentationMode } from '../config/SettingsDetailPresentation'
@@ -28,6 +28,16 @@ import {
 import { showSnackBar, SnackBarDisplayOptions, SnackBarTone } from '../utils/ToastUtil'
 
 let ttsSettingsPathStack: NavPathStack | null = null
+
+function createTtsSettingsCardMaterial(): uiMaterial.Material {
+  return new uiMaterial.ImmersiveMaterial({
+    style: uiMaterial.ImmersiveStyle.ULTRA_THIN,
+    materialColor: Color.Transparent,
+    applyShadow: true,
+    interactive: false,
+    lightEffect: { color: undefined }
+  })
+}
 
 @Entry
 @ComponentV2
@@ -234,6 +244,17 @@ struct TTSSettingsPage {
     }
   }
 
+  private selectEngine(engine: TTSEngineType): void {
+    if (this.engine === engine) {
+      return
+    }
+    if (this.isTesting) {
+      this.previewService.stop()
+      this.isTesting = false
+    }
+    this.engine = engine
+  }
+
   private async saveSettings(showSuccess: boolean = true): Promise<void> {
     const normalizedBaseUrl = this.elevenLabsBaseUrl.trim() === '' ?
       DEFAULT_ELEVENLABS_BASE_URL : this.elevenLabsBaseUrl.trim()
@@ -381,7 +402,21 @@ struct TTSSettingsPage {
 
   @Builder
   private EnableCardContent() {
-    Row({ space: 12 }) {
+    Row({ space: 14 }) {
+      Column() {
+        SymbolGlyph($r('sys.symbol.speaker_wave_2'))
+          .fontSize(22)
+          .fontColor([this.ttsEnabled ? Color.White : this.themePrimary])
+      }
+      .width(44)
+      .height(44)
+      .justifyContent(FlexAlign.Center)
+      .backgroundColor(this.ttsEnabled ? this.themePrimary : Color.Transparent)
+      .borderRadius(14)
+      .border({ width: 1, color: this.ttsEnabled ? this.themePrimary : this.themePrimaryLight })
+      .scale({ x: this.ttsEnabled ? 1 : 0.92, y: this.ttsEnabled ? 1 : 0.92 })
+      .animation({ duration: 320, curve: curves.springMotion(0.35, 0.82) })
+
       Column({ space: 4 }) {
         Text($r('app.string.tts_enabled_title'))
           .fontSize(16)
@@ -402,6 +437,7 @@ struct TTSSettingsPage {
         .selectedColor(this.themePrimary)
         .switchPointColor(Color.White)
         .systemMaterial(new uiMaterial.Material())
+        .animation({ duration: 280, curve: curves.springMotion(0.35, 0.82) })
         .onChange((value: boolean): void => {
           this.setEnabled(value)
         })
@@ -417,32 +453,65 @@ struct TTSSettingsPage {
     title: Resource,
     description: Resource
   ) {
+    // Keep both choices the same size so labels stay aligned across languages.
     Button() {
-      Column({ space: 7 }) {
-        SymbolGlyph(icon)
-          .fontSize(22)
-          .fontColor([this.engine === engine ? Color.White : this.themePrimary])
+      Column({ space: 9 }) {
+        Row() {
+          Column() {
+            SymbolGlyph(icon)
+              .fontSize(21)
+              .fontColor([this.engine === engine ? Color.White : this.themePrimary])
+          }
+          .width(38)
+          .height(38)
+          .justifyContent(FlexAlign.Center)
+          .borderRadius(12)
+          .backgroundColor(this.engine === engine ? '#26FFFFFF' : Color.Transparent)
+          .border({ width: 1, color: this.engine === engine ? '#38FFFFFF' : this.themePrimaryLight })
 
-        Text(title)
-          .fontSize(14)
-          .fontWeight(FontWeight.Medium)
-          .fontColor(this.engine === engine ? Color.White : $r('app.color.text_primary'))
+          Blank()
 
-        Text(description)
-          .fontSize(11)
-          .fontColor(this.engine === engine ? '#EDEAFF' : $r('app.color.text_secondary'))
-          .textAlign(TextAlign.Center)
-          .maxLines(2)
+          if (this.engine === engine) {
+            SymbolGlyph($r('sys.symbol.checkmark_circle_fill'))
+              .fontSize(18)
+              .fontColor([Color.White])
+              .transition(
+                TransitionEffect.OPACITY.combine(TransitionEffect.scale({ x: 0.55, y: 0.55 }))
+                  .animation({ duration: 320, curve: curves.springMotion(0.35, 0.82) })
+              )
+          }
+        }
+        .width('100%')
+
+        Column({ space: 3 }) {
+          Text(title)
+            .fontSize(14)
+            .fontWeight(FontWeight.Medium)
+            .fontColor(this.engine === engine ? Color.White : $r('app.color.text_primary'))
+            .width('100%')
+
+          Text(description)
+            .fontSize(11)
+            .fontColor(this.engine === engine ? '#EDEAFF' : $r('app.color.text_secondary'))
+            .lineHeight(16)
+            .maxLines(2)
+            .width('100%')
+        }
+        .alignItems(HorizontalAlign.Start)
       }
       .width('100%')
-      .alignItems(HorizontalAlign.Center)
+      .height('100%')
+      .alignItems(HorizontalAlign.Start)
+      .justifyContent(FlexAlign.Start)
     }
     .layoutWeight(1)
     .height(112)
-    .padding({ left: 10, right: 10, top: 12, bottom: 12 })
+    .padding(13)
     .backgroundColor(this.engine === engine ? this.themePrimary : Color.Transparent)
     .borderRadius(18)
     .border({ width: 1, color: this.engine === engine ? this.themePrimary : this.themePrimaryLight })
+    .opacity(this.ttsEnabled ? 1 : 0.5)
+    .animation({ duration: 320, curve: curves.springMotion(0.35, 0.82) })
     .stateEffect(false)
     .systemMaterial(new uiMaterial.ImmersiveMaterial({
       style: uiMaterial.ImmersiveStyle.REGULAR,
@@ -453,18 +522,26 @@ struct TTSSettingsPage {
     }))
     .enabled(this.ttsEnabled)
     .onClick((): void => {
-      this.engine = engine
+      this.selectEngine(engine)
     })
   }
 
   @Builder
   private EngineCardContent() {
     Column({ space: 14 }) {
-      Text($r('app.string.tts_engine_title'))
-        .fontSize(16)
-        .fontWeight(FontWeight.Medium)
-        .fontColor($r('app.color.text_primary'))
-        .width('100%')
+      Row({ space: 9 }) {
+        SymbolGlyph($r('sys.symbol.waveform'))
+          .fontSize(19)
+          .fontColor([this.themePrimary])
+
+        Text($r('app.string.tts_engine_title'))
+          .fontSize(16)
+          .fontWeight(FontWeight.Medium)
+          .fontColor($r('app.color.text_primary'))
+          .layoutWeight(1)
+      }
+      .width('100%')
+      .alignItems(VerticalAlign.Center)
 
       Row({ space: 12 }) {
         this.EngineButton(
@@ -481,9 +558,12 @@ struct TTSSettingsPage {
         )
       }
       .width('100%')
+      .alignItems(VerticalAlign.Top)
     }
     .width('100%')
     .alignItems(HorizontalAlign.Start)
+    .opacity(this.ttsEnabled ? 1 : 0.55)
+    .animation({ duration: 220, curve: Curve.EaseOut })
   }
 
   @Builder
@@ -618,32 +698,28 @@ struct TTSSettingsPage {
   }
 
   @Builder
-  private ParameterSlider(
-    label: Resource,
-    valueText: string,
-    value: number,
-    min: number,
-    max: number,
-    step: number,
-    onChange: (value: number) => void
-  ) {
-    Column({ space: 8 }) {
+  private StabilitySlider() {
+    Column({ space: 10 }) {
       Row() {
-        Text(label)
-          .fontSize(13)
+        Text($r('app.string.tts_stability'))
+          .fontSize(14)
+          .fontWeight(FontWeight.Medium)
           .fontColor($r('app.color.text_primary'))
           .layoutWeight(1)
 
-        Text(valueText)
+        Text(this.stability.toFixed(2))
           .fontSize(13)
           .fontWeight(FontWeight.Medium)
           .fontColor(this.themePrimary)
+          .width(52)
+          .textAlign(TextAlign.End)
       }
       .width('100%')
 
-      Slider({ value: value, min: min, max: max, step: step, style: SliderStyle.InSet })
+      Slider({ value: this.stability, min: 0, max: 1, step: 0.05, style: SliderStyle.InSet })
         .width('100%')
-        .trackThickness(16)
+        .trackThickness(8)
+        .blockSize({ width: 22, height: 22 })
         .selectedColor(this.themePrimaryLight)
         .trackColor(Color.White)
         .blockColor(this.themePrimary)
@@ -655,17 +731,104 @@ struct TTSSettingsPage {
           style: uiMaterial.ImmersiveStyle.ULTRA_THIN
         }))
         .enabled(this.ttsEnabled)
-        .onChange(onChange)
+        .onChange((value: number, _mode: SliderChangeMode): void => {
+          this.stability = Math.round(value * 100) / 100
+        })
     }
     .width('100%')
+    .padding({ top: 4, bottom: 10 })
+  }
+
+  @Builder
+  private SimilaritySlider() {
+    Column({ space: 10 }) {
+      Row() {
+        Text($r('app.string.tts_similarity_boost'))
+          .fontSize(14)
+          .fontWeight(FontWeight.Medium)
+          .fontColor($r('app.color.text_primary'))
+          .layoutWeight(1)
+
+        Text(this.similarityBoost.toFixed(2))
+          .fontSize(13)
+          .fontWeight(FontWeight.Medium)
+          .fontColor(this.themePrimary)
+          .width(52)
+          .textAlign(TextAlign.End)
+      }
+      .width('100%')
+
+      Slider({ value: this.similarityBoost, min: 0, max: 1, step: 0.05, style: SliderStyle.InSet })
+        .width('100%')
+        .trackThickness(8)
+        .blockSize({ width: 22, height: 22 })
+        .selectedColor(this.themePrimaryLight)
+        .trackColor(Color.White)
+        .blockColor(this.themePrimary)
+        .blockBorderColor(this.themePrimary)
+        .blockBorderWidth(1)
+        .showSteps(false)
+        .showTips(false)
+        .systemMaterial(new uiMaterial.ImmersiveMaterial({
+          style: uiMaterial.ImmersiveStyle.ULTRA_THIN
+        }))
+        .enabled(this.ttsEnabled)
+        .onChange((value: number, _mode: SliderChangeMode): void => {
+          this.similarityBoost = Math.round(value * 100) / 100
+        })
+    }
+    .width('100%')
+    .padding({ top: 10, bottom: 10 })
+  }
+
+  @Builder
+  private SpeedSlider() {
+    Column({ space: 10 }) {
+      Row() {
+        Text($r('app.string.tts_speed'))
+          .fontSize(14)
+          .fontWeight(FontWeight.Medium)
+          .fontColor($r('app.color.text_primary'))
+          .layoutWeight(1)
+
+        Text(`${this.speed.toFixed(2)}×`)
+          .fontSize(13)
+          .fontWeight(FontWeight.Medium)
+          .fontColor(this.themePrimary)
+          .width(52)
+          .textAlign(TextAlign.End)
+      }
+      .width('100%')
+
+      Slider({ value: this.speed, min: 0.7, max: 1.2, step: 0.05, style: SliderStyle.InSet })
+        .width('100%')
+        .trackThickness(8)
+        .blockSize({ width: 22, height: 22 })
+        .selectedColor(this.themePrimaryLight)
+        .trackColor(Color.White)
+        .blockColor(this.themePrimary)
+        .blockBorderColor(this.themePrimary)
+        .blockBorderWidth(1)
+        .showSteps(false)
+        .showTips(false)
+        .systemMaterial(new uiMaterial.ImmersiveMaterial({
+          style: uiMaterial.ImmersiveStyle.ULTRA_THIN
+        }))
+        .enabled(this.ttsEnabled)
+        .onChange((value: number, _mode: SliderChangeMode): void => {
+          this.speed = Math.round(value * 100) / 100
+        })
+    }
+    .width('100%')
+    .padding({ top: 10, bottom: 4 })
   }
 
   @Builder
   private ElevenLabsCardContent() {
-    Column({ space: 14 }) {
+    Column({ space: 16 }) {
       Row({ space: 9 }) {
         SymbolGlyph($r('sys.symbol.paintbrush_pointed_waveform'))
-          .fontSize(20)
+          .fontSize(19)
           .fontColor([this.themePrimary])
         Text($r('app.string.tts_elevenlabs_config'))
           .fontSize(16)
@@ -704,16 +867,17 @@ struct TTSSettingsPage {
       )
       this.VoiceSelector()
 
-      Row() {
+      Column({ space: 7 }) {
         Text($r('app.string.tts_model'))
           .fontSize(13)
           .fontColor($r('app.color.text_secondary'))
-          .layoutWeight(1)
+          .width('100%')
 
         Select(this.modelOptions)
           .selected(this.getModelSelectedIndex())
           .value(this.elevenLabsModelId)
-          .height(40)
+          .width('100%')
+          .height(46)
           .font({ size: 13 })
           .fontColor($r('app.color.text_primary'))
           .selectedOptionFontColor(this.themePrimary)
@@ -733,46 +897,34 @@ struct TTSSettingsPage {
           })
       }
       .width('100%')
-      .alignItems(VerticalAlign.Center)
+      .alignItems(HorizontalAlign.Start)
 
       Divider()
         .color($r('app.color.divider'))
 
-      this.ParameterSlider(
-        $r('app.string.tts_stability'),
-        this.stability.toFixed(2),
-        this.stability,
-        0,
-        1,
-        0.05,
-        (value: number): void => {
-          this.stability = value
-        }
-      )
+      Column() {
+        this.StabilitySlider()
 
-      this.ParameterSlider(
-        $r('app.string.tts_similarity_boost'),
-        this.similarityBoost.toFixed(2),
-        this.similarityBoost,
-        0,
-        1,
-        0.05,
-        (value: number): void => {
-          this.similarityBoost = value
-        }
-      )
+        Divider()
+          .color($r('app.color.divider'))
 
-      this.ParameterSlider(
-        $r('app.string.tts_speed'),
-        `${this.speed.toFixed(2)}×`,
-        this.speed,
-        0.7,
-        1.2,
-        0.05,
-        (value: number): void => {
-          this.speed = value
-        }
-      )
+        this.SimilaritySlider()
+
+        Divider()
+          .color($r('app.color.divider'))
+
+        this.SpeedSlider()
+      }
+      .width('100%')
+      .padding({ left: 12, right: 12, top: 8, bottom: 8 })
+      .backgroundColor(Color.Transparent)
+      .borderRadius(16)
+      .border({ width: 1, color: this.themePrimaryLight })
+      .systemMaterial(new uiMaterial.ImmersiveMaterial({
+        style: uiMaterial.ImmersiveStyle.ULTRA_THIN,
+        materialColor: Color.Transparent,
+        applyShadow: false
+      }))
 
       Divider()
         .color($r('app.color.divider'))
@@ -792,19 +944,35 @@ struct TTSSettingsPage {
     .width('100%')
     .alignItems(HorizontalAlign.Start)
     .opacity(this.ttsEnabled ? 1 : 0.5)
+    .animation({ duration: 220, curve: Curve.EaseOut })
   }
 
   @Builder
   private ActionButtons() {
     Row({ space: 12 }) {
-      Button(this.isTesting ? $r('app.string.tts_stop_test') : $r('app.string.tts_test'))
+      Button() {
+        Row({ space: 7 }) {
+          SymbolGlyph(this.isTesting ?
+            $r('sys.symbol.xmark_circle_fill') : $r('sys.symbol.speaker_wave_2'))
+            .fontSize(17)
+            .fontColor([this.themePrimary])
+            .scale({ x: this.isTesting ? 1.08 : 1, y: this.isTesting ? 1.08 : 1 })
+            .animation({ duration: 280, curve: curves.springMotion(0.35, 0.82) })
+
+          Text(this.isTesting ? $r('app.string.tts_stop_test') : $r('app.string.tts_test'))
+            .fontSize(14)
+            .fontWeight(FontWeight.Medium)
+            .fontColor(this.themePrimary)
+        }
+        .alignItems(VerticalAlign.Center)
+      }
         .layoutWeight(1)
-        .height(44)
-        .fontSize(14)
-        .fontWeight(FontWeight.Medium)
-        .fontColor(this.themePrimary)
+        .height(48)
         .backgroundColor(Color.Transparent)
-        .borderRadius(14)
+        .borderRadius(16)
+        .border({ width: 1, color: this.themePrimaryLight })
+        .scale({ x: this.isTesting ? 0.98 : 1, y: this.isTesting ? 0.98 : 1 })
+        .animation({ duration: 280, curve: curves.springMotion(0.35, 0.82) })
         .stateEffect(false)
         .systemMaterial(new uiMaterial.ImmersiveMaterial({
           style: uiMaterial.ImmersiveStyle.REGULAR,
@@ -817,14 +985,23 @@ struct TTSSettingsPage {
           this.testPlayback()
         })
 
-      Button($r('app.string.tts_save'))
+      Button() {
+        Row({ space: 7 }) {
+          SymbolGlyph($r('sys.symbol.save'))
+            .fontSize(17)
+            .fontColor([Color.White])
+
+          Text($r('app.string.tts_save'))
+            .fontSize(14)
+            .fontWeight(FontWeight.Medium)
+            .fontColor(Color.White)
+        }
+        .alignItems(VerticalAlign.Center)
+      }
         .layoutWeight(1)
-        .height(44)
-        .fontSize(14)
-        .fontWeight(FontWeight.Medium)
-        .fontColor(Color.White)
+        .height(48)
         .backgroundColor(this.themePrimary)
-        .borderRadius(14)
+        .borderRadius(16)
         .stateEffect(false)
         .systemMaterial(new uiMaterial.ImmersiveMaterial({
           style: uiMaterial.ImmersiveStyle.REGULAR,
@@ -838,13 +1015,14 @@ struct TTSSettingsPage {
         })
     }
     .width('100%')
+    .padding({ top: 2, bottom: 2 })
   }
 
   @Builder
   private PageContent() {
     Scroll() {
       Row() {
-        Column({ space: 14 }) {
+        Column({ space: 16 }) {
           if (!this.isDetailPaneMode()) {
             Blank()
               .width('100%')
@@ -855,81 +1033,78 @@ struct TTSSettingsPage {
             this.EnableCardContent()
           }
           .width('100%')
-          .padding(16)
+          .padding(18)
           .backgroundColor(Color.Transparent)
-          .borderRadius(20)
-          .border({ width: 1, color: this.themePrimaryLight })
-          .systemMaterial(new uiMaterial.ImmersiveMaterial({
-            style: uiMaterial.ImmersiveStyle.ULTRA_THIN,
-            materialColor: Color.Transparent,
-            applyShadow: false,
-            interactive: false,
-            lightEffect: { color: undefined }
-          }))
+          .borderRadius(24)
+          .border({ width: this.ttsEnabled ? 1.5 : 1, color: this.themePrimaryLight })
+          .scale({ x: this.ttsEnabled ? 1 : 0.99, y: this.ttsEnabled ? 1 : 0.99 })
+          .animation({ duration: 320, curve: curves.springMotion(0.35, 0.82) })
+          .systemMaterial(createTtsSettingsCardMaterial())
 
           Column() {
             this.EngineCardContent()
           }
           .width('100%')
-          .padding(16)
+          .padding(18)
           .backgroundColor(Color.Transparent)
-          .borderRadius(20)
+          .borderRadius(24)
           .border({ width: 1, color: this.themePrimaryLight })
-          .systemMaterial(new uiMaterial.ImmersiveMaterial({
-            style: uiMaterial.ImmersiveStyle.ULTRA_THIN,
-            materialColor: Color.Transparent,
-            applyShadow: false,
-            interactive: false,
-            lightEffect: { color: undefined }
-          }))
+          .systemMaterial(createTtsSettingsCardMaterial())
 
           if (this.engine === TTSEngineType.LOCAL) {
-            Column({ space: 8 }) {
-              Row({ space: 9 }) {
+            Row({ space: 14 }) {
+              Column() {
                 SymbolGlyph($r('sys.symbol.checkmark_circle_fill'))
-                  .fontSize(20)
+                  .fontSize(23)
                   .fontColor([this.themePrimary])
+              }
+              .width(44)
+              .height(44)
+              .justifyContent(FlexAlign.Center)
+              .backgroundColor(Color.Transparent)
+              .borderRadius(14)
+              .border({ width: 1, color: this.themePrimaryLight })
+              .systemMaterial(new uiMaterial.ImmersiveMaterial({
+                style: uiMaterial.ImmersiveStyle.ULTRA_THIN,
+                materialColor: Color.Transparent,
+                applyShadow: false
+              }))
+
+              Column({ space: 5 }) {
                 Text($r('app.string.tts_local_ready'))
                   .fontSize(15)
                   .fontWeight(FontWeight.Medium)
                   .fontColor($r('app.color.text_primary'))
-              }
-              .width('100%')
+                  .width('100%')
 
-              Text($r('app.string.tts_local_note'))
-                .fontSize(12)
-                .fontColor($r('app.color.text_secondary'))
-                .lineHeight(18)
-                .width('100%')
+                Text($r('app.string.tts_local_note'))
+                  .fontSize(12)
+                  .fontColor($r('app.color.text_secondary'))
+                  .lineHeight(18)
+                  .width('100%')
+              }
+              .layoutWeight(1)
+              .alignItems(HorizontalAlign.Start)
             }
             .width('100%')
-            .padding(16)
+            .padding(18)
+            .alignItems(VerticalAlign.Top)
             .backgroundColor(Color.Transparent)
-            .borderRadius(20)
+            .borderRadius(24)
             .border({ width: 1, color: this.themePrimaryLight })
-            .systemMaterial(new uiMaterial.ImmersiveMaterial({
-              style: uiMaterial.ImmersiveStyle.ULTRA_THIN,
-              materialColor: Color.Transparent,
-              applyShadow: false,
-              interactive: false,
-              lightEffect: { color: undefined }
-            }))
+            .systemMaterial(createTtsSettingsCardMaterial())
+            .transition(TransitionEffect.OPACITY.animation({ duration: 200, curve: Curve.EaseOut }))
           } else {
             Column() {
               this.ElevenLabsCardContent()
             }
             .width('100%')
-            .padding(16)
+            .padding(18)
             .backgroundColor(Color.Transparent)
-            .borderRadius(20)
+            .borderRadius(24)
             .border({ width: 1, color: this.themePrimaryLight })
-            .systemMaterial(new uiMaterial.ImmersiveMaterial({
-              style: uiMaterial.ImmersiveStyle.ULTRA_THIN,
-              materialColor: Color.Transparent,
-              applyShadow: false,
-              interactive: false,
-              lightEffect: { color: undefined }
-            }))
+            .systemMaterial(createTtsSettingsCardMaterial())
+            .transition(TransitionEffect.OPACITY.animation({ duration: 200, curve: Curve.EaseOut }))
           }
 
           this.ActionButtons()
@@ -939,7 +1114,8 @@ struct TTSSettingsPage {
       }
       .width('100%')
       .justifyContent(FlexAlign.Center)
-      .padding({ left: 16, right: 16, bottom: this.getContentBottomPadding() })
+      .alignItems(VerticalAlign.Top)
+      .padding({ left: 16, right: 16, top: 2, bottom: this.getContentBottomPadding() })
     }
     .width('100%')
     .height('100%')

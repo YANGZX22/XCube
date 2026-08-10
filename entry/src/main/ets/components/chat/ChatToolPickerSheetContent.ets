@@ -3,6 +3,7 @@ import { ToolConfig, ToolPermissionLevel, ToolSourceType } from '../../models/Ch
 import { getAppUiState } from '../../state/AppUiState'
 import { withColorAlpha } from '../../utils/ColorAlphaUtils'
 import { pickLocalizedText } from '../../utils/LocalizedTextUtils'
+import { getLocalizedBuiltinToolDescription, getLocalizedBuiltinToolName } from '../../utils/ToolDisplayTextUtils'
 import { ImmersiveSheetHeader } from '../ImmersiveSheetHeader'
 
 class McpToolGroup {
@@ -102,11 +103,7 @@ export struct ChatToolPickerSheetContent {
   }
 
   private getBuiltinDescription(tool: ToolConfig): string {
-    const description = tool.description.trim()
-    return description !== '' ? description : pickLocalizedText(
-      '应用内原生能力，可在当前聊天中按需调用。',
-      'Built-in app capability that can be exposed to the model in this chat.'
-    )
+    return getLocalizedBuiltinToolDescription(tool.id, tool.description)
   }
 
   private getToolSymbolResource(toolId: string): Resource {
@@ -184,7 +181,7 @@ export struct ChatToolPickerSheetContent {
 
       Column({ space: 6 }) {
         Row({ space: 6 }) {
-          Text(tool.name)
+          Text(getLocalizedBuiltinToolName(tool.id, tool.name))
             .fontSize(14)
             .fontWeight(FontWeight.Medium)
             .fontColor($r('app.color.text_primary'))

@@ -38,6 +38,8 @@ export class HdsTopNavigationBlurOptions {
   // 需要平铺更多入口时由调用方显式抬高。
   menuMaxCount: number = 3
   stackBuilder: () => void = (): void => {}
+  bottomBuilder: () => void = (): void => {}
+  bottomBuilderHeightVp: number = 0
 }
 
 export function getHdsTopNavigationMaskExtraHeight(windowWidthVp: number, windowHeightVp: number,
@@ -107,7 +109,11 @@ export function buildHdsTopNavigationTitleBarOptions(
         value: options.menuItems,
         maxCount: options.menuMaxCount
       },
-      stackBuilder: options.stackBuilder
+      stackBuilder: options.stackBuilder,
+      bottomBuilder: {
+        builder: options.bottomBuilder,
+        height: options.bottomBuilderHeightVp
+      }
     },
     style: {
       scrollEffectOpts: {

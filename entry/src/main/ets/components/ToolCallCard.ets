@@ -3,6 +3,13 @@ import { getAppUiState } from '../state/AppUiState'
 import { buildToolArgumentsPreview, buildToolResultPreview, ToolPayloadPreview } from '../utils/ToolPayloadSummaryUtils'
 import { withColorAlpha } from '../utils/ColorAlphaUtils'
 import { uiMaterial } from '@kit.ArkUI'
+import { VisualEffectsMode } from '../models/ThemeColors'
+import { MANUSCRIPT_COMPACT_BAR_HEIGHT } from '../utils/ManuscriptVisualUtils'
+import {
+  getLocalizedBuiltinToolName,
+  getLocalizedToolSourceLabel
+} from '../utils/ToolDisplayTextUtils'
+import { pickLocalizedText } from '../utils/LocalizedTextUtils'
 
 // 同一工具的单次调用（调用 + 对应结果），多次调用合并进同一张卡片
 export class ToolCallCardEntry {
@@ -17,19 +24,18 @@ export class ToolCallCardEntry {
 
 // 获取工具显示名称
 function getToolDisplayName(toolCall: ToolCall): string | Resource {
-  if (toolCall.displayName.trim() !== '') {
-    return toolCall.displayName
-  }
   const raw = toolCall.functionName as string | null | undefined
-  if (raw === undefined || raw === null || raw.trim() === '') {
-    return '未知工具'
+  const fallback = toolCall.displayName.trim() !== '' ? toolCall.displayName : (raw ?? '')
+  const lookupId = raw !== undefined && raw !== null && raw.trim() !== '' ? raw : toolCall.toolId
+  if (lookupId.trim() === '') {
+    return pickLocalizedText('未知工具', 'Unknown Tool')
   }
-  const normalized = raw.toLowerCase().replace(/[\s\-]+/g, '_')
+  const normalized = lookupId.toLowerCase().replace(/[\s\-]+/g, '_')
   if (normalized === 'web_search' || normalized === 'exa_search' || normalized === 'websearch'
     || normalized === 'search_web' || normalized === 'internet_search' || normalized === 'web_search_exa') {
     return $r('app.string.web_search')
   }
-  return raw
+  return getLocalizedBuiltinToolName(lookupId, fallback)
 }
 
 // 工具调用卡片组件（同一工具的多次调用合并为一张卡片，标题居中显示 x N）
@@ -58,6 +64,9 @@ export struct ToolCallCard {
   }
   private get themeAiBubble(): string {
     return getAppUiState().themeAiBubble
+  }
+  private get isManuscriptMode(): boolean {
+    return getAppUiState().visualEffectsMode === VisualEffectsMode.MANUSCRIPT
   }
   private dotAnimationTimer: number = -1
 
@@ -139,17 +148,19 @@ export struct ToolCallCard {
         // 工具图标
         SymbolGlyph($r('sys.symbol.gearshape'))
           .fontSize(14)
-          .fontColor([this.isExecuting ? this.themePrimary : $r('app.color.text_secondary')])
+          .fontColor([this.isManuscriptMode || this.isExecuting
+            ? this.themePrimary : $r('app.color.text_secondary')])
 
         // 工具名称
         Text(getToolDisplayName(this.getPrimaryCall()))
           .fontSize(13)
           .fontWeight(FontWeight.Medium)
-          .fontColor(this.isExecuting ? this.themePrimary : $r('app.color.text_secondary'))
+          .fontColor(this.isManuscriptMode || this.isExecuting
+            ? this.themePrimary : $r('app.color.text_secondary'))
           .margin({ left: 6 })
 
         if (this.getPrimaryCall().sourceLabel.trim() !== '') {
-          Text(this.getPrimaryCall().sourceLabel)
+          Text(getLocalizedToolSourceLabel(this.getPrimaryCall().sourceLabel))
             .fontSize(10)
             .fontColor($r('app.color.text_tertiary'))
             .margin({ left: 6 })
@@ -191,13 +202,14 @@ export struct ToolCallCard {
 
         // 子智能体卡片：实时预览入口（bindSheet 由宿主 MessageBubble 承载）
         if (this.isSubAgentCard()) {
-          Text('实时预览')
+          Text(pickLocalizedText('实时预览', 'Live Preview'))
             .fontSize(10)
             .fontWeight(FontWeight.Medium)
             .fontColor(this.themePrimary)
             .padding({ left: 7, right: 7, top: 2, bottom: 2 })
-            .borderRadius(9)
-            .backgroundColor(this.themePrimaryLight)
+            .borderRadius(this.isManuscriptMode ? 0 : 9)
+            .backgroundColor(this.isManuscriptMode ? Color.Transparent : this.themePrimaryLight)
+            .border({ width: 0, color: this.themePrimary })
             .margin({ left: 8 })
             .onClick(() => {
               this.onSubAgentPreview()
@@ -215,8 +227,9 @@ export struct ToolCallCard {
             .fontColor(this.themePrimary)
             .textAlign(TextAlign.Center)
             .padding({ left: 7, right: 7, top: 1, bottom: 1 })
-            .borderRadius(9)
-            .backgroundColor(this.themePrimaryLight)
+            .borderRadius(this.isManuscriptMode ? 0 : 9)
+            .backgroundColor(this.isManuscriptMode ? Color.Transparent : this.themePrimaryLight)
+            .border({ width: 0, color: this.themePrimary })
         }
 
         Blank()
@@ -227,11 +240,11 @@ export struct ToolCallCard {
           Row() {
             Text(this.isExpanded ? $r('app.string.common_collapse') : $r('app.string.common_details'))
               .fontSize(11)
-              .fontColor($r('app.color.text_tertiary'))
+              .fontColor(this.isManuscriptMode ? this.themePrimary : $r('app.color.text_tertiary'))
 
             SymbolGlyph($r('sys.symbol.chevron_down'))
               .fontSize(12)
-              .fontColor([$r('app.color.text_tertiary')])
+              .fontColor([this.isManuscriptMode ? this.themePrimary : $r('app.color.text_tertiary')])
               .rotate({ angle: this.isExpanded ? 180 : 0 })
               .animation({ duration: 200, curve: Curve.EaseOut })
               .margin({ left: 2 })
@@ -248,8 +261,8 @@ export struct ToolCallCard {
         }
       }
       .width('100%')
-      .height(36)
-      .padding({ left: 10, right: 10 })
+      .height(this.isManuscriptMode ? MANUSCRIPT_COMPACT_BAR_HEIGHT : 36)
+      .padding({ left: this.isManuscriptMode ? 14 : 10, right: this.isManuscriptMode ? 14 : 10 })
 
       // 展开的详情内容：所有调用合并在同一个展开面板里
       if (this.isExpanded && this.hasAnyResult()) {
@@ -265,10 +278,13 @@ export struct ToolCallCard {
     }
     .width('100%')
     .backgroundColor(Color.Transparent)
-    .borderRadius(12)
-    .border({ width: 0.5, color: this.getTimelineRailColor() })
+    .borderRadius(this.isManuscriptMode ? 0 : 12)
+    .border({
+      width: this.isManuscriptMode ? { top: 1, bottom: 1 } : 0.5,
+      color: this.isManuscriptMode ? getAppUiState().themeDivider : this.getTimelineRailColor()
+    })
     .clip(false)
-    .systemMaterial(new uiMaterial.ImmersiveMaterial({
+    .systemMaterial(this.isManuscriptMode ? undefined : new uiMaterial.ImmersiveMaterial({
       style: uiMaterial.ImmersiveStyle.REGULAR,
       materialColor: this.themeAiBubble,
       applyShadow: false,
@@ -276,8 +292,9 @@ export struct ToolCallCard {
       lightEffect: { color: undefined }
     }))
     .shadow({
-      radius: 12,
-      color: this.isDarkMode ? 'rgba(0, 0, 0, 0.32)' : 'rgba(15, 23, 42, 0.14)',
+      radius: this.isManuscriptMode ? 0 : 12,
+      color: this.isManuscriptMode ? Color.Transparent :
+        (this.isDarkMode ? 'rgba(0, 0, 0, 0.32)' : 'rgba(15, 23, 42, 0.14)'),
       offsetX: 0,
       offsetY: 0
     })
@@ -294,8 +311,9 @@ export struct ToolCallCard {
             .fontWeight(FontWeight.Medium)
             .fontColor(this.themePrimary)
             .padding({ left: 6, right: 6, top: 1, bottom: 1 })
-            .borderRadius(8)
-            .backgroundColor(this.themePrimaryLight)
+            .borderRadius(this.isManuscriptMode ? 0 : 8)
+            .backgroundColor(this.isManuscriptMode ? Color.Transparent : this.themePrimaryLight)
+            .border({ width: 0, color: this.themePrimary })
 
           Row()
             .height(0.5)
@@ -323,7 +341,9 @@ export struct ToolCallCard {
 
       Row() {
         Blank()
-        Text(this.isRawArgumentsShown(index) ? '收起原始参数' : '查看原始参数')
+        Text(this.isRawArgumentsShown(index)
+          ? pickLocalizedText('收起原始参数', 'Hide Raw Arguments')
+          : pickLocalizedText('查看原始参数', 'Show Raw Arguments'))
           .fontSize(10)
           .fontColor(this.themePrimary)
           .onClick(() => {
@@ -344,9 +364,13 @@ export struct ToolCallCard {
         .width('100%')
         .constraintSize({ maxHeight: 160 })
         .padding(10)
-        .borderRadius(8)
+        .borderRadius(this.isManuscriptMode ? 3 : 8)
         .backgroundColor(Color.Transparent)
-        .border({ width: 0.5, color: withColorAlpha(this.themePrimary, this.isDarkMode ? '55' : '33') })
+        .border({
+          width: this.isManuscriptMode ? 1 : 0.5,
+          color: this.isManuscriptMode ? getAppUiState().themeDivider :
+            withColorAlpha(this.themePrimary, this.isDarkMode ? '55' : '33')
+        })
       }
 
       Row() {
@@ -366,7 +390,9 @@ export struct ToolCallCard {
       if (entry.toolResult !== null) {
         Row() {
           Blank()
-          Text(this.isRawResultShown(index) ? '收起原始结果' : '查看原始结果')
+          Text(this.isRawResultShown(index)
+            ? pickLocalizedText('收起原始结果', 'Hide Raw Result')
+            : pickLocalizedText('查看原始结果', 'Show Raw Result'))
             .fontSize(10)
             .fontColor(this.themePrimary)
             .onClick(() => {
@@ -388,9 +414,13 @@ export struct ToolCallCard {
         .width('100%')
         .constraintSize({ maxHeight: 180 })
         .padding(10)
-        .borderRadius(8)
+        .borderRadius(this.isManuscriptMode ? 3 : 8)
         .backgroundColor(Color.Transparent)
-        .border({ width: 0.5, color: withColorAlpha(this.themePrimary, this.isDarkMode ? '55' : '33') })
+        .border({
+          width: this.isManuscriptMode ? 1 : 0.5,
+          color: this.isManuscriptMode ? getAppUiState().themeDivider :
+            withColorAlpha(this.themePrimary, this.isDarkMode ? '55' : '33')
+        })
       }
     }
     .width('100%')
@@ -426,7 +456,8 @@ export struct ToolCallCard {
 
   private getEntryResultPreview(entry: ToolCallCardEntry): ToolPayloadPreview {
     if (entry.toolResult === null) {
-      return new ToolPayloadPreview('执行中...', [], '执行中...', false)
+      const executingText = pickLocalizedText('执行中...', 'Running...')
+      return new ToolPayloadPreview(executingText, [], executingText, false)
     }
     return buildToolResultPreview(entry.toolResult.content, 3, 900)
   }

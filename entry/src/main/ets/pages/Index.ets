@@ -29,7 +29,7 @@ import { dismissActiveSnackBarOnBack, showSnackBar, SnackBarDisplayOptions, Snac
 import { MultiSelectToolbar } from '../components/MultiSelectToolbar'
 import { SharePreviewSheet } from '../components/SharePreviewSheet'
 import { ProviderBalanceSheet, BalanceSheetState } from '../components/ProviderBalanceSheet'
-import { ColorTheme, ThemeColorConfig } from '../models/ThemeColors'
+import { ColorTheme, ThemeColorConfig, VisualEffectsMode } from '../models/ThemeColors'
 import { ServiceRegistry } from '../services/ServiceRegistry'
 import { detectAndRegisterChatSerifFonts } from '../utils/ChatSerifFontUtils'
 import { BalanceResult, getProviderBalanceService, ProviderBalanceService } from '../services/ProviderBalanceService'
@@ -57,6 +57,8 @@ import { IndexEmptyStateCard } from '../components/index/IndexEmptyStateCard'
 import { IndexSettingsPanel } from '../components/index/IndexSettingsPanel'
 import { IndexSettingsSheetContent } from '../components/index/IndexSettingsSheetContent'
 import { IndexSessionListSection } from '../components/index/IndexSessionListSection'
+import { ManuscriptPageTitle } from '../components/index/ManuscriptPageTitle'
+import { ManuscriptTopArcButton } from '../components/index/ManuscriptTopArcButton'
 import { ChatMultiSelectToolbar } from '../components/chat/ChatMultiSelectToolbar'
 import { ChatFloatingImmersiveButton } from '../components/ChatFloatingImmersiveButton'
 import { KnowledgeBasePanel } from '../components/KnowledgeBasePanel'
@@ -130,6 +132,11 @@ import {
 } from '../services/KnowledgeRerankService'
 import { KnowledgeRerankSelectSheetContent } from '../components/KnowledgeRerankSelectSheetContent'
 import { ImmersiveSheetHeader } from '../components/ImmersiveSheetHeader'
+import {
+  MANUSCRIPT_BODY_FONT,
+  MANUSCRIPT_HEADING_FONT,
+  toRomanNumeral
+} from '../utils/ManuscriptVisualUtils'
 
 @Entry
 @ComponentV2
@@ -247,6 +254,9 @@ struct Index {
   }
   private get themeSurface(): string {
     return getAppUiState().themeSurface
+  }
+  private get themeDivider(): string {
+    return getAppUiState().themeDivider
   }
   private get isDarkMode(): boolean {
     return getAppUiState().isDarkMode
@@ -1893,6 +1903,7 @@ struct Index {
         activeIcon: activeIcon,
         inactiveIcon: inactiveIcon,
         label: label,
+        manuscriptLabel: this.getManuscriptTabLabel(index),
         badgeCount: badgeCount
       })
     }
@@ -2029,7 +2040,11 @@ struct Index {
 
   private getAssistantSwitchMaxWidth(): number {
     if (this.windowWidthVp <= 0) {
-      return 260
+      return this.isManuscriptMode() ? 188 : 260
+    }
+    if (this.isManuscriptMode()) {
+      const manuscriptActionWidth = this.isMultiSelectMode ? 44 : 132
+      return Math.max(112, this.windowWidthVp - manuscriptActionWidth - 56)
     }
     return Math.max(140, this.windowWidthVp - 104)
   }
@@ -2042,12 +2057,44 @@ struct Index {
     return this.currentTabIndex === index
   }
 
+  private isManuscriptMode(): boolean {
+    return getAppUiState().visualEffectsMode === VisualEffectsMode.MANUSCRIPT
+  }
+
+  private getManuscriptTabLabel(index: number): Resource {
+    switch (index) {
+      case Index.TAB_ASSISTANTS:
+        return $r('app.string.manuscript_tab_assistants')
+      case Index.TAB_KNOWLEDGE:
+        return $r('app.string.manuscript_tab_knowledge')
+      case Index.TAB_SETTINGS:
+        return $r('app.string.manuscript_tab_settings')
+      case Index.TAB_CHAT:
+      default:
+        return $r('app.string.manuscript_tab_chat')
+    }
+  }
+
   private getCompactTabsBottomInset(): number {
+    if (this.isManuscriptMode() && !this.shouldHideCompactTabsBar()) {
+      return this.getManuscriptBottomBarHeight() + 44
+    }
     return this.getCompactTabsHostBarHeight() + this.getCompactTabsFloatingBottomMargin()
+  }
+
+  private getManuscriptBottomSafeInset(): number {
+    return Math.max(0, this.px2vp(this.bottomAvoidHeight))
+  }
+
+  private getManuscriptBottomBarHeight(): number {
+    return Index.COMPACT_TABS_BAR_HEIGHT + this.getManuscriptBottomSafeInset()
   }
 
   private getCompactTabsFloatingBottomMargin(): number {
     if (this.shouldHideCompactTabsBar()) {
+      return 0
+    }
+    if (this.isManuscriptMode()) {
       return 0
     }
     return this.px2vp(this.bottomAvoidHeight) > 0 ? 24 : 12
@@ -2129,142 +2176,211 @@ struct Index {
 
   @Builder
   private CompactBottomBarsOverlay() {
-    Stack() {
-      Row() {
-        this.CompactBottomTabBarBuilder()
-      }
-      .width(this.getCompactBottomTabBarWidth())
-      .height(Index.COMPACT_TABS_BAR_HEIGHT)
-      .position({ x: this.getCompactTabBarX(), y: 0 })
-      .animation({ duration: 420, curve: curves.springMotion(0.75, 0.86) })
+    if (this.isManuscriptMode()) {
+      Stack() {
+        Row() {
+          this.CompactBottomTabBarBuilder()
+        }
+        .width('100%')
+        .height(this.getManuscriptBottomBarHeight())
+        .alignItems(VerticalAlign.Top)
+        .position({ x: 0, y: 0 })
 
-      Row() {
-        this.CompactBottomMiniBarBuilder()
+        Row() {
+          this.CompactBottomMiniBarBuilder()
+        }
+        .width(40)
+        .height(40)
+        .position({
+          x: Math.max(12, this.getCompactBottomBarsWidth() - 52),
+          y: -46
+        })
       }
-      .width(Index.COMPACT_MINI_BAR_WIDTH)
+      .height(this.getManuscriptBottomBarHeight())
+      .width('100%')
+      .clip(false)
+      .position({ x: 0, y: '100%' })
+      .translate({
+        x: 0,
+        y: -this.getManuscriptBottomBarHeight()
+      })
+      .hitTestBehavior(HitTestMode.Default)
+      .zIndex(10)
+      .onAreaChange((_oldArea: Area, newArea: Area) => {
+        this.handleCompactBottomBarsAreaChange(newArea)
+      })
+    } else {
+      Stack() {
+        Row() {
+          this.CompactBottomTabBarBuilder()
+        }
+        .width(this.getCompactBottomTabBarWidth())
+        .height(Index.COMPACT_TABS_BAR_HEIGHT)
+        .position({ x: this.getCompactTabBarX(), y: 0 })
+        .animation({ duration: 420, curve: curves.springMotion(0.75, 0.86) })
+
+        Row() {
+          this.CompactBottomMiniBarBuilder()
+        }
+        .width(Index.COMPACT_MINI_BAR_WIDTH)
+        .height(Index.COMPACT_TABS_BAR_HEIGHT)
+        .position({ x: this.getCompactMiniBarX(), y: 0 })
+        .animation({ duration: 420, curve: curves.springMotion(0.75, 0.86) })
+      }
+      .width('100%')
       .height(Index.COMPACT_TABS_BAR_HEIGHT)
-      .position({ x: this.getCompactMiniBarX(), y: 0 })
-      .animation({ duration: 420, curve: curves.springMotion(0.75, 0.86) })
+      .clip(false)
+      .position({ x: 0, y: '100%' })
+      .translate({
+        x: 0,
+        y: -(Index.COMPACT_TABS_BAR_HEIGHT + this.getCompactTabsFloatingBottomMargin())
+      })
+      .hitTestBehavior(HitTestMode.Default)
+      .zIndex(10)
+      .onAreaChange((_oldArea: Area, newArea: Area) => {
+        this.handleCompactBottomBarsAreaChange(newArea)
+      })
     }
-    .width('100%')
-    .height(Index.COMPACT_TABS_BAR_HEIGHT)
-    .clip(false)
-    .position({ x: 0, y: '100%' })
-    .translate({
-      x: 0,
-      y: -(Index.COMPACT_TABS_BAR_HEIGHT + this.getCompactTabsFloatingBottomMargin())
-    })
-    .hitTestBehavior(HitTestMode.Default)
-    .zIndex(10)
-    .onAreaChange((_oldArea: Area, newArea: Area) => {
-      this.handleCompactBottomBarsAreaChange(newArea)
-    })
   }
 
   @Builder
   private CompactBottomMiniBarBuilder() {
-    ChatFloatingImmersiveButton({
-      barWidth: Index.COMPACT_MINI_BAR_WIDTH,
-      barHeight: Index.COMPACT_TABS_BAR_HEIGHT,
-      iconResource: $r('sys.symbol.plus'),
-      iconSize: 28,
-      iconColor: [this.themePrimary],
-      iconOffsetY: 0,
-      responsePadding: 0,
-      enableShadow: true,
-      shadowRadius: 18,
-      shadowColor: this.fabShadowColor,
-      shadowOffsetY: 7,
-      onButtonClick: (): void => {
-        this.handleCompactBottomMiniBarClick()
-      }
-    }) {
-      Stack({ alignContent: Alignment.Center }) {
+    if (this.isManuscriptMode()) {
+      Button({ type: ButtonType.Normal, stateEffect: false }) {
         SymbolGlyph($r('sys.symbol.plus'))
-          .fontSize(28)
+          .fontSize(20)
           .fontColor([this.themePrimary])
       }
-      .width(Index.COMPACT_MINI_BAR_WIDTH)
-      .height(Index.COMPACT_TABS_BAR_HEIGHT)
+      .width(40)
+      .height(40)
+      .padding(0)
+      .backgroundColor(Color.Transparent)
+      .borderRadius(0)
+      .border({ width: 0, color: Color.Transparent })
+      .clip(false)
+      .onClick(() => {
+        this.handleCompactBottomMiniBarClick()
+      })
+    } else {
+      ChatFloatingImmersiveButton({
+        barWidth: Index.COMPACT_MINI_BAR_WIDTH,
+        barHeight: Index.COMPACT_TABS_BAR_HEIGHT,
+        iconResource: $r('sys.symbol.plus'),
+        iconSize: 28,
+        iconColor: [this.themePrimary],
+        iconOffsetY: 0,
+        responsePadding: 0,
+        enableShadow: true,
+        shadowRadius: 18,
+        shadowColor: this.fabShadowColor,
+        shadowOffsetY: 7,
+        onButtonClick: (): void => {
+          this.handleCompactBottomMiniBarClick()
+        }
+      }) {
+        Stack({ alignContent: Alignment.Center }) {
+          SymbolGlyph($r('sys.symbol.plus'))
+            .fontSize(28)
+            .fontColor([this.themePrimary])
+        }
+        .width(Index.COMPACT_MINI_BAR_WIDTH)
+        .height(Index.COMPACT_TABS_BAR_HEIGHT)
+      }
     }
   }
 
   @Builder
   private CompactBottomTabBarBuilder() {
-    HdsTabs() {
-      TabContent()
-        .tabBar(this.CompactBottomTabBarContent())
-    }
-    .barHeight(Index.COMPACT_TABS_BAR_HEIGHT)
-    .barOverlap(true)
-    .barPosition(BarPosition.End)
-    .vertical(false)
-    .barBackgroundColor(Color.Transparent)
-    .width(this.getCompactBottomTabBarWidth())
-    .height(Index.COMPACT_TABS_BAR_HEIGHT)
-    .backgroundColor(Color.Transparent)
-    .borderRadius(Index.COMPACT_TABS_BAR_HEIGHT / 2)
-    .clip(false)
-    .barFloatingStyle({
-      barBottomMargin: 0,
-      barSideMargin: 0,
-      barWidth: {
-        smallWidth: this.getCompactBottomTabBarWidth(),
-        mediumWidth: this.getCompactBottomTabBarWidth(),
-        largeWidth: this.getCompactBottomTabBarWidth()
-      },
-      gradientMask: { maskColor: Color.Transparent },
-      systemMaterialEffect: {
-        materialType: hdsMaterial.MaterialType.IMMERSIVE,
-        materialLevel: hdsMaterial.MaterialLevel.ADAPTIVE
+    if (this.isManuscriptMode()) {
+      Row() {
+        this.CompactBottomTabBarContent()
       }
-    })
+      .width('100%')
+      .height(this.getManuscriptBottomBarHeight())
+      .alignItems(VerticalAlign.Top)
+      .backgroundColor(this.themeSurface)
+      .borderRadius(0)
+      .border({ width: { top: 1 }, color: this.themeDivider })
+    } else {
+      HdsTabs() {
+        TabContent()
+          .tabBar(this.CompactBottomTabBarContent())
+      }
+      .barHeight(Index.COMPACT_TABS_BAR_HEIGHT)
+      .barOverlap(true)
+      .barPosition(BarPosition.End)
+      .vertical(false)
+      .barBackgroundColor(Color.Transparent)
+      .width(this.getCompactBottomTabBarWidth())
+      .height(Index.COMPACT_TABS_BAR_HEIGHT)
+      .backgroundColor(Color.Transparent)
+      .borderRadius(Index.COMPACT_TABS_BAR_HEIGHT / 2)
+      .clip(false)
+      .barFloatingStyle({
+        barBottomMargin: 0,
+        barSideMargin: 0,
+        barWidth: {
+          smallWidth: this.getCompactBottomTabBarWidth(),
+          mediumWidth: this.getCompactBottomTabBarWidth(),
+          largeWidth: this.getCompactBottomTabBarWidth()
+        },
+        gradientMask: { maskColor: Color.Transparent },
+        systemMaterialEffect: {
+          materialType: hdsMaterial.MaterialType.IMMERSIVE,
+          materialLevel: hdsMaterial.MaterialLevel.ADAPTIVE
+        }
+      })
+    }
   }
 
   @Builder
   private CompactBottomTabBarContent() {
-    Row() {
+    Stack({ alignContent: Alignment.Top }) {
       Row() {
-        this.TabBarAssistants()
-      }
-      .layoutWeight(1)
-      .height('100%')
-      .onClick(() => {
-        this.switchToTab(Index.TAB_ASSISTANTS)
-      })
+        Row() {
+          this.TabBarAssistants()
+        }
+        .layoutWeight(1)
+        .height('100%')
+        .onClick(() => {
+          this.switchToTab(Index.TAB_ASSISTANTS)
+        })
 
-      Row() {
-        this.TabBarChat()
-      }
-      .layoutWeight(1)
-      .height('100%')
-      .onClick(() => {
-        this.switchToTab(Index.TAB_CHAT)
-      })
+        Row() {
+          this.TabBarChat()
+        }
+        .layoutWeight(1)
+        .height('100%')
+        .onClick(() => {
+          this.switchToTab(Index.TAB_CHAT)
+        })
 
-      Row() {
-        this.TabBarKnowledge()
-      }
-      .layoutWeight(1)
-      .height('100%')
-      .onClick(() => {
-        this.switchToTab(Index.TAB_KNOWLEDGE)
-      })
+        Row() {
+          this.TabBarKnowledge()
+        }
+        .layoutWeight(1)
+        .height('100%')
+        .onClick(() => {
+          this.switchToTab(Index.TAB_KNOWLEDGE)
+        })
 
-      Row() {
-        this.TabBarSettings()
+        Row() {
+          this.TabBarSettings()
+        }
+        .layoutWeight(1)
+        .height('100%')
+        .onClick(() => {
+          this.switchToTab(Index.TAB_SETTINGS)
+        })
       }
-      .layoutWeight(1)
-      .height('100%')
-      .onClick(() => {
-        this.switchToTab(Index.TAB_SETTINGS)
-      })
+      .width('100%')
+      .height(Index.COMPACT_TABS_BAR_HEIGHT)
+      .padding({ left: this.isManuscriptMode() ? 0 : 6, right: this.isManuscriptMode() ? 0 : 6 })
+      .backgroundColor(Color.Transparent)
+      .translate({ y: this.isManuscriptMode() ? 0 : -3 })
     }
-    .width(this.getCompactBottomTabBarWidth())
+    .width('100%')
     .height(Index.COMPACT_TABS_BAR_HEIGHT)
-    .padding({ left: 6, right: 6 })
-    .backgroundColor(Color.Transparent)
-    .translate({ y: -3 })
   }
 
   @Builder
@@ -2273,7 +2389,8 @@ struct Index {
       active: this.isTabActive(Index.TAB_CHAT),
       activeIcon: $r('sys.symbol.ellipsis_message_fill'),
       inactiveIcon: $r('sys.symbol.ellipsis_message'),
-      label: $r('app.string.tab_chat')
+      label: $r('app.string.tab_chat'),
+      manuscriptLabel: $r('app.string.manuscript_tab_chat')
     })
   }
 
@@ -2283,7 +2400,8 @@ struct Index {
       active: this.isTabActive(Index.TAB_ASSISTANTS),
       activeIcon: $r('sys.symbol.person_fill'),
       inactiveIcon: $r('sys.symbol.person'),
-      label: $r('app.string.tab_assistants')
+      label: $r('app.string.tab_assistants'),
+      manuscriptLabel: $r('app.string.manuscript_tab_assistants')
     })
   }
 
@@ -2293,7 +2411,8 @@ struct Index {
       active: this.isTabActive(Index.TAB_KNOWLEDGE),
       activeIcon: $r('sys.symbol.externaldrive_fill'),
       inactiveIcon: $r('sys.symbol.externaldrive'),
-      label: $r('app.string.tab_knowledge')
+      label: $r('app.string.tab_knowledge'),
+      manuscriptLabel: $r('app.string.manuscript_tab_knowledge')
     })
   }
 
@@ -2303,7 +2422,8 @@ struct Index {
       active: this.isTabActive(Index.TAB_SETTINGS),
       activeIcon: $r('sys.symbol.gearshape_fill'),
       inactiveIcon: $r('sys.symbol.gearshape'),
-      label: $r('app.string.tab_settings')
+      label: $r('app.string.tab_settings'),
+      manuscriptLabel: $r('app.string.manuscript_tab_settings')
     })
   }
 
@@ -2449,7 +2569,7 @@ struct Index {
         content: {
           label: $r('app.string.balance_query'),
           icon: this.buildCompactChatTitleBarMenuIcon($r('sys.symbol.creditcard'),
-            $r('app.color.text_primary')),
+            this.isManuscriptMode() ? this.themePrimary : $r('app.color.text_primary')),
           action: () => {
             this.openBalanceSheet()
           }
@@ -2460,7 +2580,8 @@ struct Index {
           label: $r('app.string.filter_favorite'),
           icon: this.buildCompactChatTitleBarMenuIcon(
             this.isFavoriteFilterActive() ? $r('sys.symbol.heart_fill') : $r('sys.symbol.heart'),
-            this.isFavoriteFilterActive() ? this.themePrimary : $r('app.color.text_primary')
+            this.isFavoriteFilterActive() || this.isManuscriptMode() ? this.themePrimary :
+              $r('app.color.text_primary')
           ),
           action: () => {
             this.toggleFavoriteFilter()
@@ -2471,7 +2592,7 @@ struct Index {
         content: {
           label: $r('app.string.search_sessions_placeholder'),
           icon: this.buildCompactChatTitleBarMenuIcon($r('sys.symbol.magnifyingglass'),
-            this.isSearchExpanded ? this.themePrimary : $r('app.color.text_primary')),
+            this.isSearchExpanded || this.isManuscriptMode() ? this.themePrimary : $r('app.color.text_primary')),
           action: () => {
             if (this.isSearchExpanded) {
               this.collapseSearch()
@@ -2518,7 +2639,7 @@ struct Index {
     options.maskExtraHeightVp = this.getCompactChatTitleBarMaskExtraHeight()
     options.blurEffectiveEndOffsetVp = getHdsTopNavigationBlurEffectiveEndOffset(this.windowWidthVp,
       this.windowHeightVp)
-    options.menuItems = this.getCompactChatTitleBarMenuItems()
+    options.menuItems = this.isManuscriptMode() ? [] : this.getCompactChatTitleBarMenuItems()
     options.stackBuilder = (): void => this.CompactChatTitleStackBuilder()
     return buildHdsTopNavigationTitleBarOptions(options)
   }
@@ -3438,23 +3559,73 @@ struct Index {
   }
 
   @Builder
-  private KnowledgeTitleStackBuilder() {
-    Row() {
-      Text($r('app.string.tab_knowledge'))
-        .fontSize(Index.TAB_TITLE_FONT_SIZE)
-        .fontWeight(FontWeight.Bold)
-        .fontColor($r('app.color.text_primary'))
-        .layoutWeight(1)
+  private ManuscriptKnowledgeHeaderActions() {
+    Row({ space: 0 }) {
+      ManuscriptTopArcButton({
+        symbol: this.knowledgeEmbeddingSelection.isApi()
+          ? $r('sys.symbol.square_stack_3d_fill') : $r('sys.symbol.square_stack_3d'),
+        active: this.knowledgeEmbeddingSelection.isApi(),
+        onTap: (): void => {
+          this.openKnowledgeEmbeddingSelector()
+        }
+      })
+
+      ManuscriptTopArcButton({
+        symbol: this.knowledgeRerankSelection.isEnabled()
+          ? $r('sys.symbol.ranking_fill') : $r('sys.symbol.ranking'),
+        active: this.knowledgeRerankSelection.isEnabled(),
+        onTap: (): void => {
+          this.openKnowledgeRerankSelector()
+        }
+      })
+
+      ManuscriptTopArcButton({
+        symbol: $r('sys.symbol.doc_text_badge_leaf'),
+        onTap: (): void => {
+          this.requestKnowledgeRefresh()
+        }
+      })
+
+      ManuscriptTopArcButton({
+        symbol: $r('sys.symbol.info_circle'),
+        onTap: (): void => {
+          this.showKnowledgeUsageInfo()
+        }
+      })
     }
-    .width('100%')
-    .height(Index.TAB_TITLE_BAR_HEIGHT)
-    .padding({
-      left: Index.TAB_TITLE_CONTENT_HORIZONTAL_PADDING,
-      right: Index.TAB_TITLE_CONTENT_HORIZONTAL_PADDING
-    })
+    .height(44)
     .alignItems(VerticalAlign.Center)
-    .translate({ y: Index.TAB_TITLE_VERTICAL_OFFSET })
-    .renderGroup(false)
+  }
+
+  @Builder
+  private KnowledgeTitleStackBuilder() {
+    if (this.isManuscriptMode()) {
+      Row() {
+        Blank()
+        this.ManuscriptKnowledgeHeaderActions()
+      }
+        .width('100%')
+        .height(Index.TAB_TITLE_BAR_HEIGHT)
+        .padding({ left: 4, right: 4 })
+        .alignItems(VerticalAlign.Center)
+    } else {
+      Row() {
+        Text($r('app.string.tab_knowledge'))
+          .fontSize(Index.TAB_TITLE_FONT_SIZE)
+          .fontWeight(FontWeight.Bold)
+          .fontColor($r('app.color.text_primary'))
+          .layoutWeight(1)
+      }
+      .width('100%')
+      .height(Index.TAB_TITLE_BAR_HEIGHT)
+      .padding({
+        left: Index.TAB_TITLE_CONTENT_HORIZONTAL_PADDING,
+        right: Index.TAB_TITLE_CONTENT_HORIZONTAL_PADDING
+      })
+      .alignItems(VerticalAlign.Center)
+      .translate({ y: Index.TAB_TITLE_VERTICAL_OFFSET })
+      .renderGroup(false)
+    }
   }
 
   private getKnowledgeTitleBarOptions(): HdsNavigationTitleBarOptions {
@@ -3471,64 +3642,66 @@ struct Index {
     // 向量模型与重排序模型是一对配置入口，和更新/用量一起平铺展示，
     // 避免默认 maxCount=3 把已有的“更新知识库”折叠进“更多”
     options.menuMaxCount = 4
-    options.menuItems = [
-      {
-        content: {
-          label: pickLocalizedText('选择向量模型', 'Select embedding model'),
-          icon: this.buildCompactChatTitleBarMenuIcon(
-            this.knowledgeEmbeddingSelection.isApi()
-              ? $r('sys.symbol.square_stack_3d_fill')
-              : $r('sys.symbol.square_stack_3d'),
-            this.knowledgeEmbeddingSelection.isApi()
-              ? this.themePrimary
-              : $r('app.color.text_primary')
-          ),
-          action: () => {
-            this.openKnowledgeEmbeddingSelector()
+    if (!this.isManuscriptMode()) {
+      options.menuItems = [
+        {
+          content: {
+            label: pickLocalizedText('选择向量模型', 'Select embedding model'),
+            icon: this.buildCompactChatTitleBarMenuIcon(
+              this.knowledgeEmbeddingSelection.isApi()
+                ? $r('sys.symbol.square_stack_3d_fill')
+                : $r('sys.symbol.square_stack_3d'),
+              this.knowledgeEmbeddingSelection.isApi()
+                ? this.themePrimary
+                : $r('app.color.text_primary')
+            ),
+            action: () => {
+              this.openKnowledgeEmbeddingSelector()
+            }
+          }
+        },
+        {
+          content: {
+            label: pickLocalizedText('选择重排序模型', 'Select rerank model'),
+            icon: this.buildCompactChatTitleBarMenuIcon(
+              this.knowledgeRerankSelection.isEnabled()
+                ? $r('sys.symbol.ranking_fill')
+                : $r('sys.symbol.ranking'),
+              this.knowledgeRerankSelection.isEnabled()
+                ? this.themePrimary
+                : $r('app.color.text_primary')
+            ),
+            action: () => {
+              this.openKnowledgeRerankSelector()
+            }
+          }
+        },
+        {
+          content: {
+            label: pickLocalizedText('更新知识库', 'Update knowledge base'),
+            icon: this.buildCompactChatTitleBarMenuIcon(
+              $r('sys.symbol.doc_text_badge_leaf'),
+              $r('app.color.text_primary')
+            ),
+            action: () => {
+              this.requestKnowledgeRefresh()
+            }
+          }
+        },
+        {
+          content: {
+            label: $r('app.string.knowledge_usage_label'),
+            icon: this.buildCompactChatTitleBarMenuIcon(
+              $r('sys.symbol.info_circle'),
+              $r('app.color.text_primary')
+            ),
+            action: () => {
+              this.showKnowledgeUsageInfo()
+            }
           }
         }
-      },
-      {
-        content: {
-          label: pickLocalizedText('选择重排序模型', 'Select rerank model'),
-          icon: this.buildCompactChatTitleBarMenuIcon(
-            this.knowledgeRerankSelection.isEnabled()
-              ? $r('sys.symbol.ranking_fill')
-              : $r('sys.symbol.ranking'),
-            this.knowledgeRerankSelection.isEnabled()
-              ? this.themePrimary
-              : $r('app.color.text_primary')
-          ),
-          action: () => {
-            this.openKnowledgeRerankSelector()
-          }
-        }
-      },
-      {
-        content: {
-          label: pickLocalizedText('更新知识库', 'Update knowledge base'),
-          icon: this.buildCompactChatTitleBarMenuIcon(
-            $r('sys.symbol.doc_text_badge_leaf'),
-            $r('app.color.text_primary')
-          ),
-          action: () => {
-            this.requestKnowledgeRefresh()
-          }
-        }
-      },
-      {
-        content: {
-          label: $r('app.string.knowledge_usage_label'),
-          icon: this.buildCompactChatTitleBarMenuIcon(
-            $r('sys.symbol.info_circle'),
-            $r('app.color.text_primary')
-          ),
-          action: () => {
-            this.showKnowledgeUsageInfo()
-          }
-        }
-      }
-    ]
+      ]
+    }
     options.stackBuilder = (): void => this.KnowledgeTitleStackBuilder()
     return buildHdsTopNavigationTitleBarOptions(options)
   }
@@ -3630,32 +3803,39 @@ struct Index {
 
   @Builder
   private AssistantsHeader() {
-    Row() {
-      Text($r('app.string.assistant_manage_title'))
-        .fontSize(Index.TAB_TITLE_FONT_SIZE)
-        .fontWeight(FontWeight.Bold)
-        .fontColor($r('app.color.text_primary'))
-        .layoutWeight(1)
+    if (this.isManuscriptMode()) {
+      Column()
+        .width('100%')
+        .height(Index.TAB_TITLE_BAR_HEIGHT)
+    } else {
+      Row() {
+        Text($r('app.string.assistant_manage_title'))
+          .fontSize(Index.TAB_TITLE_FONT_SIZE)
+          .fontWeight(FontWeight.Bold)
+          .fontColor($r('app.color.text_primary'))
+          .layoutWeight(1)
 
-      Row({ space: 8 }) {
-        this.AssistantHeaderPill(this.assistants.length.toString(), $r('app.string.assistant_total_label'))
-        this.AssistantHeaderPill(this.getTotalAssistantSessionCount().toString(), $r('app.string.assistant_sessions_label'))
+        Row({ space: 8 }) {
+          this.AssistantHeaderPill(this.assistants.length.toString(), $r('app.string.assistant_total_label'))
+          this.AssistantHeaderPill(this.getTotalAssistantSessionCount().toString(),
+            $r('app.string.assistant_sessions_label'))
+        }
       }
+      .width('100%')
+      .height(Index.TAB_TITLE_BAR_HEIGHT)
+      .padding({
+        left: Index.TAB_TITLE_CONTENT_HORIZONTAL_PADDING,
+        right: Index.TAB_TITLE_CONTENT_HORIZONTAL_PADDING
+      })
+      .alignItems(VerticalAlign.Center)
+      .translate({ y: Index.TAB_TITLE_VERTICAL_OFFSET })
+      .renderGroup(false)
     }
-    .width('100%')
-    .height(Index.TAB_TITLE_BAR_HEIGHT)
-    .padding({
-      left: Index.TAB_TITLE_CONTENT_HORIZONTAL_PADDING,
-      right: Index.TAB_TITLE_CONTENT_HORIZONTAL_PADDING
-    })
-    .alignItems(VerticalAlign.Center)
-    .translate({ y: Index.TAB_TITLE_VERTICAL_OFFSET })
-    .renderGroup(false)
   }
 
   @Builder
   private AssistantHeaderPill(value: string, label: ResourceStr) {
-    Button({ type: ButtonType.Capsule, stateEffect: false }) {
+    Button({ type: this.isManuscriptMode() ? ButtonType.Normal : ButtonType.Capsule, stateEffect: false }) {
       Row({ space: 4 }) {
         Text(value)
           .fontSize(11)
@@ -3675,8 +3855,8 @@ struct Index {
     .height(this.getAssistantHeaderPillHeight())
     .padding({ left: 8, right: 8 })
     .backgroundColor(Color.Transparent)
-    .borderRadius(this.getAssistantHeaderPillHeight() / 2)
-    .systemMaterial(new uiMaterial.ImmersiveMaterial({
+    .borderRadius(this.isManuscriptMode() ? 0 : this.getAssistantHeaderPillHeight() / 2)
+    .systemMaterial(this.isManuscriptMode() ? undefined : new uiMaterial.ImmersiveMaterial({
       style: uiMaterial.ImmersiveStyle.REGULAR,
       materialColor: Color.Transparent,
       applyShadow: false,
@@ -3717,23 +3897,88 @@ struct Index {
   @Builder
   private AssistantsList() {
     if (this.assistants.length === 0) {
-      Column() {
-        IndexEmptyStateCard({
-          icon: $r('sys.symbol.person'),
-          title: $r('app.string.assistant_manage_title'),
-          description: $r('app.string.loading')
-        })
+      if (this.isManuscriptMode()) {
+        List({ scroller: this.assistantListScroller }) {
+          ListItem() {
+            Column()
+              .height(this.getAssistantsContentTopPadding())
+          }
+          .focusable(false)
+          .selectable(false)
+
+          ListItem() {
+            ManuscriptPageTitle({
+              title: $r('app.string.assistant_manage_title'),
+              subtitle: pickLocalizedText('助手名录', 'ASSISTANT CATALOGUE')
+            })
+          }
+          .focusable(false)
+          .selectable(false)
+
+          ListItem() {
+            Column({ space: 10 }) {
+              Text('❦')
+                .fontFamily(MANUSCRIPT_HEADING_FONT)
+                .fontSize(22)
+                .fontColor(getAppUiState().isDarkMode ? '#C99A52' : '#B68235')
+
+              Text($r('app.string.loading'))
+                .fontFamily(MANUSCRIPT_BODY_FONT)
+                .fontSize(13)
+                .fontStyle(FontStyle.Italic)
+                .fontColor(getAppUiState().themeTextSecondary)
+            }
+            .width('100%')
+            .height(180)
+            .justifyContent(FlexAlign.Center)
+            .alignItems(HorizontalAlign.Center)
+          }
+          .focusable(false)
+          .selectable(false)
+
+          ListItem() {
+            Column()
+              .height(this.getAssistantTabBottomSpacerHeight())
+          }
+          .focusable(false)
+          .selectable(false)
+        }
+        .width('100%')
+        .height(0)
+        .layoutWeight(1)
+        .padding({ left: 32, right: 32 })
+        .scrollBar(BarState.Off)
+        .edgeEffect(EdgeEffect.Spring)
+      } else {
+        Column() {
+          IndexEmptyStateCard({
+            icon: $r('sys.symbol.person'),
+            title: $r('app.string.assistant_manage_title'),
+            description: $r('app.string.loading')
+          })
+        }
+        .width('100%')
+        .layoutWeight(1)
       }
-      .width('100%')
-      .layoutWeight(1)
     } else {
-      List({ space: 8, scroller: this.assistantListScroller }) {
+      List({ space: this.isManuscriptMode() ? 0 : 8, scroller: this.assistantListScroller }) {
         ListItem() {
           Column()
             .height(this.getAssistantsContentTopPadding())
         }
         .focusable(false)
         .selectable(false)
+
+        if (this.isManuscriptMode()) {
+          ListItem() {
+            ManuscriptPageTitle({
+              title: $r('app.string.assistant_manage_title'),
+              subtitle: pickLocalizedText('助手名录', 'ASSISTANT CATALOGUE')
+            })
+          }
+          .focusable(false)
+          .selectable(false)
+        }
 
         ListItem() {
           this.AssistantSectionHeader($r('app.string.assistant_current_section'))
@@ -3749,7 +3994,7 @@ struct Index {
             start: this.AssistantStartSwipePanel(assistant),
             end: this.AssistantEndSwipePanel(assistant)
           })
-          .borderRadius(12)
+          .borderRadius(this.isManuscriptMode() ? 0 : 12)
           .clip(false)
         }, (assistant: Assistant) => this.getAssistantRenderKey(assistant))
 
@@ -3769,9 +4014,23 @@ struct Index {
             start: this.AssistantStartSwipePanel(assistant),
             end: this.AssistantEndSwipePanel(assistant)
           })
-          .borderRadius(12)
+          .borderRadius(this.isManuscriptMode() ? 0 : 12)
           .clip(false)
         }, (assistant: Assistant) => this.getAssistantRenderKey(assistant))
+
+        if (this.isManuscriptMode()) {
+          ListItem() {
+            Text('❦')
+              .fontFamily(MANUSCRIPT_HEADING_FONT)
+              .fontSize(18)
+              .fontColor(getAppUiState().isDarkMode ? '#C99A52' : '#B68235')
+              .width('100%')
+              .textAlign(TextAlign.Center)
+              .padding({ top: 18, bottom: 12 })
+          }
+          .focusable(false)
+          .selectable(false)
+        }
 
         ListItem() {
           Column()
@@ -3783,7 +4042,11 @@ struct Index {
       .width('100%')
       .height(0)
       .layoutWeight(1)
-      .padding({ left: this.getAssistantsListHorizontalPadding(), right: this.getAssistantsListHorizontalPadding(), top: 2 })
+      .padding({
+        left: this.isManuscriptMode() ? 32 : this.getAssistantsListHorizontalPadding(),
+        right: this.isManuscriptMode() ? 32 : this.getAssistantsListHorizontalPadding(),
+        top: this.isManuscriptMode() ? 0 : 2
+      })
       .clip(false)
       .scrollBar(BarState.Off)
       .edgeEffect(EdgeEffect.Spring)
@@ -3794,11 +4057,20 @@ struct Index {
   @Builder
   private AssistantSectionHeader(title: ResourceStr) {
     Text(title)
-      .fontSize(12)
+      .fontFamily(this.isManuscriptMode() ? MANUSCRIPT_BODY_FONT : undefined)
+      .fontSize(this.isManuscriptMode() ? 10 : 12)
       .fontWeight(FontWeight.Medium)
-      .fontColor($r('app.color.text_tertiary'))
+      .fontColor(this.isManuscriptMode() ? (getAppUiState().isDarkMode ? '#D9B274' : '#8A6228') :
+        $r('app.color.text_tertiary'))
+      .letterSpacing(this.isManuscriptMode() ? 1.4 : 0)
+      .textCase(this.isManuscriptMode() ? TextCase.UpperCase : TextCase.Normal)
       .width('100%')
-      .padding({ left: 4, right: 4, top: 8, bottom: 2 })
+      .padding({
+        left: 4,
+        right: 4,
+        top: this.isManuscriptMode() ? 14 : 8,
+        bottom: this.isManuscriptMode() ? 5 : 2
+      })
   }
 
   @Builder
@@ -3920,36 +4192,204 @@ struct Index {
     })
   }
 
+  private getAssistantOrdinal(assistant: Assistant): number {
+    for (let index = 0; index < this.assistants.length; index++) {
+      if (this.assistants[index].id === assistant.id) {
+        return index + 1
+      }
+    }
+    return 1
+  }
+
   @Builder
-  private AssistantJumpCard(assistant: Assistant, featured: boolean = false) {
-    Column() {
-      this.AssistantJumpCardContent(assistant, featured)
+  private ManuscriptAssistantAction(label: ResourceStr, primary: boolean, onTap: () => void) {
+    Button({ type: ButtonType.Normal, stateEffect: false }) {
+      Text(label)
+        .fontFamily(MANUSCRIPT_BODY_FONT)
+        .fontSize(10)
+        .fontWeight(FontWeight.Medium)
+        .fontColor(primary ? (getAppUiState().isDarkMode ? '#D9B274' : '#8A6228') :
+          getAppUiState().themeTextSecondary)
+        .letterSpacing(1)
+        .textCase(TextCase.UpperCase)
+        .maxLines(1)
+        .textOverflow({ overflow: TextOverflow.Ellipsis })
+    }
+    .height(28)
+    .padding({ left: 2, right: 2 })
+    .backgroundColor(Color.Transparent)
+    .borderRadius(0)
+    .border({
+      width: { bottom: primary ? 1 : 0 },
+      color: getAppUiState().isDarkMode ? '#C99A52' : '#B68235'
+    })
+    .onClick(() => {
+      onTap()
+    })
+  }
+
+  @Builder
+  private ManuscriptAssistantActions(assistant: Assistant) {
+    Row({ space: 20 }) {
+      this.ManuscriptAssistantAction($r('app.string.new_chat'), true, (): void => {
+        this.openAssistantNewChat(assistant)
+      })
+
+      this.ManuscriptAssistantAction($r('app.string.assistant_view_chats'), false, (): void => {
+        this.openAssistantSessions(assistant)
+      })
+
+      Blank()
+
+      Button({ type: ButtonType.Normal, stateEffect: false }) {
+        SymbolGlyph($r('sys.symbol.more'))
+          .fontSize(16)
+          .fontColor([getAppUiState().themeTextSecondary])
+      }
+      .width(36)
+      .height(28)
+      .padding(0)
+      .backgroundColor(Color.Transparent)
+      .borderRadius(0)
+      .bindMenu(this.AssistantCardMoreMenu(assistant), {
+        placement: Placement.BottomRight,
+        offset: { x: 0, y: 8 },
+        backgroundColor: this.themeSurface,
+        backgroundBlurStyle: BlurStyle.Regular
+      })
     }
     .width('100%')
-    .padding({ left: 14, right: 14, top: featured ? 14 : 12, bottom: featured ? 14 : 12 })
-    .backgroundColor(Color.Transparent)
-    .borderRadius(16)
+    .height(30)
+    .padding({ left: 34 })
+    .alignItems(VerticalAlign.Center)
+  }
+
+  @Builder
+  private ManuscriptAssistantRow(assistant: Assistant) {
+    Column({ space: 5 }) {
+      Row({ space: 8 }) {
+        Text(toRomanNumeral(this.getAssistantOrdinal(assistant)))
+          .width(26)
+          .fontFamily(MANUSCRIPT_HEADING_FONT)
+          .fontSize(15)
+          .fontWeight(600)
+          .fontColor(getAppUiState().isDarkMode ? '#D9B274' : '#8A6228')
+          .fontFeature('tnum')
+
+        Text(assistant.name)
+          .fontFamily(MANUSCRIPT_HEADING_FONT)
+          .fontSize(19)
+          .fontWeight(600)
+          .fontColor(getAppUiState().themeTextPrimary)
+          .maxLines(1)
+          .textOverflow({ overflow: TextOverflow.Ellipsis })
+          .constraintSize({ maxWidth: '55%' })
+
+        Column()
+          .height(1)
+          .border({
+            width: { top: 1 },
+            color: getAppUiState().isDarkMode ? '#4A463F' : '#C9C4BB',
+            style: BorderStyle.Dotted
+          })
+          .layoutWeight(1)
+          .constraintSize({ minWidth: 18 })
+
+        Row({ space: 4 }) {
+          SymbolGlyph($r('sys.symbol.message'))
+            .fontSize(11)
+            .fontColor([getAppUiState().themeTextTertiary])
+
+          Text(this.getAssistantSessionCount(assistant.id).toString())
+            .fontFamily(MANUSCRIPT_BODY_FONT)
+            .fontSize(11.5)
+            .fontColor(getAppUiState().themeTextTertiary)
+            .fontFeature('tnum')
+        }
+      }
+      .width('100%')
+      .alignItems(VerticalAlign.Center)
+
+      Row() {
+        Text(this.getAssistantDefaultModelText(assistant))
+          .fontFamily(MANUSCRIPT_BODY_FONT)
+          .fontSize(12.5)
+          .fontStyle(FontStyle.Italic)
+          .fontColor(getAppUiState().themeTextSecondary)
+          .maxLines(1)
+          .textOverflow({ overflow: TextOverflow.Ellipsis })
+          .layoutWeight(1)
+
+        if (assistant.id === this.currentAssistantId) {
+          Text($r('app.string.assistant_active_badge'))
+            .fontFamily(MANUSCRIPT_BODY_FONT)
+            .fontSize(9.5)
+            .fontWeight(FontWeight.Medium)
+            .fontColor(getAppUiState().isDarkMode ? '#D9B274' : '#8A6228')
+            .letterSpacing(1)
+            .textCase(TextCase.UpperCase)
+        } else {
+          this.AssistantRelativeTimeText(this.getAssistantLastChatTimestamp(assistant.id))
+        }
+      }
+      .width('100%')
+      .padding({ left: 34 })
+      .alignItems(VerticalAlign.Center)
+
+      this.ManuscriptAssistantActions(assistant)
+    }
+    .width('100%')
+    .padding({ left: 4, right: 4, top: 12, bottom: 8 })
+    .backgroundColor(this.openingAssistantId === assistant.id ?
+      (getAppUiState().isDarkMode ? '#33291B' : '#F5EDE0') : Color.Transparent)
     .border({
-      width: assistant.id === this.currentAssistantId || this.openingAssistantId === assistant.id ? 1.5 : 1,
-      color: assistant.id === this.currentAssistantId || this.openingAssistantId === assistant.id ? this.themePrimary :
-      this.themePrimaryLight
-    })
-    .systemMaterial(new uiMaterial.ImmersiveMaterial({
-      style: uiMaterial.ImmersiveStyle.REGULAR,
-      materialColor: Color.Transparent,
-      applyShadow: true,
-      interactive: false,
-      lightEffect: { color: undefined }
-    }))
-    .scale({
-      x: this.openingAssistantId === assistant.id ? 0.985 : 1,
-      y: this.openingAssistantId === assistant.id ? 0.985 : 1
+      width: {
+        bottom: 0.5,
+        left: assistant.id === this.currentAssistantId ? 2 : 0
+      },
+      color: assistant.id === this.currentAssistantId ? this.themePrimary : getAppUiState().themeDivider
     })
     .opacity(this.openingAssistantId === assistant.id ? 0.92 : 1)
     .animation({ duration: 180, curve: Curve.EaseOut })
     .onClick(() => {
       this.openAssistantSessions(assistant)
     })
+  }
+
+  @Builder
+  private AssistantJumpCard(assistant: Assistant, featured: boolean = false) {
+    if (this.isManuscriptMode()) {
+      this.ManuscriptAssistantRow(assistant)
+    } else {
+      Column() {
+        this.AssistantJumpCardContent(assistant, featured)
+      }
+      .width('100%')
+      .padding({ left: 14, right: 14, top: featured ? 14 : 12, bottom: featured ? 14 : 12 })
+      .backgroundColor(Color.Transparent)
+      .borderRadius(16)
+      .border({
+        width: assistant.id === this.currentAssistantId || this.openingAssistantId === assistant.id ? 1.5 : 1,
+        color: assistant.id === this.currentAssistantId || this.openingAssistantId === assistant.id ?
+          this.themePrimary : this.themePrimaryLight
+      })
+      .systemMaterial(new uiMaterial.ImmersiveMaterial({
+        style: uiMaterial.ImmersiveStyle.REGULAR,
+        materialColor: Color.Transparent,
+        applyShadow: true,
+        interactive: false,
+        lightEffect: { color: undefined }
+      }))
+      .scale({
+        x: this.openingAssistantId === assistant.id ? 0.985 : 1,
+        y: this.openingAssistantId === assistant.id ? 0.985 : 1
+      })
+      .opacity(this.openingAssistantId === assistant.id ? 0.92 : 1)
+      .animation({ duration: 180, curve: Curve.EaseOut })
+      .onClick(() => {
+        this.openAssistantSessions(assistant)
+      })
+    }
   }
 
   @Builder
@@ -4592,16 +5032,17 @@ struct Index {
           }))
 
           Text(this.getCurrentAssistantName())
+            .fontFamily(this.isManuscriptMode() ? MANUSCRIPT_HEADING_FONT : '')
             .fontSize(Index.TAB_TITLE_FONT_SIZE)
-            .fontWeight(FontWeight.Bold)
-            .fontColor($r('app.color.text_primary'))
+            .fontWeight(this.isManuscriptMode() ? 600 : FontWeight.Bold)
+            .fontColor(this.isManuscriptMode() ? this.themePrimary : $r('app.color.text_primary'))
             .maxLines(1)
             .textOverflow({ overflow: TextOverflow.Ellipsis })
             .constraintSize({ maxWidth: this.getAssistantSwitchNameMaxWidth() })
 
           SymbolGlyph($r('sys.symbol.chevron_down'))
             .fontSize(13)
-            .fontColor([$r('app.color.text_secondary')])
+            .fontColor([this.isManuscriptMode() ? this.themePrimary : $r('app.color.text_secondary')])
         }
         .alignItems(VerticalAlign.Center)
       }, (renderKey: string) => renderKey)
@@ -4610,7 +5051,8 @@ struct Index {
     .padding({ left: 0, right: 10 })
     .constraintSize({ maxWidth: this.getAssistantSwitchMaxWidth() })
     .backgroundColor(Color.Transparent)
-    .borderRadius(22)
+    .borderRadius(0)
+    .border({ width: 0, color: Color.Transparent })
     .onClick(() => {
       this.showAssistantSwitchSheet = true
     })
@@ -4678,6 +5120,11 @@ struct Index {
         .layoutWeight(1)
         .height('100%')
         .backgroundColor(Color.Transparent)
+        .borderRadius(this.isManuscriptMode() ? 0 : this.getFloatingSearchPanelHeight() / 2)
+        .border({
+          width: this.isManuscriptMode() ? { bottom: 1 } : 0,
+          color: getAppUiState().themeTextSecondary
+        })
         .searchIcon({ size: 0, color: Color.Transparent })
         .onChange((value: string) => {
           this.searchText = value
@@ -4693,7 +5140,8 @@ struct Index {
           this.scheduleSearchInputFocus(30)
         })
 
-      Button({ type: ButtonType.Circle }) {
+      Button({ type: this.isManuscriptMode() ? ButtonType.Normal : ButtonType.Circle,
+        stateEffect: !this.isManuscriptMode() }) {
         SymbolGlyph($r('sys.symbol.magnifyingglass'))
           .fontSize(18)
           .fontColor([this.themePrimary])
@@ -4702,7 +5150,8 @@ struct Index {
       .height(36)
       .padding(0)
       .backgroundColor(Color.Transparent)
-      .stateEffect(true)
+      .borderRadius(this.isManuscriptMode() ? 0 : 18)
+      .border({ width: 0, color: Color.Transparent })
       .onClick(() => {
         try {
           this.getUIContext().getFocusController().clearFocus()
@@ -4712,13 +5161,13 @@ struct Index {
     }
     .width(this.getFloatingSearchPanelWidth())
     .height(this.getFloatingSearchPanelHeight())
-    .borderRadius(this.getFloatingSearchPanelHeight() / 2)
+    .borderRadius(this.isManuscriptMode() ? 0 : this.getFloatingSearchPanelHeight() / 2)
     .clip(false)
     .padding({ left: 14, right: 10, top: 4, bottom: 4 })
     .justifyContent(FlexAlign.Center)
     .alignItems(VerticalAlign.Center)
     .backgroundColor(Color.Transparent)
-    .systemMaterial(new uiMaterial.ImmersiveMaterial({
+    .systemMaterial(this.isManuscriptMode() ? undefined : new uiMaterial.ImmersiveMaterial({
       style: uiMaterial.ImmersiveStyle.REGULAR,
       materialColor: Color.Transparent,
       applyShadow: false,
@@ -4816,12 +5265,60 @@ struct Index {
   }
 
   @Builder
+  private ManuscriptChatHeaderActions() {
+    Row({ space: 0 }) {
+      if (this.isMultiSelectMode) {
+        ManuscriptTopArcButton({
+          symbol: $r('sys.symbol.trash'),
+          destructive: true,
+          onTap: (): void => {
+            this.handleDeleteSelectedSessions()
+          }
+        })
+      } else {
+        ManuscriptTopArcButton({
+          symbol: $r('sys.symbol.creditcard'),
+          onTap: (): void => {
+            this.openBalanceSheet()
+          }
+        })
+
+        ManuscriptTopArcButton({
+          symbol: this.isFavoriteFilterActive() ? $r('sys.symbol.heart_fill') : $r('sys.symbol.heart'),
+          active: this.isFavoriteFilterActive(),
+          onTap: (): void => {
+            this.toggleFavoriteFilter()
+          }
+        })
+
+        ManuscriptTopArcButton({
+          symbol: $r('sys.symbol.magnifyingglass'),
+          active: this.isSearchExpanded,
+          onTap: (): void => {
+            if (this.isSearchExpanded) {
+              this.collapseSearch()
+            } else {
+              this.expandSearch()
+            }
+          }
+        })
+      }
+    }
+    .height(44)
+    .alignItems(VerticalAlign.Center)
+  }
+
+  @Builder
   private ChatListHeaderMainRow() {
     if (!this.isMultiSelectMode) {
       Row() {
         this.AssistantSwitchPill()
 
         Blank()
+
+        if (this.isManuscriptMode()) {
+          this.ManuscriptChatHeaderActions()
+        }
       }
       .width('100%')
       .height(Index.TAB_TITLE_BAR_HEIGHT)
@@ -4838,6 +5335,10 @@ struct Index {
           .fontColor($r('app.color.text_primary'))
 
         Blank()
+
+        if (this.isManuscriptMode()) {
+          this.ManuscriptChatHeaderActions()
+        }
       }
       .width('100%')
       .height(Index.TAB_TITLE_BAR_HEIGHT)
@@ -5194,6 +5695,13 @@ struct Index {
           .width('100%')
           .height(this.getSettingsListTopSpacerHeight())
 
+        if (this.isManuscriptMode()) {
+          ManuscriptPageTitle({
+            title: $r('app.string.tab_settings'),
+            subtitle: pickLocalizedText('偏好目录', 'INDEX OF PREFERENCES')
+          })
+        }
+
         this.SettingsNavigationContent()
 
         if (!this.isSettingsSplitMode()) {
@@ -5212,22 +5720,28 @@ struct Index {
 
   @Builder
   private CompactSettingsTitleStackBuilder() {
-    Row() {
-      Text($r('app.string.tab_settings'))
-        .fontSize(Index.TAB_TITLE_FONT_SIZE)
-        .fontWeight(FontWeight.Bold)
-        .fontColor($r('app.color.text_primary'))
-        .layoutWeight(1)
+    if (this.isManuscriptMode()) {
+      Column()
+        .width('100%')
+        .height(Index.TAB_TITLE_BAR_HEIGHT)
+    } else {
+      Row() {
+        Text($r('app.string.tab_settings'))
+          .fontSize(Index.TAB_TITLE_FONT_SIZE)
+          .fontWeight(FontWeight.Bold)
+          .fontColor($r('app.color.text_primary'))
+          .layoutWeight(1)
+      }
+      .width('100%')
+      .height(Index.TAB_TITLE_BAR_HEIGHT)
+      .padding({
+        left: Index.TAB_TITLE_CONTENT_HORIZONTAL_PADDING,
+        right: Index.TAB_TITLE_CONTENT_HORIZONTAL_PADDING
+      })
+      .alignItems(VerticalAlign.Center)
+      .translate({ y: Index.TAB_TITLE_VERTICAL_OFFSET })
+      .renderGroup(false)
     }
-    .width('100%')
-    .height(Index.TAB_TITLE_BAR_HEIGHT)
-    .padding({
-      left: Index.TAB_TITLE_CONTENT_HORIZONTAL_PADDING,
-      right: Index.TAB_TITLE_CONTENT_HORIZONTAL_PADDING
-    })
-    .alignItems(VerticalAlign.Center)
-    .translate({ y: Index.TAB_TITLE_VERTICAL_OFFSET })
-    .renderGroup(false)
   }
 
   private getCompactSettingsTitleBarOptions(): HdsNavigationTitleBarOptions {

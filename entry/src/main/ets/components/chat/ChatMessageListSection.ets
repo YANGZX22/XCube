@@ -8,6 +8,9 @@ import {
   ChatMessageListDataSource,
   ChatMessageRowData
 } from './ChatMessageListDataSource'
+import { getAppUiState } from '../../state/AppUiState'
+import { VisualEffectsMode } from '../../models/ThemeColors'
+import { ensureManuscriptFonts, MANUSCRIPT_HEADING_FONT } from '../../utils/ManuscriptVisualUtils'
 
 @ComponentV2
 export struct ChatMessageListSection {
@@ -66,7 +69,20 @@ export struct ChatMessageListSection {
   private messageRowDataSource: ChatMessageListDataSource = new ChatMessageListDataSource()
 
   aboutToAppear(): void {
+    ensureManuscriptFonts()
     this.syncMessageRows(true)
+  }
+
+  private isFirstAssistantMessageIndex(index: number): boolean {
+    if (index < 0 || index >= this.messageRows.length || this.messageRows[index].message.role !== MessageRole.ASSISTANT) {
+      return false
+    }
+    for (let i = 0; i < index; i++) {
+      if (this.messageRows[i].message.role === MessageRole.ASSISTANT) {
+        return false
+      }
+    }
+    return true
   }
 
   @Monitor('syncVersion')
@@ -333,6 +349,7 @@ export struct ChatMessageListSection {
                 isMultiSelectMode: this.isMultiSelectMode,
                 previewContent: this.inputText,
                 previewAttachments: this.pendingAttachments,
+                isFirstAssistantMessage: this.isFirstAssistantMessageIndex(index),
                 onRegenerate: () => {
                   this.onRegenerate(item.message)
                 },
@@ -389,6 +406,18 @@ export struct ChatMessageListSection {
                 .width('100%')
             }
           }, (item: ChatMessageRowData): string => item.key)
+
+          if (getAppUiState().visualEffectsMode === VisualEffectsMode.MANUSCRIPT && this.messages.length > 0) {
+            ListItem({ style: ListItemStyle.NONE }) {
+              Text('⁂')
+                .width('100%')
+                .fontFamily(MANUSCRIPT_HEADING_FONT)
+                .fontSize(13)
+                .fontColor(getAppUiState().isDarkMode ? '#C99A52' : '#B68235')
+                .textAlign(TextAlign.Center)
+                .padding({ top: 12, bottom: 8 })
+            }
+          }
 
           if (!this.isEditingMessage && this.showDraftPreview) {
             ListItem({ style: ListItemStyle.NONE }) {

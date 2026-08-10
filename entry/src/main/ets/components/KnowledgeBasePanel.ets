@@ -10,10 +10,17 @@ import {
 } from '../services/KnowledgeDocumentService'
 import { ServiceRegistry } from '../services/ServiceRegistry'
 import { getAppUiState } from '../state/AppUiState'
+import { VisualEffectsMode } from '../models/ThemeColors'
 import { pickLocalizedText } from '../utils/LocalizedTextUtils'
 import { showSnackBar, SnackBarDisplayOptions, SnackBarTone } from '../utils/ToastUtil'
 import { withColorAlpha } from '../utils/ColorAlphaUtils'
+import {
+  MANUSCRIPT_BODY_FONT,
+  MANUSCRIPT_HEADING_FONT,
+  toRomanNumeral
+} from '../utils/ManuscriptVisualUtils'
 import { ImmersiveSheetHeader } from './ImmersiveSheetHeader'
+import { ManuscriptPageTitle } from './index/ManuscriptPageTitle'
 
 @ComponentV2
 export struct KnowledgeBasePanel {
@@ -51,6 +58,10 @@ export struct KnowledgeBasePanel {
 
   private get knowledgeListImmersiveMaterial(): boolean {
     return getAppUiState().knowledgeListImmersiveMaterial
+  }
+
+  private get isManuscriptMode(): boolean {
+    return getAppUiState().visualEffectsMode === VisualEffectsMode.MANUSCRIPT
   }
 
   aboutToAppear(): void {
@@ -741,11 +752,96 @@ export struct KnowledgeBasePanel {
 
   @Builder
   private DocumentCard(document: KnowledgeDocument) {
-    if (this.knowledgeListImmersiveMaterial) {
+    if (this.isManuscriptMode) {
+      this.ManuscriptDocumentRow(document)
+    } else if (this.knowledgeListImmersiveMaterial) {
       this.ImmersiveDocumentCard(document)
     } else {
       this.GaussianBlurDocumentCard(document)
     }
+  }
+
+  private getDocumentOrdinal(document: KnowledgeDocument): number {
+    for (let index = 0; index < this.documents.length; index++) {
+      if (this.documents[index].id === document.id) {
+        return index + 1
+      }
+    }
+    return 1
+  }
+
+  @Builder
+  private ManuscriptDocumentRow(document: KnowledgeDocument) {
+    Column({ space: 5 }) {
+      Row({ space: 8 }) {
+        Text(toRomanNumeral(this.getDocumentOrdinal(document)))
+          .width(26)
+          .fontFamily(MANUSCRIPT_HEADING_FONT)
+          .fontSize(15)
+          .fontWeight(600)
+          .fontColor(this.isDarkMode ? '#D9B274' : '#8A6228')
+          .fontFeature('tnum')
+
+        Text(document.originalName)
+          .fontFamily(MANUSCRIPT_HEADING_FONT)
+          .fontSize(18)
+          .fontWeight(600)
+          .fontColor(getAppUiState().themeTextPrimary)
+          .maxLines(1)
+          .textOverflow({ overflow: TextOverflow.Ellipsis })
+          .constraintSize({ maxWidth: '56%' })
+
+        Column()
+          .height(1)
+          .border({
+            width: { top: 1 },
+            color: this.isDarkMode ? '#4A463F' : '#C9C4BB',
+            style: BorderStyle.Dotted
+          })
+          .layoutWeight(1)
+          .constraintSize({ minWidth: 18 })
+
+        if (this.processingDocumentId === document.id) {
+          LoadingProgress()
+            .width(16)
+            .height(16)
+            .color(this.themePrimary)
+        } else {
+          Text(this.formatFileSize(document.size))
+            .fontFamily(MANUSCRIPT_BODY_FONT)
+            .fontSize(11.5)
+            .fontColor(getAppUiState().themeTextTertiary)
+            .fontFeature('tnum')
+            .maxLines(1)
+        }
+      }
+      .width('100%')
+      .alignItems(VerticalAlign.Center)
+
+      Row({ space: 7 }) {
+        SymbolGlyph(this.getDocumentSymbol(document))
+          .renderingStrategy(SymbolRenderingStrategy.SINGLE)
+          .fontSize(12)
+          .fontColor([this.getStatusColor(document)])
+
+        Text(this.getStatusText(document))
+          .fontFamily(MANUSCRIPT_BODY_FONT)
+          .fontSize(12.5)
+          .fontStyle(FontStyle.Italic)
+          .fontColor(getAppUiState().themeTextSecondary)
+          .maxLines(1)
+          .textOverflow({ overflow: TextOverflow.Ellipsis })
+      }
+      .width('100%')
+      .padding({ left: 34 })
+    }
+    .width('100%')
+    .padding({ left: 4, right: 4, top: 14, bottom: 12 })
+    .backgroundColor(Color.Transparent)
+    .border({ width: { bottom: 0.5 }, color: getAppUiState().themeDivider })
+    .onClick(() => {
+      this.handleDocumentTap(document)
+    })
   }
 
   @Builder
@@ -859,6 +955,17 @@ export struct KnowledgeBasePanel {
           .selectable(false)
         }
 
+        if (this.isManuscriptMode) {
+          ListItem() {
+            ManuscriptPageTitle({
+              title: $r('app.string.tab_knowledge'),
+              subtitle: pickLocalizedText('参考书目', 'REFERENCE LIBRARY')
+            })
+          }
+          .focusable(false)
+          .selectable(false)
+        }
+
         if (this.isLoading) {
           ListItem() {
             Row() {
@@ -868,7 +975,7 @@ export struct KnowledgeBasePanel {
                 .color(this.themePrimary)
             }
             .width('100%')
-            .height(220)
+            .height(this.isManuscriptMode ? 160 : 220)
             .justifyContent(FlexAlign.Center)
             .alignItems(VerticalAlign.Center)
           }
@@ -877,31 +984,41 @@ export struct KnowledgeBasePanel {
         } else if (this.documents.length === 0) {
           ListItem() {
             Column({ space: 10 }) {
-              Column() {
-                SymbolGlyph($r('sys.symbol.doc_text_badge_magnifyingglass'))
-                  .renderingStrategy(SymbolRenderingStrategy.SINGLE)
-                  .fontSize(28)
-                  .fontColor([this.themePrimary])
+              if (this.isManuscriptMode) {
+                Text('❦')
+                  .fontFamily(MANUSCRIPT_HEADING_FONT)
+                  .fontSize(22)
+                  .fontColor(this.isDarkMode ? '#C99A52' : '#B68235')
+              } else {
+                Column() {
+                  SymbolGlyph($r('sys.symbol.doc_text_badge_magnifyingglass'))
+                    .renderingStrategy(SymbolRenderingStrategy.SINGLE)
+                    .fontSize(28)
+                    .fontColor([this.themePrimary])
+                }
+                .width(64)
+                .height(64)
+                .borderRadius(20)
+                .backgroundColor(withColorAlpha(this.themePrimary, this.isDarkMode ? '26' : '12'))
+                .justifyContent(FlexAlign.Center)
+                .alignItems(HorizontalAlign.Center)
               }
-              .width(64)
-              .height(64)
-              .borderRadius(20)
-              .backgroundColor(withColorAlpha(this.themePrimary, this.isDarkMode ? '26' : '12'))
-              .justifyContent(FlexAlign.Center)
-              .alignItems(HorizontalAlign.Center)
 
               Text($r('app.string.knowledge_empty_title'))
-                .fontSize(16)
-                .fontWeight(FontWeight.Bold)
+                .fontFamily(this.isManuscriptMode ? MANUSCRIPT_HEADING_FONT : undefined)
+                .fontSize(this.isManuscriptMode ? 19 : 16)
+                .fontWeight(this.isManuscriptMode ? 600 : FontWeight.Bold)
                 .fontColor($r('app.color.text_primary'))
 
               Text($r('app.string.knowledge_empty_hint'))
-                .fontSize(12)
+                .fontFamily(this.isManuscriptMode ? MANUSCRIPT_BODY_FONT : undefined)
+                .fontSize(this.isManuscriptMode ? 12.5 : 12)
+                .fontStyle(this.isManuscriptMode ? FontStyle.Italic : FontStyle.Normal)
                 .fontColor($r('app.color.text_secondary'))
                 .textAlign(TextAlign.Center)
             }
             .width('100%')
-            .height(260)
+            .height(this.isManuscriptMode ? 190 : 260)
             .justifyContent(FlexAlign.Center)
             .alignItems(HorizontalAlign.Center)
             .padding({ left: 16, right: 16 })
@@ -913,14 +1030,33 @@ export struct KnowledgeBasePanel {
             ListItem({ style: ListItemStyle.NONE }) {
               this.DocumentCard(document)
             }
-            .margin({ left: 16, right: 16, top: index === 0 ? 4 : 0, bottom: 8 })
+            .margin({
+              left: this.isManuscriptMode ? 32 : 16,
+              right: this.isManuscriptMode ? 32 : 16,
+              top: this.isManuscriptMode ? 0 : (index === 0 ? 4 : 0),
+              bottom: this.isManuscriptMode ? 0 : 8
+            })
             .swipeAction({
               start: this.UpdateSwipePanel(document),
               end: this.DeleteSwipePanel(document)
             })
-            .borderRadius(12)
+            .borderRadius(this.isManuscriptMode ? 0 : 12)
             .clip(false)
           }, (document: KnowledgeDocument) => document.id)
+        }
+
+        if (this.isManuscriptMode && !this.isLoading && this.documents.length > 0) {
+          ListItem() {
+            Text('❦')
+              .fontFamily(MANUSCRIPT_HEADING_FONT)
+              .fontSize(18)
+              .fontColor(this.isDarkMode ? '#C99A52' : '#B68235')
+              .width('100%')
+              .textAlign(TextAlign.Center)
+              .padding({ top: 18, bottom: 12 })
+          }
+          .focusable(false)
+          .selectable(false)
         }
 
         if (this.bottomSpacerHeight > 0) {

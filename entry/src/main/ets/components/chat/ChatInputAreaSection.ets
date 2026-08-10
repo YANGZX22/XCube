@@ -6,6 +6,8 @@ import { AttachmentPicker } from '../AttachmentPicker'
 import { SlashCommandPanel } from './SlashCommandPanel'
 import { ReasoningControlMode } from '../../services/ProviderCompatibilityRegistry'
 import { matchSlashCommands, SlashCommandItem } from '../../utils/SlashCommandUtils'
+import { getAppUiState } from '../../state/AppUiState'
+import { VisualEffectsMode } from '../../models/ThemeColors'
 
 @ComponentV2
 export struct ChatInputAreaSection {
@@ -58,9 +60,22 @@ export struct ChatInputAreaSection {
   @Event onComposerContentChanged: () => void = () => {}
   @Event onRecentPhotoDetected: (detected: boolean) => void = (_detected: boolean): void => {}
   @Event onSlashCommand: (commandId: string) => void = (_commandId: string): void => {}
+  @Param showManuscriptScrollTop: boolean = false
+  @Param showManuscriptScrollBottom: boolean = false
+  @Param manuscriptScrollBottomLoading: boolean = false
+  @Param showManuscriptHistory: boolean = false
+  @Param showManuscriptCanvas: boolean = false
+  @Event onManuscriptScrollTop: () => void = () => {}
+  @Event onManuscriptScrollBottom: () => void = () => {}
+  @Event onManuscriptHistory: () => void = () => {}
+  @Event onManuscriptCanvas: () => void = () => {}
 
   private getEffectiveContentMaxWidth(): number {
     return this.contentMaxWidth > 0 ? this.contentMaxWidth : 99999
+  }
+
+  private get isManuscriptMode(): boolean {
+    return getAppUiState().visualEffectsMode === VisualEffectsMode.MANUSCRIPT
   }
 
   // 编辑既有消息时不接受斜杠命令：那次输入的目标是改写消息本身
@@ -170,6 +185,23 @@ export struct ChatInputAreaSection {
           },
           onRecentPhotoDetected: (detected: boolean): void => {
             this.onRecentPhotoDetected(detected)
+          },
+          showManuscriptScrollTop: this.showManuscriptScrollTop,
+          showManuscriptScrollBottom: this.showManuscriptScrollBottom,
+          manuscriptScrollBottomLoading: this.manuscriptScrollBottomLoading,
+          showManuscriptHistory: this.showManuscriptHistory,
+          showManuscriptCanvas: this.showManuscriptCanvas,
+          onManuscriptScrollTop: (): void => {
+            this.onManuscriptScrollTop()
+          },
+          onManuscriptScrollBottom: (): void => {
+            this.onManuscriptScrollBottom()
+          },
+          onManuscriptHistory: (): void => {
+            this.onManuscriptHistory()
+          },
+          onManuscriptCanvas: (): void => {
+            this.onManuscriptCanvas()
           }
         })
 
@@ -206,6 +238,12 @@ export struct ChatInputAreaSection {
     }
     .width('100%')
     .alignItems(HorizontalAlign.Center)
-    .padding({ left: 16, right: 16, top: 6 })
+    .padding(this.isManuscriptMode ? { left: 20, right: 20, top: 14 } : { left: 16, right: 16, top: 6 })
+    .backgroundColor(this.isManuscriptMode ? getAppUiState().themeBackground : Color.Transparent)
+    .border({
+      width: this.isManuscriptMode ? { top: 1 } : 0,
+      color: getAppUiState().themeDivider
+    })
+    .translate({ y: this.isManuscriptMode ? 20 : 0 })
   }
 }

@@ -6,7 +6,12 @@ import {
   MarkdownRenderer,
   PreferenceKeys
 } from '../services/PreferencesService'
-import { ColorTheme, ThemeColorConfig } from '../models/ThemeColors'
+import {
+  ColorTheme,
+  normalizeVisualEffectsMode,
+  ThemeColorConfig,
+  VisualEffectsMode
+} from '../models/ThemeColors'
 import { getThemeService } from '../services/ThemeService'
 import { setAppUiStateValue } from '../state/AppUiState'
 import { AppStorageKeys } from '../config/AppStorageKeys'
@@ -16,6 +21,7 @@ export interface SettingsChangeCallback {
   onThemeModeChanged: (mode: ThemeMode, colorMode: ConfigurationConstant.ColorMode) => void
   onLanguageChanged: (language: AppLanguage) => void
   onColorThemeChanged?: (theme: ColorTheme, colors: ThemeColorConfig) => void
+  onVisualEffectsModeChanged?: (mode: VisualEffectsMode, colors: ThemeColorConfig) => void
   onNotificationSettingsChanged?: (enabled: boolean, notifyOnComplete: boolean, notifyOnFailed: boolean) => void
   onChatFontSizeChanged?: (size: number) => void
   onChatInputSettingsChanged?: (enterKeySend: boolean) => void
@@ -27,6 +33,7 @@ export class SettingsManager {
   private static instance: SettingsManager | null = null
   private currentThemeMode: ThemeMode = ThemeMode.SYSTEM
   private currentLanguage: AppLanguage = AppLanguage.SYSTEM
+  private visualEffectsMode: VisualEffectsMode = VisualEffectsMode.OFF
   private notificationEnabled: boolean = true
   private notifyOnComplete: boolean = true
   private notifyOnFailed: boolean = true
@@ -73,6 +80,7 @@ export class SettingsManager {
     const preferencesService = getPreferencesService()
     this.currentThemeMode = await preferencesService.getThemeMode()
     this.currentLanguage = await preferencesService.getLanguage()
+    this.visualEffectsMode = normalizeVisualEffectsMode(await preferencesService.getVisualEffectsMode())
     this.notificationEnabled = await preferencesService.getNotifyEnabled()
     this.notifyOnComplete = await preferencesService.getNotifyOnComplete()
     this.notifyOnFailed = await preferencesService.getNotifyOnFailed()
@@ -88,6 +96,7 @@ export class SettingsManager {
     this.chatListImmersiveMaterial = await preferencesService.getChatListImmersiveMaterial()
     this.knowledgeListImmersiveMaterial = await preferencesService.getKnowledgeListImmersiveMaterial()
     setAppUiStateValue(AppStorageKeys.CHAT_SERIF_FONT_ENABLED, this.chatSerifFontEnabled)
+    setAppUiStateValue(AppStorageKeys.VISUAL_EFFECTS_MODE, this.visualEffectsMode)
     setAppUiStateValue(AppStorageKeys.CHAT_SERIF_FONT_FAMILY, this.chatSerifFontFamily)
     setAppUiStateValue(AppStorageKeys.MARKDOWN_RENDERER, this.markdownRenderer)
     setAppUiStateValue(AppStorageKeys.CHAT_INPUT_ENTER_KEY_SEND, this.chatInputEnterKeySend)
@@ -102,6 +111,7 @@ export class SettingsManager {
     const preferencesService = getPreferencesService()
     this.currentThemeMode = await preferencesService.getThemeMode()
     this.currentLanguage = await preferencesService.getLanguage()
+    this.visualEffectsMode = normalizeVisualEffectsMode(await preferencesService.getVisualEffectsMode())
     this.notificationEnabled = await preferencesService.getNotifyEnabled()
     this.notifyOnComplete = await preferencesService.getNotifyOnComplete()
     this.notifyOnFailed = await preferencesService.getNotifyOnFailed()
@@ -117,6 +127,7 @@ export class SettingsManager {
     this.chatListImmersiveMaterial = await preferencesService.getChatListImmersiveMaterial()
     this.knowledgeListImmersiveMaterial = await preferencesService.getKnowledgeListImmersiveMaterial()
     setAppUiStateValue(AppStorageKeys.CHAT_SERIF_FONT_ENABLED, this.chatSerifFontEnabled)
+    setAppUiStateValue(AppStorageKeys.VISUAL_EFFECTS_MODE, this.visualEffectsMode)
     setAppUiStateValue(AppStorageKeys.CHAT_SERIF_FONT_FAMILY, this.chatSerifFontFamily)
     setAppUiStateValue(AppStorageKeys.MARKDOWN_RENDERER, this.markdownRenderer)
     setAppUiStateValue(AppStorageKeys.CHAT_INPUT_ENTER_KEY_SEND, this.chatInputEnterKeySend)
@@ -210,6 +221,26 @@ export class SettingsManager {
     // 通知所有监听者
     for (let i = 0; i < this.callbacks.length; i++) {
       this.callbacks[i].onLanguageChanged(language)
+    }
+  }
+
+  getVisualEffectsMode(): VisualEffectsMode {
+    return getThemeService().getVisualEffectsMode()
+  }
+
+  async setVisualEffectsMode(mode: VisualEffectsMode): Promise<void> {
+    const normalizedMode = normalizeVisualEffectsMode(mode as string)
+    if (this.visualEffectsMode === normalizedMode && getThemeService().getVisualEffectsMode() === normalizedMode) {
+      return
+    }
+    await getThemeService().setVisualEffectsMode(normalizedMode)
+    this.visualEffectsMode = normalizedMode
+    const colors = getThemeService().getCurrentColors()
+    for (let i = 0; i < this.callbacks.length; i++) {
+      const callback = this.callbacks[i]
+      if (callback.onVisualEffectsModeChanged !== undefined) {
+        callback.onVisualEffectsModeChanged(normalizedMode, colors)
+      }
     }
   }
 

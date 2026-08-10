@@ -31,6 +31,7 @@ import { formatLocalizedCount, pickLocalizedText } from '../utils/LocalizedTextU
 import { withColorAlpha } from '../utils/ColorAlphaUtils'
 import { ChatFloatingImmersiveButton } from './ChatFloatingImmersiveButton'
 import { ImmersiveSheetHeader } from './ImmersiveSheetHeader'
+import { getLocalizedBuiltinToolDescription, getLocalizedBuiltinToolName } from '../utils/ToolDisplayTextUtils'
 import {
   buildCustomHeadersJson,
   isSensitiveCustomHeaderName,
@@ -3244,7 +3245,7 @@ struct BuiltinToolCardItem {
         }
 
         Column({ space: 6 }) {
-          Text(this.tool.name)
+          Text(getLocalizedBuiltinToolName(this.tool.id, this.tool.name))
             .fontSize(17)
             .fontWeight(FontWeight.Bold)
             .fontColor($r('app.color.text_primary'))
@@ -3252,7 +3253,7 @@ struct BuiltinToolCardItem {
             .maxLines(1)
             .textOverflow({ overflow: TextOverflow.Ellipsis })
 
-          Text(this.tool.description)
+          Text(getLocalizedBuiltinToolDescription(this.tool.id, this.tool.description))
             .fontSize(12)
             .lineHeight(18)
             .fontColor($r('app.color.text_secondary'))

@@ -1,3 +1,5 @@
+import { pickLocalizedText } from './LocalizedTextUtils'
+
 export class ToolPreviewEntry {
   label: string = ''
   value: string = ''
@@ -145,7 +147,7 @@ export function buildToolArgumentsPreview(argumentsJson: string, entryLimit: num
   const trimmed = argumentsJson.trim()
   const parsed = tryParseJson(trimmed)
   const rawPreview = buildRawPreview(argumentsJson, parsed, DEFAULT_ARGUMENT_PREVIEW, rawMaxLength)
-  let summary = '无参数'
+  let summary = pickLocalizedText('无参数', 'No arguments')
   let entries: ToolPreviewEntry[] = []
 
   if (parsed !== null && !Array.isArray(parsed as Array<Object>) && typeof parsed === 'object') {
@@ -154,7 +156,7 @@ export function buildToolArgumentsPreview(argumentsJson: string, entryLimit: num
     if (entries.length > 0) {
       summary = buildSummaryFromEntries(entries, 120)
     } else if (Object.keys(record).length > 0) {
-      summary = '包含结构化参数'
+      summary = pickLocalizedText('包含结构化参数', 'Structured arguments')
     }
   } else if (parsed !== null) {
     summary = truncateText(stringifyValueForSummary(parsed), 120)
@@ -168,8 +170,9 @@ export function buildToolArgumentsPreview(argumentsJson: string, entryLimit: num
 export function buildToolResultPreview(content: string, entryLimit: number = 4, rawMaxLength: number = 1000): ToolPayloadPreview {
   const trimmed = content.trim()
   const parsed = tryParseJson(trimmed)
-  const rawPreview = buildRawPreview(content, parsed, '无结果内容', rawMaxLength)
-  let summary = '已完成'
+  const rawPreview = buildRawPreview(content, parsed, pickLocalizedText('无结果内容', 'No result content'), rawMaxLength)
+  const completedText = pickLocalizedText('已完成', 'Completed')
+  let summary = completedText
   let entries: ToolPreviewEntry[] = []
 
   if (parsed !== null && !Array.isArray(parsed as Array<Object>) && typeof parsed === 'object') {
@@ -181,9 +184,11 @@ export function buildToolResultPreview(content: string, entryLimit: number = 4, 
     } else if (record['message'] !== undefined && `${record['message']}`.trim() !== '') {
       summary = truncateText(`${record['message']}`.trim(), 140)
     } else if (record['results'] !== undefined && Array.isArray(record['results'] as Array<Object>)) {
-      summary = `返回 ${(record['results'] as Array<Object>).length} 条结果`
+      const resultCount = (record['results'] as Array<Object>).length
+      summary = pickLocalizedText(`返回 ${resultCount} 条结果`, `${resultCount} results returned`)
     } else if (record['forecast'] !== undefined && Array.isArray(record['forecast'] as Array<Object>)) {
-      summary = `${(record['forecast'] as Array<Object>).length} 天预报`
+      const forecastDays = (record['forecast'] as Array<Object>).length
+      summary = pickLocalizedText(`${forecastDays} 天预报`, `${forecastDays}-day forecast`)
     } else {
       const contentText = extractContentText(record)
       if (contentText !== '') {
@@ -192,7 +197,7 @@ export function buildToolResultPreview(content: string, entryLimit: number = 4, 
     }
 
     entries = buildEntriesFromRecord(record, entryLimit, RESULT_ENTRY_SKIP_KEYS)
-    if (summary === '已完成' && entries.length > 0) {
+    if (summary === completedText && entries.length > 0) {
       summary = buildSummaryFromEntries(entries, 140)
     }
   } else if (parsed !== null) {

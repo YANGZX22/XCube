@@ -1,6 +1,8 @@
 import { ChatMessage, MessageAttachment, MessageRole } from '../../models/ChatModels'
 import { DateDivider } from '../DateDivider'
 import { MessageBubble } from '../MessageBubble'
+import { getAppUiState } from '../../state/AppUiState'
+import { VisualEffectsMode } from '../../models/ThemeColors'
 
 export const CHAT_MESSAGE_LIST_ITEM_REUSE_ID: string = 'chat_message_list_item'
 
@@ -24,6 +26,7 @@ export struct ChatMessageListItem {
   @Param isMultiSelectMode: boolean = false
   @Param previewContent: string = ''
   @Param previewAttachments: MessageAttachment[] = []
+  @Param isFirstAssistantMessage: boolean = false
   @Event onRegenerate: () => void = () => {}
   @Event onDelete: () => void = () => {}
   @Event onEdit: () => void = () => {}
@@ -55,7 +58,7 @@ export struct ChatMessageListItem {
   build() {
     Row() {
       Column() {
-        if (this.showDateDivider) {
+        if (this.showDateDivider && getAppUiState().visualEffectsMode !== VisualEffectsMode.MANUSCRIPT) {
           DateDivider({ timestamp: this.message.timestamp })
         }
 
@@ -75,6 +78,7 @@ export struct ChatMessageListItem {
           isEditing: this.isEditing,
           previewContent: this.isEditing ? this.previewContent : '',
           previewAttachments: this.isEditing ? this.previewAttachments : [],
+          isFirstAssistantMessage: this.isFirstAssistantMessage,
           onRegenerate: () => {
             this.onRegenerate()
           },
@@ -130,11 +134,16 @@ export struct ChatMessageListItem {
         })
       }
       .width('100%')
-      .constraintSize({ maxWidth: this.getEffectiveContentMaxWidth() })
+      .constraintSize({
+        maxWidth: getAppUiState().visualEffectsMode === VisualEffectsMode.MANUSCRIPT ?
+          99999 : this.getEffectiveContentMaxWidth()
+      })
     }
     .width('100%')
     .justifyContent(FlexAlign.Center)
-    .padding({ left: 14, right: 14, top: 5, bottom: 5 })
+    .padding(getAppUiState().visualEffectsMode === VisualEffectsMode.MANUSCRIPT ?
+      { left: 0, right: 0, top: 11, bottom: 11 } :
+      { left: 14, right: 14, top: 5, bottom: 5 })
     .opacity(this.isDimmed ? 0.4 : 1)
   }
 }

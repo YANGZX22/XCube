@@ -1,6 +1,9 @@
 import { VChart } from '@visactor/harmony-vchart'
 import { getAppUiState } from '../state/AppUiState'
 import { withColorAlpha } from '../utils/ColorAlphaUtils'
+import { VisualEffectsMode } from '../models/ThemeColors'
+import { MANUSCRIPT_COMPACT_BAR_HEIGHT } from '../utils/ManuscriptVisualUtils'
+import { isChineseAppLanguage, pickLocalizedText } from '../utils/LocalizedTextUtils'
 
 class VChartDisplayPadding {
   top: number = 32
@@ -73,6 +76,10 @@ export struct VChartCard {
     return getAppUiState().isDarkMode === true
   }
 
+  private get isManuscriptMode(): boolean {
+    return getAppUiState().visualEffectsMode === VisualEffectsMode.MANUSCRIPT
+  }
+
   aboutToAppear(): void {
     this.parseSpec()
   }
@@ -85,7 +92,7 @@ export struct VChartCard {
       this.parseError = ''
     } catch (e) {
       this.spec = null
-      this.parseError = '图表配置解析失败'
+      this.parseError = pickLocalizedText('图表配置解析失败', 'Failed to parse chart configuration')
     }
   }
 
@@ -291,23 +298,31 @@ export struct VChartCard {
   build() {
     Column() {
       Row() {
-        Column()
-          .width(4)
-          .height(16)
-          .borderRadius(2)
-          .backgroundColor(this.themePrimary)
+        if (!this.isManuscriptMode) {
+          Column()
+            .width(4)
+            .height(16)
+            .borderRadius(2)
+            .backgroundColor(this.themePrimary)
+        }
 
         Text(this.getChartTypeLabel())
-          .fontSize(13)
+          .fontSize(this.isManuscriptMode ? 11 : 13)
           .fontWeight(FontWeight.Medium)
-          .fontColor($r('app.color.text_primary'))
-          .margin({ left: 6 })
+          .fontColor(this.isManuscriptMode ? this.themePrimary : $r('app.color.text_primary'))
+          .letterSpacing(this.isManuscriptMode ? (isChineseAppLanguage() ? 2 : 0.2) : 0)
+          .margin({ left: this.isManuscriptMode ? 0 : 6 })
 
         Blank()
       }
       .width('100%')
-      .height(30)
+      .height(this.isManuscriptMode ? MANUSCRIPT_COMPACT_BAR_HEIGHT : 30)
+      .padding(this.isManuscriptMode ? { left: 14, right: 14 } : 0)
       .alignItems(VerticalAlign.Center)
+      .border({
+        width: this.isManuscriptMode ? { bottom: 1 } : 0,
+        color: getAppUiState().themeDivider
+      })
 
       if (this.spec !== null) {
         Scroll() {
@@ -322,6 +337,7 @@ export struct VChartCard {
         .height(this.getChartHeight())
         .scrollable(ScrollDirection.Horizontal)
         .scrollBar(this.isChartScrollable() ? BarState.Auto : BarState.Off)
+        .padding(this.isManuscriptMode ? { left: 10, right: 10 } : 0)
         .onAreaChange((_oldArea: Area, newArea: Area) => {
           this.handleChartAreaChange(newArea)
         })
@@ -342,43 +358,62 @@ export struct VChartCard {
           .fontColor($r('app.color.text_secondary'))
           .width('100%')
           .margin({ top: 8 })
+          .padding(this.isManuscriptMode ? { left: 14, right: 14 } : 0)
+      }
+
+      if (this.isManuscriptMode) {
+        Row() {
+          Text('— fig. 2 · CHART —')
+            .fontSize(10)
+            .fontColor(getAppUiState().themeTextTertiary)
+            .fontFeature('tnum')
+            .letterSpacing(1.8)
+        }
+        .width('100%')
+        .height(32)
+        .justifyContent(FlexAlign.Center)
+        .alignItems(VerticalAlign.Center)
+        .border({ width: { top: 1 }, color: getAppUiState().themeDivider })
       }
     }
     .width('100%')
-    .padding({ left: 12, right: 12, top: 10, bottom: 12 })
-    .backgroundColor(this.isDarkMode ? '#14171F' : '#FFFFFF')
+    .padding(this.isManuscriptMode ? 0 : { left: 12, right: 12, top: 10, bottom: 12 })
+    .backgroundColor(this.isManuscriptMode ? getAppUiState().themeSurface :
+      (this.isDarkMode ? '#14171F' : '#FFFFFF'))
     .border({
       width: 1,
-      color: withColorAlpha(this.themePrimary, this.isDarkMode ? '33' : '22')
+      color: this.isManuscriptMode ? getAppUiState().themeDivider :
+        withColorAlpha(this.themePrimary, this.isDarkMode ? '33' : '22')
     })
-    .borderRadius(12)
+    .borderRadius(this.isManuscriptMode ? 3 : 12)
     .clip(true)
+    .margin(this.isManuscriptMode ? { top: 18, bottom: 18 } : 0)
   }
 
   private getChartTypeLabel(): string {
     switch (this.chartType) {
       case 'bar':
-        return '柱状图'
+        return pickLocalizedText('柱状图', 'Bar Chart')
       case 'area':
-        return '面积图'
+        return pickLocalizedText('面积图', 'Area Chart')
       case 'scatter':
-        return '散点图'
+        return pickLocalizedText('散点图', 'Scatter Plot')
       case 'pie':
-        return '饼图'
+        return pickLocalizedText('饼图', 'Pie Chart')
       case 'donut':
-        return '环形图'
+        return pickLocalizedText('环形图', 'Donut Chart')
       case 'rose':
-        return '玫瑰图'
+        return pickLocalizedText('玫瑰图', 'Rose Chart')
       case 'funnel':
-        return '漏斗图'
+        return pickLocalizedText('漏斗图', 'Funnel Chart')
       case 'wordCloud':
-        return '词云图'
+        return pickLocalizedText('词云图', 'Word Cloud')
       case 'sankey':
-        return '桑基图'
+        return pickLocalizedText('桑基图', 'Sankey Diagram')
       case 'dualAxis':
-        return '双轴图'
+        return pickLocalizedText('双轴图', 'Dual-axis Chart')
       default:
-        return '折线图'
+        return pickLocalizedText('折线图', 'Line Chart')
     }
   }
 }

@@ -4,6 +4,7 @@ import { getAppUiState } from '../state/AppUiState'
 import { withColorAlpha } from '../utils/ColorAlphaUtils'
 import { uiMaterial } from '@kit.ArkUI'
 import { ImmersiveSheetHeader } from './ImmersiveSheetHeader'
+import { VisualEffectsMode } from '../models/ThemeColors'
 
 @ComponentV2
 export struct SearchReferenceCard {
@@ -27,6 +28,9 @@ export struct SearchReferenceCard {
   }
   private get themeAiBubble(): string {
     return getAppUiState().themeAiBubble
+  }
+  private get isManuscriptMode(): boolean {
+    return getAppUiState().visualEffectsMode === VisualEffectsMode.MANUSCRIPT
   }
 
   // 获取引用数量文本
@@ -55,13 +59,13 @@ export struct SearchReferenceCard {
         // 联网搜索图标
         SymbolGlyph($r('sys.symbol.worldclock_fill_2'))
           .fontSize(13)
-          .fontColor([$r('app.color.text_secondary')])
+          .fontColor([this.isManuscriptMode ? this.themePrimary : $r('app.color.text_secondary')])
 
         // 标题文本
         Text($r('app.string.web_search'))
           .fontSize(12)
           .fontWeight(FontWeight.Medium)
-          .fontColor($r('app.color.text_secondary'))
+          .fontColor(this.isManuscriptMode ? this.themePrimary : $r('app.color.text_secondary'))
           .margin({ left: 4 })
 
         // 来源标签（区分：Function Calling vs 手动搜索链路）
@@ -77,8 +81,9 @@ export struct SearchReferenceCard {
             .fontSize(11)
             .fontColor($r('app.color.text_secondary'))
             .padding({ left: 6, right: 6, top: 1, bottom: 1 })
-            .borderRadius(8)
-            .backgroundColor(this.themePrimaryLight)
+            .borderRadius(this.isManuscriptMode ? 0 : 8)
+            .backgroundColor(this.isManuscriptMode ? Color.Transparent : this.themePrimaryLight)
+            .border({ width: 0, color: this.themePrimary })
             .margin({ left: 6 })
         }
 
@@ -119,7 +124,7 @@ export struct SearchReferenceCard {
       .width('100%')
       .height(36)
       .padding({ left: 10, right: 8 })
-      .borderRadius(12)
+      .borderRadius(this.isManuscriptMode ? 0 : 12)
       .stateStyles({
         normal: {
           .backgroundColor(Color.Transparent)
@@ -148,10 +153,13 @@ export struct SearchReferenceCard {
     }
     .width('100%')
     .backgroundColor(Color.Transparent)
-    .borderRadius(12)
-    .border({ width: 0.5, color: this.getTimelineRailColor() })
+    .borderRadius(this.isManuscriptMode ? 0 : 12)
+    .border({
+      width: this.isManuscriptMode ? { top: 1, bottom: 1 } : 0.5,
+      color: this.isManuscriptMode ? getAppUiState().themeDivider : this.getTimelineRailColor()
+    })
     .clip(false)
-    .systemMaterial(new uiMaterial.ImmersiveMaterial({
+    .systemMaterial(this.isManuscriptMode ? undefined : new uiMaterial.ImmersiveMaterial({
       style: uiMaterial.ImmersiveStyle.REGULAR,
       materialColor: this.themeAiBubble,
       applyShadow: false,
@@ -159,8 +167,9 @@ export struct SearchReferenceCard {
       lightEffect: { color: undefined }
     }))
     .shadow({
-      radius: 12,
-      color: this.isDarkMode ? 'rgba(0, 0, 0, 0.32)' : 'rgba(15, 23, 42, 0.14)',
+      radius: this.isManuscriptMode ? 0 : 12,
+      color: this.isManuscriptMode ? Color.Transparent :
+        (this.isDarkMode ? 'rgba(0, 0, 0, 0.32)' : 'rgba(15, 23, 42, 0.14)'),
       offsetX: 0,
       offsetY: 0
     })

@@ -3,13 +3,27 @@ import { ChatMarkdownHybridRenderer } from './ChatMarkdownHybridRenderer'
 import { ProviderIconSmall } from './ProviderIcon'
 import { getAppUiState } from '../state/AppUiState'
 import { buildIconResourcePath, getModelIconPath, isNetworkIconPath, isSandboxIconPath } from '../utils/ProviderIconUtils'
+import { VisualEffectsMode } from '../models/ThemeColors'
+import {
+  ensureManuscriptFonts,
+  MANUSCRIPT_BODY_FONT,
+  MANUSCRIPT_HEADING_FONT
+} from '../utils/ManuscriptVisualUtils'
 
 export const CHAT_NAVIGATION_TITLE_STACK_BUILDER_HEIGHT = 56
+export const CHAT_NAVIGATION_MANUSCRIPT_STACK_BUILDER_HEIGHT = 88
+export const CHAT_NAVIGATION_MANUSCRIPT_BOTTOM_EXTENSION_HEIGHT =
+  CHAT_NAVIGATION_MANUSCRIPT_STACK_BUILDER_HEIGHT - CHAT_NAVIGATION_TITLE_STACK_BUILDER_HEIGHT
 const CHAT_NAVIGATION_CONTENT_VERTICAL_OFFSET = -1
+// 书稿标题比系统 56vp 标题槽高 32vp；自绘内容会被居中并向上溢出一半，需要整体下移 16vp 对齐槽顶。
+const CHAT_NAVIGATION_MANUSCRIPT_CONTENT_VERTICAL_OFFSET =
+  CHAT_NAVIGATION_MANUSCRIPT_BOTTOM_EXTENSION_HEIGHT / 2
 // 标题栏尾部操作按钮尺寸，与 HDS 系统菜单图标保持一致
 const CHAT_NAVIGATION_ACTION_BUTTON_SIZE = 40
 const CHAT_NAVIGATION_ACTION_BUTTON_ICON_SIZE = 20
 const CHAT_NAVIGATION_ACTION_BUTTON_SPACE = 4
+const CHAT_NAVIGATION_MANUSCRIPT_ACTION_BUTTON_SIZE = 30
+const CHAT_NAVIGATION_MANUSCRIPT_ACTION_BUTTON_ICON_SIZE = 16
 
 @ComponentV2
 export struct ChatNavigationTitleContent {
@@ -29,6 +43,7 @@ export struct ChatNavigationTitleContent {
   @Param isSending: boolean = false
   @Param titleStartInset: number = 64
   @Param titleEndInset: number = 16
+  @Param showLeadingBackAction: boolean = false
   // 尾部操作区：新对话、上下文长度窗口、更多菜单。
   // 上下文用量以基础类型传入，保证压缩后父组件重算能可靠触发按钮重绘。
   @Param showNewChatAction: boolean = false
@@ -43,9 +58,11 @@ export struct ChatNavigationTitleContent {
   @Event onNewChat: () => void = () => {}
   @Event onContextProgressClick: () => void = () => {}
   @Event onDeleteChat: () => void = () => {}
+  @Event onBack: () => void = () => {}
 
   @Local private isEditingTitle: boolean = false
   @Local private editingTitleInput: string = ''
+  @Local private manuscriptTitleMarqueeActive: boolean = false
   private readonly titleInputFocusId: string = 'chat_navigation_title_input'
   private get themePrimary(): string {
     return getAppUiState().themePrimary
@@ -53,9 +70,26 @@ export struct ChatNavigationTitleContent {
   private get themePrimaryLight(): string {
     return getAppUiState().themePrimaryLight
   }
+  private get isManuscriptMode(): boolean {
+    return getAppUiState().visualEffectsMode === VisualEffectsMode.MANUSCRIPT
+  }
 
   private get isDarkMode(): boolean {
     return getAppUiState().isDarkMode
+  }
+
+  private getActionButtonSize(): number {
+    return this.isManuscriptMode
+      ? CHAT_NAVIGATION_MANUSCRIPT_ACTION_BUTTON_SIZE : CHAT_NAVIGATION_ACTION_BUTTON_SIZE
+  }
+
+  private getActionButtonIconSize(): number {
+    return this.isManuscriptMode
+      ? CHAT_NAVIGATION_MANUSCRIPT_ACTION_BUTTON_ICON_SIZE : CHAT_NAVIGATION_ACTION_BUTTON_ICON_SIZE
+  }
+
+  aboutToAppear(): void {
+    ensureManuscriptFonts()
   }
 
   private getModelIdentityTextColor(): string {
@@ -252,21 +286,23 @@ export struct ChatNavigationTitleContent {
   private TrailingActionsBuilder() {
     Row({ space: CHAT_NAVIGATION_ACTION_BUTTON_SPACE }) {
       if (this.showNewChatAction) {
-        Button({ type: ButtonType.Circle, stateEffect: false }) {
+        Button({ type: this.isManuscriptMode ? ButtonType.Normal : ButtonType.Circle,
+          stateEffect: false }) {
           SymbolGlyph($r('sys.symbol.plus'))
-            .fontSize(CHAT_NAVIGATION_ACTION_BUTTON_ICON_SIZE)
-            .fontColor([$r('app.color.text_primary')])
+            .fontSize(this.getActionButtonIconSize())
+            .fontColor([this.isManuscriptMode ? getAppUiState().themeTextSecondary :
+              $r('app.color.text_primary')])
         }
-        .width(CHAT_NAVIGATION_ACTION_BUTTON_SIZE)
-        .height(CHAT_NAVIGATION_ACTION_BUTTON_SIZE)
+        .width(this.getActionButtonSize())
+        .height(this.getActionButtonSize())
         .padding(0)
         .backgroundColor(Color.Transparent)
-        .borderRadius(CHAT_NAVIGATION_ACTION_BUTTON_SIZE / 2)
-        .clip(true)
+        .borderRadius(this.isManuscriptMode ? 0 : this.getActionButtonSize() / 2)
+        .clip(!this.isManuscriptMode)
         .onClick(() => {
           this.onNewChat()
         })
-        .systemMaterial(new uiMaterial.ImmersiveMaterial({
+        .systemMaterial(this.isManuscriptMode ? undefined : new uiMaterial.ImmersiveMaterial({
           style: uiMaterial.ImmersiveStyle.REGULAR,
           interactive: true,
           lightEffect: { color: undefined }
@@ -274,62 +310,254 @@ export struct ChatNavigationTitleContent {
       }
 
       if (this.showContextProgress) {
-        Button({ type: ButtonType.Circle, stateEffect: false }) {
+        Button({ type: this.isManuscriptMode ? ButtonType.Normal : ButtonType.Circle,
+          stateEffect: false }) {
           Progress({
             value: this.getContextProgressValue(),
             total: 100,
             type: ProgressType.Eclipse
           })
             .color(this.getContextProgressColor())
-            .width(CHAT_NAVIGATION_ACTION_BUTTON_ICON_SIZE)
-            .height(CHAT_NAVIGATION_ACTION_BUTTON_ICON_SIZE)
+            .width(this.getActionButtonIconSize())
+            .height(this.getActionButtonIconSize())
         }
-        .width(CHAT_NAVIGATION_ACTION_BUTTON_SIZE)
-        .height(CHAT_NAVIGATION_ACTION_BUTTON_SIZE)
+        .width(this.getActionButtonSize())
+        .height(this.getActionButtonSize())
         .padding(0)
         .backgroundColor(Color.Transparent)
-        .borderRadius(CHAT_NAVIGATION_ACTION_BUTTON_SIZE / 2)
-        .clip(true)
+        .borderRadius(this.isManuscriptMode ? 0 : this.getActionButtonSize() / 2)
+        .clip(!this.isManuscriptMode)
         .accessibilityText(`${this.contextPercent}%`)
         .onClick(() => {
           this.onContextProgressClick()
         })
-        .systemMaterial(new uiMaterial.ImmersiveMaterial({
+        .systemMaterial(this.isManuscriptMode ? undefined : new uiMaterial.ImmersiveMaterial({
           style: uiMaterial.ImmersiveStyle.REGULAR,
           interactive: true,
           lightEffect: { color: undefined }
         }))
       }
 
-      Button({ type: ButtonType.Circle, stateEffect: false }) {
+      Button({ type: this.isManuscriptMode ? ButtonType.Normal : ButtonType.Circle,
+        stateEffect: false }) {
         SymbolGlyph($r('sys.symbol.dot_grid_2x2'))
-          .fontSize(CHAT_NAVIGATION_ACTION_BUTTON_ICON_SIZE)
-          .fontColor([$r('app.color.text_primary')])
+          .fontSize(this.getActionButtonIconSize())
+          .fontColor([this.isManuscriptMode ? getAppUiState().themeTextSecondary :
+            $r('app.color.text_primary')])
       }
-      .width(CHAT_NAVIGATION_ACTION_BUTTON_SIZE)
-      .height(CHAT_NAVIGATION_ACTION_BUTTON_SIZE)
+      .width(this.getActionButtonSize())
+      .height(this.getActionButtonSize())
       .padding(0)
       .backgroundColor(Color.Transparent)
-      .borderRadius(CHAT_NAVIGATION_ACTION_BUTTON_SIZE / 2)
-      .clip(true)
+      .borderRadius(this.isManuscriptMode ? 0 : this.getActionButtonSize() / 2)
+      .clip(!this.isManuscriptMode)
       .bindMenu(this.MoreMenuBuilder(), {
         systemMaterial: new uiMaterial.ImmersiveMaterial({
           style: uiMaterial.ImmersiveStyle.THICK
         })
       })
-      .systemMaterial(new uiMaterial.ImmersiveMaterial({
+      .systemMaterial(this.isManuscriptMode ? undefined : new uiMaterial.ImmersiveMaterial({
         style: uiMaterial.ImmersiveStyle.REGULAR,
         interactive: true,
         lightEffect: { color: undefined }
       }))
     }
+    .height(this.getActionButtonSize())
+    .padding({ left: this.isManuscriptMode ? 2 : 0, right: this.isManuscriptMode ? 2 : 0 })
+    .borderRadius(this.isManuscriptMode ? 0 : this.getActionButtonSize() / 2)
+    .border({ width: 0, color: Color.Transparent })
+    .clip(false)
     .alignItems(VerticalAlign.Center)
   }
 
-  build() {
-    Row() {
-      Column() {
+  @Builder
+  private ManuscriptHeaderBuilder() {
+    Column({ space: 0 }) {
+      Row() {
+        if (this.showLeadingBackAction) {
+          Button({ type: ButtonType.Normal, stateEffect: false }) {
+            SymbolGlyph($r('sys.symbol.chevron_left'))
+              .fontSize(this.getActionButtonIconSize())
+              .fontColor([getAppUiState().themeTextSecondary])
+          }
+          .width(this.getActionButtonSize())
+          .height(this.getActionButtonSize())
+          .padding(0)
+          .backgroundColor(Color.Transparent)
+          .borderRadius(0)
+          .border({ width: 0, color: Color.Transparent })
+          .clip(false)
+          .onClick(() => {
+            this.onBack()
+          })
+        }
+
+        Blank()
+
+        this.TrailingActionsBuilder()
+      }
+      .width('100%')
+      .height(32)
+      .alignItems(VerticalAlign.Center)
+
+      Column({ space: 0 }) {
         if (this.isEditingTitle) {
+          TextInput({ text: this.editingTitleInput, placeholder: $r('app.string.chat_title_input_placeholder') })
+            .id(this.titleInputFocusId)
+            .defaultFocus(true)
+            .fontFamily(MANUSCRIPT_HEADING_FONT)
+            .fontSize(18)
+            .fontColor(getAppUiState().themeTextPrimary)
+            .placeholderColor(getAppUiState().themeTextTertiary)
+            .backgroundColor(Color.Transparent)
+            .border({ width: { bottom: 1 }, color: this.themePrimary })
+            .borderRadius(0)
+            .maxLength(50)
+            .height(42)
+            .width('100%')
+            .textAlign(TextAlign.Center)
+            .onChange((value: string) => {
+              this.editingTitleInput = value
+            })
+            .onSubmit(() => {
+              this.finishEditingTitle()
+            })
+            .onBlur(() => {
+              this.finishEditingTitle()
+            })
+        } else {
+          Text($r('app.string.manuscript_conversation_kicker'))
+            .fontFamily(MANUSCRIPT_BODY_FONT)
+            .fontSize(8)
+            .fontWeight(FontWeight.Medium)
+            .fontColor(getAppUiState().themeTextSecondary)
+            .letterSpacing(1.5)
+            .fontFeature('tnum')
+            .maxLines(1)
+            .onClick(() => {
+              this.onModelSelect()
+            })
+
+          Text(this.sessionTitle)
+            .fontFamily(MANUSCRIPT_HEADING_FONT)
+            .fontSize(20)
+            .fontWeight(FontWeight.Medium)
+            .fontColor(getAppUiState().themeTextPrimary)
+            .lineHeight(25)
+            .maxLines(1)
+            .textOverflow({ overflow: TextOverflow.MARQUEE })
+            .marqueeOptions({
+              start: this.manuscriptTitleMarqueeActive,
+              step: 3,
+              loop: -1,
+              fromStart: true,
+              delay: 600,
+              fadeout: true
+            })
+            .width('100%')
+            .textAlign(TextAlign.Center)
+            .onClick(() => {
+              this.manuscriptTitleMarqueeActive = !this.manuscriptTitleMarqueeActive
+            })
+        }
+      }
+      .width('100%')
+      .height(55)
+      .justifyContent(FlexAlign.Center)
+      .alignItems(HorizontalAlign.Center)
+      .gesture(
+        LongPressGesture()
+          .onAction(() => {
+            this.startEditingTitle()
+          })
+      )
+
+      Divider()
+        .width('100%')
+        .strokeWidth(0.5)
+        .color(getAppUiState().themeDivider)
+    }
+    .width('100%')
+    .height(CHAT_NAVIGATION_MANUSCRIPT_STACK_BUILDER_HEIGHT)
+    .padding({ left: 24, right: 24 })
+    .translate({ y: CHAT_NAVIGATION_MANUSCRIPT_CONTENT_VERTICAL_OFFSET })
+    .backgroundColor(Color.Transparent)
+    .renderGroup(false)
+  }
+
+  build() {
+    if (this.isManuscriptMode) {
+      this.ManuscriptHeaderBuilder()
+    } else {
+      Row() {
+      if (this.showLeadingBackAction) {
+        Button({ type: ButtonType.Circle, stateEffect: true }) {
+          SymbolGlyph($r('sys.symbol.chevron_left'))
+            .fontSize(CHAT_NAVIGATION_ACTION_BUTTON_ICON_SIZE)
+            .fontColor([this.themePrimary])
+        }
+        .width(CHAT_NAVIGATION_ACTION_BUTTON_SIZE)
+        .height(CHAT_NAVIGATION_ACTION_BUTTON_SIZE)
+        .padding(0)
+        .backgroundColor(Color.Transparent)
+        .borderRadius(0)
+        .border({ width: { bottom: 1 }, color: this.themePrimary })
+        .onClick(() => {
+          this.onBack()
+        })
+      }
+
+      Column() {
+        if (this.isManuscriptMode && !this.isEditingTitle) {
+          Column({ space: 0 }) {
+            Text($r('app.string.manuscript_conversation_kicker'))
+              .fontFamily(MANUSCRIPT_BODY_FONT)
+              .fontSize(8)
+              .fontWeight(FontWeight.Medium)
+              .fontColor(getAppUiState().themeTextSecondary)
+              .letterSpacing(1.5)
+              .fontFeature('tnum')
+              .maxLines(1)
+              .onClick(() => {
+                this.onModelSelect()
+              })
+
+            Text(this.sessionTitle)
+              .fontFamily(MANUSCRIPT_HEADING_FONT)
+              .fontSize(20)
+              .fontWeight(FontWeight.Medium)
+              .fontColor(getAppUiState().themeTextPrimary)
+              .lineHeight(23)
+              .maxLines(1)
+              .textOverflow({ overflow: TextOverflow.MARQUEE })
+              .marqueeOptions({
+                start: this.manuscriptTitleMarqueeActive,
+                step: 3,
+                loop: -1,
+                fromStart: true,
+                delay: 600,
+                fadeout: true
+              })
+              .width('100%')
+              .textAlign(TextAlign.Center)
+              .onClick(() => {
+                this.manuscriptTitleMarqueeActive = !this.manuscriptTitleMarqueeActive
+              })
+
+            Divider()
+              .width('100%')
+              .strokeWidth(0.5)
+              .color(getAppUiState().themeDivider)
+          }
+          .width('100%')
+          .alignItems(HorizontalAlign.Center)
+          .gesture(
+            LongPressGesture()
+              .onAction(() => {
+                this.startEditingTitle()
+              })
+          )
+        } else if (this.isEditingTitle) {
           TextInput({ text: this.editingTitleInput, placeholder: $r('app.string.chat_title_input_placeholder') })
             .id(this.titleInputFocusId)
             .defaultFocus(true)
@@ -463,6 +691,7 @@ export struct ChatNavigationTitleContent {
     .padding({ left: this.titleStartInset, right: this.titleEndInset })
     .translate({ y: CHAT_NAVIGATION_CONTENT_VERTICAL_OFFSET })
     .backgroundColor(Color.Transparent)
-    .renderGroup(false)
+      .renderGroup(false)
+    }
   }
 }

@@ -31,7 +31,7 @@
 ### 发布信息
 
 - 应用名称：XCube
-- 当前版本：`1.2.4` (versionCode `1002004`)
+- 当前版本：`1.3.0` (versionCode `1003000`)
 
 ## 最新界面预览
 
@@ -39,11 +39,14 @@
 
 <table>
   <tr>
-    <td align="center"><img src="docs/screenshots/IMAGE2.jpg" width="160" /><br/><sub>会话列表</sub></td>
-    <td align="center"><img src="docs/screenshots/IMAGE3.jpg" width="160" /><br/><sub>知识库界面</sub></td>
-    <td align="center"><img src="docs/screenshots/IMAGE1.jpg" width="160" /><br/><sub>对话界面</sub></td>
-    <td align="center"><img src="docs/screenshots/IMAGE4.jpg" width="160" /><br/><sub>和子智能体协同工作</sub></td>
-    <td align="center"><img src="docs/screenshots/IMAGE5.jpg" width="160" /><br/><sub>上下文</sub></td>
+    <td align="center"><img src="docs/screenshots/IMAGE1.jpg" width="220" /><br/><sub>会话列表</sub></td>
+    <td align="center"><img src="docs/screenshots/IMAGE2.jpg" width="220" /><br/><sub>知识库界面</sub></td>
+    <td align="center"><img src="docs/screenshots/IMAGE3.jpg" width="220" /><br/><sub>和子智能体协同工作</sub></td>
+  </tr>
+  <tr>
+    <td align="center"><img src="docs/screenshots/IMAGE4.jpg" width="220" /><br/><sub>上下文</sub></td>
+    <td align="center"><img src="docs/screenshots/IMAGE5.jpg" width="220" /><br/><sub>手稿模式对话界面</sub></td>
+    <td align="center"><img src="docs/screenshots/IMAGE6.jpg" width="220" /><br/><sub>手稿模式会话列表</sub></td>
   </tr>
 </table>
 

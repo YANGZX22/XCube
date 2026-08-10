@@ -2607,6 +2607,78 @@
     {
       "name": "tts_test_failed",
       "value": "无法启动测试播报"
+    },
+    {
+      "name": "visual_effects_title",
+      "value": "全新视觉效果"
+    },
+    {
+      "name": "visual_effects_manuscript",
+      "value": "手稿"
+    },
+    {
+      "name": "visual_effects_desc",
+      "value": "对话如排印书页。启用时覆盖配色主题。"
+    },
+    {
+      "name": "visual_effects_themes_locked",
+      "value": "启用全新视觉效果期间，配色主题不可用。"
+    },
+    {
+      "name": "visual_effects_new",
+      "value": "Beta"
+    },
+    {
+      "name": "manuscript_reply_placeholder",
+      "value": "写下你的回复…"
+    },
+    {
+      "name": "manuscript_contents",
+      "value": "目录"
+    },
+    {
+      "name": "manuscript_conversations",
+      "value": "对话"
+    },
+    {
+      "name": "manuscript_conversation_kicker",
+      "value": "对话 · 编号 XII"
+    },
+    {
+      "name": "manuscript_you",
+      "value": "你"
+    },
+    {
+      "name": "manuscript_send",
+      "value": "发送"
+    },
+    {
+      "name": "manuscript_stop",
+      "value": "停止"
+    },
+    {
+      "name": "manuscript_folio",
+      "value": "页码"
+    },
+    {
+      "name": "manuscript_folio_label",
+      "value": "— 第 拾 页 —"
+    },
+    {
+      "name": "manuscript_tab_assistants",
+      "value": "智能体"
+    },
+    {
+      "name": "manuscript_tab_chat",
+      "value": "对话"
+    },
+    {
+      "name": "manuscript_tab_knowledge",
+      "value": "知识"
+    },
+    {
+      "name": "manuscript_tab_settings",
+      "value": "设置"
     }
   ]
 }

@@ -10,6 +10,12 @@ export enum ColorTheme {
   NOCTURNE = 'nocturne'     // 破晓靛蓝
 }
 
+// 独立于配色主题的全局视觉模式。非 OFF 模式拥有最高的主题解析优先级。
+export enum VisualEffectsMode {
+  OFF = 'off',
+  MANUSCRIPT = 'manuscript'
+}
+
 // 主题颜色配置接口
 export interface ThemeColorConfig {
   // 主色调
@@ -42,6 +48,79 @@ export interface ThemeColorConfig {
   markdownTableHeaderBg: string
   markdownTableAltBg: string
   markdownTableBorder: string
+}
+
+export interface ManuscriptColorConfig extends ThemeColorConfig {
+  accent: string
+  accentDeep: string
+  dottedLeader: string
+  pressTint: string
+}
+
+const MANUSCRIPT_LIGHT_COLORS: ManuscriptColorConfig = {
+  primary: '#8A6228',
+  primaryLight: '#F5EDE0',
+  background: '#F3F2F2',
+  surface: '#FBFAF8',
+  divider: '#E4E1DB',
+  userBubble: '#F3F2F2',
+  userBubbleText: '#201F1D',
+  aiBubble: '#FBFAF8',
+  textPrimary: '#201F1D',
+  textSecondary: '#6B675F',
+  textTertiary: '#98938A',
+  markdownTitle: '#201F1D',
+  markdownText: '#201F1D',
+  markdownLink: '#8A6228',
+  markdownLinkBg: '#F3F2F2',
+  markdownCodeBg: '#FBFAF8',
+  markdownCodeText: '#201F1D',
+  markdownQuoteBg: '#FBFAF8',
+  markdownTableBg: '#FBFAF8',
+  markdownTableHeaderBg: '#F3F2F2',
+  markdownTableAltBg: '#F7F5F1',
+  markdownTableBorder: '#E4E1DB',
+  accent: '#B68235',
+  accentDeep: '#8A6228',
+  dottedLeader: '#C9C4BB',
+  pressTint: '#F5EDE0'
+}
+
+const MANUSCRIPT_DARK_COLORS: ManuscriptColorConfig = {
+  primary: '#D9B274',
+  primaryLight: '#33291B',
+  background: '#1B1A18',
+  surface: '#242320',
+  divider: '#34312B',
+  userBubble: '#1B1A18',
+  userBubbleText: '#ECEAE5',
+  aiBubble: '#242320',
+  textPrimary: '#ECEAE5',
+  textSecondary: '#ADA89F',
+  textTertiary: '#7B766D',
+  markdownTitle: '#ECEAE5',
+  markdownText: '#ECEAE5',
+  markdownLink: '#D9B274',
+  markdownLinkBg: '#1B1A18',
+  markdownCodeBg: '#242320',
+  markdownCodeText: '#ECEAE5',
+  markdownQuoteBg: '#242320',
+  markdownTableBg: '#242320',
+  markdownTableHeaderBg: '#1B1A18',
+  markdownTableAltBg: '#201F1C',
+  markdownTableBorder: '#34312B',
+  accent: '#C99A52',
+  accentDeep: '#D9B274',
+  dottedLeader: '#4A463F',
+  pressTint: '#33291B'
+}
+
+export function normalizeVisualEffectsMode(mode: string): VisualEffectsMode {
+  return mode === VisualEffectsMode.MANUSCRIPT ? VisualEffectsMode.MANUSCRIPT : VisualEffectsMode.OFF
+}
+
+export function getManuscriptColors(isDarkMode: boolean): ManuscriptColorConfig {
+  return isDarkMode ? MANUSCRIPT_DARK_COLORS : MANUSCRIPT_LIGHT_COLORS
 }
 
 // 主题信息接口

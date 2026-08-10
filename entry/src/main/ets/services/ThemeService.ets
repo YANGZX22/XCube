@@ -1,15 +1,18 @@
 import {
   ALL_THEMES,
   ColorTheme,
+  getManuscriptColors,
   getThemeById,
   getThemeColors,
+  normalizeVisualEffectsMode,
   resolveColorThemeId,
   ThemeColorConfig,
-  ThemeInfo
+  ThemeInfo,
+  VisualEffectsMode
 } from '../models/ThemeColors'
 import { getPreferencesService } from './PreferencesService'
 import { AppStorageKeys } from '../config/AppStorageKeys'
-import { applyThemeToAppUiState } from '../state/AppUiState'
+import { applyThemeToAppUiState, setAppUiStateValue } from '../state/AppUiState'
 import { refreshAllThemeAwareForms } from '../utils/FormThemeSyncUtils'
 
 // 主题变化回调接口
@@ -46,11 +49,13 @@ export class ThemeStorageKeys {
 
 // 偏好设置键名
 const PREF_KEY_COLOR_THEME = AppStorageKeys.COLOR_THEME
+const PREF_KEY_VISUAL_EFFECTS_MODE = AppStorageKeys.VISUAL_EFFECTS_MODE
 
 // 主题服务 - 单例模式
 export class ThemeService {
   private static instance: ThemeService | null = null
   private currentTheme: ColorTheme = ColorTheme.LAVENDER
+  private currentVisualEffectsMode: VisualEffectsMode = VisualEffectsMode.OFF
   private currentIsDarkMode: boolean = false
   private callbacks: ThemeColorChangeCallback[] = []
   private isInitialized: boolean = false
@@ -81,8 +86,13 @@ export class ThemeService {
 
     // 从偏好设置加载保存的主题
     const savedTheme = await getPreferencesService().getString(PREF_KEY_COLOR_THEME, ColorTheme.LAVENDER)
+    const savedVisualEffectsMode = await getPreferencesService().getString(
+      PREF_KEY_VISUAL_EFFECTS_MODE,
+      VisualEffectsMode.OFF
+    )
 
     this.currentTheme = resolveColorThemeId(savedTheme)
+    this.currentVisualEffectsMode = normalizeVisualEffectsMode(savedVisualEffectsMode)
     if ((this.currentTheme as string) !== savedTheme) {
       console.info('ThemeService', `Migrating theme '${savedTheme}' to '${this.currentTheme}'`)
       await getPreferencesService().setString(PREF_KEY_COLOR_THEME, this.currentTheme)
@@ -100,6 +110,10 @@ export class ThemeService {
     return this.currentTheme
   }
 
+  getVisualEffectsMode(): VisualEffectsMode {
+    return this.currentVisualEffectsMode
+  }
+
   // 获取当前主题信息
   getThemeInfo(): ThemeInfo {
     return getThemeById(this.currentTheme)
@@ -112,7 +126,21 @@ export class ThemeService {
 
   // 获取当前颜色配置
   getCurrentColors(): ThemeColorConfig {
+    if (this.currentVisualEffectsMode === VisualEffectsMode.MANUSCRIPT) {
+      return getManuscriptColors(this.currentIsDarkMode)
+    }
     return getThemeColors(this.currentTheme, this.currentIsDarkMode)
+  }
+
+  async setVisualEffectsMode(mode: VisualEffectsMode): Promise<void> {
+    const normalizedMode = normalizeVisualEffectsMode(mode as string)
+    if (this.currentVisualEffectsMode === normalizedMode) {
+      return
+    }
+    this.currentVisualEffectsMode = normalizedMode
+    await getPreferencesService().setString(PREF_KEY_VISUAL_EFFECTS_MODE, normalizedMode)
+    this.applyThemeToStorage(true, 550)
+    this.notifyCallbacks()
   }
 
   // 设置主题
@@ -139,8 +167,13 @@ export class ThemeService {
   // 重新从偏好设置加载主题（导入后刷新用）
   async reloadTheme(): Promise<void> {
     const savedTheme = await getPreferencesService().getString(PREF_KEY_COLOR_THEME, ColorTheme.LAVENDER)
+    const savedVisualEffectsMode = await getPreferencesService().getString(
+      PREF_KEY_VISUAL_EFFECTS_MODE,
+      VisualEffectsMode.OFF
+    )
 
     this.currentTheme = resolveColorThemeId(savedTheme)
+    this.currentVisualEffectsMode = normalizeVisualEffectsMode(savedVisualEffectsMode)
     if ((this.currentTheme as string) !== savedTheme) {
       console.info('ThemeService', `Reload migrated theme '${savedTheme}' to '${this.currentTheme}'`)
       await getPreferencesService().setString(PREF_KEY_COLOR_THEME, this.currentTheme)
@@ -186,14 +219,16 @@ export class ThemeService {
   }
 
   // 应用主题颜色到 AppStorage
-  private applyThemeToStorage(animated: boolean = false): void {
+  private applyThemeToStorage(animated: boolean = false, duration: number = 450): void {
     const colors = this.getCurrentColors()
     if (animated) {
-      animateTo({ duration: 450, curve: Curve.EaseInOut }, () => {
+      animateTo({ duration: duration, curve: Curve.EaseInOut }, () => {
+        setAppUiStateValue(AppStorageKeys.VISUAL_EFFECTS_MODE, this.currentVisualEffectsMode)
         applyThemeToAppUiState(this.currentTheme, colors)
       })
       return
     }
+    setAppUiStateValue(AppStorageKeys.VISUAL_EFFECTS_MODE, this.currentVisualEffectsMode)
     applyThemeToAppUiState(this.currentTheme, colors)
   }
 

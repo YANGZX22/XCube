@@ -5,6 +5,7 @@
 
 import { getAppUiState } from '../state/AppUiState'
 import { uiMaterial } from '@kit.ArkUI'
+import { VisualEffectsMode } from '../models/ThemeColors'
 
 @ComponentV2
 export struct ScrollToBottomLoadingButton {
@@ -19,6 +20,9 @@ export struct ScrollToBottomLoadingButton {
   private pointerReleaseTimer: number = -1
   private get themePrimary(): string {
     return getAppUiState().themePrimary
+  }
+  private get isManuscriptMode(): boolean {
+    return getAppUiState().visualEffectsMode === VisualEffectsMode.MANUSCRIPT
   }
 
   aboutToAppear(): void {
@@ -77,7 +81,8 @@ export struct ScrollToBottomLoadingButton {
 
   build() {
     Stack({ alignContent: Alignment.Center }) {
-      Button({ type: ButtonType.Circle, stateEffect: true }) {
+      Button({ type: this.isManuscriptMode ? ButtonType.Normal : ButtonType.Circle,
+        stateEffect: !this.isManuscriptMode }) {
         SymbolGlyph($r('sys.symbol.chevron_down'))
           .fontSize(20)
           .fontColor([this.themePrimary])
@@ -86,8 +91,10 @@ export struct ScrollToBottomLoadingButton {
       .height(40)
       .padding(0)
       .backgroundColor(Color.Transparent)
+      .borderRadius(this.isManuscriptMode ? 0 : 20)
+      .border({ width: 0, color: Color.Transparent })
       .enabled(this.shouldKeepButtonActive())
-      .systemMaterial(new uiMaterial.ImmersiveMaterial({
+      .systemMaterial(this.isManuscriptMode ? undefined : new uiMaterial.ImmersiveMaterial({
         style: uiMaterial.ImmersiveStyle.REGULAR,
         materialColor: Color.Transparent,
         applyShadow: false,

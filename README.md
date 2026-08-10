@@ -23,7 +23,7 @@
 - Ships with tools that connect the model to the device — web search, Canvas documents, PDF-to-text, a Python sandbox, math charts, and calendar read/write — while keeping tool permissions, confirmation flows, and privacy boundaries explicit.
 - Development continues on more native HarmonyOS SDK capabilities, richer interaction patterns, and new use cases.
 
-Current version: `1.2.4` (versionCode `1002004`)
+Current version: `1.3.0` (versionCode `1003000`)
 
 > [!NOTE]
 > XCube continues [YANGZX22/chatcube](https://github.com/YANGZX22/chatcube), which was originally forked from [LongLiveY96/ChatCube](https://github.com/LongLiveY96/ChatCube). Copyright and MIT license notices from both earlier versions are preserved in full.
@@ -34,11 +34,14 @@ These screenshots come from the current HarmonyOS 7 (API 26.0.0) build:
 
 <table>
   <tr>
-    <td align="center"><img src="docs/screenshots/IMAGE2.jpg" width="160" /><br/><sub>Conversation Lists</sub></td>
-    <td align="center"><img src="docs/screenshots/IMAGE3.jpg" width="160" /><br/><sub>Knowledge Base Page</sub></td>
-    <td align="center"><img src="docs/screenshots/IMAGE1.jpg" width="160" /><br/><sub>Chat Page</sub></td>
-    <td align="center"><img src="docs/screenshots/IMAGE4.jpg" width="160" /><br/><sub>Work with Sub Agents</sub></td>
-    <td align="center"><img src="docs/screenshots/IMAGE5.jpg" width="160" /><br/><sub>Contexts</sub></td>
+    <td align="center"><img src="docs/screenshots/IMAGE1.jpg" width="220" /><br/><sub>Conversation Lists</sub></td>
+    <td align="center"><img src="docs/screenshots/IMAGE2.jpg" width="220" /><br/><sub>Knowledge Base Page</sub></td>
+    <td align="center"><img src="docs/screenshots/IMAGE3.jpg" width="220" /><br/><sub>Work with Sub Agents</sub></td>
+  </tr>
+  <tr>
+    <td align="center"><img src="docs/screenshots/IMAGE4.jpg" width="220" /><br/><sub>Contexts</sub></td>
+    <td align="center"><img src="docs/screenshots/IMAGE5.jpg" width="220" /><br/><sub>Manuscript Chat</sub></td>
+    <td align="center"><img src="docs/screenshots/IMAGE6.jpg" width="220" /><br/><sub>Manuscript Conversation List</sub></td>
   </tr>
 </table>
 

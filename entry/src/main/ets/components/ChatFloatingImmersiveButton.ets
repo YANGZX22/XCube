@@ -1,4 +1,6 @@
 import { uiMaterial } from '@kit.ArkUI'
+import { VisualEffectsMode } from '../models/ThemeColors'
+import { getAppUiState } from '../state/AppUiState'
 
 @ComponentV2
 export struct ChatFloatingImmersiveButton {
@@ -16,6 +18,10 @@ export struct ChatFloatingImmersiveButton {
   @Param shadowOffsetY: number = 6
   @Event onButtonClick: () => void = () => {}
   private lastClickAt: number = 0
+
+  private get isManuscriptMode(): boolean {
+    return getAppUiState().visualEffectsMode === VisualEffectsMode.MANUSCRIPT
+  }
 
   private emitButtonClick(): void {
     const now = Date.now()
@@ -41,36 +47,58 @@ export struct ChatFloatingImmersiveButton {
   @BuilderParam contentBuilder: () => void = this.DefaultContentBuilder
 
   build() {
-    Button({ type: ButtonType.Normal, stateEffect: false }) {
-      this.contentBuilder()
+    if (this.isManuscriptMode) {
+      Button({ type: ButtonType.Normal, stateEffect: false }) {
+        this.contentBuilder()
+      }
+      .width(this.barWidth)
+      .height(this.barHeight)
+      .padding(this.contentPadding)
+      .backgroundColor(Color.Transparent)
+      .borderRadius(0)
+      .border({ width: 0, color: Color.Transparent })
+      .clip(false)
+      .responseRegion({
+        x: -this.responsePadding,
+        y: -this.responsePadding,
+        width: this.barWidth + this.responsePadding * 2,
+        height: this.barHeight + this.responsePadding * 2
+      })
+      .onClick(() => {
+        this.emitButtonClick()
+      })
+    } else {
+      Button({ type: ButtonType.Normal, stateEffect: false }) {
+        this.contentBuilder()
+      }
+      .width(this.barWidth)
+      .height(this.barHeight)
+      .padding(this.contentPadding)
+      .backgroundColor(Color.Transparent)
+      .borderRadius(Math.min(this.barWidth, this.barHeight) / 2)
+      .clip(false)
+      .systemMaterial(new uiMaterial.ImmersiveMaterial({
+        style: uiMaterial.ImmersiveStyle.REGULAR,
+        materialColor: Color.Transparent,
+        applyShadow: this.enableShadow,
+        interactive: true,
+        lightEffect: { color: undefined }
+      }))
+      .shadow({
+        radius: this.enableShadow ? this.shadowRadius : 0,
+        color: this.enableShadow ? this.shadowColor : Color.Transparent,
+        offsetX: 0,
+        offsetY: this.shadowOffsetY
+      })
+      .responseRegion({
+        x: -this.responsePadding,
+        y: -this.responsePadding,
+        width: this.barWidth + this.responsePadding * 2,
+        height: this.barHeight + this.responsePadding * 2
+      })
+      .onClick(() => {
+        this.emitButtonClick()
+      })
     }
-    .width(this.barWidth)
-    .height(this.barHeight)
-    .padding(this.contentPadding)
-    .backgroundColor(Color.Transparent)
-    .borderRadius(Math.min(this.barWidth, this.barHeight) / 2)
-    .clip(false)
-    .systemMaterial(new uiMaterial.ImmersiveMaterial({
-      style: uiMaterial.ImmersiveStyle.REGULAR,
-      materialColor: Color.Transparent,
-      applyShadow: this.enableShadow,
-      interactive: true,
-      lightEffect: { color: undefined }
-    }))
-    .shadow({
-      radius: this.enableShadow ? this.shadowRadius : 0,
-      color: this.enableShadow ? this.shadowColor : Color.Transparent,
-      offsetX: 0,
-      offsetY: this.shadowOffsetY
-    })
-    .responseRegion({
-      x: -this.responsePadding,
-      y: -this.responsePadding,
-      width: this.barWidth + this.responsePadding * 2,
-      height: this.barHeight + this.responsePadding * 2
-    })
-    .onClick(() => {
-      this.emitButtonClick()
-    })
   }
 }

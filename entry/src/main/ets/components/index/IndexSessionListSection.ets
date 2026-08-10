@@ -3,6 +3,12 @@ import { ChatSession } from '../../models/ChatModels'
 import { SessionListGroupViewModel, SessionListItemData } from '../../pages/index/IndexSessionListDataSource'
 import { IndexSessionListItem } from './IndexSessionListItem'
 import { getAppUiState } from '../../state/AppUiState'
+import { VisualEffectsMode } from '../../models/ThemeColors'
+import {
+  ensureManuscriptFonts,
+  MANUSCRIPT_HEADING_FONT
+} from '../../utils/ManuscriptVisualUtils'
+import { ManuscriptPageTitle } from './ManuscriptPageTitle'
 
 @ComponentV2
 export struct IndexSessionListSection {
@@ -34,21 +40,43 @@ export struct IndexSessionListSection {
     return 56
   }
 
+  private get isManuscriptMode(): boolean {
+    return getAppUiState().visualEffectsMode === VisualEffectsMode.MANUSCRIPT
+  }
+
+  private getEffectiveHorizontalPadding(): number {
+    return this.isManuscriptMode ? 32 : this.horizontalPadding
+  }
+
+  aboutToAppear(): void {
+    ensureManuscriptFonts()
+  }
+
+  @Builder
+  private ManuscriptTitleBlock() {
+    ManuscriptPageTitle({
+      title: $r('app.string.manuscript_conversations'),
+      subtitle: $r('app.string.manuscript_contents')
+    })
+  }
+
   @Builder
   private SessionGroupHeader(groupKey: string, count: number) {
-    Row() {
-      Text(this.onGetGroupTitle(groupKey))
-        .fontSize(13)
-        .fontWeight(FontWeight.Medium)
-        .fontColor($r('app.color.text_secondary'))
+    if (!this.isManuscriptMode) {
+      Row() {
+        Text(this.onGetGroupTitle(groupKey))
+          .fontSize(13)
+          .fontWeight(FontWeight.Medium)
+          .fontColor($r('app.color.text_secondary'))
 
-      Text(count.toString())
-        .fontSize(11)
-        .fontColor($r('app.color.text_tertiary'))
-        .margin({ left: 8 })
+        Text(count.toString())
+          .fontSize(11)
+          .fontColor($r('app.color.text_tertiary'))
+          .margin({ left: 8 })
+      }
+      .width('100%')
+      .padding({ left: this.horizontalPadding, right: this.horizontalPadding, top: 6, bottom: 2 })
     }
-    .width('100%')
-    .padding({ left: this.horizontalPadding, right: this.horizontalPadding, top: 6, bottom: 2 })
   }
 
   @Builder
@@ -219,17 +247,17 @@ export struct IndexSessionListSection {
             })
           }
           .width('100%')
-          .padding({ left: this.horizontalPadding, right: this.horizontalPadding })
+          .padding({ left: this.getEffectiveHorizontalPadding(), right: this.getEffectiveHorizontalPadding() })
         }
         .margin({
-          top: index === 0 ? 4 : 0,
-          bottom: 6
+          top: this.isManuscriptMode ? 0 : (index === 0 ? 4 : 0),
+          bottom: this.isManuscriptMode ? 0 : 6
         })
         .swipeAction(this.isMultiSelectMode ? undefined : {
           start: this.FavoriteSwipeButton(item.session),
           end: this.DeleteSwipePanel(item.session.id)
         })
-        .borderRadius(12)
+        .borderRadius(this.isManuscriptMode ? 0 : 12)
         .clip(false)
       }, (item: SessionListItemData): string => item.key)
     }
@@ -242,6 +270,14 @@ export struct IndexSessionListSection {
         ListItem() {
           Column()
             .height(this.topSpacerHeight)
+        }
+        .focusable(false)
+        .selectable(false)
+      }
+
+      if (this.isManuscriptMode && !this.isMultiSelectMode) {
+        ListItem() {
+          this.ManuscriptTitleBlock()
         }
         .focusable(false)
         .selectable(false)
@@ -260,8 +296,19 @@ export struct IndexSessionListSection {
       }, (group: SessionListGroupViewModel): string => group.key)
 
       ListItem() {
-        Column()
-          .height(this.bottomSpacerHeight)
+        Column() {
+          if (this.isManuscriptMode) {
+            Text('❦')
+              .fontFamily(MANUSCRIPT_HEADING_FONT)
+              .fontSize(18)
+              .fontColor(getAppUiState().isDarkMode ? '#C99A52' : '#B68235')
+              .padding({ top: 18, bottom: 12 })
+          }
+
+          Column().height(this.bottomSpacerHeight)
+        }
+        .width('100%')
+        .alignItems(HorizontalAlign.Center)
       }
       .focusable(false)
       .selectable(false)

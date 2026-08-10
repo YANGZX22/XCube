@@ -7,7 +7,14 @@ import {
 } from '@kit.UIDesignKit'
 import { curves, uiMaterial } from '@kit.ArkUI'
 import { picker } from '@kit.CoreFileKit'
-import { ALL_THEMES, ColorTheme, getThemeColors, ThemeColorConfig, ThemeInfo } from '../models/ThemeColors'
+import {
+  ALL_THEMES,
+  ColorTheme,
+  getThemeColors,
+  ThemeColorConfig,
+  ThemeInfo,
+  VisualEffectsMode
+} from '../models/ThemeColors'
 import { MarkdownRenderer, ThemeMode } from '../services/PreferencesService'
 import { ServiceRegistry } from '../services/ServiceRegistry'
 import { SettingsCompactTitleBarContent } from '../components/settings/SettingsCompactPageHeader'
@@ -38,6 +45,11 @@ import {
   importChatSerifFont,
   resolveChatSerifFontFamily
 } from '../utils/ChatSerifFontUtils'
+import {
+  ensureManuscriptFonts,
+  MANUSCRIPT_BODY_FONT,
+  MANUSCRIPT_HEADING_FONT
+} from '../utils/ManuscriptVisualUtils'
 
 let themeModeSettingsPathStack: NavPathStack | null = null
 
@@ -45,7 +57,8 @@ const TAB_INDEX_THEME = 0
 
 const PREVIEW_TAB_INDEX_ASSISTANTS = 0
 const PREVIEW_TAB_INDEX_CHAT = 1
-const PREVIEW_TAB_INDEX_SETTINGS = 2
+const PREVIEW_TAB_INDEX_KNOWLEDGE = 2
+const PREVIEW_TAB_INDEX_SETTINGS = 3
 const APPEARANCE_BLOCK_GAP = 16
 
 @ComponentV2
@@ -96,6 +109,9 @@ export struct ThemeAppearanceSettingsView {
     return getAppUiState().isDarkMode
   }
   private get previewChatTypeface(): string {
+    if (this.visualEffectsMode === VisualEffectsMode.MANUSCRIPT) {
+      return MANUSCRIPT_BODY_FONT
+    }
     return this.chatSerifFontEnabled ? resolveChatSerifFontFamily(this.chatSerifFontFamily) : 'HarmonyOS Sans'
   }
   private get themeCardTypeface(): string {
@@ -110,6 +126,7 @@ export struct ThemeAppearanceSettingsView {
 
   @Local currentThemeMode: ThemeMode = ThemeMode.SYSTEM
   @Local currentColorTheme: ColorTheme = ColorTheme.LAVENDER
+  @Local visualEffectsMode: VisualEffectsMode = VisualEffectsMode.OFF
   @Local chatFontSize: number = 15
   @Local chatSerifFontEnabled: boolean = false
   @Local chatSerifFontFamily: string = CHAT_SERIF_FONT_COMMON
@@ -136,11 +153,13 @@ export struct ThemeAppearanceSettingsView {
   }
 
   aboutToAppear(): void {
+    ensureManuscriptFonts()
     const fontAvailability: ChatSerifFontAvailability = detectAndRegisterChatSerifFonts(this.getUIContext())
     this.customSerifAvailable = fontAvailability.customAvailable
     this.customSerifName = getImportedChatSerifFontName()
     this.currentThemeMode = this.settingsManager.getThemeMode()
     this.currentColorTheme = this.settingsManager.getColorTheme()
+    this.visualEffectsMode = this.settingsManager.getVisualEffectsMode()
     this.chatFontSize = this.settingsManager.getChatFontSize()
     this.chatSerifFontEnabled = this.settingsManager.getChatSerifFontEnabled()
     this.markdownRenderer = this.settingsManager.getMarkdownRenderer()
@@ -297,6 +316,9 @@ export struct ThemeAppearanceSettingsView {
   }
 
   private async handleColorThemeSelected(theme: ColorTheme): Promise<void> {
+    if (this.visualEffectsMode === VisualEffectsMode.MANUSCRIPT) {
+      return
+    }
     const previousTheme = this.currentColorTheme
     animateTo({ duration: 450, curve: Curve.EaseInOut }, () => {
       this.currentColorTheme = theme
@@ -322,6 +344,9 @@ export struct ThemeAppearanceSettingsView {
   }
 
   private async handleChatSerifFontChanged(enabled: boolean): Promise<void> {
+    if (this.visualEffectsMode === VisualEffectsMode.MANUSCRIPT) {
+      return
+    }
     const previous = this.chatSerifFontEnabled
     animateTo({ duration: 280, curve: curves.springMotion(0.35, 0.8) }, () => {
       this.chatSerifFontEnabled = enabled
@@ -337,6 +362,23 @@ export struct ThemeAppearanceSettingsView {
         `Failed to update chat serif font setting: ${JSON.stringify(error)}`)
       animateTo({ duration: 280, curve: curves.springMotion(0.35, 0.8) }, () => {
         this.chatSerifFontEnabled = previous
+      })
+    }
+  }
+
+  private async handleVisualEffectsModeChanged(enabled: boolean): Promise<void> {
+    const previousMode = this.visualEffectsMode
+    const nextMode = enabled ? VisualEffectsMode.MANUSCRIPT : VisualEffectsMode.OFF
+    animateTo({ duration: 400, curve: Curve.EaseInOut }, () => {
+      this.visualEffectsMode = nextMode
+    })
+    try {
+      await this.settingsManager.setVisualEffectsMode(nextMode)
+    } catch (error) {
+      console.error('ThemeAppearanceSettingsView',
+        `Failed to update visual effects mode: ${JSON.stringify(error)}`)
+      animateTo({ duration: 400, curve: Curve.EaseInOut }, () => {
+        this.visualEffectsMode = previousMode
       })
     }
   }
@@ -514,6 +556,127 @@ export struct ThemeAppearanceSettingsView {
       indexes.push(index)
     }
     return indexes
+  }
+
+  private isManuscriptMode(): boolean {
+    return this.visualEffectsMode === VisualEffectsMode.MANUSCRIPT
+  }
+
+  private getManuscriptAccent(): string {
+    return this.isDarkMode ? '#C99A52' : '#B68235'
+  }
+
+  private getManuscriptAccentDeep(): string {
+    return this.isDarkMode ? '#D9B274' : '#8A6228'
+  }
+
+  @Builder
+  private ManuscriptVignette() {
+    Column({ space: 5 }) {
+      Text('A')
+        .fontFamily(MANUSCRIPT_HEADING_FONT)
+        .fontSize(25)
+        .fontWeight(FontWeight.Medium)
+        .fontColor(this.isDarkMode ? '#ECEAE5' : '#201F1D')
+
+      Divider()
+        .width(28)
+        .strokeWidth(1)
+        .color(this.getManuscriptAccent())
+
+      Column().width(31).height(2).backgroundColor(this.isDarkMode ? '#7B766D' : '#98938A')
+      Column().width(24).height(2).backgroundColor(this.isDarkMode ? '#7B766D' : '#98938A')
+    }
+    .width(54)
+    .height(72)
+    .padding({ top: 7, bottom: 6 })
+    .justifyContent(FlexAlign.Center)
+    .alignItems(HorizontalAlign.Center)
+    .backgroundColor(this.isDarkMode ? '#242320' : '#FBFAF8')
+    .border({ width: 1, color: this.getManuscriptAccent() })
+    .shadow({
+      radius: 0,
+      color: this.isDarkMode ? '#4A3B27' : '#E8D8BE',
+      offsetX: 2,
+      offsetY: 2
+    })
+  }
+
+  @Builder
+  private VisualEffectsEntryCard() {
+    Column({ space: 0 }) {
+      Row({ space: 14 }) {
+        this.ManuscriptVignette()
+
+        Column({ space: 4 }) {
+          Row({ space: 7 }) {
+            Text($r('app.string.visual_effects_title'))
+              .fontSize(16)
+              .fontWeight(FontWeight.Medium)
+              .fontColor($r('app.color.text_primary'))
+
+            Text($r('app.string.visual_effects_new'))
+              .fontSize(9)
+              .fontWeight(FontWeight.Medium)
+              .fontColor(Color.White)
+              .letterSpacing(1)
+              .padding({ left: 6, right: 6, top: 2, bottom: 2 })
+              .backgroundColor('#8A6228')
+              .borderRadius(5)
+          }
+          .width('100%')
+
+          Text($r('app.string.visual_effects_manuscript'))
+            .fontFamily(MANUSCRIPT_HEADING_FONT)
+            .fontSize(14)
+            .fontWeight(FontWeight.Medium)
+            .fontColor(this.getManuscriptAccentDeep())
+
+          Text($r('app.string.visual_effects_desc'))
+            .fontFamily(MANUSCRIPT_BODY_FONT)
+            .fontSize(12)
+            .fontColor($r('app.color.text_secondary'))
+            .lineHeight(18)
+            .maxLines(3)
+        }
+        .layoutWeight(1)
+        .alignItems(HorizontalAlign.Start)
+
+        Toggle({ type: ToggleType.Switch, isOn: this.isManuscriptMode() })
+          .selectedColor(this.getManuscriptAccentDeep())
+          .switchPointColor(Color.White)
+          .onChange((enabled: boolean) => {
+            this.handleVisualEffectsModeChanged(enabled)
+          })
+      }
+      .width('100%')
+      .alignItems(VerticalAlign.Center)
+
+      if (this.isManuscriptMode()) {
+        Text($r('app.string.visual_effects_themes_locked'))
+          .width('100%')
+          .fontFamily(MANUSCRIPT_BODY_FONT)
+          .fontSize(12)
+          .fontStyle(FontStyle.Italic)
+          .fontColor(this.getManuscriptAccentDeep())
+          .lineHeight(18)
+          .padding({ top: 12 })
+          .transition(
+            TransitionEffect.OPACITY.combine(TransitionEffect.translate({ y: -6 }))
+              .animation({ duration: 400, curve: Curve.EaseOut })
+          )
+      }
+    }
+    .width('100%')
+    .padding(18)
+    .backgroundColor(Color.Transparent)
+    .borderRadius(24)
+    .border({
+      width: this.isManuscriptMode() ? 2 : 1,
+      color: this.isManuscriptMode() ? this.getManuscriptAccent() : this.themePrimaryLight
+    })
+    .systemMaterial(this.getAppearanceBlockMaterial(false))
+    .animation({ duration: 400, curve: Curve.EaseInOut })
   }
 
   @Builder
@@ -703,8 +866,12 @@ export struct ThemeAppearanceSettingsView {
     })
     .layoutWeight(1)
     .systemMaterial(this.getAppearanceBlockMaterial(true))
+    .opacity(this.isManuscriptMode() ? 0.45 : 1)
+    .enabled(!this.isManuscriptMode())
     .onClick(() => {
-      this.handleColorThemeSelected(theme.id)
+      if (!this.isManuscriptMode()) {
+        this.handleColorThemeSelected(theme.id)
+      }
     })
   }
 
@@ -740,7 +907,8 @@ export struct ThemeAppearanceSettingsView {
       active: this.previewTabIndex === PREVIEW_TAB_INDEX_ASSISTANTS,
       activeIcon: $r('sys.symbol.person_fill'),
       inactiveIcon: $r('sys.symbol.person'),
-      label: $r('app.string.tab_assistants')
+      label: $r('app.string.tab_assistants'),
+      manuscriptLabel: $r('app.string.manuscript_tab_assistants')
     })
   }
 
@@ -750,7 +918,8 @@ export struct ThemeAppearanceSettingsView {
       active: this.previewTabIndex === PREVIEW_TAB_INDEX_CHAT,
       activeIcon: $r('sys.symbol.ellipsis_message_fill'),
       inactiveIcon: $r('sys.symbol.ellipsis_message'),
-      label: $r('app.string.tab_chat')
+      label: $r('app.string.tab_chat'),
+      manuscriptLabel: $r('app.string.manuscript_tab_chat')
     })
   }
 
@@ -760,88 +929,384 @@ export struct ThemeAppearanceSettingsView {
       active: this.previewTabIndex === PREVIEW_TAB_INDEX_SETTINGS,
       activeIcon: $r('sys.symbol.gearshape_fill'),
       inactiveIcon: $r('sys.symbol.gearshape'),
-      label: $r('app.string.tab_settings')
+      label: $r('app.string.tab_settings'),
+      manuscriptLabel: $r('app.string.manuscript_tab_settings')
     })
   }
 
   @Builder
-  private MiniHdsTabs() {
-    Column() {
-      HdsTabs({ barPosition: BarPosition.End, index: this.previewTabIndex }) {
-        TabContent() {
-          Column().width('100%').height('100%').backgroundColor(this.themeBackground)
-        }
-        .tabBar(this.MiniTabBarAssistants())
-
-        TabContent() {
-          Column().width('100%').height('100%').backgroundColor(this.themeBackground)
-        }
-        .tabBar(this.MiniTabBarChat())
-
-        TabContent() {
-          Column().width('100%').height('100%').backgroundColor(this.themeBackground)
-        }
-        .tabBar(this.MiniTabBarSettings())
-      }
-      .barOverlap(true)
-      .barBackgroundBlurStyle(BlurStyle.COMPONENT_THIN)
-      .barBackgroundColor(Color.Transparent)
-      .barMode(BarMode.Fixed)
-      .barFloatingStyle(this.buildPreviewFloatingStyle())
-      .scrollable(false)
-      .onChange((idx: number) => {
-        if (this.previewTabIndex !== idx) {
-          this.previewTabIndex = idx
-        }
-      })
-    }
-    .width('100%')
-    .height(105)
-    .borderRadius(18)
-    .clip(true)
-    .backgroundColor(this.themeBackground)
-    .border({ width: 1, color: this.themePrimaryLight })
+  private MiniTabBarKnowledge() {
+    IndexBottomTabItem({
+      active: this.previewTabIndex === PREVIEW_TAB_INDEX_KNOWLEDGE,
+      activeIcon: $r('sys.symbol.externaldrive_fill'),
+      inactiveIcon: $r('sys.symbol.externaldrive'),
+      label: $r('app.string.tab_knowledge'),
+      manuscriptLabel: $r('app.string.manuscript_tab_knowledge')
+    })
   }
 
   @Builder
-  private DualBubblePreview() {
-    Column({ space: 12 }) {
-      Row() {
-        Column() {
+  private MiniPreviewTab(index: number) {
+    Row() {
+      if (index === PREVIEW_TAB_INDEX_ASSISTANTS) {
+        this.MiniTabBarAssistants()
+      } else if (index === PREVIEW_TAB_INDEX_CHAT) {
+        this.MiniTabBarChat()
+      } else if (index === PREVIEW_TAB_INDEX_KNOWLEDGE) {
+        this.MiniTabBarKnowledge()
+      } else {
+        this.MiniTabBarSettings()
+      }
+    }
+    .layoutWeight(1)
+    .height(52)
+    .onClick(() => {
+      if (this.previewTabIndex !== index) {
+        this.previewTabIndex = index
+      }
+    })
+  }
+
+  @Builder
+  private MiniCurrentBottomNavigation() {
+    if (this.isManuscriptMode()) {
+      Stack({ alignContent: Alignment.Bottom }) {
+        Button({ type: ButtonType.Normal, stateEffect: false }) {
+          SymbolGlyph($r('sys.symbol.plus'))
+            .fontSize(18)
+            .fontColor([this.getManuscriptAccentDeep()])
+        }
+        .width(38)
+        .height(38)
+        .padding(0)
+        .backgroundColor(Color.Transparent)
+        .borderRadius(0)
+        .position({ x: '100%', y: 0 })
+        .translate({ x: -48, y: 0 })
+
+        Row() {
+          this.MiniPreviewTab(PREVIEW_TAB_INDEX_ASSISTANTS)
+          this.MiniPreviewTab(PREVIEW_TAB_INDEX_CHAT)
+          this.MiniPreviewTab(PREVIEW_TAB_INDEX_KNOWLEDGE)
+          this.MiniPreviewTab(PREVIEW_TAB_INDEX_SETTINGS)
+        }
+        .width('100%')
+        .height(52)
+        .backgroundColor(this.themeSurface)
+        .border({ width: { top: 1 }, color: getAppUiState().themeDivider })
+      }
+      .width('100%')
+      .height(82)
+    } else {
+      Row({ space: 8 }) {
+        Row() {
+          this.MiniPreviewTab(PREVIEW_TAB_INDEX_ASSISTANTS)
+          this.MiniPreviewTab(PREVIEW_TAB_INDEX_CHAT)
+          this.MiniPreviewTab(PREVIEW_TAB_INDEX_KNOWLEDGE)
+          this.MiniPreviewTab(PREVIEW_TAB_INDEX_SETTINGS)
+        }
+        .layoutWeight(1)
+        .height(52)
+        .padding({ left: 4, right: 4 })
+        .backgroundColor(Color.Transparent)
+        .borderRadius(26)
+        .clip(true)
+        .systemMaterial(new uiMaterial.ImmersiveMaterial({
+          style: uiMaterial.ImmersiveStyle.REGULAR,
+          materialColor: Color.Transparent,
+          applyShadow: true,
+          interactive: false,
+          lightEffect: { color: undefined }
+        }))
+
+        Button({ type: ButtonType.Circle, stateEffect: false }) {
+          SymbolGlyph($r('sys.symbol.plus'))
+            .fontSize(23)
+            .fontColor([this.themePrimary])
+        }
+        .width(52)
+        .height(52)
+        .padding(0)
+        .backgroundColor(Color.Transparent)
+        .borderRadius(26)
+        .systemMaterial(new uiMaterial.ImmersiveMaterial({
+          style: uiMaterial.ImmersiveStyle.REGULAR,
+          materialColor: Color.Transparent,
+          applyShadow: true,
+          interactive: false,
+          lightEffect: { color: undefined }
+        }))
+      }
+      .width('100%')
+      .height(68)
+      .padding({ left: 8, right: 8, top: 4, bottom: 12 })
+    }
+  }
+
+  @Builder
+  private MiniPreviewHeaderIcon(symbol: Resource) {
+    Button({ type: ButtonType.Normal, stateEffect: false }) {
+      SymbolGlyph(symbol)
+        .fontSize(this.isManuscriptMode() ? 15 : 17)
+        .fontColor([this.isManuscriptMode() ? this.getManuscriptAccentDeep() : this.themePrimary])
+    }
+    .width(34)
+    .height(34)
+    .padding(0)
+    .backgroundColor(Color.Transparent)
+    .borderRadius(this.isManuscriptMode() ? 0 : 17)
+    .systemMaterial(this.isManuscriptMode() ? undefined : new uiMaterial.ImmersiveMaterial({
+      style: uiMaterial.ImmersiveStyle.ULTRA_THIN,
+      materialColor: Color.Transparent,
+      applyShadow: false,
+      interactive: false,
+      lightEffect: { color: undefined }
+    }))
+  }
+
+  @Builder
+  private CurrentPreviewHeader() {
+    Row() {
+      this.MiniPreviewHeaderIcon($r('sys.symbol.chevron_left'))
+
+      Column({ space: 1 }) {
+        if (this.isManuscriptMode()) {
+          Text(pickLocalizedText('对话 · 编号 XII', 'CONVERSATION · N° XII'))
+            .fontFamily(MANUSCRIPT_BODY_FONT)
+            .fontSize(8)
+            .fontColor(getAppUiState().themeTextTertiary)
+            .letterSpacing(1)
+        }
+
+        Text(pickLocalizedText('预览对话', 'Preview Conversation'))
+          .fontFamily(this.isManuscriptMode() ? MANUSCRIPT_HEADING_FONT : this.previewChatTypeface)
+          .fontSize(this.isManuscriptMode() ? 18 : 14)
+          .fontWeight(FontWeight.Medium)
+          .fontColor(this.themeTextPrimary)
+          .maxLines(1)
+          .textOverflow({ overflow: TextOverflow.Ellipsis })
+      }
+      .layoutWeight(1)
+      .alignItems(HorizontalAlign.Center)
+
+      this.MiniPreviewHeaderIcon($r('sys.symbol.plus'))
+      this.MiniPreviewHeaderIcon($r('sys.symbol.dot_grid_2x2'))
+    }
+    .width('100%')
+    .height(this.isManuscriptMode() ? 58 : 50)
+    .padding({ left: 8, right: 8 })
+    .alignItems(VerticalAlign.Center)
+    .border({ width: { bottom: 1 }, color: getAppUiState().themeDivider })
+  }
+
+  @Builder
+  private PreviewMessageActions(alignment: FlexAlign) {
+    Row({ space: 12 }) {
+      SymbolGlyph($r('sys.symbol.checkmark_square_on_square'))
+        .fontSize(12)
+        .fontColor([this.isManuscriptMode() ? this.getManuscriptAccentDeep() : $r('app.color.text_tertiary')])
+      SymbolGlyph($r('sys.symbol.arrow_clockwise'))
+        .fontSize(12)
+        .fontColor([this.isManuscriptMode() ? this.getManuscriptAccentDeep() : $r('app.color.text_tertiary')])
+      SymbolGlyph($r('sys.symbol.dot_grid_2x2'))
+        .fontSize(12)
+        .fontColor([this.isManuscriptMode() ? this.getManuscriptAccentDeep() : $r('app.color.text_tertiary')])
+    }
+    .width('100%')
+    .height(22)
+    .justifyContent(alignment)
+  }
+
+  @Builder
+  private PreviewReasoningBar() {
+    Row() {
+      SymbolGlyph($r('sys.symbol.AI_deep_thinking'))
+        .fontSize(12)
+        .fontColor([this.isManuscriptMode() ? this.getManuscriptAccentDeep() : $r('app.color.text_secondary')])
+
+      Text($r('app.string.reasoning_process'))
+        .fontFamily(this.isManuscriptMode() ? MANUSCRIPT_BODY_FONT : 'HarmonyOS Sans')
+        .fontSize(11)
+        .fontWeight(FontWeight.Medium)
+        .fontColor(this.isManuscriptMode() ? this.getManuscriptAccentDeep() : $r('app.color.text_secondary'))
+        .margin({ left: 5 })
+
+      Blank()
+
+      Text($r('app.string.common_details'))
+        .fontSize(9)
+        .fontColor($r('app.color.text_tertiary'))
+
+      SymbolGlyph($r('sys.symbol.chevron_down'))
+        .fontSize(9)
+        .fontColor([$r('app.color.text_tertiary')])
+        .margin({ left: 2 })
+    }
+    .width('100%')
+    .height(this.isManuscriptMode() ? 28 : 30)
+    .padding({ left: 10, right: 10 })
+    .backgroundColor(Color.Transparent)
+    .borderRadius(this.isManuscriptMode() ? 0 : 10)
+    .border({
+      width: this.isManuscriptMode() ? { top: 1, bottom: 1 } : 0.5,
+      color: this.isManuscriptMode() ? getAppUiState().themeDivider : this.themePrimaryLight
+    })
+    .systemMaterial(this.isManuscriptMode() ? undefined : new uiMaterial.ImmersiveMaterial({
+      style: uiMaterial.ImmersiveStyle.REGULAR,
+      materialColor: this.themeAiBubble,
+      applyShadow: false,
+      interactive: false,
+      lightEffect: { color: undefined }
+    }))
+  }
+
+  @Builder
+  private CurrentMessagePreview() {
+    if (this.isManuscriptMode()) {
+      Column({ space: 13 }) {
+        Column({ space: 3 }) {
+          Text($r('app.string.manuscript_you'))
+            .fontFamily(MANUSCRIPT_BODY_FONT)
+            .fontSize(8)
+            .fontWeight(FontWeight.Medium)
+            .fontColor(this.getManuscriptAccentDeep())
+            .letterSpacing(1.2)
+            .width('100%')
+            .textAlign(TextAlign.End)
+
+          Text($r('app.string.font_preview_user_message'))
+            .fontSize(Math.max(12, this.chatFontSize - 1))
+            .lineHeight(Math.max(12, this.chatFontSize - 1) + 6)
+            .fontFamily(MANUSCRIPT_BODY_FONT)
+            .fontStyle(FontStyle.Italic)
+            .fontColor(this.themeTextPrimary)
+            .width('100%')
+            .textAlign(TextAlign.End)
+
+          this.PreviewMessageActions(FlexAlign.End)
+        }
+        .width('100%')
+
+        Column({ space: 8 }) {
+          this.PreviewReasoningBar()
+
           Text($r('app.string.font_preview_ai_message'))
             .fontSize(this.getAiPreviewFontSize())
             .lineHeight(this.getAiPreviewFontSize() + 7)
-            .fontFamily(this.previewChatTypeface)
+            .fontFamily(MANUSCRIPT_BODY_FONT)
             .fontColor(this.themeTextPrimary)
-        }
-        .padding({ left: 14, right: 14, top: 10, bottom: 10 })
-        .backgroundColor(this.themeAiBubble)
-        .borderRadius({ topLeft: 18, topRight: 18, bottomLeft: 6, bottomRight: 18 })
-        .border({ width: 1, color: this.themePrimaryLight })
-        .constraintSize({ maxWidth: '76%' })
+            .width('100%')
 
-        Blank()
+          this.PreviewMessageActions(FlexAlign.End)
+        }
+        .width('100%')
       }
       .width('100%')
+      .padding({ left: 24, right: 24, top: 14, bottom: 10 })
+    } else {
+      Column({ space: 12 }) {
+        Row() {
+          Blank()
+
+          Column() {
+            Text($r('app.string.font_preview_user_message'))
+              .fontSize(this.chatFontSize)
+              .lineHeight(this.chatFontSize + 7)
+              .fontFamily(this.previewChatTypeface)
+              .fontColor(this.themeUserBubbleText)
+          }
+          .padding({ left: 12, right: 12, top: 8, bottom: 8 })
+          .backgroundColor(this.themeUserBubble)
+          .borderRadius({ topLeft: 16, topRight: 16, bottomLeft: 16, bottomRight: 5 })
+          .constraintSize({ maxWidth: '78%' })
+          .systemMaterial(new uiMaterial.ImmersiveMaterial({
+            style: uiMaterial.ImmersiveStyle.REGULAR,
+            materialColor: this.themeUserBubble,
+            applyShadow: false,
+            interactive: false,
+            lightEffect: { color: undefined }
+          }))
+        }
+        .width('100%')
+
+        this.PreviewMessageActions(FlexAlign.End)
+
+        Column({ space: 7 }) {
+          Row({ space: 7 }) {
+            Column() {
+              Text('AI')
+                .fontSize(8)
+                .fontWeight(FontWeight.Bold)
+                .fontColor(this.themePrimary)
+            }
+            .width(22)
+            .height(22)
+            .borderRadius(7)
+            .backgroundColor(this.themePrimaryLight)
+            .justifyContent(FlexAlign.Center)
+            .alignItems(HorizontalAlign.Center)
+
+            Text('XCube')
+              .fontSize(11)
+              .fontWeight(FontWeight.Medium)
+              .fontColor(this.themeTextPrimary)
+          }
+          .width('100%')
+
+          Column({ space: 8 }) {
+            this.PreviewReasoningBar()
+
+            Text($r('app.string.font_preview_ai_message'))
+              .fontSize(this.getAiPreviewFontSize())
+              .lineHeight(this.getAiPreviewFontSize() + 7)
+              .fontFamily(this.previewChatTypeface)
+              .fontColor(this.themeTextPrimary)
+              .width('100%')
+          }
+          .width('100%')
+          .padding({ left: 12, right: 12, top: 10, bottom: 10 })
+          .backgroundColor(this.themeAiBubble)
+          .borderRadius(14)
+          .border({ width: 0.5, color: this.themePrimaryLight })
+          .systemMaterial(new uiMaterial.ImmersiveMaterial({
+            style: uiMaterial.ImmersiveStyle.REGULAR,
+            materialColor: this.themeAiBubble,
+            applyShadow: false,
+            interactive: false,
+            lightEffect: { color: undefined }
+          }))
+
+          this.PreviewMessageActions(FlexAlign.Start)
+        }
+        .width('92%')
+        .alignItems(HorizontalAlign.Start)
+      }
+      .width('100%')
+      .padding({ left: 12, right: 12, top: 12, bottom: 8 })
+    }
+  }
+
+  @Builder
+  private CurrentAppearancePreview() {
+    Column() {
+      this.CurrentPreviewHeader()
 
       Row() {
-        Blank()
-
-        Column() {
-          Text($r('app.string.font_preview_user_message'))
-            .fontSize(this.chatFontSize)
-            .lineHeight(this.chatFontSize + 7)
-            .fontFamily(this.previewChatTypeface)
-            .fontColor(this.themeUserBubbleText)
-        }
-        .padding({ left: 14, right: 14, top: 10, bottom: 10 })
-        .backgroundColor(this.themeUserBubble)
-        .borderRadius({ topLeft: 18, topRight: 18, bottomLeft: 18, bottomRight: 6 })
-        .constraintSize({ maxWidth: '76%' })
+        this.CurrentMessagePreview()
       }
       .width('100%')
+      .layoutWeight(1)
+      .alignItems(VerticalAlign.Top)
+
+      this.MiniCurrentBottomNavigation()
     }
     .width('100%')
+    .height(this.isManuscriptMode() ? 360 : 350)
+    .backgroundColor(this.themeBackground)
+    .borderRadius(this.isManuscriptMode() ? 3 : 22)
+    .border({ width: 1, color: this.isManuscriptMode() ? getAppUiState().themeDivider : this.themePrimaryLight })
+    .clip(true)
+    .animation({ duration: 400, curve: Curve.EaseInOut })
   }
 
   @Builder
@@ -850,16 +1315,7 @@ export struct ThemeAppearanceSettingsView {
       this.SectionHeader($r('app.string.appearance_live_preview_title'),
         $r('app.string.appearance_live_preview_desc'))
 
-      Column({ space: 10 }) {
-        this.DualBubblePreview()
-        this.MiniHdsTabs()
-      }
-      .width('100%')
-      .padding(12)
-      .backgroundColor(Color.Transparent)
-      .borderRadius(24)
-      .border({ width: 1, color: this.themePrimaryLight })
-      .systemMaterial(this.getAppearanceBlockMaterial(false))
+      this.CurrentAppearancePreview()
     }
     .width('100%')
   }
@@ -916,6 +1372,8 @@ export struct ThemeAppearanceSettingsView {
     Scroll(this.themeScroller) {
       Row() {
         Column({ space: APPEARANCE_BLOCK_GAP }) {
+          this.VisualEffectsEntryCard()
+
           this.SectionHeader($r('app.string.appearance_display_mode_title'),
             $r('app.string.appearance_display_mode_desc'))
 
@@ -1086,6 +1544,8 @@ export struct ThemeAppearanceSettingsView {
               .systemMaterial(new uiMaterial.Material())
               .switchPointColor(Color.White)
               .animation({ duration: 280, curve: curves.springMotion(0.35, 0.8) })
+              .enabled(!this.isManuscriptMode())
+              .opacity(this.isManuscriptMode() ? 0.45 : 1)
               .onChange((enabled: boolean) => {
                 this.handleChatSerifFontChanged(enabled)
               })
@@ -1124,7 +1584,8 @@ export struct ThemeAppearanceSettingsView {
               .menuSystemMaterial(new uiMaterial.ImmersiveMaterial({
                 style: uiMaterial.ImmersiveStyle.THICK
               }))
-              .enabled(this.chatSerifFontEnabled)
+              .enabled(this.chatSerifFontEnabled && !this.isManuscriptMode())
+              .opacity(this.isManuscriptMode() ? 0.45 : 1)
               .onSelect((index: number, _value: string): void => {
                 this.handleChatSerifFontFamilyChanged(index)
               })

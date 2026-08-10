@@ -3,6 +3,7 @@ import { getAppUiState } from '../../state/AppUiState'
 import { pickLocalizedText } from '../../utils/LocalizedTextUtils'
 import { SLASH_COMMAND_COMPACT, SlashCommandItem } from '../../utils/SlashCommandUtils'
 import { withColorAlpha } from '../../utils/ColorAlphaUtils'
+import { VisualEffectsMode } from '../../models/ThemeColors'
 
 // 输入框上方的斜杠命令面板：输入 "/" 时浮出，点选后立即执行对应命令
 @ComponentV2
@@ -17,6 +18,9 @@ export struct SlashCommandPanel {
 
   private get themeUserBubble(): string {
     return getAppUiState().themeUserBubble
+  }
+  private get isManuscriptMode(): boolean {
+    return getAppUiState().visualEffectsMode === VisualEffectsMode.MANUSCRIPT
   }
 
   private getCommandSymbol(commandId: string): Resource {
@@ -56,16 +60,20 @@ export struct SlashCommandPanel {
     }
     .width('100%')
     .backgroundColor(Color.Transparent)
-    .borderRadius(20)
-    .clip(true)
-    .systemMaterial(new uiMaterial.ImmersiveMaterial({
+    .borderRadius(this.isManuscriptMode ? 0 : 20)
+    .border({
+      width: this.isManuscriptMode ? { top: 1, bottom: 1 } : 0,
+      color: this.isManuscriptMode ? getAppUiState().themeDivider : this.themePrimary
+    })
+    .clip(!this.isManuscriptMode)
+    .systemMaterial(this.isManuscriptMode ? undefined : new uiMaterial.ImmersiveMaterial({
       style: uiMaterial.ImmersiveStyle.REGULAR,
       interactive: false,
       lightEffect: { color: undefined }
     }))
     .shadow({
-      radius: 24,
-      color: 'rgba(0, 0, 0, 0.12)',
+      radius: this.isManuscriptMode ? 0 : 24,
+      color: this.isManuscriptMode ? Color.Transparent : 'rgba(0, 0, 0, 0.12)',
       offsetX: 0,
       offsetY: 6
     })

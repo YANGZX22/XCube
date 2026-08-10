@@ -6,8 +6,11 @@
 import { ReasoningLevel } from '../models/ChatModels'
 import { ReasoningControlMode } from '../services/ProviderCompatibilityRegistry'
 import { getAppUiState } from '../state/AppUiState'
-import { uiMaterial } from '@kit.ArkUI'
+import { LengthMetrics, uiMaterial } from '@kit.ArkUI'
 import { ImmersiveSheetHeader } from './ImmersiveSheetHeader'
+import { VisualEffectsMode } from '../models/ThemeColors'
+import { MANUSCRIPT_BODY_FONT, MANUSCRIPT_COMPOSER_TOOLBAR_HEIGHT } from '../utils/ManuscriptVisualUtils'
+import { isChineseAppLanguage } from '../utils/LocalizedTextUtils'
 
 @ComponentV2
 export struct ChatToolbar {
@@ -41,6 +44,18 @@ export struct ChatToolbar {
     return getAppUiState().themeAiBubble
   }
 
+  private get isManuscriptMode(): boolean {
+    return getAppUiState().visualEffectsMode === VisualEffectsMode.MANUSCRIPT
+  }
+
+  private get manuscriptAccent(): string {
+    return getAppUiState().isDarkMode ? '#C99A52' : '#B68235'
+  }
+
+  private get manuscriptAccentDeep(): string {
+    return getAppUiState().isDarkMode ? '#D9B274' : '#8A6228'
+  }
+
   private withAlpha(color: string, alphaHex: string): string {
     if (color.startsWith('#') && color.length === 7) {
       return `#${alphaHex}${color.slice(1)}`
@@ -52,30 +67,48 @@ export struct ChatToolbar {
   }
 
   private getToolbarChipBarHeight(): number {
-    return 36
+    return this.isManuscriptMode ? MANUSCRIPT_COMPOSER_TOOLBAR_HEIGHT : 36
   }
 
   private getToolChipWidth(): number {
-    return 68
+    return isChineseAppLanguage() ? 68 : 76
   }
 
   private getReasoningChipWidth(): number {
-    return 112
+    if (isChineseAppLanguage()) {
+      return 112
+    }
+    if (this.reasoningLevel === ReasoningLevel.MEDIUM || this.reasoningLevel === ReasoningLevel.XHIGH) {
+      return 164
+    }
+    if (this.reasoningLevel === ReasoningLevel.OFF) {
+      return 138
+    }
+    return 148
   }
 
   private getKnowledgeChipWidth(): number {
-    return 96
+    return isChineseAppLanguage() ? 96 : 128
   }
 
   private getToolChipForegroundColor(): ResourceColor {
+    if (this.isManuscriptMode) {
+      return this.hasSelectedTools ? this.themePrimary : getAppUiState().themeTextSecondary
+    }
     return this.hasSelectedTools ? this.themePrimary : $r('app.color.text_secondary')
   }
 
   private getReasoningChipForegroundColor(): ResourceColor {
+    if (this.isManuscriptMode) {
+      return this.isReasoningEnabled() ? this.themePrimary : getAppUiState().themeTextSecondary
+    }
     return this.isReasoningEnabled() ? this.themePrimary : $r('app.color.text_secondary')
   }
 
   private getKnowledgeChipForegroundColor(): ResourceColor {
+    if (this.isManuscriptMode) {
+      return this.knowledgeEnabled ? this.themePrimary : getAppUiState().themeTextSecondary
+    }
     if (this.knowledgeEnabled) {
       return this.themePrimary
     }
@@ -83,44 +116,90 @@ export struct ChatToolbar {
   }
 
   build() {
-    Row() {
-      if (this.toolSelectionAvailable) {
-        this.ToolImmersiveChip()
+    if (this.isManuscriptMode) {
+      Scroll() {
+        Row({ space: 8 }) {
+          if (this.toolSelectionAvailable) {
+            this.ToolImmersiveChip()
+          }
+
+          if (this.reasoningAvailable) {
+            this.ReasoningImmersiveChip()
+          }
+
+          this.KnowledgeImmersiveChip()
+        }
+        .padding(0)
       }
+      .width('100%')
+      .height(MANUSCRIPT_COMPOSER_TOOLBAR_HEIGHT)
+      .scrollable(ScrollDirection.Horizontal)
+      .scrollBar(BarState.Off)
+      .margin({ bottom: 6 })
+    } else {
+      Flex({
+        wrap: FlexWrap.Wrap,
+        space: { main: LengthMetrics.vp(6), cross: LengthMetrics.vp(6) }
+      }) {
+        if (this.toolSelectionAvailable) {
+          this.ToolImmersiveChip()
+        }
 
-      if (this.reasoningAvailable) {
-        this.ReasoningImmersiveChip()
+        if (this.reasoningAvailable) {
+          this.ReasoningImmersiveChip()
+        }
+
+        this.KnowledgeImmersiveChip()
       }
-
-      this.KnowledgeImmersiveChip()
-
-      Blank()
+      .width('100%')
+      .padding({ left: 2, right: 2, top: 2, bottom: 6 })
+      .margin({ bottom: 4 })
     }
-    .width('100%')
-    .height(this.getToolbarChipBarHeight())
-    .clip(false)
-    .margin({ bottom: 4 })
   }
 
   @Builder
   private ToolImmersiveChip() {
-    Button({ type: ButtonType.Normal, stateEffect: false }) {
-      this.ToolChipContent()
+    if (this.isManuscriptMode) {
+      Stack({ alignContent: Alignment.Center }) {
+        Button({ type: ButtonType.Normal, stateEffect: false }) {
+          this.ToolChipContent()
+        }
+        .width(this.getToolChipWidth())
+        .height(this.getToolbarChipBarHeight())
+        .padding(0)
+        .backgroundColor(Color.Transparent)
+        .borderRadius(0)
+        .border({ width: 0, color: Color.Transparent })
+        .onClick(() => {
+          this.onOpenTools()
+        })
+      }
+      .width(this.getToolChipWidth())
+      .height(this.getToolbarChipBarHeight())
+      .backgroundColor(Color.Transparent)
+      .borderRadius(this.getToolbarChipBarHeight() / 2)
+      .border({
+        width: { bottom: 1 },
+        color: this.hasSelectedTools ? this.manuscriptAccentDeep : this.manuscriptAccent
+      })
+    } else {
+      Button({ type: ButtonType.Normal, stateEffect: false }) {
+        this.ToolChipContent()
+      }
+      .width(this.getToolChipWidth())
+      .height(this.getToolbarChipBarHeight())
+      .padding(0)
+      .backgroundColor(Color.Transparent)
+      .borderRadius(Math.min(this.getToolChipWidth(), this.getToolbarChipBarHeight()) / 2)
+      .onClick(() => {
+        this.onOpenTools()
+      })
+      .systemMaterial(new uiMaterial.ImmersiveMaterial({
+        style: uiMaterial.ImmersiveStyle.REGULAR,
+        interactive: true,
+        lightEffect: { color: undefined }
+      }))
     }
-    .width(this.getToolChipWidth())
-    .height(this.getToolbarChipBarHeight())
-    .padding(0)
-    .backgroundColor(Color.Transparent)
-    .borderRadius(Math.min(this.getToolChipWidth(), this.getToolbarChipBarHeight()) / 2)
-    .clip(true)
-    .onClick(() => {
-      this.onOpenTools()
-    })
-    .systemMaterial(new uiMaterial.ImmersiveMaterial({
-      style: uiMaterial.ImmersiveStyle.REGULAR,
-      interactive: true,
-      lightEffect: { color: undefined }
-    }))
   }
 
   @Builder
@@ -131,7 +210,9 @@ export struct ChatToolbar {
         .fontColor([this.getToolChipForegroundColor()])
 
       Text($r('app.string.chat_toolbar_tools'))
-        .fontSize(14)
+        .fontFamily(this.isManuscriptMode ? MANUSCRIPT_BODY_FONT : '')
+        .fontSize(this.isManuscriptMode ? 11.5 : 14)
+        .letterSpacing(this.isManuscriptMode ? (isChineseAppLanguage() ? 1.3 : 0.2) : 0)
         .fontColor(this.getToolChipForegroundColor())
         .fontWeight(this.hasSelectedTools ? FontWeight.Medium : FontWeight.Regular)
         .maxLines(1)
@@ -147,37 +228,73 @@ export struct ChatToolbar {
 
   @Builder
   private ReasoningImmersiveChip() {
-    Button({ type: ButtonType.Normal, stateEffect: false }) {
-      this.ReasoningChipContent()
-    }
-    .width(this.getReasoningChipWidth())
-    .height(this.getToolbarChipBarHeight())
-    .padding(0)
-    .backgroundColor(Color.Transparent)
-    .borderRadius(Math.min(this.getReasoningChipWidth(), this.getToolbarChipBarHeight()) / 2)
-    .clip(true)
-    .onClick(() => {
-      this.showReasoningPanel = true
-    })
-    .bindSheet($$this.showReasoningPanel, this.ReasoningSliderSheet(), {
-      height: SheetSize.FIT_CONTENT,
-      dragBar: true,
-      showClose: false,
-      backgroundColor: Color.Transparent,
-      systemMaterial: new uiMaterial.ImmersiveMaterial({
-        style: uiMaterial.ImmersiveStyle.REGULAR
-      }),
-      preferType: SheetType.BOTTOM,
-      onDisappear: (): void => {
-        this.showReasoningPanel = false
+    if (this.isManuscriptMode) {
+      Stack({ alignContent: Alignment.Center }) {
+        Button({ type: ButtonType.Normal, stateEffect: false }) {
+          this.ReasoningChipContent()
+        }
+        .width(this.getReasoningChipWidth())
+        .height(this.getToolbarChipBarHeight())
+        .padding(0)
+        .backgroundColor(Color.Transparent)
+        .borderRadius(0)
+        .border({ width: 0, color: Color.Transparent })
+        .onClick(() => {
+          this.showReasoningPanel = true
+        })
       }
-    })
-    .systemMaterial(new uiMaterial.ImmersiveMaterial({
-      style: uiMaterial.ImmersiveStyle.REGULAR,
-      interactive: true,
-      lightEffect: { color: undefined }
-    }))
-    .margin({ left: this.toolSelectionAvailable ? 6 : 0 })
+      .width(this.getReasoningChipWidth())
+      .height(this.getToolbarChipBarHeight())
+      .backgroundColor(Color.Transparent)
+      .borderRadius(this.getToolbarChipBarHeight() / 2)
+      .border({
+        width: { bottom: 1 },
+        color: this.isReasoningEnabled() ? this.manuscriptAccentDeep : this.manuscriptAccent
+      })
+      .bindSheet($$this.showReasoningPanel, this.ReasoningSliderSheet(), {
+        height: SheetSize.FIT_CONTENT,
+        dragBar: true,
+        showClose: false,
+        backgroundColor: Color.Transparent,
+        systemMaterial: new uiMaterial.ImmersiveMaterial({
+          style: uiMaterial.ImmersiveStyle.REGULAR
+        }),
+        preferType: SheetType.BOTTOM,
+        onDisappear: (): void => {
+          this.showReasoningPanel = false
+        }
+      })
+    } else {
+      Button({ type: ButtonType.Normal, stateEffect: false }) {
+        this.ReasoningChipContent()
+      }
+      .width(this.getReasoningChipWidth())
+      .height(this.getToolbarChipBarHeight())
+      .padding(0)
+      .backgroundColor(Color.Transparent)
+      .borderRadius(Math.min(this.getReasoningChipWidth(), this.getToolbarChipBarHeight()) / 2)
+      .onClick(() => {
+        this.showReasoningPanel = true
+      })
+      .bindSheet($$this.showReasoningPanel, this.ReasoningSliderSheet(), {
+        height: SheetSize.FIT_CONTENT,
+        dragBar: true,
+        showClose: false,
+        backgroundColor: Color.Transparent,
+        systemMaterial: new uiMaterial.ImmersiveMaterial({
+          style: uiMaterial.ImmersiveStyle.REGULAR
+        }),
+        preferType: SheetType.BOTTOM,
+        onDisappear: (): void => {
+          this.showReasoningPanel = false
+        }
+      })
+      .systemMaterial(new uiMaterial.ImmersiveMaterial({
+        style: uiMaterial.ImmersiveStyle.REGULAR,
+        interactive: true,
+        lightEffect: { color: undefined }
+      }))
+    }
   }
 
   @Builder
@@ -188,21 +305,24 @@ export struct ChatToolbar {
         .fontColor([this.getReasoningChipForegroundColor()])
 
       Text($r('app.string.chat_toolbar_reasoning'))
-        .fontSize(14)
+        .fontFamily(this.isManuscriptMode ? MANUSCRIPT_BODY_FONT : '')
+        .fontSize(this.isManuscriptMode ? 11.5 : 14)
+        .letterSpacing(this.isManuscriptMode ? (isChineseAppLanguage() ? 1.3 : 0.2) : 0)
         .fontColor(this.getReasoningChipForegroundColor())
         .fontWeight(this.isReasoningEnabled() ? FontWeight.Medium : FontWeight.Regular)
         .maxLines(1)
         .textOverflow({ overflow: TextOverflow.Ellipsis })
-        .constraintSize({ maxWidth: 44 })
+        .constraintSize({ maxWidth: isChineseAppLanguage() ? 44 : 72 })
         .margin({ left: 4 })
 
       Text(this.getReasoningLevelText(this.reasoningLevel))
-        .fontSize(13)
+        .fontFamily(this.isManuscriptMode ? MANUSCRIPT_BODY_FONT : '')
+        .fontSize(this.isManuscriptMode ? 11 : 13)
         .fontColor(this.getReasoningChipForegroundColor())
         .fontWeight(this.isReasoningEnabled() ? FontWeight.Medium : FontWeight.Regular)
         .maxLines(1)
         .textOverflow({ overflow: TextOverflow.Ellipsis })
-        .constraintSize({ maxWidth: 34 })
+        .constraintSize({ maxWidth: isChineseAppLanguage() ? 34 : 52 })
         .margin({ left: 4 })
 
       SymbolGlyph($r('sys.symbol.chevron_up'))
@@ -221,52 +341,86 @@ export struct ChatToolbar {
 
   @Builder
   private KnowledgeImmersiveChip() {
-    Button({ type: ButtonType.Normal, stateEffect: false }) {
-      Row() {
-        SymbolGlyph($r('sys.symbol.externaldrive'))
-          .fontSize(16)
-          .fontColor([this.getKnowledgeChipForegroundColor()])
-
-        Text('知识库')
-          .fontSize(14)
-          .fontColor(this.getKnowledgeChipForegroundColor())
-          .fontWeight(this.knowledgeEnabled ? FontWeight.Medium : FontWeight.Regular)
-          .maxLines(1)
-          .textOverflow({ overflow: TextOverflow.Ellipsis })
-          .margin({ left: 4 })
-
-        SymbolGlyph(this.knowledgeEnabled
-          ? $r('sys.symbol.checkmark_circle_fill')
-          : $r('sys.symbol.xmark_circle_fill'))
-          .fontSize(14)
-          .fontColor([this.getKnowledgeChipForegroundColor()])
-          .margin({ left: 4 })
+    if (this.isManuscriptMode) {
+      Stack({ alignContent: Alignment.Center }) {
+        Button({ type: ButtonType.Normal, stateEffect: false }) {
+          this.KnowledgeChipContent()
+        }
+        .width(this.getKnowledgeChipWidth())
+        .height(this.getToolbarChipBarHeight())
+        .padding(0)
+        .backgroundColor(Color.Transparent)
+        .borderRadius(0)
+        .border({ width: 0, color: Color.Transparent })
+        .enabled(this.knowledgeAvailable)
+        .onClick(() => {
+          if (this.knowledgeAvailable) {
+            this.onKnowledgeToggle(!this.knowledgeEnabled)
+          }
+        })
       }
       .width(this.getKnowledgeChipWidth())
       .height(this.getToolbarChipBarHeight())
-      .padding({ left: 8, right: 8 })
-      .alignItems(VerticalAlign.Center)
-      .justifyContent(FlexAlign.Center)
+      .backgroundColor(Color.Transparent)
+      .borderRadius(this.getToolbarChipBarHeight() / 2)
+      .border({
+        width: { bottom: 1 },
+        color: this.knowledgeEnabled ? this.manuscriptAccentDeep : this.manuscriptAccent
+      })
+      .opacity(this.knowledgeAvailable ? 1 : 0.45)
+    } else {
+      Button({ type: ButtonType.Normal, stateEffect: false }) {
+        this.KnowledgeChipContent()
+      }
+      .width(this.getKnowledgeChipWidth())
+      .height(this.getToolbarChipBarHeight())
+      .padding(0)
+      .backgroundColor(Color.Transparent)
+      .borderRadius(Math.min(this.getKnowledgeChipWidth(), this.getToolbarChipBarHeight()) / 2)
+      .enabled(this.knowledgeAvailable)
+      .opacity(this.knowledgeAvailable ? 1 : 0.45)
+      .onClick(() => {
+        if (this.knowledgeAvailable) {
+          this.onKnowledgeToggle(!this.knowledgeEnabled)
+        }
+      })
+      .systemMaterial(new uiMaterial.ImmersiveMaterial({
+        style: uiMaterial.ImmersiveStyle.REGULAR,
+        interactive: this.knowledgeAvailable,
+        lightEffect: { color: undefined }
+      }))
+    }
+  }
+
+  @Builder
+  private KnowledgeChipContent() {
+    Row() {
+      SymbolGlyph($r('sys.symbol.externaldrive'))
+        .fontSize(16)
+        .fontColor([this.getKnowledgeChipForegroundColor()])
+
+      Text($r('app.string.tab_knowledge'))
+        .fontFamily(this.isManuscriptMode ? MANUSCRIPT_BODY_FONT : '')
+        .fontSize(this.isManuscriptMode ? 11.5 : 14)
+        .letterSpacing(this.isManuscriptMode ? (isChineseAppLanguage() ? 1.3 : 0.2) : 0)
+        .fontColor(this.getKnowledgeChipForegroundColor())
+        .fontWeight(this.knowledgeEnabled ? FontWeight.Medium : FontWeight.Regular)
+        .maxLines(1)
+        .textOverflow({ overflow: TextOverflow.Ellipsis })
+        .margin({ left: 4 })
+
+      SymbolGlyph(this.knowledgeEnabled
+        ? $r('sys.symbol.checkmark_circle_fill')
+        : $r('sys.symbol.xmark_circle_fill'))
+        .fontSize(14)
+        .fontColor([this.getKnowledgeChipForegroundColor()])
+        .margin({ left: 4 })
     }
     .width(this.getKnowledgeChipWidth())
     .height(this.getToolbarChipBarHeight())
-    .padding(0)
-    .backgroundColor(Color.Transparent)
-    .borderRadius(Math.min(this.getKnowledgeChipWidth(), this.getToolbarChipBarHeight()) / 2)
-    .clip(true)
-    .enabled(this.knowledgeAvailable)
-    .opacity(this.knowledgeAvailable ? 1 : 0.45)
-    .onClick(() => {
-      if (this.knowledgeAvailable) {
-        this.onKnowledgeToggle(!this.knowledgeEnabled)
-      }
-    })
-    .systemMaterial(new uiMaterial.ImmersiveMaterial({
-      style: uiMaterial.ImmersiveStyle.REGULAR,
-      interactive: this.knowledgeAvailable,
-      lightEffect: { color: undefined }
-    }))
-    .margin({ left: this.toolSelectionAvailable || this.reasoningAvailable ? 6 : 0 })
+    .padding({ left: 8, right: 8 })
+    .alignItems(VerticalAlign.Center)
+    .justifyContent(FlexAlign.Center)
   }
 
   private isReasoningEnabled(): boolean {

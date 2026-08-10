@@ -70,6 +70,7 @@ export class PreferenceKeys {
   static readonly CONTEXT_COMPACT_MAX_TOKENS: string = 'context_compact_max_tokens'
   // 主题配色
   static readonly COLOR_THEME: string = 'color_theme'
+  static readonly VISUAL_EFFECTS_MODE: string = 'visual_effects_mode'
 
   // 通知配置
   static readonly NOTIFY_ENABLED: string = 'notify_enabled'
@@ -428,6 +429,14 @@ export class PreferencesService {
   // 设置主题模式
   async setThemeMode(mode: ThemeMode): Promise<void> {
     await this.setString(PreferenceKeys.THEME_MODE, mode)
+  }
+
+  async getVisualEffectsMode(): Promise<string> {
+    return await this.getString(PreferenceKeys.VISUAL_EFFECTS_MODE, 'off')
+  }
+
+  async setVisualEffectsMode(mode: string): Promise<void> {
+    await this.setString(PreferenceKeys.VISUAL_EFFECTS_MODE, mode)
   }
 
   // 获取语言设置
