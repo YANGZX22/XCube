@@ -192,6 +192,8 @@ export function detectAndRegisterChatSerifFonts(uiContext: UIContext): ChatSerif
   if (!sourceHanSerifRegistered) {
     fontCollection.loadFontSync(SOURCE_HAN_SERIF_SC_ALIAS, $rawfile('fonts/SourceHanSerifSC-Regular.otf'))
     fontCollection.loadFontSync(SOURCE_HAN_SERIF_SC_ALIAS, $rawfile('fonts/SourceHanSerifSC-Bold.otf'))
+    fontCollection.loadFontSync(SOURCE_HAN_SERIF_SC_ALIAS, $rawfile('fonts/SourceHanSerifSC-Italic.ttf'))
+    fontCollection.loadFontSync(SOURCE_HAN_SERIF_SC_ALIAS, $rawfile('fonts/SourceHanSerifSC-ItalicBold.ttf'))
     sourceHanSerifRegistered = true
   }
 

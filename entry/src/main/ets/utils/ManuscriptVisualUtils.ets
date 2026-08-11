@@ -24,6 +24,9 @@ export function ensureManuscriptFonts(): void {
   fontCollection.loadFontSync(LORA_ALIAS, $rawfile('fonts/Manuscript/Lora-Regular.ttf'))
   fontCollection.loadFontSync(LORA_ALIAS, $rawfile('fonts/Manuscript/Lora-Italic.ttf'))
   fontCollection.loadFontSync(MANUSCRIPT_CJK_ALIAS, $rawfile('fonts/SourceHanSerifSC-Regular.otf'))
+  fontCollection.loadFontSync(MANUSCRIPT_CJK_ALIAS, $rawfile('fonts/SourceHanSerifSC-Bold.otf'))
+  fontCollection.loadFontSync(MANUSCRIPT_CJK_ALIAS, $rawfile('fonts/SourceHanSerifSC-Italic.ttf'))
+  fontCollection.loadFontSync(MANUSCRIPT_CJK_ALIAS, $rawfile('fonts/SourceHanSerifSC-ItalicBold.ttf'))
   manuscriptFontsRegistered = true
 }
 
