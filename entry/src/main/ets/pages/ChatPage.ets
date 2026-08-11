@@ -128,7 +128,13 @@ import {
   MIN_COMPACT_USAGE_PERCENT
 } from '../utils/ContextWindowUtils'
 import { ContextCompactionStatus } from '../services/ContextCompactionService'
-import { resolveSlashCommandId, SLASH_COMMAND_COMPACT } from '../utils/SlashCommandUtils'
+import {
+  resolveSlashCommandId,
+  SLASH_COMMAND_CANVAS,
+  SLASH_COMMAND_COMPACT,
+  SLASH_COMMAND_MODELS,
+  SLASH_COMMAND_REASONING
+} from '../utils/SlashCommandUtils'
 import { VisualEffectsMode } from '../models/ThemeColors'
 import { ensureManuscriptFonts, MANUSCRIPT_COMPACT_BAR_HEIGHT } from '../utils/ManuscriptVisualUtils'
 import { ImmersiveSheetHeader } from '../components/ImmersiveSheetHeader'
@@ -188,6 +194,7 @@ export struct ChatPage {
   @Local currentModel: string = ''
   @Local currentModelId: string = ''
   @Local currentAssistantId: string = DEFAULT_ASSISTANT_ID
+  @Local currentAssistantName: string = '默认助手'
   @Local currentAssistantAvatarSymbol: string = 'AI'
   @Local currentAssistantColor: string = DEFAULT_PRIMARY_COLOR
   @Local assistantAvatarRenderTick: number = 0
@@ -319,6 +326,7 @@ export struct ChatPage {
   @Local canvasMarkdownRenderToggle: boolean = false
   // 推理级别状态
   @Local reasoningLevel: ReasoningLevel = ReasoningLevel.OFF
+  @Local reasoningPanelOpenRequestTick: number = 0
   // 最近截图检测状态（由 ChatInputBar 回调设置，ScreenshotBanner 独立渲染）
   @Local hasRecentScreenshot: boolean = false
   // 是否为新建对话（用于加载和自动发送策略）
@@ -816,7 +824,8 @@ export struct ChatPage {
     this.pendingAttachments = [...loadResult.draftAttachments]
     this.isNewChatTransition = loadResult.isNewChatTransition
     this.isNewEmptySession = loadResult.isNewEmptySession
-    this.applyAssistantSnapshot(loadResult.assistantId, loadResult.assistantAvatarSymbol, loadResult.assistantColor)
+    this.applyAssistantSnapshot(loadResult.assistantId, loadResult.assistantName,
+      loadResult.assistantAvatarSymbol, loadResult.assistantColor)
 
     if (!this.isNewChatTransition) {
       this.replaceMessages(loadResult.messages)
@@ -828,8 +837,9 @@ export struct ChatPage {
     this.clearMessages()
   }
 
-  private applyAssistantSnapshot(assistantId: string, avatarSymbol: string, color: string): void {
+  private applyAssistantSnapshot(assistantId: string, assistantName: string, avatarSymbol: string, color: string): void {
     this.currentAssistantId = assistantId.trim() !== '' ? assistantId.trim() : DEFAULT_ASSISTANT_ID
+    this.currentAssistantName = assistantName.trim() !== '' ? assistantName.trim() : '默认助手'
     this.currentAssistantAvatarSymbol = normalizeAssistantAvatarValue(avatarSymbol)
     this.currentAssistantColor = color.trim() !== '' ? color.trim() : DEFAULT_PRIMARY_COLOR
     this.bumpAssistantAvatarRenderTick()
@@ -1513,10 +1523,10 @@ export struct ChatPage {
       return
     }
     if (assistant === null) {
-      this.applyAssistantSnapshot(DEFAULT_ASSISTANT_ID, 'AI', DEFAULT_PRIMARY_COLOR)
+      this.applyAssistantSnapshot(DEFAULT_ASSISTANT_ID, '默认助手', 'AI', DEFAULT_PRIMARY_COLOR)
       return
     }
-    this.applyAssistantSnapshot(assistant.id, assistant.avatarSymbol, assistant.color)
+    this.applyAssistantSnapshot(assistant.id, assistant.name, assistant.avatarSymbol, assistant.color)
   }
 
   private triggerPostLoadActions(): void {
@@ -3575,6 +3585,7 @@ export struct ChatPage {
           bottomPadding: this.getListBottomPadding(),
           topInsetHeight: this.getMessageListContentTopSpacerHeight(),
           currentModelId: this.currentModelId,
+          assistantName: this.currentAssistantName,
           assistantAvatarSymbol: this.currentAssistantAvatarSymbol,
           assistantAvatarColor: this.currentAssistantColor,
           assistantAvatarCacheKey: this.assistantAvatarRenderTick,
@@ -3757,6 +3768,7 @@ export struct ChatPage {
               reasoningAvailable: this.supportsReasoningForCurrentModel(),
               reasoningControlMode: this.getReasoningControlModeForCurrentModel(),
               reasoningXhighAvailable: this.supportsReasoningXhighForCurrentModel(),
+              reasoningPanelOpenRequestTick: this.reasoningPanelOpenRequestTick,
               onOpenTools: (): void => {
                 this.syncToolAvailabilityFromPreferences()
                   .catch((error: Object): void => {
@@ -5343,17 +5355,64 @@ export struct ChatPage {
     this.sendMessage()
   }
 
-  // 输入框斜杠命令入口（面板点选或直接发送 "/compact"）
+  // 输入框斜杠命令入口（面板点选或直接发送完整命令）
   private handleSlashCommand(commandId: string): void {
-    if (commandId !== SLASH_COMMAND_COMPACT) {
+    if (commandId !== SLASH_COMMAND_MODELS && commandId !== SLASH_COMMAND_REASONING &&
+      commandId !== SLASH_COMMAND_CANVAS && commandId !== SLASH_COMMAND_COMPACT) {
       return
     }
     // 命令原文不该留在草稿里
     this.clearDraftAutosaveTimer()
     this.inputText = ''
-    this.compactContextFromCommand().catch((error: Object): void => {
-      console.error('ChatPage', `Manual compaction failed: ${JSON.stringify(error)}`)
-    })
+
+    if (commandId === SLASH_COMMAND_MODELS) {
+      this.safeStopInputSession()
+      this.modelSheetActivePanel = 'selector'
+      this.isModelEditAdvancedExpanded = false
+      this.isModelSelectorVisible = true
+      return
+    }
+    if (commandId === SLASH_COMMAND_REASONING) {
+      if (!this.supportsReasoningForCurrentModel()) {
+        this.showChatSnack(pickLocalizedText(
+          '当前模型不支持推理强度设置',
+          'The current model does not support reasoning controls'
+        ), 2500, SnackBarTone.ERROR)
+        return
+      }
+      this.safeStopInputSession()
+      this.reasoningPanelOpenRequestTick++
+      return
+    }
+    if (commandId === SLASH_COMMAND_CANVAS) {
+      this.activateCanvasFromCommand().catch((error: Object): void => {
+        console.error('ChatPage', `Failed to activate Canvas: ${JSON.stringify(error)}`)
+        this.showChatSnack(pickLocalizedText(
+          'Canvas 激活失败，请重试',
+          'Failed to activate Canvas, try again'
+        ), 2500, SnackBarTone.ERROR)
+      })
+      return
+    }
+    if (commandId === SLASH_COMMAND_COMPACT) {
+      this.compactContextFromCommand().catch((error: Object): void => {
+        console.error('ChatPage', `Manual compaction failed: ${JSON.stringify(error)}`)
+      })
+    }
+  }
+
+  // /canvas：为当前会话创建（或恢复）Canvas，并立即展开工作区。
+  private async activateCanvasFromCommand(): Promise<void> {
+    const document = await this.canvasDocumentService.activateDocument('user', this.sessionId)
+    this.applyCanvasDocumentState(
+      document.title,
+      document.content,
+      document.revision,
+      document.updatedAt,
+      document.updatedBy,
+      document.activated
+    )
+    this.setCanvasPanelOpen(true)
   }
 
   // /compact：立刻把更早的历史压缩成摘要（只影响发送给模型的上下文，不动聊天记录）
@@ -5988,7 +6047,7 @@ export struct ChatPage {
     this.branchIndex = session.branchIndex
     this.branchCount = session.branchCount
     this.branchPointIndex = session.branchPointIndex
-    this.applyAssistantSnapshot(assistant.id, assistant.avatarSymbol, assistant.color)
+    this.applyAssistantSnapshot(assistant.id, assistant.name, assistant.avatarSymbol, assistant.color)
     // 重置标题状态
     this.isTitleGenerating = false
     this.titleGenerateFailed = false

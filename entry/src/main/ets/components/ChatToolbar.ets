@@ -23,6 +23,8 @@ export struct ChatToolbar {
   @Param reasoningXhighAvailable: boolean = false
   // 推理级别状态
   @Param reasoningLevel: ReasoningLevel = ReasoningLevel.OFF
+  // 父组件递增此值时，复用工具栏现有的推理强度 bindSheet。
+  @Param reasoningPanelOpenRequestTick: number = 0
   @Event onReasoningLevelChange: (value: ReasoningLevel) => void =
     (_value: ReasoningLevel): void => {}
   @Param knowledgeEnabled: boolean = false
@@ -31,6 +33,17 @@ export struct ChatToolbar {
     (_enabled: boolean): void => {}
   // 推理强度滑块面板是否展开
   @Local showReasoningPanel: boolean = false
+  private handledReasoningPanelOpenRequestTick: number = 0
+
+  @Monitor('reasoningPanelOpenRequestTick')
+  onReasoningPanelOpenRequestTickChanged(): void {
+    if (!this.reasoningAvailable || this.reasoningPanelOpenRequestTick <= 0 ||
+      this.reasoningPanelOpenRequestTick === this.handledReasoningPanelOpenRequestTick) {
+      return
+    }
+    this.handledReasoningPanelOpenRequestTick = this.reasoningPanelOpenRequestTick
+    this.showReasoningPanel = true
+  }
 
   private get themePrimary(): string {
     return getAppUiState().themePrimary

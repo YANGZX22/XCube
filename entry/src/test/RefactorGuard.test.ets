@@ -85,7 +85,10 @@ import { shouldShowAssistantMessageToolbar } from '../main/ets/utils/MessageBubb
 import {
   matchSlashCommands,
   resolveSlashCommandId,
-  SLASH_COMMAND_COMPACT
+  SLASH_COMMAND_CANVAS,
+  SLASH_COMMAND_COMPACT,
+  SLASH_COMMAND_MODELS,
+  SLASH_COMMAND_REASONING
 } from '../main/ets/utils/SlashCommandUtils'
 import {
   ContextCompactionStatus,
@@ -1167,9 +1170,12 @@ export default function refactorGuardTest() {
     })
 
     it('slashCommands_should_match_only_leading_slash_token', 0, () => {
-      expect(matchSlashCommands('/').length).assertEqual(1)
+      expect(matchSlashCommands('/').length).assertEqual(4)
       expect(matchSlashCommands('/comp')[0].id).assertEqual(SLASH_COMMAND_COMPACT)
       expect(matchSlashCommands('/COMPACT')[0].name).assertEqual('/compact')
+      expect(matchSlashCommands('/mod')[0].id).assertEqual(SLASH_COMMAND_MODELS)
+      expect(matchSlashCommands('/rea')[0].id).assertEqual(SLASH_COMMAND_REASONING)
+      expect(matchSlashCommands('/can')[0].id).assertEqual(SLASH_COMMAND_CANVAS)
       expect(matchSlashCommands('/unknown').length).assertEqual(0)
       // 正文里的斜杠（路径、日期）不应该弹出命令面板
       expect(matchSlashCommands('src/main/ets').length).assertEqual(0)
@@ -1216,6 +1222,9 @@ export default function refactorGuardTest() {
     it('slashCommands_should_resolve_exact_command_on_send', 0, () => {
       expect(resolveSlashCommandId('/compact')).assertEqual(SLASH_COMMAND_COMPACT)
       expect(resolveSlashCommandId('  /Compact  ')).assertEqual(SLASH_COMMAND_COMPACT)
+      expect(resolveSlashCommandId('/models')).assertEqual(SLASH_COMMAND_MODELS)
+      expect(resolveSlashCommandId(' /Reasoning ')).assertEqual(SLASH_COMMAND_REASONING)
+      expect(resolveSlashCommandId('/CANVAS')).assertEqual(SLASH_COMMAND_CANVAS)
       expect(resolveSlashCommandId('/compact now')).assertEqual('')
       expect(resolveSlashCommandId('compact')).assertEqual('')
     })

@@ -36,6 +36,7 @@ export struct ChatInputAreaSection {
   @Param reasoningControlMode: ReasoningControlMode = ReasoningControlMode.NONE
   @Param reasoningXhighAvailable: boolean = false
   @Param reasoningLevel: ReasoningLevel = ReasoningLevel.OFF
+  @Param reasoningPanelOpenRequestTick: number = 0
   @Event onReasoningLevelChange: (value: ReasoningLevel) => void =
     (_value: ReasoningLevel): void => {}
   @Param knowledgeEnabled: boolean = false
@@ -109,6 +110,9 @@ export struct ChatInputAreaSection {
         if (this.getVisibleSlashCommands().length > 0) {
           SlashCommandPanel({
             commands: this.getVisibleSlashCommands(),
+            currentModelId: this.currentModelId,
+            currentProviderId: this.currentProviderId,
+            currentModelName: this.currentModelName,
             onSelectCommand: (commandId: string): void => {
               this.onSlashCommand(commandId)
             }
@@ -125,6 +129,7 @@ export struct ChatInputAreaSection {
           reasoningControlMode: this.reasoningControlMode,
           reasoningXhighAvailable: this.reasoningXhighAvailable,
           reasoningLevel: this.reasoningLevel,
+          reasoningPanelOpenRequestTick: this.reasoningPanelOpenRequestTick,
           onReasoningLevelChange: (value: ReasoningLevel): void => {
             this.onReasoningLevelChange(value)
           },

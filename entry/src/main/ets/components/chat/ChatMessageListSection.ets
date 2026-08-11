@@ -29,6 +29,7 @@ export struct ChatMessageListSection {
   @Param bottomPadding: number = 0
   @Param topInsetHeight: number = 0
   @Param currentModelId: string = ''
+  @Param assistantName: string = '默认助手'
   @Param assistantAvatarSymbol: string = 'AI'
   @Param assistantAvatarColor: string = '#7A68F0'
   @Param assistantAvatarCacheKey: number = 0
@@ -340,6 +341,7 @@ export struct ChatMessageListSection {
                 renderSignature: item.renderSignature,
                 contentRenderSignature: item.contentRenderSignature,
                 currentModelId: this.currentModelId,
+                assistantName: this.assistantName,
                 assistantAvatarSymbol: item.assistantAvatarSymbol,
                 assistantAvatarColor: item.assistantAvatarColor,
                 assistantAvatarCacheKey: item.assistantAvatarCacheKey,

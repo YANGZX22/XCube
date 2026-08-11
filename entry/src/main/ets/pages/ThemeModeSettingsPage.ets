@@ -142,6 +142,7 @@ export struct ThemeAppearanceSettingsView {
 
   @Local currentTabIndex: number = TAB_INDEX_THEME
   @Local previewTabIndex: number = PREVIEW_TAB_INDEX_CHAT
+  @Local livePreviewExpanded: boolean = true
 
   private settingsManager = ServiceRegistry.settings()
   private appearanceTabsController: TabsController = new TabsController()
@@ -185,6 +186,16 @@ export struct ThemeAppearanceSettingsView {
 
   private isDetailPaneMode(): boolean {
     return this.settingsDetailPresentationMode === SettingsPagePresentationMode.DETAIL_PANE
+  }
+
+  private getLivePreviewHeight(): number {
+    return this.isManuscriptMode() ? 360 : 350
+  }
+
+  private toggleLivePreview(): void {
+    this.getUIContext().animateTo({ duration: 300, curve: Curve.EaseInOut }, () => {
+      this.livePreviewExpanded = !this.livePreviewExpanded
+    })
   }
 
   private getScrollBottomPadding(): number {
@@ -1188,6 +1199,14 @@ export struct ThemeAppearanceSettingsView {
         .width('100%')
 
         Column({ space: 8 }) {
+          Text('XCUBE')
+            .fontFamily(MANUSCRIPT_BODY_FONT)
+            .fontSize(8)
+            .fontWeight(FontWeight.Medium)
+            .fontColor(this.getManuscriptAccentDeep())
+            .letterSpacing(1.2)
+            .width('100%')
+
           this.PreviewReasoningBar()
 
           Text($r('app.string.font_preview_ai_message'))
@@ -1301,7 +1320,7 @@ export struct ThemeAppearanceSettingsView {
       this.MiniCurrentBottomNavigation()
     }
     .width('100%')
-    .height(this.isManuscriptMode() ? 360 : 350)
+    .height(this.getLivePreviewHeight())
     .backgroundColor(this.themeBackground)
     .borderRadius(this.isManuscriptMode() ? 3 : 22)
     .border({ width: 1, color: this.isManuscriptMode() ? getAppUiState().themeDivider : this.themePrimaryLight })
@@ -1310,12 +1329,73 @@ export struct ThemeAppearanceSettingsView {
   }
 
   @Builder
-  private LivePreviewSection() {
-    Column({ space: APPEARANCE_BLOCK_GAP }) {
-      this.SectionHeader($r('app.string.appearance_live_preview_title'),
-        $r('app.string.appearance_live_preview_desc'))
+  private LivePreviewHeader() {
+    Row({ space: 12 }) {
+      Column({ space: 4 }) {
+        Text($r('app.string.appearance_live_preview_title'))
+          .fontSize(18)
+          .fontWeight(FontWeight.Bold)
+          .fontColor($r('app.color.text_primary'))
+          .width('100%')
 
-      this.CurrentAppearancePreview()
+        Text($r('app.string.appearance_live_preview_desc'))
+          .fontSize(12)
+          .fontColor($r('app.color.text_secondary'))
+          .lineHeight(18)
+          .width('100%')
+      }
+      .layoutWeight(1)
+      .alignItems(HorizontalAlign.Start)
+
+      Row({ space: 3 }) {
+        Text(this.livePreviewExpanded ? $r('app.string.common_collapse') : $r('app.string.common_expand'))
+          .fontSize(11)
+          .fontWeight(FontWeight.Medium)
+          .fontColor(this.themePrimary)
+
+        SymbolGlyph($r('sys.symbol.chevron_down'))
+          .fontSize(12)
+          .fontColor([this.themePrimary])
+          .rotate({ angle: this.livePreviewExpanded ? 180 : 0 })
+          .animation({ duration: 220, curve: Curve.EaseOut })
+      }
+      .height(32)
+      .padding({ left: 10, right: 8 })
+      .borderRadius(16)
+      .backgroundColor(Color.Transparent)
+      .border({ width: 1, color: this.themePrimaryLight })
+      .systemMaterial(new uiMaterial.ImmersiveMaterial({
+        style: uiMaterial.ImmersiveStyle.ULTRA_THIN,
+        materialColor: Color.Transparent,
+        applyShadow: false,
+        interactive: true,
+        lightEffect: { color: undefined }
+      }))
+    }
+    .width('100%')
+    .alignItems(VerticalAlign.Center)
+    .onClick(() => {
+      this.toggleLivePreview()
+    })
+  }
+
+  @Builder
+  private LivePreviewSection() {
+    Column({ space: 0 }) {
+      this.LivePreviewHeader()
+
+      Blank()
+        .width('100%')
+        .height(this.livePreviewExpanded ? APPEARANCE_BLOCK_GAP : 0)
+
+      Column() {
+        this.CurrentAppearancePreview()
+      }
+      .width('100%')
+      .height(this.livePreviewExpanded ? this.getLivePreviewHeight() : 0)
+      .opacity(this.livePreviewExpanded ? 1 : 0)
+      .translate({ y: this.livePreviewExpanded ? 0 : -10 })
+      .clip(true)
     }
     .width('100%')
   }

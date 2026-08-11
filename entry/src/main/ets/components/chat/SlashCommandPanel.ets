@@ -1,14 +1,24 @@
 import { uiMaterial } from '@kit.ArkUI'
 import { getAppUiState } from '../../state/AppUiState'
 import { pickLocalizedText } from '../../utils/LocalizedTextUtils'
-import { SLASH_COMMAND_COMPACT, SlashCommandItem } from '../../utils/SlashCommandUtils'
+import {
+  SLASH_COMMAND_CANVAS,
+  SLASH_COMMAND_COMPACT,
+  SLASH_COMMAND_MODELS,
+  SLASH_COMMAND_REASONING,
+  SlashCommandItem
+} from '../../utils/SlashCommandUtils'
 import { withColorAlpha } from '../../utils/ColorAlphaUtils'
 import { VisualEffectsMode } from '../../models/ThemeColors'
+import { buildModelIconRenderData, ModelIconRenderData } from '../../utils/ModelIconRenderUtils'
 
 // 输入框上方的斜杠命令面板：输入 "/" 时浮出，点选后立即执行对应命令
 @ComponentV2
 export struct SlashCommandPanel {
   @Param commands: SlashCommandItem[] = []
+  @Param currentModelId: string = ''
+  @Param currentProviderId: string = ''
+  @Param currentModelName: string = ''
   @Event onSelectCommand: (commandId: string) => void = (_commandId: string): void => {}
   @Local pressedCommandId: string = ''
 
@@ -27,12 +37,31 @@ export struct SlashCommandPanel {
     if (commandId === SLASH_COMMAND_COMPACT) {
       return $r('sys.symbol.arrow_down_right_and_arrow_up_left')
     }
+    if (commandId === SLASH_COMMAND_REASONING) {
+      return $r('sys.symbol.lightbulb')
+    }
+    if (commandId === SLASH_COMMAND_CANVAS) {
+      return $r('sys.symbol.paintbrush_pointed_waveform')
+    }
     return $r('sys.symbol.bolt')
+  }
+
+  private getCurrentModelIcon(): ModelIconRenderData {
+    return buildModelIconRenderData(this.currentModelId, this.currentProviderId, this.currentModelName)
   }
 
   private getCommandTitle(commandId: string): string {
     if (commandId === SLASH_COMMAND_COMPACT) {
       return pickLocalizedText('压缩上下文', 'Compact context')
+    }
+    if (commandId === SLASH_COMMAND_MODELS) {
+      return pickLocalizedText('选择模型', 'Select model')
+    }
+    if (commandId === SLASH_COMMAND_REASONING) {
+      return pickLocalizedText('调整推理强度', 'Adjust reasoning effort')
+    }
+    if (commandId === SLASH_COMMAND_CANVAS) {
+      return pickLocalizedText('打开 Canvas', 'Open Canvas')
     }
     return commandId
   }
@@ -48,6 +77,15 @@ export struct SlashCommandPanel {
         '把更早的对话压缩成摘要，聊天记录不受影响',
         'Summarize earlier turns; your chat records stay unchanged'
       )
+    }
+    if (commandId === SLASH_COMMAND_MODELS) {
+      return pickLocalizedText('打开当前对话的模型选择面板', 'Open the model picker for this chat')
+    }
+    if (commandId === SLASH_COMMAND_REASONING) {
+      return pickLocalizedText('设置当前模型的推理级别', 'Set the reasoning level for the current model')
+    }
+    if (commandId === SLASH_COMMAND_CANVAS) {
+      return pickLocalizedText('激活并展开当前对话的 Canvas', 'Activate and expand Canvas for this chat')
     }
     return ''
   }
@@ -99,9 +137,26 @@ export struct SlashCommandPanel {
 
       Row() {
         Column() {
-          SymbolGlyph(this.getCommandSymbol(command.id))
-            .fontSize(16)
-            .fontColor([this.themePrimary])
+          if (command.id === SLASH_COMMAND_MODELS && this.getCurrentModelIcon().hasIcon()) {
+            if (this.getCurrentModelIcon().isRawfile()) {
+              Image($rawfile(this.getCurrentModelIcon().resourcePath))
+                .width(16)
+                .height(16)
+                .objectFit(ImageFit.Contain)
+                .fillColor(this.themePrimary)
+            } else {
+              Image(this.getCurrentModelIcon().resourcePath)
+                .width(16)
+                .height(16)
+                .objectFit(ImageFit.Contain)
+                .fillColor(this.themePrimary)
+            }
+          } else {
+            SymbolGlyph(command.id === SLASH_COMMAND_MODELS
+              ? $r('sys.symbol.ai_edit') : this.getCommandSymbol(command.id))
+              .fontSize(16)
+              .fontColor([this.themePrimary])
+          }
         }
         .width(28)
         .height(28)

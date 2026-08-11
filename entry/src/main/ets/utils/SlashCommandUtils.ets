@@ -2,6 +2,9 @@
 // 这里只放纯匹配逻辑，命令的实际执行由 ChatPage 负责。
 
 export const SLASH_COMMAND_COMPACT: string = 'compact'
+export const SLASH_COMMAND_MODELS: string = 'models'
+export const SLASH_COMMAND_REASONING: string = 'reasoning'
+export const SLASH_COMMAND_CANVAS: string = 'canvas'
 
 export class SlashCommandItem {
   id: string = ''
@@ -15,6 +18,9 @@ export class SlashCommandItem {
 }
 
 const SLASH_COMMANDS: SlashCommandItem[] = [
+  new SlashCommandItem(SLASH_COMMAND_MODELS),
+  new SlashCommandItem(SLASH_COMMAND_REASONING),
+  new SlashCommandItem(SLASH_COMMAND_CANVAS),
   new SlashCommandItem(SLASH_COMMAND_COMPACT)
 ]
 
@@ -42,7 +48,7 @@ export function matchSlashCommands(input: string): SlashCommandItem[] {
   return matched
 }
 
-// 直接发送 "/compact" 时按命令执行，而不是把命令原文当成消息发出去。
+// 直接发送一个完整命令时按命令执行，而不是把命令原文当成消息发出去。
 // 返回空串表示这段输入不是命令。
 export function resolveSlashCommandId(input: string): string {
   const normalized = input.trim().toLowerCase()

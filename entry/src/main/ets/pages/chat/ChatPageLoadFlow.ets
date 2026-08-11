@@ -25,6 +25,7 @@ export class ChatPageLoadResult {
   isNewChatTransition: boolean = true
   isNewEmptySession: boolean = false
   assistantId: string = DEFAULT_ASSISTANT_ID
+  assistantName: string = '默认助手'
   assistantAvatarSymbol: string = 'AI'
   assistantColor: string = DEFAULT_PRIMARY_COLOR
   branchIndex: number = 0
@@ -127,6 +128,7 @@ export class ChatPageLoadFlow {
 
   private applyAssistantSnapshot(result: ChatPageLoadResult, assistant: Assistant): void {
     result.assistantId = assistant.id !== '' ? assistant.id : DEFAULT_ASSISTANT_ID
+    result.assistantName = assistant.name.trim() !== '' ? assistant.name.trim() : '默认助手'
     result.assistantAvatarSymbol = assistant.avatarSymbol !== '' ? assistant.avatarSymbol : 'AI'
     result.assistantColor = assistant.color !== '' ? assistant.color : DEFAULT_PRIMARY_COLOR
   }

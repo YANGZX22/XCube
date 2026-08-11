@@ -90,6 +90,7 @@ export struct MessageBubble {
   @Param contentRenderSignature: string = ''
   @Param showHeader: boolean = true  // 是否显示消息头部（模型信息）
   @Param currentModelId: string = ''  // 当前会话的模型 ID（用于图标匹配回退）
+  @Param assistantName: string = '默认助手'
   @Param assistantAvatarSymbol: string = 'AI'
   @Param assistantAvatarColor: string = '#7A68F0'
   @Param assistantAvatarCacheKey: number = 0
@@ -143,6 +144,10 @@ export struct MessageBubble {
   }
   private get isManuscriptMode(): boolean {
     return getAppUiState().visualEffectsMode === VisualEffectsMode.MANUSCRIPT
+  }
+  private get manuscriptAssistantLabel(): string {
+    const name = this.assistantName.trim()
+    return (name !== '' ? name : 'AI').toUpperCase()
   }
   private get manuscriptAccent(): string {
     return this.isDarkMode ? '#C99A52' : '#B68235'
@@ -2191,7 +2196,18 @@ export struct MessageBubble {
         }
 
         // 内容区域 - 无气泡，全宽显示
-        Column() {
+        Column({ space: this.isManuscriptMode ? 5 : 0 }) {
+          if (this.isManuscriptMode) {
+            Text(this.manuscriptAssistantLabel)
+              .fontFamily(MANUSCRIPT_BODY_FONT)
+              .fontSize(10)
+              .fontWeight(FontWeight.Medium)
+              .fontColor(this.manuscriptAccentDeep)
+              .letterSpacing(2)
+              .width('100%')
+              .textAlign(TextAlign.Start)
+          }
+
           Column() {
             // ========== 工具调用区域 ==========
             if (this.message.hasToolCalls()) {
