@@ -101,6 +101,8 @@ export struct IndexBottomTabItem {
         .fontSize(10)
         .fontWeight(FontWeight.Medium)
         .fontColor(this.active ? this.themePrimary : $r('app.color.text_secondary'))
+        .maxLines(1)
+        .textOverflow({ overflow: TextOverflow.Ellipsis })
     }
     .width('100%')
     .height('100%')

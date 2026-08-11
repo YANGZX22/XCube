@@ -149,9 +149,10 @@ struct Index {
   private static readonly TAB_TITLE_BAR_HORIZONTAL_PADDING: number = 16
   private static readonly TAB_TITLE_CONTENT_HORIZONTAL_PADDING: number = 8
   private static readonly COMPACT_TABS_FLOATING_SIDE_MARGIN: number = 16
-  private static readonly COMPACT_TABS_WITH_ACTION_SMALL_WIDTH: number = 272
-  private static readonly COMPACT_TABS_WITH_ACTION_MEDIUM_WIDTH: number = 304
-  private static readonly COMPACT_TABS_WITH_ACTION_LARGE_WIDTH: number = 336
+  private static readonly COMPACT_TABS_FLOATING_TAB_OUTER_MARGIN: number = 12
+  private static readonly COMPACT_TABS_WITH_ACTION_SMALL_WIDTH: number = 284
+  private static readonly COMPACT_TABS_WITH_ACTION_MEDIUM_WIDTH: number = 316
+  private static readonly COMPACT_TABS_WITH_ACTION_LARGE_WIDTH: number = 348
   private static readonly COMPACT_MINI_BAR_WIDTH: number = 56
   private static readonly TAB_ASSISTANTS: number = INDEX_TAB_ASSISTANTS
   private static readonly TAB_CHAT: number = INDEX_TAB_CHAT
@@ -2114,12 +2115,14 @@ struct Index {
     } else if (this.windowWidthVp >= 440) {
       preferredWidth = Index.COMPACT_TABS_WITH_ACTION_MEDIUM_WIDTH
     }
-    if (this.windowWidthVp <= 0) {
-      return 220
+    const availableHostWidth = this.windowWidthVp > 0 ? this.windowWidthVp : this.compactBottomBarsWidthVp
+    if (availableHostWidth <= 0) {
+      return preferredWidth
     }
     const minimumGap = 8
-    const maximumAvailableWidth = this.windowWidthVp -
-      Index.COMPACT_TABS_FLOATING_SIDE_MARGIN * 2 -
+    const maximumAvailableWidth = availableHostWidth -
+      Index.COMPACT_TABS_FLOATING_SIDE_MARGIN -
+      Index.COMPACT_TABS_FLOATING_TAB_OUTER_MARGIN -
       Index.COMPACT_MINI_BAR_WIDTH -
       minimumGap
     return Math.min(preferredWidth, Math.max(208, maximumAvailableWidth))
@@ -2142,10 +2145,11 @@ struct Index {
 
   private getCompactTabBarX(): number {
     if (this.shouldPlaceCompactMiniBarOnLeft()) {
-      return Math.max(Index.COMPACT_TABS_FLOATING_SIDE_MARGIN,
-        this.getCompactBottomBarsWidth() - Index.COMPACT_TABS_FLOATING_SIDE_MARGIN - this.getCompactBottomTabBarWidth())
+      return Math.max(Index.COMPACT_TABS_FLOATING_TAB_OUTER_MARGIN,
+        this.getCompactBottomBarsWidth() - Index.COMPACT_TABS_FLOATING_TAB_OUTER_MARGIN -
+          this.getCompactBottomTabBarWidth())
     }
-    return Index.COMPACT_TABS_FLOATING_SIDE_MARGIN
+    return Index.COMPACT_TABS_FLOATING_TAB_OUTER_MARGIN
   }
 
   private handleCompactBottomBarsAreaChange(area: Area): void {
@@ -2340,7 +2344,7 @@ struct Index {
         Row() {
           this.TabBarAssistants()
         }
-        .layoutWeight(1)
+        .layoutWeight(this.isManuscriptMode() ? 1 : 1.12)
         .height('100%')
         .onClick(() => {
           this.switchToTab(Index.TAB_ASSISTANTS)
@@ -2349,7 +2353,7 @@ struct Index {
         Row() {
           this.TabBarChat()
         }
-        .layoutWeight(1)
+        .layoutWeight(this.isManuscriptMode() ? 1 : 0.76)
         .height('100%')
         .onClick(() => {
           this.switchToTab(Index.TAB_CHAT)
@@ -2358,7 +2362,7 @@ struct Index {
         Row() {
           this.TabBarKnowledge()
         }
-        .layoutWeight(1)
+        .layoutWeight(this.isManuscriptMode() ? 1 : 1.12)
         .height('100%')
         .onClick(() => {
           this.switchToTab(Index.TAB_KNOWLEDGE)
