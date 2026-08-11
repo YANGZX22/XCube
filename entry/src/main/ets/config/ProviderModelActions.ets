@@ -79,9 +79,9 @@ export function buildSelectedModelsWithPreservedConfig(existingModels: ModelInfo
     if (existingModel !== undefined) {
       newModels.push(existingModel)
     } else {
-      newModels.push(new ModelInfo(modelId, modelId, 4096, true, false))
+      // 未匹配到能力元数据时保持“未知”，不能用 4K 冒充真实上下文窗口。
+      newModels.push(new ModelInfo(modelId, modelId, 0, true, false))
     }
   }
   return newModels
 }
-

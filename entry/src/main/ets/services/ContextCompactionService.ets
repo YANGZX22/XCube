@@ -59,17 +59,20 @@ export class ContextCompactionRuntime {
   // 本次请求实际发送的持久化历史（活跃路径，含本轮用户消息）
   messages: ChatMessage[] = []
   contextWindowTokens: number = 0
+  requestInputTokens: number = 0
 
   constructor(
     requestId: string,
     sessionId: string,
     messages: ChatMessage[],
-    contextWindowTokens: number
+    contextWindowTokens: number,
+    requestInputTokens: number = 0
   ) {
     this.requestId = requestId
     this.sessionId = sessionId
     this.messages = messages
     this.contextWindowTokens = contextWindowTokens
+    this.requestInputTokens = Math.max(0, Math.round(requestInputTokens))
   }
 }
 
@@ -252,7 +255,8 @@ export class ContextCompactionService {
       summary,
       keepRecentTurns,
       runtime.contextWindowTokens,
-      true
+      true,
+      runtime.requestInputTokens
     )
     if (computed.applied) {
       this.pendingResults.set(runtime.requestId, computed)
@@ -301,12 +305,14 @@ export class ContextCompactionService {
     summary: string,
     keepRecentTurns: number,
     contextWindowTokens: number,
-    reserveTrailingTurn: boolean
+    reserveTrailingTurn: boolean,
+    requestInputTokens: number = 0
   ): ContextCompactionResult {
     const result = new ContextCompactionResult()
     result.sessionId = sessionId
 
-    const usedTokens = estimateMessagesTokens(messages)
+    const historyTokens = estimateMessagesTokens(messages)
+    const usedTokens = requestInputTokens > 0 ? requestInputTokens : historyTokens
     // 窗口已知时用量说了算：低于下限一律不压，高于下限即使只有一两条消息也放行
     const windowKnown = contextWindowTokens > 0
     const heavyEnough = isContextHeavyEnoughToCompact(usedTokens, contextWindowTokens)
@@ -332,7 +338,9 @@ export class ContextCompactionService {
     result.compactedMessageCount = anchorIndex + 1
     result.keptMessageCount = keptMessages.length
     result.beforeTokens = usedTokens
-    result.afterTokens = estimateMessagesTokens(keptMessages) + estimateExtraPromptTokens([summary])
+    const nonHistoryTokens = Math.max(0, usedTokens - historyTokens)
+    result.afterTokens = nonHistoryTokens + estimateMessagesTokens(keptMessages) +
+      estimateExtraPromptTokens([ContextCompactionService.buildSummaryRequestPrompt(summary)])
     result.message = '对话历史已压缩为摘要，请基于摘要继续回答用户当前的问题'
 
     console.info(

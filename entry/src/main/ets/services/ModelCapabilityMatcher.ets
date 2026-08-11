@@ -528,6 +528,10 @@ export class ModelCapabilityMatcher {
       entry.limit.context > 0) {
       model.contextLength = entry.limit.context
     }
+    // limit.output → 最大输出预算；上下文安全输入预算会据此预留空间。
+    if (entry.limit !== undefined && entry.limit !== null && entry.limit.output > 0) {
+      model.parameters.maxTokens = entry.limit.output
+    }
   }
 
   private applyKnownCapabilityFallback(model: ModelInfo): boolean {

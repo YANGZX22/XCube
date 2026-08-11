@@ -1,7 +1,9 @@
 import { http } from '@kit.NetworkKit'
-import { AIApiConfig, AIApiService, RequestMessage } from './AIApiService'
+import { AIApiConfig, AIApiService, RequestMessage, UsageInfo } from './AIApiService'
 import { ReasoningLevel, ToolCall, ToolDefinition, ToolResult } from '../models/ChatModels'
 import { createThrottle } from '../utils/ThrottleUtil'
+import { estimateTextTokens } from '../utils/ModelBillingUtils'
+import { resolveRequestMaxOutputTokens } from '../utils/ContextWindowUtils'
 
 export const SUB_AGENT_TOOL_ID: string = 'sub_agent'
 
@@ -43,6 +45,7 @@ export type SubAgentToolRunner = (
 // 让 ask_user 弹窗/结果栏、图表、Canvas、日程等交互式工具对用户可见
 export type SubAgentToolCallStarted = (toolCall: ToolCall) => void
 export type SubAgentToolCallCompleted = (toolCall: ToolCall, toolResult: ToolResult) => void
+export type SubAgentUsageCallback = (inputTokens: number, outputTokens: number, exact: boolean) => void
 
 // 子智能体运行时配置，由 ChatViewModel 在每次带工具的请求开始前注入
 export class SubAgentRuntimeConfig {
@@ -57,6 +60,8 @@ export class SubAgentRuntimeConfig {
   onToolCallStarted: SubAgentToolCallStarted
   onToolCallCompleted: SubAgentToolCallCompleted
   isCancelled: () => boolean
+  onUsage: SubAgentUsageCallback
+  contextWindowTokens: number
 
   constructor(
     apiConfig: AIApiConfig,
@@ -69,7 +74,9 @@ export class SubAgentRuntimeConfig {
     toolRunner: SubAgentToolRunner,
     onToolCallStarted: SubAgentToolCallStarted,
     onToolCallCompleted: SubAgentToolCallCompleted,
-    isCancelled: () => boolean
+    isCancelled: () => boolean,
+    onUsage: SubAgentUsageCallback,
+    contextWindowTokens: number = 0
   ) {
     this.apiConfig = apiConfig
     this.modelId = modelId
@@ -82,6 +89,8 @@ export class SubAgentRuntimeConfig {
     this.onToolCallStarted = onToolCallStarted
     this.onToolCallCompleted = onToolCallCompleted
     this.isCancelled = isCancelled
+    this.onUsage = onUsage
+    this.contextWindowTokens = contextWindowTokens
   }
 }
 
@@ -727,13 +736,38 @@ ${knowledgeSearchRule}
       let settled = false
       let cancelHandled = false
       let contentBuffer = ''
+      let actualInputTokens = -1
+      let actualOutputTokens = -1
       let httpRequest: http.HttpRequest | null = null
+      const estimatedInputTokens = apiService.estimateRequestInputTokens(
+        runtime.apiConfig,
+        messages,
+        runtime.modelId,
+        runtime.reasoningLevel,
+        tools.length > 0 ? tools : undefined,
+        true
+      )
+      const safeMaxOutputTokens = resolveRequestMaxOutputTokens(
+        runtime.maxTokens,
+        runtime.contextWindowTokens,
+        estimatedInputTokens
+      )
 
       const settle = (): void => {
         if (settled) {
           return
         }
         settled = true
+        let estimatedOutputTokens = estimateTextTokens(outcome.content)
+        for (let i = 0; i < outcome.toolCalls.length; i++) {
+          estimatedOutputTokens += estimateTextTokens(outcome.toolCalls[i].functionName)
+          estimatedOutputTokens += estimateTextTokens(outcome.toolCalls[i].arguments)
+        }
+        runtime.onUsage(
+          actualInputTokens >= 0 ? actualInputTokens : estimatedInputTokens,
+          actualOutputTokens >= 0 ? actualOutputTokens : estimatedOutputTokens,
+          actualInputTokens >= 0 && actualOutputTokens >= 0
+        )
         resolve(outcome)
       }
 
@@ -764,12 +798,17 @@ ${knowledgeSearchRule}
           settle()
         },
         runtime.temperature,
-        runtime.maxTokens,
+        safeMaxOutputTokens,
         undefined,
         undefined,
         runtime.reasoningLevel,
         tools.length > 0 ? tools : undefined,
-        tools.length > 0 ? 'auto' : 'none'
+        tools.length > 0 ? 'auto' : 'none',
+        undefined,
+        (usage: UsageInfo): void => {
+          actualInputTokens = Math.max(actualInputTokens, usage.prompt_tokens)
+          actualOutputTokens = Math.max(actualOutputTokens, usage.completion_tokens)
+        }
       )
     })
   }

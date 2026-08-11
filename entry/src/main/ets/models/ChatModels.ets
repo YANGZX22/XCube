@@ -527,6 +527,10 @@ export class ChatMessage {
   @Trace estimatedInputTokens: number
   @Trace estimatedOutputTokens: number
   @Trace estimatedCost: number
+  // 运行时字段：发送链路已按真实请求逐轮统计时，UI 计费回调不得再用可见历史覆盖。
+  @Trace tokenUsageTracked: boolean
+  // 仅当当前累计值全部来自供应商 usage 时为 true；不持久化，不影响历史统计。
+  @Trace tokenUsageExact: boolean
   // 推理内容（用于支持 o1, DeepSeek R1 等推理模型）
   @Trace reasoningContent: string
   // 对话树父消息 ID（指向对话链中的前驱消息，根消息为空）
@@ -571,6 +575,8 @@ export class ChatMessage {
     this.estimatedInputTokens = 0
     this.estimatedOutputTokens = 0
     this.estimatedCost = 0
+    this.tokenUsageTracked = false
+    this.tokenUsageExact = false
     this.reasoningContent = ''
     this.parentId = ''
     this.versionIndex = 0
@@ -652,7 +658,7 @@ export class ModelInfo {
   constructor(
     id: string,
     name: string,
-    contextLength: number = 4096,
+    contextLength: number = 0,
     isEnabled: boolean = false,
     isRecommended: boolean = false
   ) {

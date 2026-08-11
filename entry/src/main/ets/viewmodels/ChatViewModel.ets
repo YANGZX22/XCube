@@ -5,7 +5,8 @@ import {
   AIApiConfig,
   RequestMessage,
   AIApiResult,
-  ToolCallDelta
+  ToolCallDelta,
+  UsageInfo
 } from '../services/AIApiService'
 import { getAppStateManager, AppStateManager } from './AppStateManager'
 import { getAITaskService, AITaskService } from '../services/AITaskService'
@@ -22,7 +23,7 @@ import { appendSubAgentResultTool } from '../config/BuiltinTools'
 import { getProviderViewModel, ProviderViewModel } from './ProviderViewModel'
 import { getAssistantService, AssistantService, AssistantRuntimeConfig } from '../services/AssistantService'
 import { getSkillService, SkillConfig } from '../services/SkillService'
-import { ChatMessage, ChatSession, MessageRole, ProviderType, ApiStyle, MessageAttachment, AttachmentType, ReasoningLevel, ToolDefinition, ToolCall, ToolResult, SearchReference, ModelParameters, ModelProvider } from '../models/ChatModels'
+import { ChatMessage, ChatSession, MessageRole, ProviderType, ApiStyle, OpenAITransport, MessageAttachment, AttachmentType, ReasoningLevel, ToolDefinition, ToolCall, ToolResult, SearchReference, ModelParameters, ModelProvider } from '../models/ChatModels'
 import { WebSearchResult, SearchResult, getWebSearchService } from '../services/WebSearchService'
 import { http } from '@kit.NetworkKit'
 import { HttpRequestController } from '../services/HttpService'
@@ -57,7 +58,7 @@ import {
   KNOWLEDGE_SEARCH_MAX_CALLS_PER_USER_TURN,
   KNOWLEDGE_SEARCH_TOOL_ID
 } from '../config/KnowledgeSearchTool'
-import { COMPACT_TOOL_ID } from '../config/CompactTool'
+import { COMPACT_TOOL_ID, createCompactToolDefinition } from '../config/CompactTool'
 import {
   COMPACT_SUMMARY_PROMPT_MARKER,
   ContextCompactionResult,
@@ -68,11 +69,13 @@ import {
 } from '../services/ContextCompactionService'
 import { ReasoningRequestStrategy } from '../services/ProviderCompatibilityRegistry'
 import {
-  computeContextUsage,
+  buildContextUsageFromRequestTokens,
   ContextUsage,
   formatTokenCount,
-  resolveContextWindowTokens
+  resolveContextWindowTokens,
+  resolveRequestMaxOutputTokens
 } from '../utils/ContextWindowUtils'
+import { estimateTextTokens, RequestTokenUsageTracker } from '../utils/ModelBillingUtils'
 
 // 标题生成状态
 export interface TitleGenerationCallbacks {
@@ -678,7 +681,11 @@ export class ChatViewModel {
     return new CompactedHistoryPlan(contextStartIndex)
   }
 
-  private buildConversationRequestHistory(messages: ChatMessage[], contextStartIndex: number): RequestMessage[] {
+  private buildConversationRequestHistory(
+    messages: ChatMessage[],
+    contextStartIndex: number,
+    preserveToolProtocol: boolean = false
+  ): RequestMessage[] {
     const historyMessages: RequestMessage[] = []
     const plan = this.resolveCompactedHistoryPlan(messages, contextStartIndex)
     if (plan.summaryPrompt !== '') {
@@ -687,6 +694,41 @@ export class ChatViewModel {
     for (let i = plan.startIndex; i < messages.length; i++) {
       const msg = messages[i]
       if (msg.role === MessageRole.SYSTEM) {
+        continue
+      }
+      if (preserveToolProtocol && msg.role === MessageRole.ASSISTANT && msg.toolCalls.length > 0) {
+        // ChatMessage 为展示把多轮工具过程折叠在一条气泡里；请求历史必须还原为
+        // assistant(tool_calls) -> tool results -> assistant(final) 的合法协议顺序。
+        // 取消/异常请求可能只持久化了半组工具事件；仅还原有配对结果的调用，避免协议 400。
+        const matchedToolCalls: ToolCall[] = []
+        const matchedToolResults: ToolResult[] = []
+        for (let j = 0; j < msg.toolCalls.length; j++) {
+          for (let k = 0; k < msg.toolResults.length; k++) {
+            if (msg.toolResults[k].toolCallId === msg.toolCalls[j].id) {
+              matchedToolCalls.push(msg.toolCalls[j])
+              matchedToolResults.push(msg.toolResults[k])
+              break
+            }
+          }
+        }
+        if (matchedToolCalls.length > 0) {
+          historyMessages.push(RequestMessage.createAssistantWithToolCalls('', matchedToolCalls))
+        }
+        for (let j = 0; j < matchedToolResults.length; j++) {
+          historyMessages.push(RequestMessage.createToolResultMessage(
+            matchedToolResults[j].toolCallId,
+            matchedToolResults[j].content
+          ))
+        }
+        if (msg.content !== '' || msg.reasoningContent !== '' || msg.attachments.length > 0) {
+          const finalAssistant = new RequestMessage(
+            msg.role,
+            msg.content,
+            this.cloneAttachments(msg.attachments)
+          )
+          finalAssistant.reasoningContent = msg.reasoningContent
+          historyMessages.push(finalAssistant)
+        }
         continue
       }
       const requestMessage = new RequestMessage(msg.role, msg.content, this.cloneAttachments(msg.attachments))
@@ -714,22 +756,48 @@ export class ChatViewModel {
     return 0
   }
 
-  // 估算本次请求发送出去的上下文用量（已应用当前会话的压缩摘要）
+  private getConfiguredMaxOutputTokens(providerId: string, modelId: string): number {
+    const appDefault = Math.max(1, this.appStateManager.getDefaultMaxTokens())
+    const parameters = this.getCurrentModelParameters(providerId, modelId)
+    if (parameters !== null && Number.isFinite(parameters.maxTokens) && parameters.maxTokens > 0) {
+      return Math.min(appDefault, Math.floor(parameters.maxTokens))
+    }
+    return appDefault
+  }
+
+  // 直接按最终 RequestMessage 与工具 schema 计算，避免 ChatMessage 展示结构与 API 结构不一致。
   private computeRequestContextUsage(
-    messages: ChatMessage[],
+    apiConfig: AIApiConfig,
+    requestMessages: RequestMessage[],
     providerId: string,
     modelId: string,
-    systemPrompt: string
+    reasoningLevel: ReasoningLevel,
+    tools?: ToolDefinition[],
+    includeUnloadedAttachments: boolean = false
   ): ContextUsage {
-    const session = this.currentSession
     const compactionService = getContextCompactionService()
-    return computeContextUsage(
-      messages,
+    const usedTokens = this.aiApiService.estimateRequestInputTokens(
+      apiConfig,
+      requestMessages,
+      modelId,
+      reasoningLevel,
+      tools,
+      tools !== undefined && tools.length > 0,
+      includeUnloadedAttachments
+    )
+    let compacted = false
+    for (let i = 0; i < requestMessages.length; i++) {
+      if (requestMessages[i].content.indexOf(COMPACT_SUMMARY_PROMPT_MARKER) >= 0) {
+        compacted = true
+        break
+      }
+    }
+    return buildContextUsageFromRequestTokens(
+      usedTokens,
       this.getCurrentModelContextWindow(providerId, modelId),
+      this.getConfiguredMaxOutputTokens(providerId, modelId),
       compactionService.getThresholdPercent(),
-      session !== null ? session.contextSummary : '',
-      session !== null ? session.contextSummaryAnchorId : '',
-      [systemPrompt]
+      compacted
     )
   }
 
@@ -855,9 +923,54 @@ export class ChatViewModel {
     }
   }
 
-  // 供 UI 与发送前判定读取的上下文用量（基于已有历史，不含本轮尚未发送的输入）
-  getContextUsage(providerId: string, modelId: string, messages: ChatMessage[]): ContextUsage {
-    return this.computeRequestContextUsage(messages, providerId, modelId, '')
+  // 供 UI 与发送前判定读取。可传入待发送内容/附件/工具，压缩判定因此包含本轮输入。
+  async getContextUsage(
+    providerId: string,
+    modelId: string,
+    messages: ChatMessage[],
+    pendingContent: string = '',
+    pendingAttachments: MessageAttachment[] = [],
+    tools: ToolDefinition[] = []
+  ): Promise<ContextUsage> {
+    const provider = this.providerViewModel.getProviderById(providerId)
+    if (provider === null) {
+      return new ContextUsage()
+    }
+    const requestMessages: RequestMessage[] = []
+    const systemPrompt = await this.buildRequestSystemPrompt()
+    if (systemPrompt !== '') {
+      requestMessages.push(new RequestMessage('system', systemPrompt))
+    }
+    const preserveToolProtocol = provider.apiStyle === ApiStyle.OPENAI &&
+      (tools.length > 0 || provider.openaiTransport !== OpenAITransport.RESPONSES)
+    const history = this.buildConversationRequestHistory(messages, 0, preserveToolProtocol)
+    for (let i = 0; i < history.length; i++) {
+      requestMessages.push(history[i])
+    }
+    if (pendingContent !== '' || pendingAttachments.length > 0) {
+      requestMessages.push(new RequestMessage('user', pendingContent, this.cloneAttachments(pendingAttachments)))
+    }
+    const apiConfig: AIApiConfig = {
+      providerId: provider.id,
+      providerType: provider.type,
+      apiStyle: provider.apiStyle,
+      apiKey: '',
+      baseUrl: provider.baseUrl,
+      apiPath: provider.apiPath !== '' ? provider.apiPath : undefined,
+      openaiTransport: this.getOpenAITransportForProvider(provider.id),
+      customHeadersJson: provider.customHeadersJson !== '' ? provider.customHeadersJson : undefined
+    }
+    apiConfig.modelReasoningStrategyOverride = this.getCurrentModelReasoningStrategyOverride(providerId, modelId)
+    apiConfig.modelSupportsReasoning = this.getCurrentModelSupportsReasoning(providerId, modelId)
+    return this.computeRequestContextUsage(
+      apiConfig,
+      requestMessages,
+      providerId,
+      modelId,
+      ReasoningLevel.OFF,
+      tools.length > 0 ? tools : undefined,
+      true
+    )
   }
 
   // 用户在输入框执行 /compact：单独向当前模型请求一段摘要，
@@ -980,12 +1093,24 @@ export class ChatViewModel {
 
     try {
       // 流式解析状态是实例级的，摘要请求用独立实例，避免污染正在进行的对话请求
-      const apiResult = await AIApiService.createIsolated().sendChatRequest(
+      const isolatedApiService = AIApiService.createIsolated()
+      const estimatedInputTokens = isolatedApiService.estimateRequestInputTokens(
+        apiConfig,
+        requestMessages,
+        modelId,
+        ReasoningLevel.OFF
+      )
+      const safeMaxOutputTokens = resolveRequestMaxOutputTokens(
+        this.getConfiguredMaxOutputTokens(provider.id, modelId),
+        this.getCurrentModelContextWindow(provider.id, modelId),
+        estimatedInputTokens
+      )
+      const apiResult = await isolatedApiService.sendChatRequest(
         apiConfig,
         requestMessages,
         modelId,
         0.3,
-        this.appStateManager.getDefaultMaxTokens()
+        safeMaxOutputTokens
       )
       if (!apiResult.success) {
         console.error('ChatViewModel', `Manual compaction summary failed: ${apiResult.errorMessage}`)
@@ -1004,12 +1129,26 @@ export class ChatViewModel {
   }
 
   // 是否需要在本次请求中曝光 compact 工具并注入压缩提醒
-  shouldSuggestCompaction(providerId: string, modelId: string, messages: ChatMessage[]): boolean {
+  async shouldSuggestCompaction(
+    providerId: string,
+    modelId: string,
+    messages: ChatMessage[],
+    pendingContent: string = '',
+    pendingAttachments: MessageAttachment[] = [],
+    tools: ToolDefinition[] = []
+  ): Promise<boolean> {
     const compactionService = getContextCompactionService()
     if (!compactionService.isEnabled()) {
       return false
     }
-    return this.getContextUsage(providerId, modelId, messages).overThreshold
+    return (await this.getContextUsage(
+      providerId,
+      modelId,
+      messages,
+      pendingContent,
+      pendingAttachments,
+      tools
+    )).overThreshold
   }
 
   // 判断待持久化消息是否包含有效内容（空占位消息不应跨会话残留）
@@ -1284,7 +1423,9 @@ export class ChatViewModel {
     const parentage = this.resolveSendParentage(messages)
     // 分叉模式下 messages 末条是被重发的用户消息，构建历史时需排除它（其内容作为本轮 user 消息）
     const historySource = this.buildForkAwareHistorySource(messages, parentage.forkContext)
-    const historyMessages = this.buildConversationRequestHistory(historySource, contextStartIndex)
+    const preserveToolProtocol = apiStyle === ApiStyle.OPENAI &&
+      this.getOpenAITransportForProvider(providerId) !== OpenAITransport.RESPONSES
+    const historyMessages = this.buildConversationRequestHistory(historySource, contextStartIndex, preserveToolProtocol)
     const requestAttachments = await this.prepareOutgoingAttachments(attachments)
     const effectiveRequestContent = requestContent !== '' ? requestContent : content
     if (this.isCancelled(cancelSnapshot)) {
@@ -1392,6 +1533,22 @@ export class ChatViewModel {
       return
     }
 
+    const usageTracker = new RequestTokenUsageTracker()
+    const estimatedRequestInput = this.aiApiService.estimateRequestInputTokens(
+      apiConfig,
+      requestMessages,
+      modelId,
+      reasoningLevel
+    )
+    usageTracker.beginRound(estimatedRequestInput)
+    usageTracker.applyToMessage(aiMessage)
+    onAIMessageUpdated(aiMessage)
+    const requestMaxOutputTokens = resolveRequestMaxOutputTokens(
+      this.getConfiguredMaxOutputTokens(providerId, modelId),
+      this.getCurrentModelContextWindow(providerId, modelId),
+      estimatedRequestInput
+    )
+
     // 每请求独立的状态（通过闭包隔离）
     let cancelled = false
     let userCancelled = false
@@ -1468,6 +1625,8 @@ export class ChatViewModel {
         })
 
         this.fillEmptyAIContentPlaceholder(aiMessage)
+        usageTracker.finishRound(estimateTextTokens(aiMessage.content) + estimateTextTokens(aiMessage.reasoningContent))
+        usageTracker.applyToMessage(aiMessage)
         aiMessage.isGenerating = false
         onAIMessageUpdated(aiMessage)
 
@@ -1516,6 +1675,8 @@ export class ChatViewModel {
             onAIMessageUpdated(aiMessage)
           }
         })
+        usageTracker.finishRound(estimateTextTokens(aiMessage.content) + estimateTextTokens(aiMessage.reasoningContent))
+        usageTracker.applyToMessage(aiMessage)
         this.fillEmptyAIContentPlaceholder(aiMessage, error)
         aiMessage.isGenerating = false
         onAIMessageUpdated(aiMessage)
@@ -1530,7 +1691,7 @@ export class ChatViewModel {
         this.unregisterActiveRequest(requestId)
       },
 	      requestTemperature,
-      this.appStateManager.getDefaultMaxTokens(),
+      requestMaxOutputTokens,
       (reasoningContent: string) => {
         if (cancelled) {
           return
@@ -1553,7 +1714,12 @@ export class ChatViewModel {
           console.error('ChatViewModel', `Failed to save AI generated image: ${JSON.stringify(error)}`)
         }
       },
-      reasoningLevel
+      reasoningLevel,
+      (usage: UsageInfo): void => {
+        usageTracker.updateCurrentRoundUsage(usage.prompt_tokens, usage.completion_tokens)
+        usageTracker.applyToMessage(aiMessage)
+        onAIMessageUpdated(aiMessage)
+      }
     )
 
     // 注册到活跃请求 Map
@@ -1610,7 +1776,9 @@ export class ChatViewModel {
     const parentage = this.resolveSendParentage(messages)
     // 分叉模式下 messages 末条是被重发的用户消息，构建历史时需排除它
     const historySource = this.buildForkAwareHistorySource(messages, parentage.forkContext)
-    const historyMessages = this.buildConversationRequestHistory(historySource, contextStartIndex)
+    const preserveToolProtocol = apiStyle === ApiStyle.OPENAI &&
+      this.getOpenAITransportForProvider(providerId) !== OpenAITransport.RESPONSES
+    const historyMessages = this.buildConversationRequestHistory(historySource, contextStartIndex, preserveToolProtocol)
     const requestAttachments = await this.prepareOutgoingAttachments(attachments)
     if (this.isCancelled(cancelSnapshot)) {
       return
@@ -1695,6 +1863,22 @@ ${webContext.content}
       return
     }
 
+    const usageTracker = new RequestTokenUsageTracker()
+    const estimatedRequestInput = this.aiApiService.estimateRequestInputTokens(
+      apiConfig,
+      requestMessages,
+      modelId,
+      ReasoningLevel.OFF
+    )
+    usageTracker.beginRound(estimatedRequestInput)
+    usageTracker.applyToMessage(aiMessage)
+    onAIMessageUpdated(aiMessage)
+    const requestMaxOutputTokens = resolveRequestMaxOutputTokens(
+      this.getConfiguredMaxOutputTokens(providerId, modelId),
+      this.getCurrentModelContextWindow(providerId, modelId),
+      estimatedRequestInput
+    )
+
     // 每请求独立的状态（通过闭包隔离）
     let cancelled = false
     let userCancelled = false
@@ -1768,6 +1952,8 @@ ${webContext.content}
           }
         })
         this.fillEmptyAIContentPlaceholder(aiMessage)
+        usageTracker.finishRound(estimateTextTokens(aiMessage.content) + estimateTextTokens(aiMessage.reasoningContent))
+        usageTracker.applyToMessage(aiMessage)
         aiMessage.isGenerating = false
         onAIMessageUpdated(aiMessage)
         if (snapshotSession !== null) {
@@ -1814,6 +2000,8 @@ ${webContext.content}
             onAIMessageUpdated(aiMessage)
           }
         })
+        usageTracker.finishRound(estimateTextTokens(aiMessage.content) + estimateTextTokens(aiMessage.reasoningContent))
+        usageTracker.applyToMessage(aiMessage)
         this.fillEmptyAIContentPlaceholder(aiMessage, error)
         aiMessage.isGenerating = false
         onAIMessageUpdated(aiMessage)
@@ -1828,7 +2016,7 @@ ${webContext.content}
         this.unregisterActiveRequest(requestId)
       },
 	      requestTemperature,
-      this.appStateManager.getDefaultMaxTokens(),
+      requestMaxOutputTokens,
       (reasoningContent: string) => {
         if (cancelled) {
           return
@@ -1850,6 +2038,12 @@ ${webContext.content}
         } catch (error) {
           console.error('ChatViewModel', `Failed to save AI generated image: ${JSON.stringify(error)}`)
         }
+      },
+      ReasoningLevel.OFF,
+      (usage: UsageInfo): void => {
+        usageTracker.updateCurrentRoundUsage(usage.prompt_tokens, usage.completion_tokens)
+        usageTracker.applyToMessage(aiMessage)
+        onAIMessageUpdated(aiMessage)
       }
     )
 
@@ -1908,7 +2102,9 @@ ${webContext.content}
     const parentage = this.resolveSendParentage(messages)
     // 分叉模式下 messages 末条是被重发的用户消息，构建历史时需排除它
     const historySource = this.buildForkAwareHistorySource(messages, parentage.forkContext)
-    const historyMessages = this.buildConversationRequestHistory(historySource, contextStartIndex)
+    const preserveToolProtocol = apiStyle === ApiStyle.OPENAI &&
+      this.getOpenAITransportForProvider(providerId) !== OpenAITransport.RESPONSES
+    const historyMessages = this.buildConversationRequestHistory(historySource, contextStartIndex, preserveToolProtocol)
     const requestAttachments = await this.prepareOutgoingAttachments(attachments)
     if (this.isCancelled(cancelSnapshot)) {
       return
@@ -2023,6 +2219,22 @@ ${limitedSearchContext}
       return
     }
 
+    const usageTracker = new RequestTokenUsageTracker()
+    const estimatedRequestInput = this.aiApiService.estimateRequestInputTokens(
+      apiConfig,
+      requestMessages,
+      modelId,
+      ReasoningLevel.OFF
+    )
+    usageTracker.beginRound(estimatedRequestInput)
+    usageTracker.applyToMessage(aiMessage)
+    onAIMessageUpdated(aiMessage)
+    const requestMaxOutputTokens = resolveRequestMaxOutputTokens(
+      this.getConfiguredMaxOutputTokens(providerId, modelId),
+      this.getCurrentModelContextWindow(providerId, modelId),
+      estimatedRequestInput
+    )
+
     // 每请求独立的状态（通过闭包隔离）
     let cancelled = false
     let userCancelled = false
@@ -2096,6 +2308,8 @@ ${limitedSearchContext}
           }
         })
         this.fillEmptyAIContentPlaceholder(aiMessage)
+        usageTracker.finishRound(estimateTextTokens(aiMessage.content) + estimateTextTokens(aiMessage.reasoningContent))
+        usageTracker.applyToMessage(aiMessage)
         aiMessage.isGenerating = false
         onAIMessageUpdated(aiMessage)
         if (snapshotSession !== null) {
@@ -2142,6 +2356,8 @@ ${limitedSearchContext}
             onAIMessageUpdated(aiMessage)
           }
         })
+        usageTracker.finishRound(estimateTextTokens(aiMessage.content) + estimateTextTokens(aiMessage.reasoningContent))
+        usageTracker.applyToMessage(aiMessage)
         this.fillEmptyAIContentPlaceholder(aiMessage, error)
         aiMessage.isGenerating = false
         onAIMessageUpdated(aiMessage)
@@ -2156,7 +2372,7 @@ ${limitedSearchContext}
         this.unregisterActiveRequest(requestId)
       },
 	      requestTemperature,
-      this.appStateManager.getDefaultMaxTokens(),
+      requestMaxOutputTokens,
       (reasoningContent: string) => {
         if (cancelled) {
           return
@@ -2179,7 +2395,12 @@ ${limitedSearchContext}
           console.error('ChatViewModel', `Failed to save AI generated image: ${JSON.stringify(error)}`)
         }
       },
-      reasoningLevel
+      reasoningLevel,
+      (usage: UsageInfo): void => {
+        usageTracker.updateCurrentRoundUsage(usage.prompt_tokens, usage.completion_tokens)
+        usageTracker.applyToMessage(aiMessage)
+        onAIMessageUpdated(aiMessage)
+      }
     )
 
     // 注册到活跃请求 Map
@@ -2244,7 +2465,11 @@ ${limitedSearchContext}
     const parentage = this.resolveSendParentage(messages)
     // 分叉模式下 messages 末条是被重发的用户消息，构建历史时需排除它（其内容作为本轮 user 消息）
     const historySource = this.buildForkAwareHistorySource(messages, parentage.forkContext)
-    const historyMessages = this.buildConversationRequestHistory(historySource, contextStartIndex)
+    const historyMessages = this.buildConversationRequestHistory(
+      historySource,
+      contextStartIndex,
+      apiStyle === ApiStyle.OPENAI
+    )
     const requestAttachments = await this.prepareOutgoingAttachments(attachments)
     const effectiveRequestContent = requestContent !== '' ? requestContent : content
     if (this.isCancelled(cancelSnapshot)) {
@@ -2317,7 +2542,7 @@ ${limitedSearchContext}
 
     // sub_agent 派发后立即返回，收取产出要靠配套的 sub_agent_result。
     // 它不在工具面板中单独出现，始终随 sub_agent 一起曝光。
-    const requestTools: ToolDefinition[] = hasSubAgentTool ? appendSubAgentResultTool(tools) : tools
+    let requestTools: ToolDefinition[] = hasSubAgentTool ? appendSubAgentResultTool(tools) : tools
 
     onAIMessageAdded(aiMessage)
     this.addPendingAIMessage(aiMessage, snapshotSessionId)
@@ -2393,16 +2618,51 @@ ${limitedSearchContext}
 - 若用户提到“今天/昨天/明天/现在/最新”等相对时间，请以当前时间为基准理解，不要编造不一致的绝对日期。
 - 工具返回后必须给出最终回答，不要在没有必要的情况下重复调用工具。`
 
-    // 上下文长度窗口检查：超过阈值且本次已曝光 compact 工具时，注入压缩提醒。
-    // 用量按“已应用当前摘要之后实际会发送的历史”估算，不含本轮新输入。
+    const apiConfig: AIApiConfig = {
+      providerId: providerId,
+      providerType: providerType,
+      apiStyle: apiStyle,
+      apiKey: getEffectiveApiKey(providerId, apiKey),
+      baseUrl: baseUrl,
+      apiPath: apiPath,
+      openaiTransport: this.getOpenAITransportForProvider(providerId),
+      customHeadersJson: customHeadersJson
+    }
+    apiConfig.modelReasoningStrategyOverride = this.getCurrentModelReasoningStrategyOverride(providerId, modelId)
+    apiConfig.modelSupportsReasoning = this.getCurrentModelSupportsReasoning(providerId, modelId)
+
+    // 上下文检查使用“最终系统提示 + 摘要后的历史 + 本轮用户输入 + 工具 schema”。
     const compactionService = getContextCompactionService()
     await compactionService.ensurePreferencesLoaded()
-    const contextUsage = this.computeRequestContextUsage(
-      historySource,
+    const previewRequestMessages: RequestMessage[] = []
+    const previewSystemPrompt = await this.buildRequestSystemPrompt(toolUsageSystemPrompt)
+    previewRequestMessages.push(new RequestMessage('system', previewSystemPrompt))
+    for (let i = 0; i < historyMessages.length; i++) {
+      previewRequestMessages.push(historyMessages[i])
+    }
+    previewRequestMessages.push(new RequestMessage('user', effectiveRequestContent, requestAttachments))
+    let contextUsage = this.computeRequestContextUsage(
+      apiConfig,
+      previewRequestMessages,
       providerId,
       modelId,
-      toolUsageSystemPrompt
+      reasoningLevel,
+      requestTools,
+      true
     )
+    if (!hasCompactTool && compactionService.isEnabled() && contextUsage.overThreshold) {
+      requestTools = [...requestTools, createCompactToolDefinition()]
+      hasCompactTool = true
+      contextUsage = this.computeRequestContextUsage(
+        apiConfig,
+        previewRequestMessages,
+        providerId,
+        modelId,
+        reasoningLevel,
+        requestTools,
+        true
+      )
+    }
     if (hasCompactTool && compactionService.isEnabled() && contextUsage.overThreshold) {
       toolUsageSystemPrompt += this.buildCompactReminderPrompt(contextUsage)
       console.info(
@@ -2428,31 +2688,27 @@ ${limitedSearchContext}
       return
     }
 
-    // 构建 API 配置
-    const apiConfig: AIApiConfig = {
-      providerId: providerId,
-      providerType: providerType,
-      apiStyle: apiStyle,
-      apiKey: getEffectiveApiKey(providerId, apiKey),
-      baseUrl: baseUrl,
-      apiPath: apiPath,
-      openaiTransport: this.getOpenAITransportForProvider(providerId),
-      customHeadersJson: customHeadersJson
-    }
-
     const modelParams = this.getCurrentModelParameters(providerId, modelId)
     if (modelParams !== null) {
       apiConfig.topP = modelParams.topP
       apiConfig.presencePenalty = modelParams.presencePenalty
       apiConfig.frequencyPenalty = modelParams.frequencyPenalty
     }
-    apiConfig.modelReasoningStrategyOverride = this.getCurrentModelReasoningStrategyOverride(providerId, modelId)
-    apiConfig.modelSupportsReasoning = this.getCurrentModelSupportsReasoning(providerId, modelId)
     await this.prepareProviderDocumentsForRequest(apiConfig, requestMessages, cancelSnapshot)
 
     if (this.isCancelled(cancelSnapshot)) {
       return
     }
+
+    const usageTracker = new RequestTokenUsageTracker()
+    const initialContextUsage = this.computeRequestContextUsage(
+      apiConfig,
+      requestMessages,
+      providerId,
+      modelId,
+      reasoningLevel,
+      requestTools
+    )
 
     // 每请求独立的状态（通过闭包隔离）
     let cancelled = false
@@ -2498,7 +2754,8 @@ ${limitedSearchContext}
       requestId,
       snapshotSessionId,
       compactionSourceMessages,
-      this.getCurrentModelContextWindow(providerId, modelId)
+      initialContextUsage.limitTokens,
+      initialContextUsage.usedTokens
     ))
 
     // 每个子智能体拥有独立的联网搜索/知识库预算记录，
@@ -2510,7 +2767,7 @@ ${limitedSearchContext}
       apiConfig,
       modelId,
       requestTemperature,
-      this.appStateManager.getDefaultMaxTokens(),
+      this.getConfiguredMaxOutputTokens(providerId, modelId),
       reasoningLevel,
       requestTools,
       currentTime,
@@ -2571,7 +2828,13 @@ ${limitedSearchContext}
           })
         }
       },
-      () => toolExecutionCancelled
+      () => toolExecutionCancelled,
+      (inputTokens: number, outputTokens: number, exact: boolean): void => {
+        usageTracker.addCompletedUsage(inputTokens, outputTokens, exact)
+        usageTracker.applyToMessage(aiMessage)
+        onAIMessageUpdated(aiMessage)
+      },
+      this.getCurrentModelContextWindow(providerId, modelId)
     ))
 
     // 开始工具调用循环
@@ -2600,7 +2863,8 @@ ${limitedSearchContext}
       (v: boolean) => { hasReceivedFirstChunk = v },
       localFirstChunkThrottle,
       localContentThrottle,
-      localReasoningThrottle
+      localReasoningThrottle,
+      usageTracker
     )
   }
 
@@ -3188,7 +3452,8 @@ ${preview}`
     setHasReceivedFirstChunk: (v: boolean) => void,
     localFirstChunkThrottle: ThrottleUtil,
     localContentThrottle: ThrottleUtil,
-    localReasoningThrottle: ThrottleUtil
+    localReasoningThrottle: ThrottleUtil,
+    usageTracker: RequestTokenUsageTracker
   ): Promise<void> {
     if (isCancelledFn()) {
       return
@@ -3238,6 +3503,8 @@ ${preview}`
     let roundHasToolCallDelta = false
     let streamedContentLength = 0
     let streamedReasoningLength = 0
+    let roundGeneratedContent = ''
+    let roundGeneratedReasoning = ''
 
     const rollbackStreamedRoundOutput = (): void => {
       if (streamedContentLength > 0 && aiMessage.content.length >= streamedContentLength) {
@@ -3271,6 +3538,7 @@ ${preview}`
       if (content === '') {
         return
       }
+      roundGeneratedContent += content
       if (roundHasToolCallDelta) {
         roundContentBuffer += content
         return
@@ -3284,6 +3552,7 @@ ${preview}`
       if (content === '') {
         return
       }
+      roundGeneratedReasoning += content
       if (roundHasToolCallDelta) {
         roundReasoningBuffer += content
         return
@@ -3315,6 +3584,23 @@ ${preview}`
 
     // 设置取消检查回调
     this.toolExecutionService.setCancelCheckCallback(isToolCancelledFn)
+
+    const estimatedRoundInput = this.aiApiService.estimateRequestInputTokens(
+      apiConfig,
+      requestMessagesForRound,
+      modelId,
+      reasoningLevelForThisRound,
+      toolsEnabledInThisRound ? toolsForThisRound : undefined,
+      true
+    )
+    usageTracker.beginRound(estimatedRoundInput)
+    usageTracker.applyToMessage(aiMessage)
+    onAIMessageUpdated(aiMessage)
+    const roundMaxOutputTokens = resolveRequestMaxOutputTokens(
+      this.getConfiguredMaxOutputTokens(apiConfig.providerId, modelId),
+      this.getCurrentModelContextWindow(apiConfig.providerId, modelId),
+      estimatedRoundInput
+    )
 
     // 发送流式请求（带工具）
     const httpRequest = this.aiApiService.streamChatRequestWithTools(
@@ -3367,6 +3653,18 @@ ${preview}`
         })
         setHasReceivedFirstChunk(false)
 
+        let estimatedToolCallOutput = 0
+        for (let i = 0; i < toolCalls.length; i++) {
+          estimatedToolCallOutput += estimateTextTokens(toolCalls[i].functionName)
+          estimatedToolCallOutput += estimateTextTokens(toolCalls[i].arguments)
+        }
+        usageTracker.finishRound(
+          estimateTextTokens(roundGeneratedContent) +
+            estimateTextTokens(roundGeneratedReasoning) + estimatedToolCallOutput
+        )
+        usageTracker.applyToMessage(aiMessage)
+        onAIMessageUpdated(aiMessage)
+
         if (forceKnowledgeSearchInThisRound && !this.hasCanonicalKnowledgeSearchCall(toolCalls)) {
           rollbackStreamedRoundOutput()
           roundContentBuffer = ''
@@ -3401,7 +3699,8 @@ ${preview}`
               setHasReceivedFirstChunk,
               localFirstChunkThrottle,
               localContentThrottle,
-              localReasoningThrottle
+              localReasoningThrottle,
+              usageTracker
             )
             return
           }
@@ -3614,7 +3913,8 @@ ${preview}`
             setHasReceivedFirstChunk,
             localFirstChunkThrottle,
             localContentThrottle,
-            localReasoningThrottle
+            localReasoningThrottle,
+            usageTracker
           )
         } else {
           if (toolCalls.length > 0) {
@@ -3664,7 +3964,8 @@ ${preview}`
               setHasReceivedFirstChunk,
               localFirstChunkThrottle,
               localContentThrottle,
-              localReasoningThrottle
+              localReasoningThrottle,
+              usageTracker
             )
             return
           }
@@ -3704,6 +4005,10 @@ ${preview}`
           appendRoundContent(throttledContent)
         })
         flushBufferedRoundOutput()
+        usageTracker.finishRound(
+          estimateTextTokens(roundGeneratedContent) + estimateTextTokens(roundGeneratedReasoning)
+        )
+        usageTracker.applyToMessage(aiMessage)
         this.fillEmptyAIContentPlaceholder(aiMessage, error)
         aiMessage.isGenerating = false
         aiMessage.isSearching = false
@@ -3722,7 +4027,7 @@ ${preview}`
         getSubAgentService().clearRuntime()
       },
 	      requestTemperature,
-      this.appStateManager.getDefaultMaxTokens(),
+      roundMaxOutputTokens,
       (reasoningContent: string) => {
         if (isCancelledFn()) {
           return
@@ -3752,6 +4057,11 @@ ${preview}`
           return
         }
         markCurrentRoundAsToolCall()
+      },
+      (usage: UsageInfo): void => {
+        usageTracker.updateCurrentRoundUsage(usage.prompt_tokens, usage.completion_tokens)
+        usageTracker.applyToMessage(aiMessage)
+        onAIMessageUpdated(aiMessage)
       }
     )
 

@@ -484,6 +484,7 @@ export struct ChatPage {
   private initialBottomAlignmentCompletionTimerId: number = -1
   private branchSwitchScrollRestoreToken: number = 0
   private assistantAvatarReloadToken: number = 0
+  private contextUsageRefreshSequence: number = 0
 
   private showChatSnack(message: string | Resource, duration: number = 2000,
     tone: SnackBarTone = SnackBarTone.DEFAULT): void {
@@ -1114,7 +1115,7 @@ export struct ChatPage {
   @Builder
   private ContextUsageDialogBuilder() {
     Column({ space: 16 }) {
-      Text(pickLocalizedText('上下文长度窗口', 'Context window'))
+      Text(pickLocalizedText('有效上下文预算', 'Effective context budget'))
         .fontSize(18)
         .fontWeight(FontWeight.Bold)
         .fontColor($r('app.color.text_primary'))
@@ -1139,11 +1140,21 @@ export struct ChatPage {
 
       Column({ space: 6 }) {
         Text(pickLocalizedText(
-          `约 ${formatTokenCount(this.contextUsage.usedTokens)} / ${formatTokenCount(this.contextUsage.limitTokens)} tokens`,
-          `About ${formatTokenCount(this.contextUsage.usedTokens)} / ${formatTokenCount(this.contextUsage.limitTokens)} tokens`
+          `输入约 ${formatTokenCount(this.contextUsage.usedTokens)} / ${formatTokenCount(this.contextUsage.limitTokens)} tokens`,
+          `Input about ${formatTokenCount(this.contextUsage.usedTokens)} / ${formatTokenCount(this.contextUsage.limitTokens)} tokens`
         ))
           .fontSize(13)
           .fontColor($r('app.color.text_secondary'))
+
+        if (this.contextUsage.outputReserveTokens > 0) {
+          Text(pickLocalizedText(
+            `总窗口 ${formatTokenCount(this.contextUsage.modelWindowTokens)}，已为输出预留 ${formatTokenCount(this.contextUsage.outputReserveTokens)}`,
+            `Total window ${formatTokenCount(this.contextUsage.modelWindowTokens)}; ${formatTokenCount(this.contextUsage.outputReserveTokens)} reserved for output`
+          ))
+            .fontSize(11)
+            .fontColor($r('app.color.text_tertiary'))
+            .textAlign(TextAlign.Center)
+        }
 
         Text(this.getContextUsageHintText())
           .fontSize(12)
@@ -2044,13 +2055,26 @@ export struct ChatPage {
   private async appendCompactToolIfContextOverThreshold(
     currentProvider: ModelProvider,
     modelSupportsTools: boolean,
-    forcedToolIds: string[]
+    forcedToolIds: string[],
+    selectedToolIds: string[],
+    pendingContent: string,
+    pendingAttachments: MessageAttachment[]
   ): Promise<void> {
     if (!modelSupportsTools || !this.toolRegistry.isToolRegistered(COMPACT_TOOL_ID)) {
       return
     }
     await ServiceRegistry.contextCompaction().ensurePreferencesLoaded()
-    if (!this.chatViewModel.shouldSuggestCompaction(currentProvider.id, this.currentModelId, this.messages)) {
+    const enabledToolIds = this.getSendFlow().buildEnabledToolIds(selectedToolIds, forcedToolIds)
+    const requestTools = this.toolRegistry.getEnabledToolDefinitions(enabledToolIds)
+    const shouldSuggest = await this.chatViewModel.shouldSuggestCompaction(
+      currentProvider.id,
+      this.currentModelId,
+      this.messages,
+      pendingContent,
+      pendingAttachments,
+      requestTools
+    )
+    if (!shouldSuggest) {
       return
     }
     if (!forcedToolIds.includes(COMPACT_TOOL_ID)) {
@@ -2059,9 +2083,13 @@ export struct ChatPage {
   }
 
   // 重新估算当前会话的上下文长度窗口用量（消息列表、模型或压缩状态变化后调用）
-  private refreshContextUsage(): void {
+  private async refreshContextUsage(): Promise<void> {
+    const sequence = ++this.contextUsageRefreshSequence
     const providerId = this.currentProvider !== null ? this.currentProvider.id : ''
-    this.contextUsage = this.chatViewModel.getContextUsage(providerId, this.currentModelId, this.messages)
+    const usage = await this.chatViewModel.getContextUsage(providerId, this.currentModelId, this.messages)
+    if (sequence === this.contextUsageRefreshSequence) {
+      this.contextUsage = usage
+    }
   }
 
   private getContextUsageColor(): ResourceColor {
@@ -5585,9 +5613,6 @@ export struct ChatPage {
       })
       const forcedToolIds = this.filterFallbackToolIdsForCurrentModel(this.forcedToolIdsOnce)
         .filter((toolId: string): boolean => toolId !== KNOWLEDGE_SEARCH_TOOL_ID && toolId !== COMPACT_TOOL_ID)
-      // 上下文长度窗口：超过阈值时把 compact 强制加入本次请求，
-      // 即使用户没有选择任何工具也让模型有机会先压缩历史再回答
-      await this.appendCompactToolIfContextOverThreshold(currentProvider, modelSupportsTools, forcedToolIds)
       const fallbackHintTexts: string[] = []
       if (!modelSupportsDocuments) {
         const documentFallback = await this.prepareDocumentFallbackForSend(
@@ -5616,6 +5641,15 @@ export struct ChatPage {
         }
       }
       userDocumentToolHint = fallbackHintTexts.join('\n')
+      // 文档/图片 fallback 可能扩展正文或追加工具，必须在它们完成后再判断本次请求。
+      await this.appendCompactToolIfContextOverThreshold(
+        currentProvider,
+        modelSupportsTools,
+        forcedToolIds,
+        selectedToolIds,
+        requestMessageContent,
+        attachmentsToSend
+      )
       const searchEnabled = this.webSearchAvailable &&
         (selectedToolIds.includes('web_search') || forcedToolIds.includes('web_search'))
       this.syncActiveSessionBinding()

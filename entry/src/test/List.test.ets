@@ -10,6 +10,7 @@ import chatMessageTreeHelperTest from './ChatMessageTreeHelper.test';
 import knowledgeVectorStartupCoordinatorTest from './KnowledgeVectorStartupCoordinator.test';
 import knowledgeVectorRecoveryPolicyTest from './KnowledgeVectorRecoveryPolicy.test';
 import appVersionUtilsTest from './AppVersionUtils.test';
+import tokenAccountingTest from './TokenAccounting.test';
 
 export default function testsuite() {
   localUnitTest();
@@ -24,4 +25,5 @@ export default function testsuite() {
   knowledgeVectorStartupCoordinatorTest();
   knowledgeVectorRecoveryPolicyTest();
   appVersionUtilsTest();
+  tokenAccountingTest();
 }

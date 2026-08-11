@@ -646,7 +646,7 @@ export struct ProviderDetailPanel {
         return
       }
     }
-    const model = new ModelInfo(modelId, modelId, 4096, true, false)
+    const model = new ModelInfo(modelId, modelId, 0, true, false)
     this.provider.models.push(model)
     await this.saveCurrentProvider()
     this.refreshModelGroups()

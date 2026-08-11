@@ -32,6 +32,7 @@ import {
   resolveReasoningRequestStrategyWithOverride
 } from './ProviderCompatibilityRegistry'
 import { normalizeCustomHeaderName, parseCustomHeadersMap } from '../utils/CustomHeaderUtils'
+import { estimateTextTokens } from '../utils/ModelBillingUtils'
 
 // URL 解析工具类
 class ApiUrlResolver {
@@ -238,6 +239,7 @@ interface OpenAIRequestBody {
   temperature?: number
   max_tokens: number
   stream?: boolean
+  stream_options?: OpenAIStreamOptions
   reasoning_effort?: string  // OpenAI/OpenAI-compatible 推理级别: none, low, medium, high, xhigh/max
   reasoning?: OpenRouterReasoningConfig  // OpenRouter 统一推理控制
   reasoning_split?: boolean  // MiniMax 推理内容分离（reasoning_details 字段）
@@ -249,6 +251,10 @@ interface OpenAIRequestBody {
   top_p?: number             // Top P 采样参数
   presence_penalty?: number  // 存在惩罚
   frequency_penalty?: number // 频率惩罚
+}
+
+interface OpenAIStreamOptions {
+  include_usage: boolean
 }
 
 interface OpenAIResponsesContentPart {
@@ -463,10 +469,15 @@ interface AnthropicContent {
 }
 
 // Anthropic 响应格式
+interface AnthropicUsageInfo {
+  input_tokens?: number
+  output_tokens?: number
+}
+
 interface AnthropicResponse {
   id: string
   content: AnthropicContent[]
-  usage: UsageInfo
+  usage?: AnthropicUsageInfo
 }
 
 // Google Gemini 请求体接口
@@ -515,8 +526,15 @@ interface GoogleCandidate {
   finishReason?: string
 }
 
+interface GoogleUsageMetadata {
+  promptTokenCount?: number
+  candidatesTokenCount?: number
+  totalTokenCount?: number
+}
+
 interface GoogleResponse {
   candidates: GoogleCandidate[]
+  usageMetadata?: GoogleUsageMetadata
 }
 
 interface OpenAIResponsesOutputContentItem {
@@ -547,6 +565,7 @@ interface OpenAIResponsesStreamEvent {
   type?: string
   delta?: string
   error?: ApiError
+  response?: OpenAIResponsesResponse
 }
 
 // OpenAI 流式响应块增量
@@ -594,6 +613,7 @@ interface OpenAIStreamChoice {
 // OpenAI 流式响应块
 interface OpenAIStreamChunk {
   choices: OpenAIStreamChoice[]
+  usage?: UsageInfo
 }
 
 // Anthropic 流式响应块增量
@@ -607,6 +627,8 @@ interface AnthropicStreamDelta {
 interface AnthropicStreamChunk {
   type: string
   delta?: AnthropicStreamDelta
+  message?: AnthropicResponse
+  usage?: AnthropicUsageInfo
 }
 
 // Google 流式响应块部分
@@ -637,6 +659,7 @@ interface GoogleStreamCandidate {
 // Google 流式响应块
 interface GoogleStreamChunk {
   candidates: GoogleStreamCandidate[]
+  usageMetadata?: GoogleUsageMetadata
 }
 
 // 流式响应块解析结果
@@ -1298,6 +1321,81 @@ export class AIApiService {
     }
   }
 
+  private buildAnthropicUsageInfo(usage?: AnthropicUsageInfo): UsageInfo | null {
+    if (usage === undefined || usage === null) {
+      return null
+    }
+    const inputTokens = usage.input_tokens !== undefined ? usage.input_tokens : 0
+    const outputTokens = usage.output_tokens !== undefined ? usage.output_tokens : 0
+    return {
+      prompt_tokens: inputTokens,
+      completion_tokens: outputTokens,
+      total_tokens: inputTokens + outputTokens
+    }
+  }
+
+  private buildGoogleUsageInfo(usage?: GoogleUsageMetadata): UsageInfo | null {
+    if (usage === undefined || usage === null) {
+      return null
+    }
+    const inputTokens = usage.promptTokenCount !== undefined ? usage.promptTokenCount : 0
+    const outputTokens = usage.candidatesTokenCount !== undefined ? usage.candidatesTokenCount : 0
+    return {
+      prompt_tokens: inputTokens,
+      completion_tokens: outputTokens,
+      total_tokens: usage.totalTokenCount !== undefined ? usage.totalTokenCount : inputTokens + outputTokens
+    }
+  }
+
+  private extractStreamUsage(
+    apiStyle: ApiStyle,
+    useOpenAIResponses: boolean,
+    json: object
+  ): UsageInfo | null {
+    if (apiStyle === ApiStyle.OPENAI) {
+      if (useOpenAIResponses) {
+        const event = json as OpenAIResponsesStreamEvent
+        return event.response !== undefined ? this.buildResponsesUsageInfo(event.response.usage) : null
+      }
+      const chunk = json as OpenAIStreamChunk
+      return chunk.usage !== undefined ? chunk.usage : null
+    }
+    if (apiStyle === ApiStyle.ANTHROPIC) {
+      const chunk = json as AnthropicStreamChunk
+      if (chunk.message !== undefined && chunk.message.usage !== undefined) {
+        return this.buildAnthropicUsageInfo(chunk.message.usage)
+      }
+      return this.buildAnthropicUsageInfo(chunk.usage)
+    }
+    const googleChunk = json as GoogleStreamChunk
+    return this.buildGoogleUsageInfo(googleChunk.usageMetadata)
+  }
+
+  private emitStreamUsage(
+    apiStyle: ApiStyle,
+    useOpenAIResponses: boolean,
+    json: object,
+    onUsage?: (usage: UsageInfo) => void
+  ): void {
+    if (onUsage === undefined) {
+      return
+    }
+    if (Array.isArray(json)) {
+      const items = json as object[]
+      for (let i = 0; i < items.length; i++) {
+        const itemUsage = this.extractStreamUsage(apiStyle, useOpenAIResponses, items[i])
+        if (itemUsage !== null) {
+          onUsage(itemUsage)
+        }
+      }
+      return
+    }
+    const usage = this.extractStreamUsage(apiStyle, useOpenAIResponses, json)
+    if (usage !== null) {
+      onUsage(usage)
+    }
+  }
+
   private extractOpenAIResponsesContent(response: OpenAIResponsesResponse): string {
     if (response.output_text !== undefined && response.output_text !== null && response.output_text !== '') {
       return response.output_text
@@ -1786,6 +1884,84 @@ export class AIApiService {
     return ''
   }
 
+  // 以最终 RequestMessage 和工具 schema 为输入估算本轮请求。这里与 buildRequestBody
+  // 共用附件解码、推理兼容策略等判断，是上下文进度与无 usage 时计费的统一入口。
+  estimateRequestInputTokens(
+    config: AIApiConfig,
+    messages: RequestMessage[],
+    model: string,
+    reasoningLevel: ReasoningLevel = ReasoningLevel.OFF,
+    tools?: ToolDefinition[],
+    forceChatCompletions: boolean = false,
+    includeUnloadedAttachments: boolean = false
+  ): number {
+    let tokens = 3 + estimateTextTokens(model)
+    const useOpenAIResponses = this.shouldUseOpenAIResponses(config, forceChatCompletions) &&
+      (tools === undefined || tools.length === 0)
+    const reasoningStrategy = this.getReasoningRequestStrategy(config, model)
+    const preserveReasoning = config.apiStyle === ApiStyle.OPENAI && !useOpenAIResponses &&
+      (this.shouldPreserveReasoningContentForToolMessages(reasoningStrategy) ||
+        this.getCompatibilityProfile(config).preserveAssistantReasoningDetails)
+
+    for (let i = 0; i < messages.length; i++) {
+      const message = messages[i]
+      tokens += 4 + estimateTextTokens(message.role) + estimateTextTokens(message.content)
+      if (message.role === 'assistant' && preserveReasoning) {
+        tokens += estimateTextTokens(message.reasoningContent)
+      }
+      if (message.toolCallId !== '') {
+        tokens += estimateTextTokens(message.toolCallId)
+      }
+      for (let j = 0; j < message.toolCalls.length; j++) {
+        tokens += 4 + estimateTextTokens(message.toolCalls[j].id)
+        tokens += estimateTextTokens(message.toolCalls[j].functionName)
+        tokens += estimateTextTokens(message.toolCalls[j].arguments)
+      }
+      for (let j = 0; j < message.attachments.length; j++) {
+        const attachment = message.attachments[j]
+        if (attachment.base64Data === '' && !includeUnloadedAttachments) {
+          continue
+        }
+        if (config.apiStyle === ApiStyle.OPENAI) {
+          const textContent = this.buildTextAttachmentContent(attachment)
+          if (textContent !== '') {
+            tokens += estimateTextTokens(textContent)
+            continue
+          }
+        }
+        tokens += this.estimateBinaryAttachmentTokens(attachment)
+      }
+    }
+
+    if (tools !== undefined) {
+      for (let i = 0; i < tools.length; i++) {
+        const tool = tools[i]
+        tokens += 8 + estimateTextTokens(tool.function.name)
+        tokens += estimateTextTokens(tool.function.description)
+        tokens += estimateTextTokens(JSON.stringify(tool.function.parameters.toJsonObject()))
+      }
+    }
+    // 推理控制字段本身很小，但仍属于输入请求。
+    if (reasoningLevel !== ReasoningLevel.OFF) {
+      tokens += 4
+    }
+    return Math.max(1, tokens)
+  }
+
+  private estimateBinaryAttachmentTokens(attachment: MessageAttachment): number {
+    let byteSize = Math.max(0, attachment.size)
+    if (byteSize <= 0 && attachment.base64Data !== '') {
+      byteSize = Math.floor(attachment.base64Data.length * 0.75)
+    }
+    const nameTokens = estimateTextTokens(attachment.name) + estimateTextTokens(attachment.mimeType) + 8
+    if (attachment.type === AttachmentType.IMAGE || attachment.mimeType.toLowerCase().startsWith('image/')) {
+      // auto detail 无法在客户端精确预知切片数；按尺寸给出保守且有上限的图像估算。
+      return nameTokens + Math.min(4096, 85 + Math.ceil(byteSize / 2048))
+    }
+    // PDF/二进制文档最终按抽取内容计费，字节数与 token 不是一一对应；使用保守近似。
+    return nameTokens + Math.min(100000, Math.max(256, Math.ceil(byteSize / 6)))
+  }
+
   // 构建请求体
   private buildRequestBody(
     config: AIApiConfig,
@@ -1870,12 +2046,14 @@ export class AIApiService {
     if (config.apiStyle === ApiStyle.ANTHROPIC) {
       // Anthropic 格式
       const anthropicMessages: (MessageContent | AnthropicMultimodalMessage)[] = []
-      let systemPrompt = ''
+      const systemPrompts: string[] = []
 
       for (let i = 0; i < messages.length; i++) {
         const msg = messages[i]
         if (msg.role === 'system') {
-          systemPrompt = msg.content
+          if (msg.content.trim() !== '') {
+            systemPrompts.push(msg.content.trim())
+          }
         } else if (msg.hasAttachments()) {
           // Anthropic 多模态消息（支持图片和 PDF）
           const contentParts: AnthropicContentPart[] = []
@@ -1933,6 +2111,7 @@ export class AIApiService {
         }
       }
 
+      const systemPrompt = systemPrompts.join('\n\n')
       if (systemPrompt !== '') {
         const bodyWithSystem: AnthropicRequestBody = {
           model: model,
@@ -2419,7 +2598,7 @@ export class AIApiService {
         success: true,
         content: content,
         errorMessage: '',
-        usage: response.usage,
+        usage: this.buildAnthropicUsageInfo(response.usage),
         reasoningContent: reasoningContent
       }
 
@@ -2468,7 +2647,7 @@ export class AIApiService {
           success: true,
           content: content,
           errorMessage: '',
-          usage: null,
+          usage: this.buildGoogleUsageInfo(response.usageMetadata),
           reasoningContent: reasoningContent,
           finishReason: candidate.finishReason
         }
@@ -2845,7 +3024,8 @@ export class AIApiService {
     maxTokens: number = DEFAULT_MAX_OUTPUT_TOKENS,
     onReasoningData?: (content: string) => void,
     onImageData?: (base64Data: string, mimeType: string) => void,
-    reasoningLevel: ReasoningLevel = ReasoningLevel.OFF  // 推理级别参数
+    reasoningLevel: ReasoningLevel = ReasoningLevel.OFF,  // 推理级别参数
+    onUsage?: (usage: UsageInfo) => void
   ): http.HttpRequest {
     this.resetThinkingState()
     const toolStreamState = new ToolCallStreamState(false)
@@ -2863,7 +3043,9 @@ export class AIApiService {
       if (useOpenAIResponses) {
         (requestBody as OpenAIResponsesRequestBody).stream = true
       } else {
-        (requestBody as OpenAIRequestBody).stream = true
+        const openAIRequestBody = requestBody as OpenAIRequestBody
+        openAIRequestBody.stream = true
+        openAIRequestBody.stream_options = { include_usage: true }
       }
     } else if (config.apiStyle === ApiStyle.ANTHROPIC) {
       (requestBody as AnthropicRequestBody).stream = true
@@ -2902,7 +3084,8 @@ export class AIApiService {
               onData,
               onError,
               onReasoningData,
-              onImageData
+              onImageData,
+              onUsage
             )
           }
         } catch (e) {
@@ -2919,7 +3102,8 @@ export class AIApiService {
             onData,
             onError,
             onReasoningData,
-            onImageData
+            onImageData,
+            onUsage
           )
           buffer = ''
         }
@@ -2953,7 +3137,8 @@ export class AIApiService {
     reasoningLevel: ReasoningLevel = ReasoningLevel.OFF,
     tools?: ToolDefinition[],
     toolChoice?: string,
-    onToolCallDelta?: (toolCallDeltas: ToolCallDelta[]) => void
+    onToolCallDelta?: (toolCallDeltas: ToolCallDelta[]) => void,
+    onUsage?: (usage: UsageInfo) => void
   ): http.HttpRequest {
     this.resetThinkingState()
     const toolStreamState = new ToolCallStreamState(
@@ -2969,7 +3154,9 @@ export class AIApiService {
     this.configureStreamState(config, model)
 
     if (config.apiStyle === ApiStyle.OPENAI) {
-      (requestBody as OpenAIRequestBody).stream = true
+      const openAIRequestBody = requestBody as OpenAIRequestBody
+      openAIRequestBody.stream = true
+      openAIRequestBody.stream_options = { include_usage: true }
     } else if (config.apiStyle === ApiStyle.ANTHROPIC) {
       (requestBody as AnthropicRequestBody).stream = true
     }
@@ -3007,7 +3194,8 @@ export class AIApiService {
               onError,
               onReasoningData,
               onImageData,
-              onToolCallDelta
+              onToolCallDelta,
+              onUsage
             )
           }
         } catch (e) {
@@ -3025,7 +3213,8 @@ export class AIApiService {
             onError,
             onReasoningData,
             onImageData,
-            onToolCallDelta
+            onToolCallDelta,
+            onUsage
           )
           buffer = ''
         }
@@ -3055,7 +3244,8 @@ export class AIApiService {
     onError: (error: string) => void,
     onReasoningData?: (content: string) => void,
     onImageData?: (base64Data: string, mimeType: string) => void,
-    onToolCallDelta?: (toolCallDeltas: ToolCallDelta[]) => void
+    onToolCallDelta?: (toolCallDeltas: ToolCallDelta[]) => void,
+    onUsage?: (usage: UsageInfo) => void
   ): void {
     const trimmedLine = line.trim()
     if (trimmedLine === '') {
@@ -3080,6 +3270,7 @@ export class AIApiService {
 
     try {
       const json = JSON.parse(jsonStr) as object
+      this.emitStreamUsage(apiStyle, useOpenAIResponses, json, onUsage)
       this.emitStreamContentWithTools(
         apiStyle,
         useOpenAIResponses,
@@ -3454,7 +3645,8 @@ export class AIApiService {
     onData: (content: string) => void,
     onError: (error: string) => void,
     onReasoningData?: (content: string) => void,
-    onImageData?: (base64Data: string, mimeType: string) => void
+    onImageData?: (base64Data: string, mimeType: string) => void,
+    onUsage?: (usage: UsageInfo) => void
   ): void {
     const trimmedLine = line.trim()
     if (trimmedLine === '') {
@@ -3479,6 +3671,7 @@ export class AIApiService {
 
     try {
       const json = JSON.parse(jsonStr) as object
+      this.emitStreamUsage(apiStyle, useOpenAIResponses, json, onUsage)
       this.emitStreamContent(
         apiStyle,
         useOpenAIResponses,

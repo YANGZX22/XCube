@@ -62,6 +62,7 @@ export struct ModelEditSheet {
     return getAppUiState().themePrimaryLight
   }
   @Local tempName: string = ''
+  @Local contextLengthText: string = ''
   // 能力开关状态（用于触发 UI 刷新）
   @Local capSupportsTools: boolean = false
   @Local capSupportsReasoning: boolean = false
@@ -78,6 +79,7 @@ export struct ModelEditSheet {
   @Local paramTopP: number = 1.0
   @Local paramPresencePenalty: number = 0
   @Local paramFrequencyPenalty: number = 0
+  @Local maxOutputTokensText: string = ''
   // 计费配置
   @Local billingEnabled: boolean = false
   @Local billingCurrency: string = 'CNY'
@@ -107,6 +109,7 @@ export struct ModelEditSheet {
 
   private syncDraftFromModel(): void {
     this.tempName = this.model.name
+    this.contextLengthText = this.model.contextLength > 0 ? this.model.contextLength.toString() : ''
     this.capSupportsTools = this.model.capabilities.supportsTools
     this.capSupportsReasoning = this.model.capabilities.supportsReasoning
     this.capSupportsWebSearch = this.model.capabilities.supportsWebSearch
@@ -119,6 +122,8 @@ export struct ModelEditSheet {
     this.paramTopP = this.model.parameters.topP
     this.paramPresencePenalty = this.model.parameters.presencePenalty
     this.paramFrequencyPenalty = this.model.parameters.frequencyPenalty
+    this.maxOutputTokensText = this.model.parameters.maxTokens > 0 ?
+      this.model.parameters.maxTokens.toString() : ''
     this.billingEnabled = this.model.billingEnabled
     this.billingCurrency = normalizeBillingCurrency(this.model.billingCurrency)
     this.billingCurrencySelectedIndex = this.getBillingCurrencyIndex(this.billingCurrency)
@@ -139,10 +144,13 @@ export struct ModelEditSheet {
   }
 
   private buildDraft(): ModelInfoExtendedJson {
+    const parsedContextLength = Number(this.contextLengthText.trim())
+    const parsedMaxOutputTokens = Number(this.maxOutputTokensText.trim())
     return {
       id: this.model.id,
       name: this.tempName,
-      contextLength: this.model.contextLength,
+      contextLength: Number.isFinite(parsedContextLength) && parsedContextLength > 0 ?
+        Math.floor(parsedContextLength) : 0,
       isEnabled: this.model.isEnabled,
       isRecommended: this.model.isRecommended,
       modelType: this.model.modelType,
@@ -164,7 +172,8 @@ export struct ModelEditSheet {
       parameters: {
         temperature: this.paramTemperature,
         topP: this.paramTopP,
-        maxTokens: this.model.parameters.maxTokens,
+        maxTokens: Number.isFinite(parsedMaxOutputTokens) && parsedMaxOutputTokens > 0 ?
+          Math.floor(parsedMaxOutputTokens) : this.model.parameters.maxTokens,
         presencePenalty: this.paramPresencePenalty,
         frequencyPenalty: this.paramFrequencyPenalty
       }
@@ -189,6 +198,12 @@ export struct ModelEditSheet {
             .margin({ left: 16, right: 16 })
 
           this.ModelNameSection()
+
+          Divider()
+            .color($r('app.color.divider'))
+            .margin({ left: 16, right: 16 })
+
+          this.ContextLengthSection()
 
           Divider()
             .color($r('app.color.divider'))
@@ -292,6 +307,45 @@ export struct ModelEditSheet {
         .onChange((value: string) => {
           this.tempName = value
         })
+    }
+    .width('100%')
+    .alignItems(HorizontalAlign.Start)
+    .padding(16)
+    .backgroundColor(Color.Transparent)
+  }
+
+  @Builder
+  ContextLengthSection() {
+    Column({ space: 8 }) {
+      Text(pickLocalizedText('上下文长度（Token）', 'Context length (tokens)'))
+        .fontSize(13)
+        .fontColor($r('app.color.text_primary'))
+
+      TextInput({
+        text: this.contextLengthText,
+        placeholder: pickLocalizedText('未知（请填写模型真实窗口）', 'Unknown (enter the model window)')
+      })
+        .width('100%')
+        .height(44)
+        .type(InputType.Number)
+        .backgroundColor(Color.Transparent)
+        .borderRadius(16)
+        .systemMaterial(new uiMaterial.ImmersiveMaterial({
+          style: uiMaterial.ImmersiveStyle.ULTRA_THIN,
+          materialColor: Color.Transparent,
+          applyShadow: false
+        }))
+        .padding({ left: 16, right: 16 })
+        .onChange((value: string) => {
+          this.contextLengthText = value
+        })
+
+      Text(pickLocalizedText(
+        '留空表示未知；应用不会再自动按 4K 计算。',
+        'Leave empty if unknown; the app no longer assumes 4K.'
+      ))
+        .fontSize(11)
+        .fontColor($r('app.color.text_tertiary'))
     }
     .width('100%')
     .alignItems(HorizontalAlign.Start)
@@ -526,6 +580,43 @@ export struct ModelEditSheet {
           .color($r('app.color.divider'))
 
         Column() {
+          Column({ space: 8 }) {
+            Text(pickLocalizedText('最大输出 Token', 'Maximum output tokens'))
+              .fontSize(15)
+              .fontColor($r('app.color.text_primary'))
+              .width('100%')
+
+            TextInput({ text: this.maxOutputTokensText, placeholder: '32768' })
+              .width('100%')
+              .height(42)
+              .type(InputType.Number)
+              .backgroundColor(Color.Transparent)
+              .borderRadius(14)
+              .padding({ left: 12, right: 12 })
+              .systemMaterial(new uiMaterial.ImmersiveMaterial({
+                style: uiMaterial.ImmersiveStyle.ULTRA_THIN,
+                materialColor: Color.Transparent,
+                applyShadow: false
+              }))
+              .onChange((value: string) => {
+                this.maxOutputTokensText = value
+              })
+
+            Text(pickLocalizedText(
+              '该预算会从上下文总窗口中预留；发送时还会按实际输入自动收紧。',
+              'Reserved from the total context window and tightened against actual input at send time.'
+            ))
+              .fontSize(11)
+              .fontColor($r('app.color.text_tertiary'))
+              .width('100%')
+          }
+          .width('100%')
+          .alignItems(HorizontalAlign.Start)
+          .padding({ top: 12, bottom: 12 })
+
+          Divider()
+            .color($r('app.color.divider'))
+
           // 温度
           Column() {
             Row() {
