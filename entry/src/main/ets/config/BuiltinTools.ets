@@ -1710,7 +1710,7 @@ function createWebSearchToolDefinition(): ToolDefinition {
   const parameters = new ToolParameters()
   parameters.addProperty('query', new ToolParameterProperty(
     'string',
-    '必填。搜索关键词或网页 URL。传入可直接检索的短关键词，不要传入整段推理；保留用户给出的实体、地点、日期、版本号和专有名词。读取网页时原样传入 URL。'
+    '必填。搜索关键词或网页/API URL。传入可直接检索的短关键词，不要传入整段推理；保留用户给出的实体、地点、日期、版本号和专有名词。读取 HTML 网页或 JSON 接口时原样传入 URL。'
   ))
   parameters.addProperty('page', new ToolParameterProperty(
     'number',
@@ -1720,7 +1720,7 @@ function createWebSearchToolDefinition(): ToolDefinition {
 
   const func = new ToolFunction(
     'web_search',
-    '搜索互联网或读取网页 URL 获取外部信息。适合实时信息、新闻、天气、股票、最新事件、外部网页总结等。query 必须是简洁且可检索的关键词或原始 URL；多次搜索同一问题时要更换 query 角度获取不同来源，不要重复同一关键词。',
+    '搜索互联网或读取 URL 获取 HTML 网页及 JSON 接口数据。适合实时信息、新闻、天气、股票、最新事件、外部网页总结等。query 必须是简洁且可检索的关键词或原始 URL；多次搜索同一问题时要更换 query 角度获取不同来源，不要重复同一关键词。',
     parameters
   )
 

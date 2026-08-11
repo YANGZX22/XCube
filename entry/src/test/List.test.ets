@@ -11,6 +11,7 @@ import knowledgeVectorStartupCoordinatorTest from './KnowledgeVectorStartupCoord
 import knowledgeVectorRecoveryPolicyTest from './KnowledgeVectorRecoveryPolicy.test';
 import appVersionUtilsTest from './AppVersionUtils.test';
 import tokenAccountingTest from './TokenAccounting.test';
+import jsonResponseUtilsTest from './JsonResponseUtils.test';
 
 export default function testsuite() {
   localUnitTest();
@@ -26,4 +27,5 @@ export default function testsuite() {
   knowledgeVectorRecoveryPolicyTest();
   appVersionUtilsTest();
   tokenAccountingTest();
+  jsonResponseUtilsTest();
 }

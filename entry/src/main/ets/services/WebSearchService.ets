@@ -8,6 +8,7 @@ import { util } from '@kit.ArkTS'
 import { SearchReference, SearchServiceConfig, SearchEngine } from '../models/ChatModels'
 import { getPreferencesService, PreferenceKeys } from './PreferencesService'
 import { cleanSearchQuery as cleanSearchQueryShared } from '../utils/SearchQueryUtils'
+import { JsonResponseContent, parseJsonResponseContent } from '../utils/JsonResponseUtils'
 
 // 搜索结果类（用于返回给业务层）
 export class SearchResult {
@@ -1650,6 +1651,18 @@ export class WebSearchService {
           if (title === '') {
             title = this.extractTitleFromTextContent(content, resolvedUrl)
           }
+          const jsonContent = parseJsonResponseContent(content)
+          if (jsonContent.isJson) {
+            return new WebSearchResult(
+              true,
+              resolvedUrl,
+              jsonContent.truncated ? 'JSON 数据（已截断）' : 'JSON 数据',
+              jsonContent.content,
+              '',
+              undefined,
+              'Tavily Extract(JSON)'
+            )
+          }
           return new WebSearchResult(
             true,
             resolvedUrl,
@@ -2663,7 +2676,11 @@ export class WebSearchService {
           )
         }
         const tavilyResult = await this.tavilyExtractUrlContent(url, runtime, controller, options?.cancelCheck)
-        if (tavilyResult.success || this.isCancelled(controller, options?.cancelCheck)) {
+        if (tavilyResult.success) {
+          this.normalizeJsonWebResult(tavilyResult)
+          return tavilyResult
+        }
+        if (this.isCancelled(controller, options?.cancelCheck)) {
           return tavilyResult
         }
         console.warn('WebSearchService', `[Tavily Extract] Failed, fallback to local fetch: ${tavilyResult.errorMessage}`)
@@ -2706,7 +2723,9 @@ export class WebSearchService {
 
     const response = await this.httpService.get(
       fullUrl,
-      {},
+      {
+        'Accept': 'application/json,text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8'
+      },
       this.buildHttpOptions(timeout, controller)
     )
 
@@ -2721,11 +2740,27 @@ export class WebSearchService {
       return this.buildCancelledWebResult(fullUrl)
     }
 
+    const jsonContent = parseJsonResponseContent(response.data)
+    if (jsonContent.isJson) {
+      const title = jsonContent.truncated ? 'JSON 数据（已截断）' : 'JSON 数据'
+      return new WebSearchResult(true, fullUrl, title, jsonContent.content, '', undefined, 'URL抓取(JSON)')
+    }
+
     const parsed = this.parseHtmlContent(response.data)
     if (parsed.content.trim() === '') {
       return new WebSearchResult(false, fullUrl, parsed.title, '', '本地 URL 抓取未提取到网页正文', undefined, 'URL抓取')
     }
     return new WebSearchResult(true, fullUrl, parsed.title, parsed.content, '', undefined, 'URL抓取')
+  }
+
+  private normalizeJsonWebResult(result: WebSearchResult): void {
+    const jsonContent: JsonResponseContent = parseJsonResponseContent(result.content)
+    if (!jsonContent.isJson) {
+      return
+    }
+    result.title = jsonContent.truncated ? 'JSON 数据（已截断）' : 'JSON 数据'
+    result.content = jsonContent.content
+    result.sourceName = 'Tavily Extract(JSON)'
   }
 
   private normalizeContentUrl(url: string): string {
