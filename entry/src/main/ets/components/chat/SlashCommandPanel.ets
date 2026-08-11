@@ -11,6 +11,7 @@ import {
 import { withColorAlpha } from '../../utils/ColorAlphaUtils'
 import { VisualEffectsMode } from '../../models/ThemeColors'
 import { buildModelIconRenderData, ModelIconRenderData } from '../../utils/ModelIconRenderUtils'
+import { MANUSCRIPT_BODY_FONT } from '../../utils/ManuscriptVisualUtils'
 
 // 输入框上方的斜杠命令面板：输入 "/" 时浮出，点选后立即执行对应命令
 @ComponentV2
@@ -168,12 +169,14 @@ export struct SlashCommandPanel {
         Column() {
           Row() {
             Text(command.name)
+              .fontFamily(this.isManuscriptMode ? MANUSCRIPT_BODY_FONT : 'HarmonyOS Sans')
               .fontSize(14)
               .fontWeight(FontWeight.Medium)
               .fontColor(this.themePrimary)
               .maxLines(1)
 
             Text(this.getCommandTitle(command.id))
+              .fontFamily(this.isManuscriptMode ? MANUSCRIPT_BODY_FONT : 'HarmonyOS Sans')
               .fontSize(13)
               .fontColor($r('app.color.text_primary'))
               .maxLines(1)
@@ -185,6 +188,7 @@ export struct SlashCommandPanel {
           .alignItems(VerticalAlign.Center)
 
           Text(this.getCommandDescription(command.id))
+            .fontFamily(this.isManuscriptMode ? MANUSCRIPT_BODY_FONT : 'HarmonyOS Sans')
             .fontSize(11)
             .lineHeight(16)
             .fontColor($r('app.color.text_tertiary'))
