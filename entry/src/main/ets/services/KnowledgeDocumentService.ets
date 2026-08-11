@@ -2028,16 +2028,44 @@ export class KnowledgeDocumentService implements
         const storedChunkCount = await this.countStoredDocumentChunks(store, duplicate.id)
         const storedMetadataCount =
           await this.countStoredDocumentChunkMetadata(store, duplicate.id)
-        if (duplicate.status === KnowledgeDocumentStatus.READY &&
+        const keywordIndexIsComplete =
+          duplicate.status === KnowledgeDocumentStatus.READY &&
           duplicate.chunkCount > 0 &&
           storedChunkCount === duplicate.chunkCount &&
-          storedMetadataCount === duplicate.chunkCount) {
-          return new KnowledgeImportResult(true, '该文件已在知识库中', duplicate, true)
+          storedMetadataCount === duplicate.chunkCount
+        // 关键词索引完整不代表语义向量可用：向量可能从未生成、生成失败，或因
+        // 模型与维度变化而过期。只比对 FTS 会让重复导入静默跳过向量补建。
+        const pendingVectorDocumentIds = keywordIndexIsComplete
+          ? await this.listDocumentsNeedingVectorMigration(
+            store,
+            getKnowledgeEmbeddingService().modelKey(),
+            getKnowledgeVectorStore().isVectorSupported()
+          )
+          : []
+        if (keywordIndexIsComplete &&
+          pendingVectorDocumentIds.indexOf(duplicate.id) < 0) {
+          const vectorReadyDocumentIds = await this.listVectorReadyDocumentIds([duplicate.id])
+          const vectorReady = vectorReadyDocumentIds.indexOf(duplicate.id) >= 0
+          return new KnowledgeImportResult(
+            true,
+            vectorReady
+              ? '该文件已在知识库中，语义向量与关键词混合索引均已就绪'
+              : '该文件已在知识库中，当前使用关键词索引',
+            duplicate,
+            true,
+            vectorReady
+          )
         }
         const rebuilt = await this.rebuildDocumentLocked(duplicate.id)
         rebuilt.duplicate = true
         if (rebuilt.ok) {
-          rebuilt.message = '已恢复该文件的知识索引'
+          if (!keywordIndexIsComplete) {
+            rebuilt.message = '已恢复该文件的知识索引'
+          } else {
+            rebuilt.message = rebuilt.vectorReady
+              ? '该文件已在知识库中，已补建语义向量索引'
+              : `该文件已在知识库中；语义向量未完成：${rebuilt.vectorMessage}`
+          }
         }
         return rebuilt
       }

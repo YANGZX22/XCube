@@ -159,7 +159,9 @@ export struct KnowledgeBasePanel {
     this.isWorking = true
     let succeeded = 0
     let failed = 0
+    let vectorReady = 0
     let lastMessage = ''
+    let lastVectorMessage = ''
     try {
       for (let i = 0; i < uris.length; i++) {
         const uri = uris[i]
@@ -167,6 +169,11 @@ export struct KnowledgeBasePanel {
         lastMessage = result.message
         if (result.ok) {
           succeeded += 1
+          if (result.vectorReady) {
+            vectorReady += 1
+          } else if (result.vectorMessage.trim() !== '') {
+            lastVectorMessage = result.vectorMessage
+          }
         } else {
           failed += 1
         }
@@ -176,20 +183,39 @@ export struct KnowledgeBasePanel {
       this.isWorking = false
     }
 
-    if (failed === 0) {
-      this.showKnowledgeSnack(
-        pickLocalizedText(`已处理 ${succeeded} 个知识文件`, `Processed ${succeeded} knowledge file(s)`),
-        SnackBarTone.SUCCESS
-      )
-    } else {
+    if (failed === 0 && vectorReady === succeeded) {
       this.showKnowledgeSnack(
         pickLocalizedText(
-          `成功 ${succeeded} 个，失败 ${failed} 个：${lastMessage}`,
-          `${succeeded} succeeded, ${failed} failed: ${lastMessage}`
+          `已处理 ${succeeded} 个知识文件，关键词索引与语义向量均已就绪`,
+          `Processed ${succeeded} knowledge file(s); keyword indexes and semantic vectors are ready`
         ),
-        SnackBarTone.ERROR
+        SnackBarTone.SUCCESS
       )
+      return
     }
+    if (failed === 0) {
+      const vectorDetail = lastVectorMessage.trim() === ''
+        ? pickLocalizedText('未完成的文件继续使用关键词检索',
+          'Files without vectors continue to use keyword retrieval')
+        : lastVectorMessage
+      this.showKnowledgeSnack(
+        pickLocalizedText(
+          `已处理 ${succeeded} 个知识文件；语义向量 ${vectorReady}/${succeeded}，${vectorDetail}`,
+          `Processed ${succeeded} knowledge file(s); semantic vectors ${vectorReady}/${succeeded}, ` +
+            `${vectorDetail}`
+        ),
+        SnackBarTone.DEFAULT
+      )
+      return
+    }
+    this.showKnowledgeSnack(
+      pickLocalizedText(
+        `成功 ${succeeded} 个，失败 ${failed} 个，语义向量 ${vectorReady}/${succeeded}：${lastMessage}`,
+        `${succeeded} succeeded, ${failed} failed; semantic vectors ` +
+          `${vectorReady}/${succeeded}: ${lastMessage}`
+      ),
+      SnackBarTone.ERROR
+    )
   }
 
   private rebuildDocument(document: KnowledgeDocument): void {
