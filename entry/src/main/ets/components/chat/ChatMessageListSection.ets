@@ -1,5 +1,6 @@
 import { ChatMessage, MessageAttachment, MessageRole } from '../../models/ChatModels'
 import { DraftPreviewBubble } from './DraftPreviewBubble'
+import { ManuscriptWorkingIndicator } from './ManuscriptWorkingIndicator'
 import { shouldShowMessageHeader } from '../../utils/MessageListUtils'
 import { CHAT_MESSAGE_LIST_ITEM_REUSE_ID, ChatMessageListItem } from './ChatMessageListItem'
 import {
@@ -84,6 +85,16 @@ export struct ChatMessageListSection {
       }
     }
     return true
+  }
+
+  private hasWorkingAssistantMessage(): boolean {
+    for (let i = this.messages.length - 1; i >= 0; i--) {
+      const message = this.messages[i]
+      if (message.role === MessageRole.ASSISTANT && (message.isGenerating || message.isSearching)) {
+        return true
+      }
+    }
+    return false
   }
 
   @Monitor('syncVersion')
@@ -411,13 +422,28 @@ export struct ChatMessageListSection {
 
           if (getAppUiState().visualEffectsMode === VisualEffectsMode.MANUSCRIPT && this.messages.length > 0) {
             ListItem({ style: ListItemStyle.NONE }) {
-              Text('⁂')
+              if (this.hasWorkingAssistantMessage()) {
+                Row({ space: 7 }) {
+                  Text('⁂')
+                    .fontFamily(MANUSCRIPT_HEADING_FONT)
+                    .fontSize(13)
+                    .fontColor(getAppUiState().isDarkMode ? '#C99A52' : '#B68235')
+
+                  ManuscriptWorkingIndicator()
+                }
                 .width('100%')
-                .fontFamily(MANUSCRIPT_HEADING_FONT)
-                .fontSize(13)
-                .fontColor(getAppUiState().isDarkMode ? '#C99A52' : '#B68235')
-                .textAlign(TextAlign.Center)
+                .justifyContent(FlexAlign.Center)
+                .alignItems(VerticalAlign.Center)
                 .padding({ top: 12, bottom: 8 })
+              } else {
+                Text('⁂')
+                  .width('100%')
+                  .fontFamily(MANUSCRIPT_HEADING_FONT)
+                  .fontSize(13)
+                  .fontColor(getAppUiState().isDarkMode ? '#C99A52' : '#B68235')
+                  .textAlign(TextAlign.Center)
+                  .padding({ top: 12, bottom: 8 })
+              }
             }
           }
 
