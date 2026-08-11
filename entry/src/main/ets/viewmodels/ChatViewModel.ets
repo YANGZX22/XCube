@@ -78,7 +78,7 @@ import {
 export interface TitleGenerationCallbacks {
   onTitleUpdated?: (title: string) => void
   onTitleGenerating?: (isGenerating: boolean) => void
-  onTitleFailed?: () => void
+  onTitleFailed?: (reason?: string) => void
 }
 
 // 工具调用回调
@@ -247,8 +247,8 @@ export class ChatViewModel {
   private titleCallbacks: TitleGenerationCallbacks | null = null
   // 上下文压缩完成回调：压缩在一轮回答中途发生，UI 需要立刻重算上下文用量
   private contextCompactedCallback: (() => void) | null = null
-  // 最大重试次数
-  private readonly MAX_TITLE_RETRY = 3
+  // 标题是轻量请求：失败后只快速重试一次，避免 UI 长时间停在生成状态。
+  private readonly MAX_TITLE_RETRY = 1
   private readonly DEFAULT_WEB_SEARCH_LIMIT = 5
   private readonly EXTRA_WEB_SEARCH_LIMIT = 5
   // 取消令牌：用于停止”尚未开始发送的请求”（例如退出页面时）
@@ -446,10 +446,7 @@ export class ChatViewModel {
     if (normalized.length === 0) {
       return '新对话'
     }
-    if (normalized.length <= 20) {
-      return normalized
-    }
-    return normalized.substring(0, 20) + '...'
+    return normalized
   }
 
   private buildDraftPreview(content: string, attachments: MessageAttachment[]): string {
@@ -1339,7 +1336,7 @@ export class ChatViewModel {
       // 先把活跃叶子推进到新用户消息，保证中途中断也展示新分支
       await this.advanceActiveLeaf(snapshotSession, snapshotSessionId, userMessage.id)
       if (shouldAutoGenerateTitle) {
-        const title = content.length > 20 ? content.substring(0, 20) + '...' : content
+        const title = this.buildDraftTitle(content)
         snapshotSession.title = title
         await this.databaseService.updateSessionTitle(snapshotSessionId, title)
         this.notifySessionListChanged()
@@ -2331,7 +2328,7 @@ ${limitedSearchContext}
       this.appendMessageToSessionIfMissing(snapshotSession, userMessage)
       await this.advanceActiveLeaf(snapshotSession, snapshotSessionId, userMessage.id)
       if (shouldAutoGenerateTitle) {
-        const title = content.length > 20 ? content.substring(0, 20) + '...' : content
+        const title = this.buildDraftTitle(content)
         snapshotSession.title = title
         await this.databaseService.updateSessionTitle(snapshotSessionId, title)
         this.notifySessionListChanged()
@@ -4466,7 +4463,11 @@ ${context !== '' ? context : '(无历史对话)'}
   }
 
   // 生成智能标题（带重试机制）
-  private async generateSmartTitle(session: ChatSession, retryCount: number = 0): Promise<void> {
+  private async generateSmartTitle(
+    session: ChatSession,
+    retryCount: number = 0,
+    allowFallback: boolean = true
+  ): Promise<void> {
     // 通知开始生成
     if (this.titleCallbacks !== null && this.titleCallbacks.onTitleGenerating !== undefined) {
       this.titleCallbacks.onTitleGenerating(true)
@@ -4481,7 +4482,7 @@ ${context !== '' ? context : '(无历史对话)'}
       }
 
       // 调用 AI 任务服务生成标题（自动检测语言）
-      const title = await this.aiTaskService.generateTitle(content)
+      const title = await this.aiTaskService.generateTitle(content, undefined, allowFallback)
       if (title !== '' && this.currentSession !== null && this.currentSession.id === session.id) {
         this.currentSession.title = title
         await this.databaseService.updateSessionTitle(this.currentSession.id, title)
@@ -4496,7 +4497,7 @@ ${context !== '' ? context : '(无历史对话)'}
         // 生成失败（配置问题或 API 返回空），通知失败
         console.warn('ChatViewModel', 'Title generation returned empty string')
         if (this.titleCallbacks !== null && this.titleCallbacks.onTitleFailed !== undefined) {
-          this.titleCallbacks.onTitleFailed()
+          this.titleCallbacks.onTitleFailed('Title model returned no valid title')
         }
       }
 
@@ -4509,15 +4510,17 @@ ${context !== '' ? context : '(无历史对话)'}
 
       // 检查是否可以重试（网络错误等可重试，配置错误不重试）
       const errorStr = JSON.stringify(error)
-      const isConfigError = errorStr.includes('API Key') || errorStr.includes('未配置') || errorStr.includes('not configured')
+      const errorMessage = error instanceof Error ? error.message : errorStr
+      const isConfigError = errorMessage.includes('API Key') || errorMessage.includes('API key') ||
+        errorMessage.includes('未配置') || errorMessage.includes('not configured')
 
       if (!isConfigError && retryCount < this.MAX_TITLE_RETRY) {
-        // 指数退避重试：2秒、4秒、8秒
+        // 2 秒后快速重试一次
         const delayMs = Math.pow(2, retryCount + 1) * 1000
         console.info('ChatViewModel', `Retrying title generation in ${delayMs}ms (attempt ${retryCount + 1}/${this.MAX_TITLE_RETRY})`)
 
         setTimeout(() => {
-          this.generateSmartTitle(session, retryCount + 1)
+          this.generateSmartTitle(session, retryCount + 1, allowFallback)
         }, delayMs)
       } else {
         // 重试次数用尽或配置错误，通知失败
@@ -4525,7 +4528,7 @@ ${context !== '' ? context : '(无历史对话)'}
           this.titleCallbacks.onTitleGenerating(false)
         }
         if (this.titleCallbacks !== null && this.titleCallbacks.onTitleFailed !== undefined) {
-          this.titleCallbacks.onTitleFailed()
+          this.titleCallbacks.onTitleFailed(errorMessage)
         }
       }
     }
@@ -4534,13 +4537,20 @@ ${context !== '' ? context : '(无历史对话)'}
   // 手动重新生成标题
   async regenerateTitle(): Promise<void> {
     if (this.currentSession === null) {
+      if (this.titleCallbacks !== null && this.titleCallbacks.onTitleFailed !== undefined) {
+        this.titleCallbacks.onTitleFailed('Current chat is not ready')
+      }
       return
     }
     if (this.currentSession.messages.length === 0) {
       console.warn('ChatViewModel', 'Cannot generate title: no messages in session')
+      if (this.titleCallbacks !== null && this.titleCallbacks.onTitleFailed !== undefined) {
+        this.titleCallbacks.onTitleFailed('No chat messages are available for title generation')
+      }
       return
     }
-    await this.generateSmartTitle(this.currentSession, 0)
+    // 手动重新生成必须暴露真实失败，不能用原消息静默回退成看似成功的标题。
+    await this.generateSmartTitle(this.currentSession, 0, false)
   }
 
   // 手动更新会话标题

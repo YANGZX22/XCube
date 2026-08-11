@@ -62,7 +62,7 @@ export struct ChatNavigationTitleContent {
 
   @Local private isEditingTitle: boolean = false
   @Local private editingTitleInput: string = ''
-  @Local private manuscriptTitleMarqueeActive: boolean = false
+  @Local private titleMarqueeActive: boolean = false
   private readonly titleInputFocusId: string = 'chat_navigation_title_input'
   private get themePrimary(): string {
     return getAppUiState().themePrimary
@@ -264,7 +264,7 @@ export struct ChatNavigationTitleContent {
         startIcon: $r('sys.symbol.arrow_clockwise'),
         content: $r('app.string.regenerate_title')
       })
-        .enabled(!this.isTitleGenerating && !this.isSending)
+        .enabled(!this.isTitleGenerating)
         .onClick(() => {
           this.onRegenerateTitle()
         })
@@ -412,7 +412,6 @@ export struct ChatNavigationTitleContent {
             .backgroundColor(Color.Transparent)
             .border({ width: { bottom: 1 }, color: this.themePrimary })
             .borderRadius(0)
-            .maxLength(50)
             .height(42)
             .width('100%')
             .textAlign(TextAlign.Center)
@@ -438,27 +437,39 @@ export struct ChatNavigationTitleContent {
               this.onModelSelect()
             })
 
-          Text(this.sessionTitle)
-            .fontFamily(MANUSCRIPT_HEADING_FONT)
-            .fontSize(20)
-            .fontWeight(FontWeight.Medium)
-            .fontColor(getAppUiState().themeTextPrimary)
-            .lineHeight(25)
-            .maxLines(1)
-            .textOverflow({ overflow: TextOverflow.MARQUEE })
-            .marqueeOptions({
-              start: this.manuscriptTitleMarqueeActive,
-              step: 3,
-              loop: -1,
-              fromStart: true,
-              delay: 600,
-              fadeout: true
-            })
-            .width('100%')
-            .textAlign(TextAlign.Center)
-            .onClick(() => {
-              this.manuscriptTitleMarqueeActive = !this.manuscriptTitleMarqueeActive
-            })
+          Stack({ alignContent: Alignment.End }) {
+            Text(this.sessionTitle)
+              .fontFamily(MANUSCRIPT_HEADING_FONT)
+              .fontSize(20)
+              .fontWeight(FontWeight.Medium)
+              .fontColor(getAppUiState().themeTextPrimary)
+              .lineHeight(25)
+              .maxLines(1)
+              .textOverflow({ overflow: TextOverflow.MARQUEE })
+              .marqueeOptions({
+                start: this.titleMarqueeActive,
+                step: 3,
+                loop: -1,
+                fromStart: true,
+                delay: 600,
+                fadeout: true
+              })
+              .width('100%')
+              .padding({ left: 16, right: 16 })
+              .textAlign(TextAlign.Center)
+              .onClick(() => {
+                this.titleMarqueeActive = !this.titleMarqueeActive
+              })
+
+            if (this.isTitleGenerating) {
+              LoadingProgress()
+                .width(12)
+                .height(12)
+                .color(this.themePrimary)
+                .margin({ right: 1 })
+            }
+          }
+          .width('100%')
         }
       }
       .width('100%')
@@ -531,7 +542,7 @@ export struct ChatNavigationTitleContent {
               .maxLines(1)
               .textOverflow({ overflow: TextOverflow.MARQUEE })
               .marqueeOptions({
-                start: this.manuscriptTitleMarqueeActive,
+                start: this.titleMarqueeActive,
                 step: 3,
                 loop: -1,
                 fromStart: true,
@@ -541,7 +552,7 @@ export struct ChatNavigationTitleContent {
               .width('100%')
               .textAlign(TextAlign.Center)
               .onClick(() => {
-                this.manuscriptTitleMarqueeActive = !this.manuscriptTitleMarqueeActive
+                this.titleMarqueeActive = !this.titleMarqueeActive
               })
 
             Divider()
@@ -567,7 +578,6 @@ export struct ChatNavigationTitleContent {
             .placeholderColor($r('app.color.text_tertiary'))
             .backgroundColor(Color.Transparent)
             .border({ width: { bottom: 1 }, color: this.themePrimary })
-            .maxLength(50)
             .height(36)
             .width('100%')
             .onChange((value: string) => {
@@ -613,7 +623,18 @@ export struct ChatNavigationTitleContent {
                     .fontColor($r('app.color.text_primary'))
                     .maxLines(1)
                     .lineHeight(17)
-                    .textOverflow({ overflow: TextOverflow.Ellipsis })
+                    .textOverflow({ overflow: TextOverflow.MARQUEE })
+                    .marqueeOptions({
+                      start: this.titleMarqueeActive,
+                      step: 3,
+                      loop: -1,
+                      fromStart: true,
+                      delay: 600,
+                      fadeout: true
+                    })
+                    .onClick(() => {
+                      this.titleMarqueeActive = !this.titleMarqueeActive
+                    })
                 }
 
                 if (this.isTitleGenerating) {

@@ -1190,7 +1190,7 @@
     },
     {
       "name": "title_generate_failed_config",
-      "value": "Title generation failed. Check model settings"
+      "value": "Title generation failed. Please try again later"
     },
     {
       "name": "chat_created",

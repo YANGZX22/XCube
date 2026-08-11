@@ -1190,7 +1190,7 @@
     },
     {
       "name": "title_generate_failed_config",
-      "value": "标题生成失败，请检查模型配置"
+      "value": "标题生成失败，请稍后重试"
     },
     {
       "name": "chat_created",

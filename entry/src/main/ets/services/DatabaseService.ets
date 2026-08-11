@@ -900,10 +900,7 @@ export class DatabaseService {
     if (normalized.length === 0) {
       return '新对话'
     }
-    if (normalized.length <= 20) {
-      return normalized
-    }
-    return normalized.substring(0, 20) + '...'
+    return normalized
   }
 
   private buildDraftPreview(content: string, attachments: MessageAttachment[]): string {

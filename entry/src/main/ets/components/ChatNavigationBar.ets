@@ -190,7 +190,6 @@ export struct ChatNavigationBar {
                   .fontColor($r('app.color.text_primary'))
                   .backgroundColor(Color.Transparent)
                   .border({ width: { bottom: 1 }, color: this.themePrimary })
-                  .maxLength(50)
                   .height(36)
                   .layoutWeight(1)
                   .margin({ left: this.hasCurrentModelIdentity() ? 5 : 0 })
@@ -391,7 +390,7 @@ export struct ChatNavigationBar {
         startIcon: $r('sys.symbol.arrow_clockwise'),
         content: $r('app.string.regenerate_title')
       })
-      .enabled(!this.isTitleGenerating && !this.isSending)
+      .enabled(!this.isTitleGenerating)
       .onClick(() => {
         this.onRegenerateTitle()
       })

@@ -2,8 +2,7 @@
 import { getAIApiService, AIApiService, AIApiConfig, RequestMessage } from './AIApiService'
 import { getDefaultModelService, DefaultModelService } from './DefaultModelService'
 import { getProviderViewModel, ProviderViewModel } from '../viewmodels/ProviderViewModel'
-import { ReasoningRequestStrategy } from './ProviderCompatibilityRegistry'
-import { ModelRole, OpenAITransport } from '../models/ChatModels'
+import { ModelRole, OpenAITransport, ReasoningLevel } from '../models/ChatModels'
 import { getEffectiveApiKey } from '../config/PresetProviders'
 
 // 翻译/标题生成结果
@@ -19,6 +18,7 @@ export class AITaskService {
   private aiApiService: AIApiService
   private defaultModelService: DefaultModelService
   private providerViewModel: ProviderViewModel
+  private readonly TITLE_REQUEST_TIMEOUT_MS: number = 20000
 
   private constructor() {
     this.aiApiService = getAIApiService()
@@ -124,16 +124,15 @@ export class AITaskService {
     // 再次去除引号（去前缀后可能暴露出引号）
     title = title.replace(/^["'""'']+|["'""'']+$/g, '')
 
+    // 标题始终完整保存，不接受模型自行补上的截断省略号
+    title = title.replace(/(?:\.{3,}|…)+$/g, '').trim()
+
     return title.trim()
   }
 
   // 验证标题有效性
   private isValidTitle(title: string): boolean {
     if (title === '') {
-      return false
-    }
-    // 长度检查：4-20 字符
-    if (title.length < 4 || title.length > 20) {
       return false
     }
     // 不能全是标点符号
@@ -195,24 +194,20 @@ export class AITaskService {
     title = title.replace(/[？?。.！!，,]+$/g, '')
     title = title.replace(/[呢吗呀啊吧嘛]+$/g, '')
 
-    // 截取合适长度
-    if (title.length > 20) {
-      title = title.substring(0, 17) + '...'
-    }
-
-    // 如果清理后太短，使用原始消息截取
+    // 如果清理后太短，使用原始消息
     if (title.length < 2) {
       title = userMessage
-      if (title.length > 20) {
-        title = title.substring(0, 17) + '...'
-      }
     }
 
     return title
   }
 
   // 生成对话标题
-  async generateTitle(conversationContent: string, locale?: string): Promise<string> {
+  async generateTitle(
+    conversationContent: string,
+    locale?: string,
+    allowFallback: boolean = true
+  ): Promise<string> {
     const titleModel = this.defaultModelService.getModel(ModelRole.TITLE)
 
     // 获取供应商信息（使用异步方法，确保缓存已加载）
@@ -220,14 +215,20 @@ export class AITaskService {
 
     if (provider === null) {
       console.error('AITaskService', 'Provider not found: ' + titleModel.providerId)
-      return this.extractFallbackTitle(conversationContent, locale || 'Chinese')
+      if (allowFallback) {
+        return this.extractFallbackTitle(conversationContent, locale || 'Chinese')
+      }
+      throw new Error('Title model provider is unavailable')
     }
 
     // 获取有效的 API Key（优先用户配置，其次预设）
     const effectiveApiKey = getEffectiveApiKey(provider.id, provider.apiKey)
     if (effectiveApiKey === '') {
       console.error('AITaskService', 'No API Key configured for provider: ' + provider.id)
-      return this.extractFallbackTitle(conversationContent, locale || 'Chinese')
+      if (allowFallback) {
+        return this.extractFallbackTitle(conversationContent, locale || 'Chinese')
+      }
+      throw new Error('Title model API key is missing')
     }
 
     // 截断内容
@@ -253,7 +254,6 @@ export class AITaskService {
         apiConfig.topP = provider.models[i].parameters.topP
         apiConfig.presencePenalty = provider.models[i].parameters.presencePenalty
         apiConfig.frequencyPenalty = provider.models[i].parameters.frequencyPenalty
-        apiConfig.modelReasoningStrategyOverride = ReasoningRequestStrategy.NONE
         break
       }
     }
@@ -267,36 +267,45 @@ export class AITaskService {
     ]
 
     try {
-      const result = await this.aiApiService.sendChatRequest(
+      // 标题请求使用独立实例，避免与正在进行的流式对话共享解析状态。
+      const titleApiService = AIApiService.createIsolated()
+      const result = await titleApiService.sendChatRequest(
         apiConfig,
         messages,
         titleModel.modelId,
         0.3, // 低温度以获得更稳定的输出
-        100  // 标题只需要少量 token
+        512, // 为可能包含内部推理的模型预留空间，最终仍只提取标题正文
+        ReasoningLevel.OFF,
+        this.TITLE_REQUEST_TIMEOUT_MS
       )
       if (result.success) {
         // 清理标题
-        let title = this.cleanTitle(result.content)
-
-        // 限制长度为 20 字符
-        if (title.length > 20) {
-          title = title.substring(0, 20)
-        }
+        const title = this.cleanTitle(result.content)
 
         // 验证标题有效性
         if (this.isValidTitle(title)) {
           return title
         } else {
-          console.warn('AITaskService', 'Generated title invalid, using fallback: ' + title)
-          return this.extractFallbackTitle(conversationContent, effectiveLocale)
+          console.warn('AITaskService', 'Generated title invalid: ' + title)
+          if (allowFallback) {
+            return this.extractFallbackTitle(conversationContent, effectiveLocale)
+          }
+          throw new Error('Title model returned no valid title')
         }
       } else {
         console.error('AITaskService', 'Failed to generate title: ' + result.errorMessage)
-        return this.extractFallbackTitle(conversationContent, effectiveLocale)
+        if (allowFallback) {
+          return this.extractFallbackTitle(conversationContent, effectiveLocale)
+        }
+        throw new Error(result.errorMessage !== '' ? result.errorMessage : 'Title generation request failed')
       }
     } catch (error) {
       console.error('AITaskService', 'Error generating title: ' + JSON.stringify(error))
-      return this.extractFallbackTitle(conversationContent, effectiveLocale)
+      if (allowFallback) {
+        return this.extractFallbackTitle(conversationContent, effectiveLocale)
+      }
+      const errorMessage = error instanceof Error ? error.message : JSON.stringify(error)
+      throw new Error(errorMessage !== '' ? errorMessage : 'Title generation request failed')
     }
   }
 

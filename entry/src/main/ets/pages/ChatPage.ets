@@ -243,6 +243,7 @@ export struct ChatPage {
   @Local sessionTitle: string = ''
   @Local isTitleGenerating: boolean = false
   @Local titleGenerateFailed: boolean = false
+  private isManualTitleRegeneration: boolean = false
   // 上下文长度窗口用量。估算需要遍历全部历史文本，只在消息列表或模型变化时刷新，
   // 不随流式输出的每一帧重算。
   @Local contextUsage: ContextUsage = new ContextUsage()
@@ -485,6 +486,25 @@ export struct ChatPage {
     showSnackBar(this.getUIContext(), options)
   }
 
+  private localizeTitleGenerationFailure(reason: string): string {
+    if (reason === 'Title model provider is unavailable') {
+      return pickLocalizedText('标题模型服务商不可用', reason)
+    }
+    if (reason === 'Title model API key is missing') {
+      return pickLocalizedText('标题模型缺少 API Key', reason)
+    }
+    if (reason === 'Title model returned no valid title') {
+      return pickLocalizedText('标题模型未返回有效标题', reason)
+    }
+    if (reason === 'Current chat is not ready') {
+      return pickLocalizedText('当前对话尚未就绪', reason)
+    }
+    if (reason === 'No chat messages are available for title generation') {
+      return pickLocalizedText('当前对话没有可用于生成标题的消息', reason)
+    }
+    return reason
+  }
+
   aboutToAppear(): void {
     ensureManuscriptFonts()
     if (this.routeParams === null && this.routeParamsSeed !== null) {
@@ -521,13 +541,28 @@ export struct ChatPage {
       onTitleUpdated: (title: string): void => {
         this.sessionTitle = title
         this.titleGenerateFailed = false
+        if (this.isManualTitleRegeneration) {
+          this.isManualTitleRegeneration = false
+          this.showChatSnack($r('app.string.title_updated'), 2000, SnackBarTone.SUCCESS)
+        }
       },
       onTitleGenerating: (isGenerating: boolean): void => {
         this.isTitleGenerating = isGenerating
       },
-      onTitleFailed: (): void => {
+      onTitleFailed: (reason?: string): void => {
+        this.isTitleGenerating = false
         this.titleGenerateFailed = true
-        this.showChatSnack($r('app.string.title_generate_failed_config'), 2000, SnackBarTone.ERROR)
+        this.isManualTitleRegeneration = false
+        const detail = reason !== undefined ? this.localizeTitleGenerationFailure(reason.trim()) : ''
+        if (detail !== '') {
+          this.showChatSnack(
+            pickLocalizedText(`标题生成失败：${detail}`, `Title generation failed: ${detail}`),
+            4000,
+            SnackBarTone.ERROR
+          )
+        } else {
+          this.showChatSnack($r('app.string.title_generate_failed_config'), 3000, SnackBarTone.ERROR)
+        }
       }
     }
     this.chatViewModel.setTitleCallbacks(titleCallbacks)
@@ -1923,15 +1958,19 @@ export struct ChatPage {
     this.scheduleInitialBottomAlignmentRetries()
   }
 
+  private getManuscriptEndMarkItemCount(): number {
+    return this.isManuscriptMode && this.messages.length > 0 ? 1 : 0
+  }
+
   private getBottomAnchorListIndex(): number {
     const draftItemCount = !this.isEditingMessage && this.hasDraftContent() ? 1 : 0
-    return this.messages.length + 1 + draftItemCount
+    return this.messages.length + 1 + this.getManuscriptEndMarkItemCount() + draftItemCount
   }
 
   private getTotalListItemCount(): number {
-    // 1 (top padding) + messages + draft preview (0 or 1) + 1 (bottom padding)
+    // 1 (top padding) + messages + manuscript end mark (0 or 1) + draft preview (0 or 1) + 1 (bottom padding)
     const draftItemCount = !this.isEditingMessage && this.hasDraftContent() ? 1 : 0
-    return 1 + this.messages.length + draftItemCount + 1
+    return 1 + this.messages.length + this.getManuscriptEndMarkItemCount() + draftItemCount + 1
   }
 
   private getCurrentModelInfo(): ModelInfo | null {
@@ -5953,6 +5992,7 @@ export struct ChatPage {
     // 重置标题状态
     this.isTitleGenerating = false
     this.titleGenerateFailed = false
+    this.isManualTitleRegeneration = false
     // 标记为新建的空会话（返回时需要删除）
     this.isNewEmptySession = true
     this.syncActiveSessionBinding()
@@ -5967,9 +6007,23 @@ export struct ChatPage {
       this.showChatSnack($r('app.string.chat_empty'), 2000, SnackBarTone.ERROR)
       return
     }
+    if (this.isTitleGenerating) {
+      this.showChatSnack($r('app.string.generating_title'), 2000)
+      return
+    }
+    this.isManualTitleRegeneration = true
+    this.isTitleGenerating = true
     this.titleGenerateFailed = false
     this.showChatSnack($r('app.string.generating_title'), 2000)
-    this.chatViewModel.regenerateTitle()
+    try {
+      await this.chatViewModel.regenerateTitle()
+    } catch (error) {
+      console.error('ChatPage', `Failed to regenerate title: ${JSON.stringify(error)}`)
+      this.isTitleGenerating = false
+      this.titleGenerateFailed = true
+      this.isManualTitleRegeneration = false
+      this.showChatSnack($r('app.string.title_generate_failed_config'), 2000, SnackBarTone.ERROR)
+    }
   }
 
   // 处理删除对话

@@ -1399,7 +1399,8 @@ export class AIApiService {
     model: string,
     temperature: number = 0.7,
     maxTokens: number = DEFAULT_MAX_OUTPUT_TOKENS,
-    reasoningLevel: ReasoningLevel = ReasoningLevel.OFF
+    reasoningLevel: ReasoningLevel = ReasoningLevel.OFF,
+    timeoutMs: number = 120000
   ): Promise<AIApiResult> {
     const url = this.buildChatUrl(config, model)
     const requestBody = this.buildRequestBody(config, messages, model, temperature, maxTokens, reasoningLevel)
@@ -1408,7 +1409,7 @@ export class AIApiService {
       config,
       url,
       JSON.stringify(requestBody),
-      120000 // 2分钟超时
+      timeoutMs
     )
 
     if (!response.success) {
