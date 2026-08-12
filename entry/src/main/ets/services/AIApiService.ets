@@ -32,7 +32,7 @@ import {
   resolveReasoningRequestStrategyWithOverride
 } from './ProviderCompatibilityRegistry'
 import { normalizeCustomHeaderName, parseCustomHeadersMap } from '../utils/CustomHeaderUtils'
-import { estimateTextTokens } from '../utils/ModelBillingUtils'
+import { estimateProviderManagedAttachmentTokens, estimateTextTokens } from '../utils/ModelBillingUtils'
 
 // URL 解析工具类
 class ApiUrlResolver {
@@ -1929,7 +1929,7 @@ export class AIApiService {
             continue
           }
         }
-        tokens += this.estimateBinaryAttachmentTokens(attachment)
+        tokens += estimateProviderManagedAttachmentTokens(attachment)
       }
     }
 
@@ -1946,20 +1946,6 @@ export class AIApiService {
       tokens += 4
     }
     return Math.max(1, tokens)
-  }
-
-  private estimateBinaryAttachmentTokens(attachment: MessageAttachment): number {
-    let byteSize = Math.max(0, attachment.size)
-    if (byteSize <= 0 && attachment.base64Data !== '') {
-      byteSize = Math.floor(attachment.base64Data.length * 0.75)
-    }
-    const nameTokens = estimateTextTokens(attachment.name) + estimateTextTokens(attachment.mimeType) + 8
-    if (attachment.type === AttachmentType.IMAGE || attachment.mimeType.toLowerCase().startsWith('image/')) {
-      // auto detail 无法在客户端精确预知切片数；按尺寸给出保守且有上限的图像估算。
-      return nameTokens + Math.min(4096, 85 + Math.ceil(byteSize / 2048))
-    }
-    // PDF/二进制文档最终按抽取内容计费，字节数与 token 不是一一对应；使用保守近似。
-    return nameTokens + Math.min(100000, Math.max(256, Math.ceil(byteSize / 6)))
   }
 
   // 构建请求体

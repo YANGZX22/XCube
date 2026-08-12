@@ -65,6 +65,7 @@ import {
   ContextCompactionRuntime,
   ContextCompactionService,
   ContextCompactionStatus,
+  DEFAULT_COMPACT_KEEP_RECENT_TURNS,
   getContextCompactionService
 } from '../services/ContextCompactionService'
 import { ReasoningRequestStrategy } from '../services/ProviderCompatibilityRegistry'
@@ -952,6 +953,13 @@ export class ChatViewModel {
     if (pendingContent !== '' || pendingAttachments.length > 0) {
       requestMessages.push(new RequestMessage('user', pendingContent, this.cloneAttachments(pendingAttachments)))
     }
+    // 与真正发送链路保持一致：不支持原生附件的模型会先移除文件/图片，随后只接收
+    // fallback 提示、工具 schema 和工具返回文本，不能再把本地文件大小计入上下文。
+    this.filterNativeUnsupportedAttachmentsInMessages(
+      requestMessages,
+      this.getCurrentModelSupportsDocuments(providerId, modelId),
+      this.getCurrentModelSupportsVision(providerId, modelId)
+    )
     const apiConfig: AIApiConfig = {
       providerId: provider.id,
       providerType: provider.type,
@@ -995,9 +1003,11 @@ export class ChatViewModel {
       return this.buildManualCompactionFailure(ContextCompactionStatus.UNAVAILABLE, `未找到供应商 ${providerId}`)
     }
     const effectiveApiKey = getEffectiveApiKey(providerId, provider.apiKey)
-    if (effectiveApiKey === '') {
+    if (provider.requiresApiKey && effectiveApiKey === '') {
       return this.buildManualCompactionFailure(ContextCompactionStatus.UNAVAILABLE, `${provider.name} 未配置 API Key`)
     }
+
+    const currentUsage = await this.getContextUsage(providerId, modelId, messages)
 
     const summary = await this.requestManualCompactionSummary(provider, effectiveApiKey, modelId, session, messages)
     if (summary === '') {
@@ -1009,7 +1019,9 @@ export class ChatViewModel {
       session.id,
       ContextCompactionService.getEffectiveMessages(session, messages),
       summary,
-      this.getCurrentModelContextWindow(providerId, modelId)
+      currentUsage.limitTokens,
+      DEFAULT_COMPACT_KEEP_RECENT_TURNS,
+      currentUsage.usedTokens
     )
     if (!result.applied) {
       console.warn('ChatViewModel', `Manual compaction not applied: ${result.status} ${result.message}`)
@@ -1065,11 +1077,20 @@ export class ChatViewModel {
     const effectiveMessages = ContextCompactionService.getEffectiveMessages(session, messages)
     for (let i = 0; i < effectiveMessages.length; i++) {
       const message = effectiveMessages[i]
-      if (message.role === MessageRole.SYSTEM || message.content.trim() === '') {
+      if (message.role === MessageRole.SYSTEM) {
         continue
       }
-      // 摘要只需要文本，附件与推理过程不参与本次请求
-      requestMessages.push(new RequestMessage(message.role, message.content))
+      const summaryText = this.buildManualCompactionHistoryText(message)
+      if (summaryText === '' && message.attachments.length === 0) {
+        continue
+      }
+      // 原生附件交给供应商的文件/视觉管线重新读取；非原生附件会在下方过滤，
+      // 其真实读取内容来自已持久化的工具结果文本。
+      requestMessages.push(new RequestMessage(
+        message.role,
+        summaryText,
+        this.cloneAttachments(message.attachments)
+      ))
     }
     requestMessages.push(new RequestMessage('user', ContextCompactionService.buildManualSummaryUserPrompt()))
 
@@ -1096,6 +1117,13 @@ export class ChatViewModel {
     try {
       // 流式解析状态是实例级的，摘要请求用独立实例，避免污染正在进行的对话请求
       const isolatedApiService = AIApiService.createIsolated()
+      this.filterNativeUnsupportedAttachmentsInMessages(
+        requestMessages,
+        this.getCurrentModelSupportsDocuments(provider.id, modelId),
+        this.getCurrentModelSupportsVision(provider.id, modelId)
+      )
+      await this.prepareHistoryAttachments(requestMessages)
+      await isolatedApiService.prepareProviderDocumentMessages(apiConfig, requestMessages)
       const estimatedInputTokens = isolatedApiService.estimateRequestInputTokens(
         apiConfig,
         requestMessages,
@@ -1123,6 +1151,34 @@ export class ChatViewModel {
       console.error('ChatViewModel', `Manual compaction summary error: ${JSON.stringify(error)}`)
       return ''
     }
+  }
+
+  // 手动摘要必须看到工具真正读取到的内容。ChatMessage 会把多轮工具过程折叠到一条
+  // 气泡里，因此这里把调用参数与配对结果展开成可供摘要模型读取的文本记录。
+  private buildManualCompactionHistoryText(message: ChatMessage): string {
+    const sections: string[] = []
+    if (message.content.trim() !== '') {
+      sections.push(message.content)
+    }
+    if (message.attachments.length > 0) {
+      const attachmentNames: string[] = []
+      for (let i = 0; i < message.attachments.length; i++) {
+        const attachment = message.attachments[i]
+        attachmentNames.push(`${attachment.name} (${attachment.mimeType}, attachmentId=${attachment.id})`)
+      }
+      sections.push(`附件记录：${attachmentNames.join('；')}`)
+    }
+    for (let i = 0; i < message.toolCalls.length; i++) {
+      const toolCall = message.toolCalls[i]
+      sections.push(`工具调用 ${toolCall.functionName} 参数：${toolCall.arguments}`)
+      for (let j = 0; j < message.toolResults.length; j++) {
+        if (message.toolResults[j].toolCallId === toolCall.id) {
+          sections.push(`工具 ${toolCall.functionName} 返回：\n${message.toolResults[j].content}`)
+          break
+        }
+      }
+    }
+    return sections.join('\n\n').trim()
   }
 
   // 部分模型会把思考过程以 <think> 标签内联在正文里，摘要不需要这部分
@@ -2643,6 +2699,11 @@ ${limitedSearchContext}
       previewRequestMessages.push(historyMessages[i])
     }
     previewRequestMessages.push(new RequestMessage('user', effectiveRequestContent, requestAttachments))
+    this.filterNativeUnsupportedAttachmentsInMessages(
+      previewRequestMessages,
+      modelSupportsDocuments,
+      modelSupportsVision
+    )
     let contextUsage = this.computeRequestContextUsage(
       apiConfig,
       previewRequestMessages,
@@ -4930,6 +4991,32 @@ ${context !== '' ? context : '(无历史对话)'}
       }
     }
 
+    return false
+  }
+
+  private getCurrentModelSupportsDocuments(providerId: string, modelId: string): boolean {
+    const provider = this.providerViewModel.getProviderById(providerId)
+    if (provider === null) {
+      return false
+    }
+    for (let i = 0; i < provider.models.length; i++) {
+      if (provider.models[i].id === modelId) {
+        return provider.models[i].capabilities.supportsDocuments
+      }
+    }
+    return false
+  }
+
+  private getCurrentModelSupportsVision(providerId: string, modelId: string): boolean {
+    const provider = this.providerViewModel.getProviderById(providerId)
+    if (provider === null) {
+      return false
+    }
+    for (let i = 0; i < provider.models.length; i++) {
+      if (provider.models[i].id === modelId) {
+        return provider.models[i].capabilities.supportsVision
+      }
+    }
     return false
   }
 

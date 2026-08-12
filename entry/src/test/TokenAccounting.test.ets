@@ -1,5 +1,5 @@
 import { describe, it, expect } from '@ohos/hypium'
-import { ChatMessage, MessageRole } from '../main/ets/models/ChatModels'
+import { AttachmentType, ChatMessage, MessageAttachment, MessageRole } from '../main/ets/models/ChatModels'
 import {
   buildContextUsageFromRequestTokens,
   estimateExtraPromptTokens,
@@ -7,7 +7,11 @@ import {
   resolveContextWindowTokens,
   resolveRequestMaxOutputTokens
 } from '../main/ets/utils/ContextWindowUtils'
-import { estimateTextTokens, RequestTokenUsageTracker } from '../main/ets/utils/ModelBillingUtils'
+import {
+  estimateProviderManagedAttachmentTokens,
+  estimateTextTokens,
+  RequestTokenUsageTracker
+} from '../main/ets/utils/ModelBillingUtils'
 import { ContextCompactionService } from '../main/ets/services/ContextCompactionService'
 
 export default function tokenAccountingTest() {
@@ -39,6 +43,42 @@ export default function tokenAccountingTest() {
 
     it('counts_whitespace_that_is_sent_to_the_tokenizer', 0, () => {
       expect(estimateTextTokens('a               b') > estimateTextTokens('ab')).assertEqual(true)
+    })
+
+    it('does_not_convert_binary_file_size_into_context_tokens', 0, () => {
+      const small = new MessageAttachment(
+        'small',
+        AttachmentType.FILE,
+        'report.pdf',
+        '/tmp/report.pdf',
+        'application/pdf',
+        1024
+      )
+      const large = new MessageAttachment(
+        'large',
+        AttachmentType.FILE,
+        'report.pdf',
+        '/tmp/report.pdf',
+        'application/pdf',
+        100 * 1024 * 1024
+      )
+      expect(estimateProviderManagedAttachmentTokens(small))
+        .assertEqual(estimateProviderManagedAttachmentTokens(large))
+    })
+
+    it('uses_actual_request_tokens_for_manual_compaction_accounting', 0, () => {
+      const message = new ChatMessage('user', MessageRole.USER, '需要压缩的历史内容')
+      const summary = '用户正在修复附件上下文统计；附件由工具读取，摘要必须保留工具返回的实际文本和当前任务进度。'
+      const result = ContextCompactionService.getInstance().buildManualCompaction(
+        'session-token-accounting',
+        [message],
+        summary,
+        4000,
+        0,
+        900
+      )
+      expect(result.applied).assertEqual(true)
+      expect(result.beforeTokens).assertEqual(900)
     })
 
     it('accumulates_actual_and_fallback_usage_across_api_rounds', 0, () => {

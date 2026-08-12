@@ -271,7 +271,8 @@ export class ContextCompactionService {
     messages: ChatMessage[],
     summaryBody: string,
     contextWindowTokens: number,
-    keepRecentTurns: number = DEFAULT_COMPACT_KEEP_RECENT_TURNS
+    keepRecentTurns: number = DEFAULT_COMPACT_KEEP_RECENT_TURNS,
+    requestInputTokens: number = 0
   ): ContextCompactionResult {
     const result = new ContextCompactionResult()
     result.sessionId = sessionId
@@ -293,7 +294,8 @@ export class ContextCompactionService {
       trimmedSummary,
       this.resolveKeepRecentTurns(keepRecentTurns),
       contextWindowTokens,
-      false
+      false,
+      requestInputTokens
     )
   }
 

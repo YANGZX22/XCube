@@ -1,4 +1,4 @@
-import { ChatMessage, ModelInfo } from '../models/ChatModels'
+import { ChatMessage, MessageAttachment, ModelInfo } from '../models/ChatModels'
 
 export class ModelBillingSnapshot {
   enabled: boolean = false
@@ -58,6 +58,17 @@ export function estimateTextTokens(text: string): number {
     }
   }
   return Math.max(1, Math.ceil(cjkCount + otherCharacterCount / 4))
+}
+
+// 二进制附件由供应商的文件/视觉管线或本地读取工具解析，原始字节数不是模型输入
+// Token。发送前只估算消息封装与附件元数据；供应商返回 usage 后由真实值覆盖。
+export function estimateProviderManagedAttachmentTokens(attachment: MessageAttachment): number {
+  const metadataTokens = estimateTextTokens(attachment.name) + estimateTextTokens(attachment.mimeType) + 8
+  if (attachment.mimeType.toLowerCase().startsWith('image/')) {
+    // 对 auto detail 无法在客户端预知图像切片数，仅保留常见的基础图像预算。
+    return metadataTokens + 85
+  }
+  return metadataTokens + 32
 }
 
 // 一次模型请求的 Token 统计器。工具调用会产生多轮 API 请求，因此不能只把
@@ -131,17 +142,7 @@ export class RequestTokenUsageTracker {
 function estimateMessagePayloadTokens(message: ChatMessage): number {
   let tokens = estimateTextTokens(message.content) + estimateTextTokens(message.reasoningContent) + 4
   for (let i = 0; i < message.attachments.length; i++) {
-    const attachment = message.attachments[i]
-    let byteSize = Math.max(0, attachment.size)
-    if (byteSize <= 0 && attachment.base64Data !== '') {
-      byteSize = Math.floor(attachment.base64Data.length * 0.75)
-    }
-    if (attachment.mimeType.toLowerCase().startsWith('image/')) {
-      tokens += Math.min(4096, 85 + Math.ceil(byteSize / 2048))
-    } else {
-      tokens += Math.min(100000, Math.max(256, Math.ceil(byteSize / 6)))
-    }
-    tokens += estimateTextTokens(attachment.name) + estimateTextTokens(attachment.mimeType)
+    tokens += estimateProviderManagedAttachmentTokens(message.attachments[i])
   }
   for (let i = 0; i < message.toolCalls.length; i++) {
     const toolCall = message.toolCalls[i]

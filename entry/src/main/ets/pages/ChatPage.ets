@@ -5593,7 +5593,7 @@ export struct ChatPage {
       this.showChatSnack(pickLocalizedText('请先选择模型', 'Select a model first'), 2000, SnackBarTone.ERROR)
       return
     }
-    this.refreshContextUsage()
+    await this.refreshContextUsage()
     if (!this.canCompactCurrentContext()) {
       this.showChatSnack(this.getCompactionUnavailableText(), 2500)
       return
