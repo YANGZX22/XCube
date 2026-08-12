@@ -27,6 +27,10 @@ export function getLocalizedBuiltinToolName(toolId: string, fallback: string = '
       return pickLocalizedText('PDF 转文本', 'PDF to Text')
     case 'image_to_text':
       return pickLocalizedText('图片转文本', 'Image to Text')
+    case 'docx_to_text':
+      return pickLocalizedText('DOCX 转文本', 'DOCX to Text')
+    case 'xlsx_to_text':
+      return pickLocalizedText('XLSX 转文本', 'XLSX to Text')
     case 'use_skill':
       return 'Skill'
     case 'python_sandbox':
@@ -71,6 +75,12 @@ export function getLocalizedBuiltinToolDescription(toolId: string, fallback: str
     case 'image_to_text':
       return pickLocalizedText('使用本地 OCR 读取图片中的文字',
         'Extract text from images with local OCR.')
+    case 'docx_to_text':
+      return pickLocalizedText('在本地读取 DOCX 中的标题、段落、列表和表格',
+        'Extract headings, paragraphs, lists, and tables from DOCX files locally.')
+    case 'xlsx_to_text':
+      return pickLocalizedText('在本地读取 XLSX 工作表和单元格内容',
+        'Extract worksheets and cell content from XLSX files locally.')
     case 'use_skill':
       return pickLocalizedText('读取用户已启用的技能说明',
         'Read instructions from enabled user skills.')

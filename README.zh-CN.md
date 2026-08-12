@@ -71,7 +71,7 @@ OpenAI · Claude · Gemini · DeepSeek · Grok · Ollama · OpenRouter · Silico
 
 ### 📚 知识库与 RAG
 
-在“知识库”标签页上传 PDF、Markdown、文本或图片（内置 OCR）。模型会按需通过 [`knowledge_search`](entry/src/main/ets/config/KnowledgeSearchTool.ets) 工具检索资料；应用不会预先检索，也不会将知识片段注入系统提示词。
+在“知识库”标签页上传 DOCX、XLSX、PDF、Markdown、文本或图片（内置 Office 文档解析与 OCR）。模型会按需通过 [`knowledge_search`](entry/src/main/ets/config/KnowledgeSearchTool.ets) 工具检索资料；应用不会预先检索，也不会将知识片段注入系统提示词。
 
 - **混合检索** —— 融合关键词与向量检索，并扩展相邻片段，避免跨分块的答案被截断
 - **结构感知分块** —— 保留页边界、标题、列表、表格与 FAQ 问答对等文档结构

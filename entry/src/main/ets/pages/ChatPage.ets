@@ -43,6 +43,7 @@ import {
   ASK_USER_TOOL_ID,
   CANVAS_DOCUMENT_TOOL_ID,
   COMPACT_TOOL_ID,
+  DOCX_TO_TEXT_TOOL_ID,
   IMAGE_TO_TEXT_TOOL_ID,
   KNOWLEDGE_SEARCH_TOOL_ID,
   MATH_CHART_TOOL_ID,
@@ -52,6 +53,7 @@ import {
   SUB_AGENT_RESULT_TOOL_ID,
   USE_SKILL_TOOL_ID,
   WRITE_SCHEDULE_TOOL_ID,
+  XLSX_TO_TEXT_TOOL_ID,
   registerBuiltinTools
 } from '../config/BuiltinTools'
 import { AppStorageKeys } from '../config/AppStorageKeys'
@@ -2033,6 +2035,40 @@ export struct ChatPage {
     return mimeType === 'application/pdf' || name.endsWith('.pdf')
   }
 
+  private collectDocxAttachments(attachments: MessageAttachment[]): MessageAttachment[] {
+    const docxAttachments: MessageAttachment[] = []
+    for (let i = 0; i < attachments.length; i++) {
+      if (this.isDocxAttachment(attachments[i])) {
+        docxAttachments.push(attachments[i])
+      }
+    }
+    return docxAttachments
+  }
+
+  private isDocxAttachment(attachment: MessageAttachment): boolean {
+    const mimeType = attachment.mimeType.toLowerCase()
+    const name = attachment.name.toLowerCase()
+    return mimeType === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' ||
+      name.endsWith('.docx')
+  }
+
+  private collectXlsxAttachments(attachments: MessageAttachment[]): MessageAttachment[] {
+    const xlsxAttachments: MessageAttachment[] = []
+    for (let i = 0; i < attachments.length; i++) {
+      if (this.isXlsxAttachment(attachments[i])) {
+        xlsxAttachments.push(attachments[i])
+      }
+    }
+    return xlsxAttachments
+  }
+
+  private isXlsxAttachment(attachment: MessageAttachment): boolean {
+    const mimeType = attachment.mimeType.toLowerCase()
+    const name = attachment.name.toLowerCase()
+    return mimeType === 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' ||
+      name.endsWith('.xlsx')
+  }
+
   private collectImageAttachments(attachments: MessageAttachment[]): MessageAttachment[] {
     const imageAttachments: MessageAttachment[] = []
     for (let i = 0; i < attachments.length; i++) {
@@ -2149,6 +2185,9 @@ export struct ChatPage {
       if (modelSupportsDocuments && toolId === PDF_TO_TEXT_TOOL_ID) {
         return false
       }
+      if (modelSupportsDocuments && (toolId === DOCX_TO_TEXT_TOOL_ID || toolId === XLSX_TO_TEXT_TOOL_ID)) {
+        return false
+      }
       if (modelSupportsVision && toolId === IMAGE_TO_TEXT_TOOL_ID) {
         return false
       }
@@ -2167,32 +2206,81 @@ export struct ChatPage {
       return new DocumentFallbackSendResult(messageContent, '')
     }
     const pdfAttachments = this.collectPdfAttachments(attachments)
-    if (pdfAttachments.length === 0) {
+    const docxAttachments = this.collectDocxAttachments(attachments)
+    const xlsxAttachments = this.collectXlsxAttachments(attachments)
+    if (pdfAttachments.length === 0 && docxAttachments.length === 0 && xlsxAttachments.length === 0) {
       return new DocumentFallbackSendResult(messageContent, '')
     }
 
-    this.documentAttachmentRegistry.registerAttachments(this.sessionId, pdfAttachments)
+    this.documentAttachmentRegistry.registerAttachments(
+      this.sessionId,
+      [...pdfAttachments, ...docxAttachments, ...xlsxAttachments]
+    )
     if (this.getSendFlow().isCurrentModelSupportsTools(currentProvider, this.currentModelId)) {
+      const instructions: string[] = []
+      const hints: string[] = []
       if (!selectedToolIds.includes(PDF_TO_TEXT_TOOL_ID) && !forcedToolIds.includes(PDF_TO_TEXT_TOOL_ID)) {
-        forcedToolIds.push(PDF_TO_TEXT_TOOL_ID)
+        if (pdfAttachments.length > 0) {
+          forcedToolIds.push(PDF_TO_TEXT_TOOL_ID)
+        }
+      }
+      if (pdfAttachments.length > 0) {
+        instructions.push(this.buildPdfToTextToolInstruction(pdfAttachments))
+        hints.push('已提醒模型通过 PDF 转文本工具读取文档')
+      }
+      if (!selectedToolIds.includes(DOCX_TO_TEXT_TOOL_ID) && !forcedToolIds.includes(DOCX_TO_TEXT_TOOL_ID)) {
+        if (docxAttachments.length > 0) {
+          forcedToolIds.push(DOCX_TO_TEXT_TOOL_ID)
+        }
+      }
+      if (docxAttachments.length > 0) {
+        instructions.push(this.buildOfficeToTextToolInstruction(docxAttachments, 'DOCX', DOCX_TO_TEXT_TOOL_ID))
+        hints.push('已提醒模型通过 DOCX 转文本工具读取文档')
+      }
+      if (!selectedToolIds.includes(XLSX_TO_TEXT_TOOL_ID) && !forcedToolIds.includes(XLSX_TO_TEXT_TOOL_ID)) {
+        if (xlsxAttachments.length > 0) {
+          forcedToolIds.push(XLSX_TO_TEXT_TOOL_ID)
+        }
+      }
+      if (xlsxAttachments.length > 0) {
+        instructions.push(this.buildOfficeToTextToolInstruction(xlsxAttachments, 'XLSX', XLSX_TO_TEXT_TOOL_ID))
+        hints.push('已提醒模型通过 XLSX 转文本工具读取文档')
       }
       return new DocumentFallbackSendResult(
-        this.appendDocumentContext(messageContent, this.buildPdfToTextToolInstruction(pdfAttachments)),
-        '已提醒模型通过 PDF 转文本工具读取文档'
+        this.appendDocumentContext(messageContent, instructions.join('\n\n')),
+        hints.join('\n')
       )
     }
 
-    const inlineContext = await this.buildInlinePdfTextContext(pdfAttachments)
-    if (inlineContext !== '') {
+    const inlineContexts: string[] = []
+    if (pdfAttachments.length > 0) {
+      const pdfContext = await this.buildInlinePdfTextContext(pdfAttachments)
+      if (pdfContext !== '') {
+        inlineContexts.push(pdfContext)
+      }
+    }
+    if (docxAttachments.length > 0) {
+      const docxContext = await this.buildInlineOfficeTextContext(docxAttachments, '.docx', 'DOCX')
+      if (docxContext !== '') {
+        inlineContexts.push(docxContext)
+      }
+    }
+    if (xlsxAttachments.length > 0) {
+      const xlsxContext = await this.buildInlineOfficeTextContext(xlsxAttachments, '.xlsx', 'XLSX')
+      if (xlsxContext !== '') {
+        inlineContexts.push(xlsxContext)
+      }
+    }
+    if (inlineContexts.length > 0) {
       return new DocumentFallbackSendResult(
-        this.appendDocumentContext(messageContent, inlineContext),
-        '已提取 PDF 文本并作为隐藏上下文发送'
+        this.appendDocumentContext(messageContent, inlineContexts.join('\n\n')),
+        '已提取文档文本并作为隐藏上下文发送'
       )
     }
     return new DocumentFallbackSendResult(
       this.appendDocumentContext(messageContent,
-        '当前模型未开启原生文档阅读，且当前接口不支持工具调用。用户上传的 PDF 已暂存到本地，但本轮未能提取出可用文本。'),
-      'PDF 已暂存，未提取到可用文本'
+        '当前模型未开启原生文档阅读，且当前接口不支持工具调用。用户上传的文档已暂存到本地，但本轮未能提取出可用文本。'),
+      '文档已暂存，未提取到可用文本'
     )
   }
 
@@ -2202,6 +2290,20 @@ export struct ChatPage {
     ]
     for (let i = 0; i < pdfAttachments.length; i++) {
       lines.push(`- attachmentId: ${pdfAttachments[i].id}, 文件名: ${pdfAttachments[i].name}`)
+    }
+    return lines.join('\n')
+  }
+
+  private buildOfficeToTextToolInstruction(
+    officeAttachments: MessageAttachment[],
+    label: string,
+    toolId: string
+  ): string {
+    const lines: string[] = [
+      `当前模型未开启原生文档阅读。用户上传的 ${label} 已暂存到本地沙箱，不能直接读取原始文件；回答文档内容前必须先调用 ${toolId} 工具，不要猜测文档内容。可用 ${label} 附件：`
+    ]
+    for (let i = 0; i < officeAttachments.length; i++) {
+      lines.push(`- attachmentId: ${officeAttachments[i].id}, 文件名: ${officeAttachments[i].name}`)
     }
     return lines.join('\n')
   }
@@ -2292,6 +2394,35 @@ export struct ChatPage {
       if (!result.ok) {
         result = await service.extractAttachment(registered, 12000, true)
       }
+      if (!result.ok) {
+        continue
+      }
+      sections.push(`\n[${result.fileName} / attachmentId: ${result.attachmentId}]\n${result.text}`)
+      if (result.truncated) {
+        sections.push('\n[文本已截断，可后续开启文档能力或工具调用以读取更多内容]')
+      }
+    }
+    return sections.length > 1 ? sections.join('\n') : ''
+  }
+
+  private async buildInlineOfficeTextContext(
+    officeAttachments: MessageAttachment[],
+    extension: string,
+    label: string
+  ): Promise<string> {
+    const sections: string[] = [
+      `当前模型未开启原生文档阅读，且当前接口不支持工具调用。以下是 APP 自动从用户上传 ${label} 中提取的文本：`
+    ]
+    for (let i = 0; i < officeAttachments.length; i++) {
+      const registered = this.documentAttachmentRegistry.getAttachment(this.sessionId, officeAttachments[i].id)
+      if (registered === null) {
+        continue
+      }
+      const result = await ServiceRegistry.officeDocumentTextExtraction().extractAttachment(
+        registered,
+        extension,
+        12000
+      )
       if (!result.ok) {
         continue
       }
@@ -2447,6 +2578,8 @@ export struct ChatPage {
       !this.toolRegistry.isToolRegistered(CANVAS_DOCUMENT_TOOL_ID) ||
       !this.toolRegistry.isToolRegistered(PDF_TO_TEXT_TOOL_ID) ||
       !this.toolRegistry.isToolRegistered(IMAGE_TO_TEXT_TOOL_ID) ||
+      !this.toolRegistry.isToolRegistered(DOCX_TO_TEXT_TOOL_ID) ||
+      !this.toolRegistry.isToolRegistered(XLSX_TO_TEXT_TOOL_ID) ||
       !this.toolRegistry.isToolRegistered(KNOWLEDGE_SEARCH_TOOL_ID) ||
       !this.toolRegistry.isToolRegistered(COMPACT_TOOL_ID) ||
       !this.toolRegistry.isToolRegistered(SUB_AGENT_RESULT_TOOL_ID) ||

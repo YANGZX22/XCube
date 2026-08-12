@@ -182,6 +182,8 @@ export class AttachmentStorageService {
       'image/gif': '.gif',
       'image/webp': '.webp',
       'application/pdf': '.pdf',
+      'application/vnd.openxmlformats-officedocument.wordprocessingml.document': '.docx',
+      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet': '.xlsx',
       'text/plain': '.txt',
       'text/markdown': '.md'
     }

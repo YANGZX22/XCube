@@ -115,7 +115,7 @@ export struct IndexSettingsPanel {
           {
             key: SettingsRouteName.TOOLS_CENTER,
             icon: $r('sys.symbol.puzzle'),
-            title: $r('app.string.settings_tools_center_list_title'),
+            title: $r('app.string.settings_tools_center'),
             subtitle: $r('app.string.settings_tools_center_desc'),
             action: (): void => { this.onOpenToolsCenter() }
           } as SettingsListItemModel,
@@ -143,7 +143,7 @@ export struct IndexSettingsPanel {
           {
             key: SettingsRouteName.HAND_ADAPTIVE,
             icon: $r('sys.symbol.person'),
-            title: $r('app.string.settings_hand_adaptive_list_title'),
+            title: $r('app.string.settings_hand_adaptive'),
             subtitle: $r('app.string.settings_hand_adaptive_desc'),
             action: (): void => { this.onOpenHandAdaptive() }
           } as SettingsListItemModel,
@@ -288,13 +288,14 @@ export struct IndexSettingsPanel {
           .fontSize(15)
           .fontWeight(FontWeight.Medium)
           .fontColor($r('app.color.text_primary'))
-          .maxLines(2)
-          .textOverflow({ overflow: TextOverflow.Clip })
+          .maxLines(1)
+          .textOverflow({ overflow: TextOverflow.Ellipsis })
         Text(item.subtitle)
           .fontSize(12)
           .fontColor($r('app.color.text_secondary'))
-          .maxLines(1)
-          .textOverflow({ overflow: TextOverflow.Ellipsis })
+          .maxLines(2)
+          .wordBreak(WordBreak.BREAK_WORD)
+          .textOverflow({ overflow: TextOverflow.Clip })
           .margin({ top: 2 })
       }
       .layoutWeight(1)
@@ -305,8 +306,8 @@ export struct IndexSettingsPanel {
         .fontWeight(FontWeight.Medium)
         .fontColor($r('app.color.text_primary'))
         .layoutWeight(1)
-        .maxLines(2)
-        .textOverflow({ overflow: TextOverflow.Clip })
+        .maxLines(1)
+        .textOverflow({ overflow: TextOverflow.Ellipsis })
     }
   }
 
@@ -373,9 +374,9 @@ export struct IndexSettingsPanel {
           .fontSize(17.5)
           .fontWeight(600)
           .fontColor(getAppUiState().themeTextPrimary)
-          .maxLines(2)
-          .textOverflow({ overflow: TextOverflow.Clip })
-          .constraintSize({ maxWidth: '68%' })
+          .maxLines(1)
+          .textOverflow({ overflow: TextOverflow.Ellipsis })
+          .constraintSize({ maxWidth: '58%' })
 
         Column()
           .height(1)
@@ -403,8 +404,9 @@ export struct IndexSettingsPanel {
           .fontSize(12)
           .fontStyle(FontStyle.Italic)
           .fontColor(getAppUiState().themeTextSecondary)
-          .maxLines(1)
-          .textOverflow({ overflow: TextOverflow.Ellipsis })
+          .maxLines(2)
+          .wordBreak(WordBreak.BREAK_WORD)
+          .textOverflow({ overflow: TextOverflow.Clip })
           .padding({ left: 34, right: 18 })
       }
     }

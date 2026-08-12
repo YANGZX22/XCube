@@ -3223,6 +3223,26 @@ struct BuiltinToolCardItem {
     return $r('sys.symbol.wrench_and_screwdriver')
   }
 
+  @Builder
+  private ToolIcon(toolId: string, size: number) {
+    if (toolId === 'docx_to_text') {
+      Image($r('app.media.doc_docx'))
+        .width(size)
+        .height(size)
+        .fillColor(this.themePrimary)
+    } else if (toolId === 'xlsx_to_text') {
+      Image($r('app.media.doc_xlsx'))
+        .width(size)
+        .height(size)
+        .fillColor(this.themePrimary)
+    } else {
+      SymbolGlyph(this.getToolSymbolResource(toolId))
+        .renderingStrategy(SymbolRenderingStrategy.SINGLE)
+        .fontSize(size)
+        .fontColor([this.themePrimary])
+    }
+  }
+
   build() {
     Column({ space: 12 }) {
       Row({ space: 12 }) {
@@ -3235,10 +3255,7 @@ struct BuiltinToolCardItem {
           responsePadding: 0
         }) {
           Stack({ alignContent: Alignment.Center }) {
-            SymbolGlyph(this.getToolSymbolResource(this.tool.id))
-              .renderingStrategy(SymbolRenderingStrategy.SINGLE)
-              .fontSize(20)
-              .fontColor([this.themePrimary])
+            this.ToolIcon(this.tool.id, 20)
           }
           .width(44)
           .height(44)

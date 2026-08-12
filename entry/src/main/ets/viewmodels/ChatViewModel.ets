@@ -76,6 +76,7 @@ import {
   resolveRequestMaxOutputTokens
 } from '../utils/ContextWindowUtils'
 import { estimateTextTokens, RequestTokenUsageTracker } from '../utils/ModelBillingUtils'
+import { isOfficeOpenXmlDocumentAttachment } from '../services/DocumentAttachmentRegistryService'
 
 // 标题生成状态
 export interface TitleGenerationCallbacks {
@@ -402,7 +403,8 @@ export class ChatViewModel {
     const filtered: MessageAttachment[] = []
     for (let i = 0; i < attachments.length; i++) {
       const attachment = attachments[i]
-      if (!modelSupportsDocuments && this.isPdfAttachment(attachment)) {
+      if (!modelSupportsDocuments &&
+        (this.isPdfAttachment(attachment) || isOfficeOpenXmlDocumentAttachment(attachment))) {
         continue
       }
       if (!modelSupportsVision && this.isImageAttachment(attachment)) {

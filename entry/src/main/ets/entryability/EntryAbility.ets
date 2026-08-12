@@ -103,6 +103,9 @@ export default class EntryAbility extends UIAbility {
       await ServiceRegistry.attachmentStorage().initialize(this.context);
       hilog.info(DOMAIN, 'testTag', 'AttachmentStorageService initialized successfully');
 
+      ServiceRegistry.officeDocumentTextExtraction().initialize(this.context);
+      hilog.info(DOMAIN, 'testTag', 'OfficeDocumentTextExtractionService initialized successfully');
+
       try {
         await ServiceRegistry.knowledgeDocuments().initialize(this.context);
         hilog.info(DOMAIN, 'testTag', 'KnowledgeDocumentService initialized successfully');

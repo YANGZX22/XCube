@@ -71,7 +71,7 @@ Turn on **Sub-agent** in the chat input's tool selector, and the main model can 
 
 ### 📚 Knowledge base & RAG
 
-Upload PDFs, Markdown, text, or images (OCR included) in the Knowledge Base tab. Models search them on demand through the [`knowledge_search`](entry/src/main/ets/config/KnowledgeSearchTool.ets) tool — nothing is pre-retrieved or injected into the system prompt.
+Upload DOCX, XLSX, PDF, Markdown, text, or images (local Office parsing and OCR included) in the Knowledge Base tab. Models search them on demand through the [`knowledge_search`](entry/src/main/ets/config/KnowledgeSearchTool.ets) tool — nothing is pre-retrieved or injected into the system prompt.
 
 - **Hybrid retrieval** — keyword + vector search with neighbor-chunk expansion, so answers that span a boundary don't get cut off
 - **Structure-aware chunking** — respects page boundaries, headings, lists, tables, and FAQ pairs

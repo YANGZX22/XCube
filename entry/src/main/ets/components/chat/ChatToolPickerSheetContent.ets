@@ -144,13 +144,30 @@ export struct ChatToolPickerSheetContent {
   }
 
   @Builder
+  private ToolIcon(toolId: string, size: number) {
+    if (toolId === 'docx_to_text') {
+      Image($r('app.media.doc_docx'))
+        .width(size)
+        .height(size)
+        .fillColor(this.themePrimary)
+    } else if (toolId === 'xlsx_to_text') {
+      Image($r('app.media.doc_xlsx'))
+        .width(size)
+        .height(size)
+        .fillColor(this.themePrimary)
+    } else {
+      SymbolGlyph(this.getToolSymbolResource(toolId))
+        .fontSize(size)
+        .fontColor([this.themePrimary])
+    }
+  }
+
+  @Builder
   private BuiltinToolGridCard(tool: ToolConfig) {
     Column({ space: 10 }) {
       Row({ space: 8 }) {
         Button({ type: ButtonType.Circle, stateEffect: false }) {
-          SymbolGlyph(this.getToolSymbolResource(tool.id))
-            .fontSize(17)
-            .fontColor([this.themePrimary])
+          this.ToolIcon(tool.id, 17)
         }
         .width(36)
         .height(36)

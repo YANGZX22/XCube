@@ -1,5 +1,23 @@
 import { MessageAttachment } from '../models/ChatModels'
 
+export function isDocxDocumentAttachment(attachment: MessageAttachment): boolean {
+  const mimeType = attachment.mimeType.toLowerCase()
+  const name = attachment.name.toLowerCase()
+  return mimeType === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' ||
+    name.endsWith('.docx')
+}
+
+export function isXlsxDocumentAttachment(attachment: MessageAttachment): boolean {
+  const mimeType = attachment.mimeType.toLowerCase()
+  const name = attachment.name.toLowerCase()
+  return mimeType === 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' ||
+    name.endsWith('.xlsx')
+}
+
+export function isOfficeOpenXmlDocumentAttachment(attachment: MessageAttachment): boolean {
+  return isDocxDocumentAttachment(attachment) || isXlsxDocumentAttachment(attachment)
+}
+
 export class RegisteredDocumentAttachment {
   sessionId: string = ''
   attachmentId: string = ''
@@ -41,7 +59,9 @@ export class DocumentAttachmentRegistryService {
     }
     for (let i = 0; i < attachments.length; i++) {
       const attachment = attachments[i]
-      if ((!this.isPdfAttachment(attachment) && !this.isImageAttachment(attachment)) || attachment.filePath.trim() === '') {
+      if ((!this.isPdfAttachment(attachment) && !this.isImageAttachment(attachment) &&
+        !isOfficeOpenXmlDocumentAttachment(attachment)) ||
+        attachment.filePath.trim() === '') {
         continue
       }
       sessionDocuments.set(attachment.id, new RegisteredDocumentAttachment(normalizedSessionId, attachment))
@@ -80,6 +100,7 @@ export class DocumentAttachmentRegistryService {
     return mimeType.startsWith('image/') || name.endsWith('.jpg') || name.endsWith('.jpeg') ||
       name.endsWith('.png') || name.endsWith('.webp') || name.endsWith('.bmp') || name.endsWith('.gif')
   }
+
 }
 
 export function getDocumentAttachmentRegistryService(): DocumentAttachmentRegistryService {

@@ -194,7 +194,7 @@ export struct AttachmentPicker {
     try {
       const documentSelectOptions = new picker.DocumentSelectOptions()
       documentSelectOptions.maxSelectNumber = 3
-      documentSelectOptions.fileSuffixFilters = ['.pdf', '.doc', '.docx', '.txt', '.md']
+      documentSelectOptions.fileSuffixFilters = ['.pdf', '.doc', '.docx', '.xlsx', '.txt', '.md']
 
       const context = this.getUIContext().getHostContext()
       if (context === undefined) {
@@ -323,6 +323,7 @@ export struct AttachmentPicker {
       'pdf': 'application/pdf',
       'doc': 'application/msword',
       'docx': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+      'xlsx': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
       'txt': 'text/plain',
       'md': 'text/markdown',
       'jpg': 'image/jpeg',

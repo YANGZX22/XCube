@@ -49,6 +49,7 @@ import {
 import { RegisteredDocumentAttachment } from './DocumentAttachmentRegistryService'
 import { getPdfTextExtractionService } from './PdfTextExtractionService'
 import { getImageTextRecognitionService } from './ImageTextRecognitionService'
+import { getOfficeDocumentTextExtractionService } from './OfficeDocumentTextExtractionService'
 
 export const KNOWLEDGE_DATABASE_NAME: string = 'chatcube_knowledge.db'
 export const KNOWLEDGE_DOCUMENTS_TABLE: string = 'knowledge_documents'
@@ -1970,11 +1971,28 @@ export class KnowledgeDocumentService implements
       throw new Error('未找到知识库文件')
     }
     const extension = this.getSupportedExtension(document.originalName)
-    if (extension !== '.txt' && extension !== '.md' && extension !== '.markdown') {
+    if (extension !== '.txt' && extension !== '.md' && extension !== '.markdown' &&
+      extension !== '.docx' && extension !== '.xlsx') {
       throw new Error('该文件不支持文本预览')
     }
     if (!fileIo.accessSync(document.filePath)) {
       throw new Error('原文件不存在')
+    }
+    if (extension === '.docx' || extension === '.xlsx') {
+      const context = this.context
+      if (context === null) {
+        throw new Error('知识库尚未初始化')
+      }
+      const result = await getOfficeDocumentTextExtractionService().extract(
+        context,
+        document.filePath,
+        extension,
+        MAX_DOCUMENT_TEXT_CHARACTERS
+      )
+      if (!result.ok || result.text.trim() === '') {
+        throw new Error(result.message === '' ? 'Office 文档解析失败' : result.message)
+      }
+      return new KnowledgeTextPreview(result.text, result.truncated)
     }
     const bytes = this.readFilePathBytes(document.filePath)
     const decoder = util.TextDecoder.create('utf-8')
@@ -2005,7 +2023,10 @@ export class KnowledgeDocumentService implements
     const normalizedName = this.normalizeFileName(originalName)
     const extension = this.getSupportedExtension(normalizedName)
     if (extension === '') {
-      return new KnowledgeImportResult(false, '当前知识库支持 PDF、TXT、Markdown 和常见图片文件')
+      return new KnowledgeImportResult(
+        false,
+        '当前知识库支持 DOCX、XLSX、PDF、TXT、Markdown 和常见图片文件'
+      )
     }
 
     let sourceFile: fileIo.File | null = null
@@ -2367,6 +2388,22 @@ export class KnowledgeDocumentService implements
       }
       if (!result.ok || result.text.trim() === '') {
         throw new Error(result.message === '' ? '未能从 PDF 提取文字' : result.message)
+      }
+      return this.normalizeText(result.text)
+    }
+    if (extension === '.docx' || extension === '.xlsx') {
+      const context = this.context
+      if (context === null) {
+        throw new Error('知识库尚未初始化')
+      }
+      const result = await getOfficeDocumentTextExtractionService().extract(
+        context,
+        document.filePath,
+        extension,
+        MAX_DOCUMENT_TEXT_CHARACTERS
+      )
+      if (!result.ok || result.text.trim() === '') {
+        throw new Error(result.message === '' ? 'Office 文档解析失败' : result.message)
       }
       return this.normalizeText(result.text)
     }
@@ -2787,6 +2824,8 @@ export class KnowledgeDocumentService implements
       '.markdown',
       '.jpeg',
       '.webp',
+      '.docx',
+      '.xlsx',
       '.pdf',
       '.txt',
       '.jpg',
@@ -2818,6 +2857,12 @@ export class KnowledgeDocumentService implements
   private mimeTypeForExtension(extension: string): string {
     if (extension === '.pdf') {
       return 'application/pdf'
+    }
+    if (extension === '.docx') {
+      return 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
+    }
+    if (extension === '.xlsx') {
+      return 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
     }
     if (extension === '.md' || extension === '.markdown') {
       return 'text/markdown'

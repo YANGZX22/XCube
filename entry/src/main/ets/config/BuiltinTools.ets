@@ -17,6 +17,10 @@ import { getPyodideRuntimeService } from '../services/PyodideRuntimeService'
 import { CanvasDocumentMutationResult, CanvasDocumentState, getCanvasDocumentService } from '../services/CanvasDocumentService'
 import { getPdfTextExtractionService, PdfTextExtractionRequest } from '../services/PdfTextExtractionService'
 import { getImageTextRecognitionService, ImageTextRecognitionRequest } from '../services/ImageTextRecognitionService'
+import {
+  getOfficeDocumentTextExtractionService,
+  OfficeAttachmentTextExtractionRequest
+} from '../services/OfficeDocumentTextExtractionService'
 import { getSkillService } from '../services/SkillService'
 import {
   getSubAgentService,
@@ -50,6 +54,8 @@ export const CANVAS_DOCUMENT_TOOL_ID: string = 'canvas_document'
 export const CANVAS_DOCUMENT_MAX_WRITE_CHARACTERS: number = 4000
 export const PDF_TO_TEXT_TOOL_ID: string = 'pdf_to_text'
 export const IMAGE_TO_TEXT_TOOL_ID: string = 'image_to_text'
+export const DOCX_TO_TEXT_TOOL_ID: string = 'docx_to_text'
+export const XLSX_TO_TEXT_TOOL_ID: string = 'xlsx_to_text'
 export const USE_SKILL_TOOL_ID: string = 'use_skill'
 
 // web_search 工具参数接口
@@ -152,6 +158,14 @@ interface PdfToTextArgs {
 }
 
 interface ImageToTextArgs {
+  attachmentId?: string
+  attachment_id?: string
+  id?: string
+  maxChars?: number | string
+  max_chars?: number | string
+}
+
+interface OfficeToTextArgs {
   attachmentId?: string
   attachment_id?: string
   id?: string
@@ -520,6 +534,68 @@ class ImageToTextExecutor implements ToolExecutor {
   }
 
   private resolveAttachmentId(params: ImageToTextArgs): string {
+    if (params.attachmentId !== undefined) {
+      return `${params.attachmentId}`.trim()
+    }
+    if (params.attachment_id !== undefined) {
+      return `${params.attachment_id}`.trim()
+    }
+    if (params.id !== undefined) {
+      return `${params.id}`.trim()
+    }
+    return ''
+  }
+
+  private resolveNumber(value: number | string | undefined, fallback: number): number {
+    if (value === undefined || value === null) {
+      return fallback
+    }
+    if (typeof value === 'number') {
+      return Number.isFinite(value) ? value : fallback
+    }
+    const parsed = Number.parseInt(value, 10)
+    return Number.isNaN(parsed) ? fallback : parsed
+  }
+
+  private stringifyError(error: Object): string {
+    if (error instanceof Error) {
+      return error.message
+    }
+    return JSON.stringify(error)
+  }
+}
+
+class OfficeToTextExecutor implements ToolExecutor {
+  private extension: string
+  private label: string
+
+  constructor(extension: string, label: string) {
+    this.extension = extension
+    this.label = label
+  }
+
+  async execute(args: string): Promise<string> {
+    try {
+      const params = JSON.parse(args) as OfficeToTextArgs
+      const request = new OfficeAttachmentTextExtractionRequest()
+      request.attachmentId = this.resolveAttachmentId(params)
+      request.maxChars = this.resolveNumber(params.maxChars, this.resolveNumber(params.max_chars, 12000))
+      if (request.attachmentId === '') {
+        return JSON.stringify(new ErrorOutput(
+          `attachmentId 不能为空。请使用用户上传 ${this.label} 附件的 id。`
+        ))
+      }
+      const result = await getOfficeDocumentTextExtractionService().extractForCurrentSession(
+        request,
+        this.extension
+      )
+      return JSON.stringify(result)
+    } catch (error) {
+      return JSON.stringify(new ErrorOutput(`${this.label} 转文本失败: ${this.stringifyError(error)}`))
+    }
+  }
+
+  private resolveAttachmentId(params: OfficeToTextArgs): string {
     if (params.attachmentId !== undefined) {
       return `${params.attachmentId}`.trim()
     }
@@ -2131,6 +2207,90 @@ function createImageToTextToolConfig(): ToolConfig {
   )
 }
 
+function createDocxToTextToolDefinition(): ToolDefinition {
+  const parameters = createOfficeToTextToolParameters('DOCX')
+  const func = new ToolFunction(
+    DOCX_TO_TEXT_TOOL_ID,
+    '将用户上传的 DOCX 附件转换为结构化文本。仅能读取当前会话已登记的 DOCX 附件；调用时传 attachmentId。工具在本地解析 OOXML，保留标题、段落、列表和表格结构，不上传到第三方服务。',
+    parameters
+  )
+  return new ToolDefinition(func)
+}
+
+function createDocxToTextToolConfig(): ToolConfig {
+  return new ToolConfig(
+    DOCX_TO_TEXT_TOOL_ID,
+    'DOCX 转文本',
+    '在本地读取 DOCX 中的标题、段落、列表和表格',
+    null,
+    true,
+    false,
+    ToolSourceType.BUILTIN,
+    'builtin',
+    DOCX_TO_TEXT_TOOL_ID,
+    '内置工具',
+    ToolPermissionLevel.READ
+  )
+}
+
+function createXlsxToTextToolDefinition(): ToolDefinition {
+  const parameters = createOfficeToTextToolParameters('XLSX')
+  const func = new ToolFunction(
+    XLSX_TO_TEXT_TOOL_ID,
+    '将用户上传的 XLSX 附件转换为结构化文本。仅能读取当前会话已登记的 XLSX 附件；调用时传 attachmentId。工具在本地解析 OOXML，保留工作表名称、表格、单元格坐标、日期和公式缓存值，不上传到第三方服务。',
+    parameters
+  )
+  return new ToolDefinition(func)
+}
+
+function createXlsxToTextToolConfig(): ToolConfig {
+  return new ToolConfig(
+    XLSX_TO_TEXT_TOOL_ID,
+    'XLSX 转文本',
+    '在本地读取 XLSX 工作表、单元格、日期和公式结果',
+    null,
+    true,
+    false,
+    ToolSourceType.BUILTIN,
+    'builtin',
+    XLSX_TO_TEXT_TOOL_ID,
+    '内置工具',
+    ToolPermissionLevel.READ
+  )
+}
+
+function createOfficeToTextToolParameters(label: string): ToolParameters {
+  const parameters = new ToolParameters()
+  const rawSchemaJson: string = `{
+    "type": "object",
+    "properties": {
+      "attachmentId": {
+        "type": "string",
+        "description": "要读取的 ${label} 附件 ID。用户上传 ${label} 后，系统会在提示中列出可用 attachmentId。"
+      },
+      "attachment_id": {
+        "type": "string",
+        "description": "attachmentId 的别名。"
+      },
+      "id": {
+        "type": "string",
+        "description": "attachmentId 的别名。"
+      },
+      "maxChars": {
+        "type": "number",
+        "description": "最多返回多少字符，默认 12000。"
+      },
+      "max_chars": {
+        "type": "number",
+        "description": "maxChars 的别名。"
+      }
+    },
+    "required": ["attachmentId"]
+  }`
+  parameters.setRawSchema(JSON.parse(rawSchemaJson) as object)
+  return parameters
+}
+
 function createUseSkillToolDefinition(): ToolDefinition {
   const parameters = new ToolParameters()
   const rawSchemaJson: string = `{
@@ -2615,6 +2775,30 @@ export function registerBuiltinTools(): void {
     registeredNow += 1
   }
 
+  const docxToTextWasRegistered = registry.isToolRegistered(DOCX_TO_TEXT_TOOL_ID)
+  const docxToTextTool = new RegisteredTool(
+    DOCX_TO_TEXT_TOOL_ID,
+    createDocxToTextToolConfig(),
+    createDocxToTextToolDefinition(),
+    new OfficeToTextExecutor('.docx', 'DOCX')
+  )
+  registry.registerTool(docxToTextTool)
+  if (!docxToTextWasRegistered) {
+    registeredNow += 1
+  }
+
+  const xlsxToTextWasRegistered = registry.isToolRegistered(XLSX_TO_TEXT_TOOL_ID)
+  const xlsxToTextTool = new RegisteredTool(
+    XLSX_TO_TEXT_TOOL_ID,
+    createXlsxToTextToolConfig(),
+    createXlsxToTextToolDefinition(),
+    new OfficeToTextExecutor('.xlsx', 'XLSX')
+  )
+  registry.registerTool(xlsxToTextTool)
+  if (!xlsxToTextWasRegistered) {
+    registeredNow += 1
+  }
+
   const useSkillWasRegistered = registry.isToolRegistered(USE_SKILL_TOOL_ID)
   const useSkillTool = new RegisteredTool(
     USE_SKILL_TOOL_ID,
@@ -2699,6 +2883,8 @@ export function getBuiltinToolIds(): string[] {
     PYTHON_SANDBOX_TOOL_ID,
     PDF_TO_TEXT_TOOL_ID,
     IMAGE_TO_TEXT_TOOL_ID,
+    DOCX_TO_TEXT_TOOL_ID,
+    XLSX_TO_TEXT_TOOL_ID,
     USE_SKILL_TOOL_ID,
     CANVAS_DOCUMENT_TOOL_ID,
     MATH_CHART_TOOL_ID,

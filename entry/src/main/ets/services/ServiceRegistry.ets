@@ -30,6 +30,10 @@ import {
   getKnowledgeDocumentService,
   KnowledgeDocumentService
 } from './KnowledgeDocumentService'
+import {
+  getOfficeDocumentTextExtractionService,
+  OfficeDocumentTextExtractionService
+} from './OfficeDocumentTextExtractionService'
 import { getSettingsManager, SettingsManager } from '../viewmodels/SettingsManager'
 import { getAppStateManager, AppStateManager } from '../viewmodels/AppStateManager'
 import { getProviderViewModel, ProviderViewModel } from '../viewmodels/ProviderViewModel'
@@ -147,6 +151,10 @@ export class ServiceRegistry {
 
   static knowledgeDocuments(): KnowledgeDocumentService {
     return getKnowledgeDocumentService()
+  }
+
+  static officeDocumentTextExtraction(): OfficeDocumentTextExtractionService {
+    return getOfficeDocumentTextExtractionService()
   }
 
   static contextCompaction(): ContextCompactionService {

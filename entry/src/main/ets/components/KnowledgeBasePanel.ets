@@ -140,6 +140,8 @@ export struct KnowledgeBasePanel {
     const options = new picker.DocumentSelectOptions()
     options.maxSelectNumber = 10
     options.fileSuffixFilters = [
+      '.docx',
+      '.xlsx',
       '.pdf',
       '.txt',
       '.md',
@@ -491,6 +493,18 @@ export struct KnowledgeBasePanel {
     return document.mimeType.toLowerCase().startsWith('image/')
   }
 
+  private isDocxDocument(document: KnowledgeDocument): boolean {
+    return document.originalName.toLowerCase().endsWith('.docx') ||
+      document.mimeType.toLowerCase() ===
+        'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
+  }
+
+  private isXlsxDocument(document: KnowledgeDocument): boolean {
+    return document.originalName.toLowerCase().endsWith('.xlsx') ||
+      document.mimeType.toLowerCase() ===
+        'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+  }
+
   private getImagePreviewSource(): string {
     if (this.previewPath.startsWith('file://')) {
       return this.previewPath
@@ -551,6 +565,26 @@ export struct KnowledgeBasePanel {
       return $r('sys.symbol.picture')
     }
     return $r('sys.symbol.doc_text')
+  }
+
+  @Builder
+  private DocumentIcon(document: KnowledgeDocument, size: number, color: ResourceColor) {
+    if (this.isDocxDocument(document)) {
+      Image($r('app.media.doc_docx'))
+        .width(size)
+        .height(size)
+        .fillColor(color)
+    } else if (this.isXlsxDocument(document)) {
+      Image($r('app.media.doc_xlsx'))
+        .width(size)
+        .height(size)
+        .fillColor(color)
+    } else {
+      SymbolGlyph(this.getDocumentSymbol(document))
+        .renderingStrategy(SymbolRenderingStrategy.SINGLE)
+        .fontSize(size)
+        .fontColor([color])
+    }
   }
 
   private showKnowledgeSnack(
@@ -682,10 +716,7 @@ export struct KnowledgeBasePanel {
   @Builder
   private DocumentCardContent(document: KnowledgeDocument) {
     Column() {
-      SymbolGlyph(this.getDocumentSymbol(document))
-        .renderingStrategy(SymbolRenderingStrategy.SINGLE)
-        .fontSize(18)
-        .fontColor([this.themePrimary])
+      this.DocumentIcon(document, 18, this.themePrimary)
     }
     .width(38)
     .height(38)
@@ -845,10 +876,7 @@ export struct KnowledgeBasePanel {
       .alignItems(VerticalAlign.Center)
 
       Row({ space: 7 }) {
-        SymbolGlyph(this.getDocumentSymbol(document))
-          .renderingStrategy(SymbolRenderingStrategy.SINGLE)
-          .fontSize(12)
-          .fontColor([this.getStatusColor(document)])
+        this.DocumentIcon(document, 12, this.getStatusColor(document))
 
         Text(this.getStatusText(document))
           .fontFamily(MANUSCRIPT_BODY_FONT)

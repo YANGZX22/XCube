@@ -54,11 +54,11 @@
     },
     {
       "name": "knowledge_empty_hint",
-      "value": "Tap + to upload PDF, TXT, Markdown, or image files."
+      "value": "Tap + to upload DOCX, XLSX, PDF, TXT, Markdown, or image files."
     },
     {
       "name": "knowledge_usage_message",
-      "value": "The knowledge base lets the AI answer questions using your own files, such as lecture notes, documents, or manuals.\n\n1. Add files: tap + in the corner to upload PDF, TXT, Markdown, or image files. The app builds a searchable index on this device, and text in images or scanned PDFs is recognized automatically.\n\n2. Manage files: tap a file to preview it; swipe right to rebuild its index after the file changes, or swipe left to delete it.\n\n3. Start using it: turn on the knowledge-base switch on the chat page and ask questions as usual. When the AI thinks your files can help, it searches them by keywords and by meaning, so related passages are found even if your wording differs from the original text (the selected model must support tool calling).\n\nYour files are read only when the AI actually runs a search, and only the few most relevant snippets are shared with it — never the whole file."
+      "value": "The knowledge base lets the AI answer questions using your own files, such as lecture notes, documents, or manuals.\n\n1. Add files: tap + in the corner to upload DOCX, XLSX, PDF, TXT, Markdown, or image files. The app parses Office files locally, builds a searchable index on this device, and recognizes text in images or scanned PDFs automatically.\n\n2. Manage files: tap a file to preview it; swipe right to rebuild its index after the file changes, or swipe left to delete it.\n\n3. Start using it: turn on the knowledge-base switch on the chat page and ask questions as usual. When the AI thinks your files can help, it searches them by keywords and by meaning, so related passages are found even if your wording differs from the original text (the selected model must support tool calling).\n\nYour files are read only when the AI actually runs a search, and only the few most relevant snippets are shared with it — never the whole file."
     },
     {
       "name": "knowledge_usage_label",
@@ -369,20 +369,12 @@
       "value": "Tool Services"
     },
     {
-      "name": "settings_tools_center_list_title",
-      "value": "Tool\nServices"
-    },
-    {
       "name": "settings_tools_center_desc",
       "value": "View built-in tools and configure web search service"
     },
     {
       "name": "settings_hand_adaptive",
       "value": "Smart Grip"
-    },
-    {
-      "name": "settings_hand_adaptive_list_title",
-      "value": "Smart\nGrip"
     },
     {
       "name": "settings_hand_adaptive_desc",
