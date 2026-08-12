@@ -41,8 +41,8 @@
 - 🤖 **Any model** — 15+ providers built in, plus any OpenAI-, Anthropic-, or Gemini-compatible API
 - 🔍 **Web search & MCP** — Bocha, Bing (local), Tavily, Exa, and remote streamable MCP servers
 - 🧩 **Parallel sub-agents** — split big tasks across up to 3 agents and merge the results
-- 📚 **Local knowledge base** — hybrid keyword + vector RAG with built-in OCR; files never leave the app sandbox
-- 🛠️ **Built-in tools** — Canvas documents, Python sandbox, charts, calendar, PDF/image → text
+- 📚 **Local knowledge base** — hybrid keyword + vector RAG with built-in DOCX/XLSX parsing and OCR; files never leave the app sandbox
+- 🛠️ **Built-in tools** — Canvas documents, Python sandbox, charts, calendar, and PDF/image/DOCX/XLSX → text
 - 🔊 **Read aloud** — HarmonyOS offline TTS or ElevenLabs
 - 🔒 **Privacy by design** — explicit tool permissions and confirmation flows throughout
 
@@ -71,15 +71,20 @@ Turn on **Sub-agent** in the chat input's tool selector, and the main model can 
 
 ### 📚 Knowledge base & RAG
 
-Upload DOCX, XLSX, PDF, Markdown, text, or images (local Office parsing and OCR included) in the Knowledge Base tab. Models search them on demand through the [`knowledge_search`](entry/src/main/ets/config/KnowledgeSearchTool.ets) tool — nothing is pre-retrieved or injected into the system prompt.
+Upload DOCX, XLSX, PDF, Markdown, text, or images in the Knowledge Base tab. DOCX and XLSX files are handled by the app's built-in OOXML parser, while images and scanned PDFs can use local OCR. Models search them on demand through the [`knowledge_search`](entry/src/main/ets/config/KnowledgeSearchTool.ets) tool — nothing is pre-retrieved or injected into the system prompt.
 
 - **Hybrid retrieval** — keyword + vector search with neighbor-chunk expansion, so answers that span a boundary don't get cut off
-- **Structure-aware chunking** — respects page boundaries, headings, lists, tables, and FAQ pairs
+- **DOCX structure extraction** — preserves headings, paragraphs, lists, line breaks, and tables as chunk-friendly structured text
+- **XLSX table extraction** — supports multiple worksheets, shared strings, dates, merged cells, cached formula values, and sparse-cell coordinates
+- **Structure-aware chunking** — respects page boundaries, headings, lists, tables, worksheets, and FAQ pairs
 - **Two embedding options** — on-device ArkData embedding (PC/2-in-1 devices) or any OpenAI-compatible embedding API
 - **Everything stays local** — files, OCR results, indexes, and vectors all live in the app sandbox
 
 > [!NOTE]
 > On-device ArkData embedding currently supports 2-in-1 devices only. Phones and tablets can use an API embedding model — and keyword search still works with no API configured at all.
+
+> [!NOTE]
+> Office parsing currently supports the OOXML `.docx` and `.xlsx` formats. Legacy `.doc`/`.xls`, encrypted files, macros, chart content, and OCR of images embedded inside documents are not supported. Formulas use the cached value saved in the workbook when available and otherwise preserve the formula expression.
 
 ### 🛠️ Built-in tools
 
@@ -89,7 +94,10 @@ Upload DOCX, XLSX, PDF, Markdown, text, or images (local Office parsing and OCR 
 | **Canvas document** | A shared doc beside the chat that you and the AI can both edit, with Markdown preview |
 | **Python sandbox** | Run Python for calculations, data processing, and intermediate reasoning |
 | **Math charts** | Generate [VChart](https://ohpm.openharmony.cn/#/cn/detail/@visactor%2Fharmony-vchart) visualizations — line, bar, pie, scatter, Sankey, word cloud, and more |
-| **PDF / image → text** | Local text extraction and CoreVisionKit OCR for models without native document or vision input |
+| **PDF → text** (`pdf_to_text`) | Extract the PDF text layer, with automatic local CoreVisionKit OCR fallback for scans |
+| **Image → text** (`image_to_text`) | Recognize text in images with local CoreVisionKit OCR |
+| **DOCX → text** (`docx_to_text`) | Locally extract DOCX headings, paragraphs, lists, and tables without passing the raw file to models that lack document input |
+| **XLSX → text** (`xlsx_to_text`) | Locally extract worksheets, cells, dates, and formula results without passing the raw file to models that lack document input |
 | **Calendar** | Read a user-confirmed date range or create events, with privacy controls |
 | **Ask user** | Lets the model raise a confirmation card when it hits a critical ambiguity |
 

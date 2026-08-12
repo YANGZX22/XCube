@@ -41,8 +41,8 @@
 - 🤖 **兼容任意模型** —— 内置 15+ 服务商，并支持任意 OpenAI、Anthropic 或 Gemini 兼容 API
 - 🔍 **联网搜索与 MCP** —— 支持博查、Bing（本地）、Tavily、Exa 和远程 Streamable MCP Server
 - 🧩 **并行子智能体** —— 最多将大型任务拆分给 3 个子智能体并行执行，再统一汇总结果
-- 📚 **本地知识库** —— 结合关键词与向量的混合 RAG，内置 OCR；文件始终保留在应用沙箱内
-- 🛠️ **内置工具** —— Canvas 文档、Python 沙箱、图表、日历以及 PDF／图片转文本
+- 📚 **本地知识库** —— 结合关键词与向量的混合 RAG，内置 DOCX／XLSX 解析与 OCR；文件始终保留在应用沙箱内
+- 🛠️ **内置工具** —— Canvas 文档、Python 沙箱、图表、日历以及 PDF／图片／DOCX／XLSX 转文本
 - 🔊 **回复播报** —— 支持 HarmonyOS 离线 TTS 或 ElevenLabs
 - 🔒 **隐私优先** —— 所有工具均配有明确的权限控制与用户确认流程
 
@@ -71,15 +71,20 @@ OpenAI · Claude · Gemini · DeepSeek · Grok · Ollama · OpenRouter · Silico
 
 ### 📚 知识库与 RAG
 
-在“知识库”标签页上传 DOCX、XLSX、PDF、Markdown、文本或图片（内置 Office 文档解析与 OCR）。模型会按需通过 [`knowledge_search`](entry/src/main/ets/config/KnowledgeSearchTool.ets) 工具检索资料；应用不会预先检索，也不会将知识片段注入系统提示词。
+在“知识库”标签页上传 DOCX、XLSX、PDF、Markdown、文本或图片。DOCX 与 XLSX 使用应用内置的 OOXML 解析器处理，图片和扫描版 PDF 可使用本地 OCR。模型会按需通过 [`knowledge_search`](entry/src/main/ets/config/KnowledgeSearchTool.ets) 工具检索资料；应用不会预先检索，也不会将知识片段注入系统提示词。
 
 - **混合检索** —— 融合关键词与向量检索，并扩展相邻片段，避免跨分块的答案被截断
-- **结构感知分块** —— 保留页边界、标题、列表、表格与 FAQ 问答对等文档结构
+- **DOCX 结构解析** —— 保留标题、段落、列表、换行和表格，并转换为适合语义分块的结构化文本
+- **XLSX 表格解析** —— 支持多工作表、共享字符串、日期、合并单元格、公式缓存值和稀疏单元格坐标
+- **结构感知分块** —— 保留页边界、标题、列表、表格、工作表与 FAQ 问答对等文档结构
 - **两种向量方案** —— PC／2-in-1 设备可使用本地 ArkData Embedding，也可接入任意 OpenAI 兼容的 Embedding API
 - **全部保存在本地** —— 文件、OCR 结果、索引和向量均存放在应用沙箱内
 
 > [!NOTE]
 > 本地 ArkData Embedding 目前仅支持 2-in-1 设备。手机和平板可使用 API Embedding；即使未配置任何 API，关键词检索仍可正常使用。
+
+> [!NOTE]
+> Office 解析目前支持 OOXML 格式 `.docx` 和 `.xlsx`，不支持旧版 `.doc`／`.xls`、加密文件、宏、图表内容或文档内图片 OCR。公式优先读取文件保存的缓存结果，无缓存时保留公式表达式。
 
 ### 🛠️ 内置工具
 
@@ -89,7 +94,10 @@ OpenAI · Claude · Gemini · DeepSeek · Grok · Ollama · OpenRouter · Silico
 | **Canvas 文档** | 在对话旁维护一份你和 AI 都能编辑的共享文档，并支持 Markdown 预览 |
 | **Python 沙箱** | 运行 Python 进行计算、数据处理和中间推导 |
 | **数学图表** | 生成基于 [VChart](https://ohpm.openharmony.cn/#/cn/detail/@visactor%2Fharmony-vchart) 的折线图、柱状图、饼图、散点图、桑基图、词云图等可视化 |
-| **PDF／图片转文本** | 为不支持原生文档或视觉输入的模型提供本地文本提取与 CoreVisionKit OCR |
+| **PDF 转文本** (`pdf_to_text`) | 提取 PDF 文本层；扫描件自动回退到本地 CoreVisionKit OCR |
+| **图片转文本** (`image_to_text`) | 使用本地 CoreVisionKit OCR 识别图片文字 |
+| **DOCX 转文本** (`docx_to_text`) | 在本地提取 DOCX 的标题、段落、列表和表格，不把原始文件交给不支持文档输入的模型 |
+| **XLSX 转文本** (`xlsx_to_text`) | 在本地提取 XLSX 的工作表、单元格、日期及公式结果，不把原始文件交给不支持文档输入的模型 |
 | **日历** | 在隐私控制下读取用户确认的日期范围，或创建新的日程事件 |
 | **向用户提问** | 模型遇到关键歧义时，可显示确认卡片向用户提问 |
 

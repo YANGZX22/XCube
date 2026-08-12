@@ -1471,7 +1471,10 @@ export struct MessageBubble {
             bottomRight: 6
           })
           .clip(true)
-          .constraintSize({ maxWidth: '75%' })
+          .constraintSize({
+            minWidth: this.hasDisplayAttachments() || this.shouldShowDocumentToolHint() ? 280 : 0,
+            maxWidth: this.hasDisplayAttachments() || this.shouldShowDocumentToolHint() ? '88%' : '75%'
+          })
           .border({
             width: this.isEditing ? 2 : (this.isMultiSelectMode && this.isSelected ? 1.2 : 0.5),
             color: this.isEditing
@@ -1647,8 +1650,11 @@ export struct MessageBubble {
         .fontSize(12)
         .fontColor('rgba(255,255,255,0.92)')
         .maxLines(2)
+        .wordBreak(WordBreak.BREAK_WORD)
         .textOverflow({ overflow: TextOverflow.Ellipsis })
+        .layoutWeight(1)
     }
+    .alignSelf(ItemAlign.Stretch)
     .padding({ left: 8, right: 9, top: 6, bottom: 6 })
     .backgroundColor('rgba(255,255,255,0.16)')
     .borderRadius(8)
@@ -1783,18 +1789,25 @@ export struct MessageBubble {
         Row() {
           SymbolGlyph(this.getFileAttachmentSymbol(attachment))
             .fontSize(18)
-            .fontColor(['rgba(255,255,255,0.8)'])
+            .fontColor([this.isManuscriptMode ? this.manuscriptAccentDeep : 'rgba(255,255,255,0.8)'])
 
           Text(attachment.name)
+            .fontFamily(this.isManuscriptMode ? MANUSCRIPT_BODY_FONT : 'HarmonyOS Sans')
             .fontSize(12)
-            .fontColor('rgba(255,255,255,0.9)')
+            .fontColor(this.isManuscriptMode ? getAppUiState().themeTextPrimary : 'rgba(255,255,255,0.9)')
             .margin({ left: 6 })
             .maxLines(1)
             .textOverflow({ overflow: TextOverflow.Ellipsis })
             .layoutWeight(1)
         }
+        .alignSelf(ItemAlign.Stretch)
         .padding(8)
-        .backgroundColor('rgba(255,255,255,0.15)')
+        .backgroundColor(this.isManuscriptMode ? withColorAlpha(this.manuscriptAccent, '14') :
+          'rgba(255,255,255,0.15)')
+        .border({
+          width: this.isManuscriptMode ? 0.5 : 0,
+          color: this.isManuscriptMode ? withColorAlpha(this.manuscriptAccentDeep, '4D') : Color.Transparent
+        })
         .borderRadius(8)
         .margin({ bottom: this.hasMessageTextContent() ? 6 : 0 })
         .onClick(() => {
@@ -1804,6 +1817,9 @@ export struct MessageBubble {
         })
       }, (attachment: MessageAttachment, index: number) => attachment.id || attachment.filePath || index.toString())
     }
+    // 由气泡内容区决定宽度。这里不能使用 100%，否则百分比会按气泡的
+    // 外部约束计算，叠加气泡 padding 后附件栏会越过右侧圆角。
+    .alignSelf(ItemAlign.Stretch)
     .alignItems(HorizontalAlign.End)
   }
 
