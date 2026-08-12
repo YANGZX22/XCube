@@ -2,18 +2,18 @@
  * 供应商图标工具模块
  * 处理供应商和模型图标的显示逻辑
  *
- * 模型图标完全走 models.dev 网络 logo + 沙箱缓存
+ * 模型图标使用 LobeHub Icons 静态 SVG + 沙箱缓存
  */
 
 import { getPresetProviderIconPath } from '../config/PresetProviders'
-import { ModelCapabilityMatcher } from '../services/ModelCapabilityMatcher'
 import { IconDownloadCache } from '../services/IconDownloadCache'
+import { resolveLobeModelIconUrl } from './LobeIconResolver'
 
 // 默认图标路径
 const DEFAULT_ICON_PATH = ''
 
-function resolveModelLogoUrl(modelId: string): string {
-  return ModelCapabilityMatcher.getInstance().getLogoUrl(modelId)
+function resolveModelLogoUrl(modelId: string, providerId: string = ''): string {
+  return resolveLobeModelIconUrl(modelId, providerId)
 }
 
 export function resolveShareModelIdentity(modelId: string, currentModelId: string, modelName: string): string {
@@ -47,14 +47,14 @@ export function getProviderIconPath(providerId: string, customIconPath?: string)
 }
 
 /**
- * 根据模型 ID 获取图标路径（走 models.dev 网络 logo）
+ * 根据模型 ID 获取 LobeHub Icons 图标路径
  * @param modelId 模型 ID（优先）或模型名称（回退）
  * @param providerId 供应商 ID（用于回退）
  * @param providerIconPath 供应商图标路径（用于回退）
  * @returns 图标路径（网络 URL 或沙箱路径）
  */
 export function getModelIconPath(modelId: string, providerId: string, providerIconPath?: string): string {
-  const logoUrl = resolveModelLogoUrl(modelId)
+  const logoUrl = resolveModelLogoUrl(modelId, providerId)
   if (logoUrl !== '') {
     const cachedUri = IconDownloadCache.getInstance().getCachedIconUri(logoUrl)
     if (cachedUri !== '') {
@@ -71,16 +71,16 @@ export function getModelIconPath(modelId: string, providerId: string, providerIc
  * 仅返回本地已缓存的模型图标，不触发后台下载。
  * 适合截图、离屏渲染等不能容忍异步资源未就绪的场景。
  */
-export function getCachedModelIconPath(modelId: string): string {
-  const logoUrl = resolveModelLogoUrl(modelId)
+export function getCachedModelIconPath(modelId: string, providerId: string = ''): string {
+  const logoUrl = resolveModelLogoUrl(modelId, providerId)
   if (logoUrl === '') {
     return ''
   }
   return IconDownloadCache.getInstance().getCachedIconUri(logoUrl)
 }
 
-export async function preloadModelIcon(modelId: string): Promise<string> {
-  const logoUrl = resolveModelLogoUrl(modelId)
+export async function preloadModelIcon(modelId: string, providerId: string = ''): Promise<string> {
+  const logoUrl = resolveModelLogoUrl(modelId, providerId)
   if (logoUrl === '') {
     return ''
   }

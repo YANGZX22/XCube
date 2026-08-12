@@ -11,6 +11,7 @@ import { ProviderIcon, resolveProviderTextIconDisplayMode } from '../components/
 import { ServiceRegistry } from '../services/ServiceRegistry'
 import { ModelCapabilityMatcher } from '../services/ModelCapabilityMatcher'
 import { IconDownloadCache } from '../services/IconDownloadCache'
+import { resolveLobeModelIconUrl } from '../utils/LobeIconResolver'
 import {
   HdsNavigation,
   HdsNavigationMenuItemOptions,
@@ -1003,12 +1004,7 @@ struct ModelManagePage {
     this.showManageToast($r('app.string.matching_icons'))
 
     const matcher = ModelCapabilityMatcher.getInstance()
-    const loaded = await matcher.loadCache()
-    if (!loaded) {
-      this.showManageToast($r('app.string.match_icons_failed'))
-      this.isMatchingIcons = false
-      return
-    }
+    const capabilityCacheLoaded = await matcher.loadCache()
 
     const iconCache = IconDownloadCache.getInstance()
     let matchedCount = 0
@@ -1019,15 +1015,15 @@ struct ModelManagePage {
 
     for (let i = 0; i < this.allProviders.length; i++) {
       const provider = this.allProviders[i]
-      const providerCapabilityMatched = await matcher.applyCapabilitiesBatch(provider.models)
+      const providerCapabilityMatched = capabilityCacheLoaded ?
+        await matcher.applyCapabilitiesBatch(provider.models) : 0
       capabilityMatchedCount += providerCapabilityMatched
 
       for (let j = 0; j < provider.models.length; j++) {
         totalModels++
-        const logoUrl = matcher.getLogoUrl(provider.models[j].id)
+        const logoUrl = resolveLobeModelIconUrl(provider.models[j].id, provider.id)
         if (logoUrl !== '') {
           matchedCount++
-          matcher.recordModelLogo(provider.models[j].id, logoUrl)
           if (!downloadedUrls.has(logoUrl)) {
             downloadedUrls.add(logoUrl)
             const cached = iconCache.getCachedIconUri(logoUrl)
@@ -1042,9 +1038,6 @@ struct ModelManagePage {
         await this.providerViewModel.saveProvider(provider)
       }
     }
-
-    // 显式保存，确保冷启动后可直接恢复
-    await matcher.savePersistedLogoIndex()
 
     // 触发 UI 刷新
     this.allProviders = [...this.allProviders]

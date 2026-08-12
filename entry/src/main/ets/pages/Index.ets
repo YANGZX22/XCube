@@ -3610,8 +3610,12 @@ struct Index {
       }
         .width('100%')
         .height(Index.TAB_TITLE_BAR_HEIGHT)
-        .padding({ left: 4, right: 4 })
+        .padding({
+          left: Index.TAB_TITLE_CONTENT_HORIZONTAL_PADDING,
+          right: Index.TAB_TITLE_CONTENT_HORIZONTAL_PADDING
+        })
         .alignItems(VerticalAlign.Center)
+        .translate({ y: Index.TAB_TITLE_VERTICAL_OFFSET })
     } else {
       Row() {
         Text($r('app.string.tab_knowledge'))

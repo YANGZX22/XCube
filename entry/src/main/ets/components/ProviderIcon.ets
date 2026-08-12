@@ -55,7 +55,7 @@ export struct ProviderIcon {
     return this.iconType === 'image' && this.hasImageLoadError && this.textIcon !== ''
   }
 
-  // models.dev 远程 SVG 内部用 fill="currentColor" 默认黑色，深色主题下不可见，需配浅色背景
+  // 远程 SVG 可能包含黑色/深色路径，深色主题下需配浅色背景
   private isPresetRemoteSvgLogo(): boolean {
     if (this.iconType !== 'image' || this.customImagePath === '' || this.hasImageLoadError) {
       return false
@@ -182,7 +182,7 @@ export struct ProviderIconSmall {
     return this.iconType === 'image' && this.hasImageLoadError && this.textIcon !== ''
   }
 
-  // models.dev 远程 SVG 内部用 fill="currentColor" 默认黑色，深色主题下不可见，需配浅色背景
+  // 远程 SVG 可能包含黑色/深色路径，深色主题下需配浅色背景
   private isPresetRemoteSvgLogo(): boolean {
     if (this.iconType !== 'image' || this.customImagePath === '' || this.hasImageLoadError) {
       return false

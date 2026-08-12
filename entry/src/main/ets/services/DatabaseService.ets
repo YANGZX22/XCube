@@ -101,6 +101,7 @@ export class DatabaseService {
   private initPromise: Promise<void> | null = null
   private legacySummaryRepairPromise: Promise<void> | null = null
   private pendingLegacySummaryRepairIds: string[] = []
+  private assistantSummaryRepairScheduled: boolean = false
 
   private constructor() {
   }
@@ -986,6 +987,7 @@ export class DatabaseService {
     let messageCount = 0
     let latestTimestamp = 0
     let latestPreview = ''
+    let hasAssistantMessage = false
 
     const predicates = new relationalStore.RdbPredicates(TableNames.MESSAGES)
     predicates.equalTo('session_id', sessionId)
@@ -996,7 +998,13 @@ export class DatabaseService {
         messageCount = messageCount + 1
         if (messageCount === 1) {
           latestTimestamp = resultSet.getLong(resultSet.getColumnIndex('timestamp'))
+        }
+        // 会话列表摘要始终来自最近一条 AI 回复。用户消息仍用于更新时间和消息计数，
+        // 但不能在 AI 回复落库前临时覆盖摘要。
+        if (!hasAssistantMessage &&
+          resultSet.getString(resultSet.getColumnIndex('role')) === MessageRole.ASSISTANT) {
           latestPreview = this.normalizePreview(resultSet.getString(resultSet.getColumnIndex('content')) || '')
+          hasAssistantMessage = true
         }
       }
       resultSet.close()
@@ -1674,12 +1682,13 @@ export class DatabaseService {
       }
       resultSet.close()
 
-      if (repairLegacySummary) {
-        // 兼容旧数据：回填放到后台队列里，避免首页首屏被历史修复任务卡住
+      if (repairLegacySummary && !this.assistantSummaryRepairScheduled) {
+        this.assistantSummaryRepairScheduled = true
+        // 旧版本可能把最后一条用户消息写进摘要。首次加载时统一在后台按最近的
+        // AI 回复重建一次，避免阻塞首页首屏；本次运行中新写入的数据已走新逻辑。
         for (let i = 0; i < sessions.length; i++) {
-          if (sessions[i].messageCount === 0 &&
-            sessions[i].lastMessagePreview === '' &&
-            sessions[i].updatedAt > sessions[i].createdAt) {
+          if (sessions[i].messageCount > 0 ||
+            (sessions[i].lastMessagePreview === '' && sessions[i].updatedAt > sessions[i].createdAt)) {
             this.addUniqueSessionId(legacySummaryRepairIds, sessions[i].id)
           }
         }

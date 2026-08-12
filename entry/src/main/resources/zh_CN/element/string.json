@@ -345,6 +345,10 @@
       "value": "语言"
     },
     {
+      "name": "settings_language_desc",
+      "value": "选择应用界面的显示语言"
+    },
+    {
       "name": "settings_model_config",
       "value": "模型配置"
     },
@@ -365,12 +369,24 @@
       "value": "工具服务"
     },
     {
+      "name": "settings_tools_center_list_title",
+      "value": "工具服务"
+    },
+    {
       "name": "settings_tools_center_desc",
       "value": "查看内置工具并配置联网搜索服务"
     },
     {
       "name": "settings_hand_adaptive",
       "value": "智感握姿"
+    },
+    {
+      "name": "settings_hand_adaptive_list_title",
+      "value": "智感握姿"
+    },
+    {
+      "name": "settings_hand_adaptive_desc",
+      "value": "根据握持手调整控件位置，方便单手操作"
     },
     {
       "name": "hand_adaptive_title",
@@ -403,6 +419,10 @@
     {
       "name": "settings_notifications",
       "value": "通知"
+    },
+    {
+      "name": "settings_notifications_desc",
+      "value": "管理回复完成与失败提醒"
     },
     {
       "name": "notification_enabled_title",

@@ -12,6 +12,7 @@ import knowledgeVectorRecoveryPolicyTest from './KnowledgeVectorRecoveryPolicy.t
 import appVersionUtilsTest from './AppVersionUtils.test';
 import tokenAccountingTest from './TokenAccounting.test';
 import jsonResponseUtilsTest from './JsonResponseUtils.test';
+import lobeIconResolverTest from './LobeIconResolver.test';
 
 export default function testsuite() {
   localUnitTest();
@@ -28,4 +29,5 @@ export default function testsuite() {
   appVersionUtilsTest();
   tokenAccountingTest();
   jsonResponseUtilsTest();
+  lobeIconResolverTest();
 }

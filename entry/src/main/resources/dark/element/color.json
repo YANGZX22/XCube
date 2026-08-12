@@ -134,7 +134,7 @@
     },
     {
       "name": "model_icon_bg",
-      "value": "#F0F0F0"
+      "value": "#00000000"
     }
   ]
 }

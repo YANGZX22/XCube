@@ -5,7 +5,7 @@
 
 import { ProviderType, ApiStyle, OpenAITransport, ProviderIconType, ModelProvider } from '../models/ChatModels'
 import { DEFAULT_PRIMARY_COLOR } from './ThemeDefaults'
-import { DEFAULT_MODELS_DEV_BASE_URL } from '../services/PreferencesService'
+import { buildLobeIconUrl } from '../utils/LobeIconResolver'
 
 // 预设供应商配置接口
 export interface PresetProviderConfig {
@@ -21,9 +21,8 @@ export interface PresetProviderConfig {
   presetApiKey?: string // 预设 API Key（可选，用户不填时使用）
   textIcon: string      // 文字图标内容（也作为远程 logo 加载失败的兜底显示）
   textIconBgColor: string // 文字图标背景色
-  // models.dev 上对应的 provider key，用于拉取远程 SVG logo（${baseUrl}/logos/{key}.svg）。
-  // 留空则不使用远程 logo，仅显示文字图标。
-  logoProviderKey?: string
+  // @lobehub/icons-static-svg 中的文件名（不含 .svg）。留空时显示文字图标。
+  lobeIconFileName?: string
 }
 
 // 预设供应商列表（主流厂商，不可删除）
@@ -39,7 +38,7 @@ const PRESET_PROVIDERS: PresetProviderConfig[] = [
     brandColorHex: '#202123',
     textIcon: 'AI',
     textIconBgColor: '#202123',
-    logoProviderKey: 'openai'
+    lobeIconFileName: 'openai'
   },
   {
     id: 'anthropic',
@@ -52,7 +51,7 @@ const PRESET_PROVIDERS: PresetProviderConfig[] = [
     brandColorHex: '#C45C3A',
     textIcon: 'C',
     textIconBgColor: '#C45C3A',
-    logoProviderKey: 'anthropic'
+    lobeIconFileName: 'anthropic'
   },
   {
     id: 'deepseek',
@@ -65,7 +64,7 @@ const PRESET_PROVIDERS: PresetProviderConfig[] = [
     brandColorHex: '#4D6BFE',
     textIcon: 'DS',
     textIconBgColor: '#4D6BFE',
-    logoProviderKey: 'deepseek'
+    lobeIconFileName: 'deepseek-color'
   },
   {
     id: 'gemini',
@@ -78,7 +77,7 @@ const PRESET_PROVIDERS: PresetProviderConfig[] = [
     brandColorHex: '#4285F4',
     textIcon: 'G',
     textIconBgColor: '#4285F4',
-    logoProviderKey: 'google'
+    lobeIconFileName: 'gemini-color'
   },
   {
     id: 'openrouter',
@@ -90,7 +89,7 @@ const PRESET_PROVIDERS: PresetProviderConfig[] = [
     brandColorHex: '#6366F1',
     textIcon: 'OR',
     textIconBgColor: '#6366F1',
-    logoProviderKey: 'openrouter'
+    lobeIconFileName: 'openrouter-color'
   },
   {
     id: 'siliconflow',
@@ -102,7 +101,7 @@ const PRESET_PROVIDERS: PresetProviderConfig[] = [
     brandColorHex: '#7C3AED',
     textIcon: 'SF',
     textIconBgColor: '#7C3AED',
-    logoProviderKey: 'siliconflow'
+    lobeIconFileName: 'siliconcloud-color'
   },
   {
     id: 'qwen',
@@ -114,7 +113,7 @@ const PRESET_PROVIDERS: PresetProviderConfig[] = [
     brandColorHex: '#615CED',
     textIcon: 'Q',
     textIconBgColor: '#615CED',
-    logoProviderKey: 'alibaba'
+    lobeIconFileName: 'qwen-color'
   },
   {
     id: 'kimi',
@@ -126,7 +125,7 @@ const PRESET_PROVIDERS: PresetProviderConfig[] = [
     brandColorHex: '#0F172A',
     textIcon: 'K',
     textIconBgColor: '#0F172A',
-    logoProviderKey: 'moonshotai'
+    lobeIconFileName: 'kimi-color'
   },
   {
     id: 'zhipu',
@@ -138,7 +137,7 @@ const PRESET_PROVIDERS: PresetProviderConfig[] = [
     brandColorHex: '#3B82F6',
     textIcon: 'Z',
     textIconBgColor: '#3B82F6',
-    logoProviderKey: 'zhipuai'
+    lobeIconFileName: 'zhipu-color'
   },
   {
     id: 'doubao',
@@ -149,7 +148,8 @@ const PRESET_PROVIDERS: PresetProviderConfig[] = [
     iconPath: '',
     brandColorHex: '#3370FF',
     textIcon: 'D',
-    textIconBgColor: '#3370FF'
+    textIconBgColor: '#3370FF',
+    lobeIconFileName: 'volcengine-color'
   },
   {
     id: 'minimax',
@@ -161,7 +161,7 @@ const PRESET_PROVIDERS: PresetProviderConfig[] = [
     brandColorHex: '#00A876',
     textIcon: 'M',
     textIconBgColor: '#00A876',
-    logoProviderKey: 'minimax'
+    lobeIconFileName: 'minimax-color'
   },
   {
     id: 'aihubmix',
@@ -173,7 +173,7 @@ const PRESET_PROVIDERS: PresetProviderConfig[] = [
     brandColorHex: '#D97706',
     textIcon: 'AH',
     textIconBgColor: '#D97706',
-    logoProviderKey: 'aihubmix'
+    lobeIconFileName: 'aihubmix-color'
   },
   {
     id: 'grok',
@@ -185,7 +185,7 @@ const PRESET_PROVIDERS: PresetProviderConfig[] = [
     brandColorHex: '#000000',
     textIcon: 'G',
     textIconBgColor: '#000000',
-    logoProviderKey: 'xai'
+    lobeIconFileName: 'xai'
   },
   {
     id: 'aiping',
@@ -209,7 +209,7 @@ const PRESET_PROVIDERS: PresetProviderConfig[] = [
     brandColorHex: '#FF6900',
     textIcon: 'Mi',
     textIconBgColor: '#FF6900',
-    logoProviderKey: 'xiaomi'
+    lobeIconFileName: 'xiaomimimo'
   },
   {
     id: 'ollama',
@@ -222,7 +222,7 @@ const PRESET_PROVIDERS: PresetProviderConfig[] = [
     brandColorHex: '#FFFFFF',
     textIcon: '🦙',
     textIconBgColor: '',
-    logoProviderKey: 'ollama-cloud'
+    lobeIconFileName: 'ollama'
   }
 ]
 
@@ -310,15 +310,15 @@ export function isPresetProviderApiKeyRequired(providerId: string): boolean {
 }
 
 /**
- * 由 logoProviderKey 拼接 models.dev 远程 logo URL。
- * 没有 logoProviderKey 返回空字符串。
+ * 由 lobeIconFileName 拼接固定版本的 @lobehub/icons-static-svg CDN URL。
+ * 没有 lobeIconFileName 返回空字符串。
  */
 export function getPresetProviderLogoUrl(providerId: string): string {
   const preset = getPresetProviderById(providerId)
-  if (preset === null || preset.logoProviderKey === undefined || preset.logoProviderKey === '') {
+  if (preset === null || preset.lobeIconFileName === undefined || preset.lobeIconFileName === '') {
     return ''
   }
-  return `${DEFAULT_MODELS_DEV_BASE_URL}/logos/${preset.logoProviderKey}.svg`
+  return buildLobeIconUrl(preset.lobeIconFileName)
 }
 
 /**

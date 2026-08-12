@@ -297,17 +297,19 @@ export class ProviderViewModel {
     provider.textIconBgColor = config.textIconBgColor !== undefined ? config.textIconBgColor : ''
     provider.customImagePath = config.customImagePath !== undefined ? config.customImagePath : ''
 
-    // 自动迁移：预设服务商优先使用 models.dev 远程 logo + 文字兜底；保留用户自定义图标
+    // 自动迁移：预设服务商使用 LobeHub Icons + 文字兜底；保留用户自定义图标
     if (provider.isPreset) {
       const preset = getPresetProviderById(config.id)
       if (preset !== null) {
         // 判断用户是否手动改过图标：
-        // - image 类型且 customImagePath 不等于该预设的远程 logo URL → 用户自定义图片（含 file:// 沙箱图、其他 URL 链接）
+        // - image 类型且 customImagePath 既不是当前 LobeHub 图标，也不是旧版 models.dev 默认图标 → 用户自定义图片
         // - text 类型且 textIcon 与预设不同 → 用户自定义文字
         const presetLogoUrl = getPresetProviderLogoUrl(preset.id)
+        const isLegacyPresetLogo = provider.customImagePath.startsWith('https://models.dev/logos/')
         const isUserCustomImage = provider.iconType === ProviderIconType.IMAGE
           && provider.customImagePath !== ''
           && provider.customImagePath !== presetLogoUrl
+          && !isLegacyPresetLogo
         const savedTextIcon: string = config.textIcon !== undefined ? config.textIcon : ''
         const isUserCustomText = provider.iconType === ProviderIconType.TEXT
           && savedTextIcon !== '' && savedTextIcon !== preset.textIcon

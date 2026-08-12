@@ -8,7 +8,6 @@ import { AppStorageKeys } from '../config/AppStorageKeys';
 import { AppError } from '../models/AppError';
 import { ServiceRegistry } from '../services/ServiceRegistry';
 import { IconDownloadCache } from '../services/IconDownloadCache';
-import { ModelCapabilityMatcher } from '../services/ModelCapabilityMatcher';
 import { isExpandedLayoutClass, resolveLayoutSizeClass } from '../config/LayoutProfile';
 import { setAppUiStateValue } from '../state/AppUiState';
 
@@ -95,10 +94,6 @@ export default class EntryAbility extends UIAbility {
 
       await ServiceRegistry.language().migrateStoredLanguagePreference();
       hilog.info(DOMAIN, 'testTag', 'Language preference migrated successfully');
-
-      // 预加载模型图标持久化索引（用于冷启动恢复图标）
-      await ModelCapabilityMatcher.getInstance().loadPersistedLogoIndex();
-      hilog.info(DOMAIN, 'testTag', 'Model logo index loaded successfully');
 
       // 初始化数据库服务
       await ServiceRegistry.database().initialize(this.context);

@@ -115,7 +115,7 @@ export struct IndexSettingsPanel {
           {
             key: SettingsRouteName.TOOLS_CENTER,
             icon: $r('sys.symbol.puzzle'),
-            title: $r('app.string.settings_tools_center'),
+            title: $r('app.string.settings_tools_center_list_title'),
             subtitle: $r('app.string.settings_tools_center_desc'),
             action: (): void => { this.onOpenToolsCenter() }
           } as SettingsListItemModel,
@@ -143,19 +143,22 @@ export struct IndexSettingsPanel {
           {
             key: SettingsRouteName.HAND_ADAPTIVE,
             icon: $r('sys.symbol.person'),
-            title: $r('app.string.settings_hand_adaptive'),
+            title: $r('app.string.settings_hand_adaptive_list_title'),
+            subtitle: $r('app.string.settings_hand_adaptive_desc'),
             action: (): void => { this.onOpenHandAdaptive() }
           } as SettingsListItemModel,
           {
             key: SettingsRouteName.LANGUAGE,
             icon: $r('sys.symbol.globe_badge_message'),
             title: $r('app.string.settings_language'),
+            subtitle: $r('app.string.settings_language_desc'),
             action: (): void => { this.onOpenLanguage() }
           } as SettingsListItemModel,
           {
             key: SettingsRouteName.NOTIFICATION,
             icon: $r('sys.symbol.bell_badge_gearshape'),
             title: $r('app.string.settings_notifications'),
+            subtitle: $r('app.string.settings_notifications_desc'),
             action: (): void => { this.onOpenNotification() }
           } as SettingsListItemModel
         ]
@@ -285,8 +288,8 @@ export struct IndexSettingsPanel {
           .fontSize(15)
           .fontWeight(FontWeight.Medium)
           .fontColor($r('app.color.text_primary'))
-          .maxLines(1)
-          .textOverflow({ overflow: TextOverflow.Ellipsis })
+          .maxLines(2)
+          .textOverflow({ overflow: TextOverflow.Clip })
         Text(item.subtitle)
           .fontSize(12)
           .fontColor($r('app.color.text_secondary'))
@@ -302,8 +305,8 @@ export struct IndexSettingsPanel {
         .fontWeight(FontWeight.Medium)
         .fontColor($r('app.color.text_primary'))
         .layoutWeight(1)
-        .maxLines(1)
-        .textOverflow({ overflow: TextOverflow.Ellipsis })
+        .maxLines(2)
+        .textOverflow({ overflow: TextOverflow.Clip })
     }
   }
 
@@ -370,9 +373,9 @@ export struct IndexSettingsPanel {
           .fontSize(17.5)
           .fontWeight(600)
           .fontColor(getAppUiState().themeTextPrimary)
-          .maxLines(1)
-          .textOverflow({ overflow: TextOverflow.Ellipsis })
-          .constraintSize({ maxWidth: '58%' })
+          .maxLines(2)
+          .textOverflow({ overflow: TextOverflow.Clip })
+          .constraintSize({ maxWidth: '68%' })
 
         Column()
           .height(1)

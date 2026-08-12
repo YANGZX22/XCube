@@ -84,7 +84,6 @@ export class PreferenceKeys {
   // models.dev 能力匹配配置
   static readonly MODELS_DEV_BASE_URL: string = 'models_dev_base_url'
   static readonly MODELS_DEV_ENABLED: string = 'models_dev_enabled'
-  static readonly MODEL_LOGO_INDEX_JSON: string = 'model_logo_index_json'
 
   // 聊天字体大小
   static readonly CHAT_FONT_SIZE: string = 'chat_font_size'

@@ -1,6 +1,6 @@
 /**
  * 图标下载缓存服务
- * 下载 models.dev SVG logo → 转 PNG → 缓存到沙箱
+ * 下载远程 SVG 图标 → 转 PNG → 缓存到沙箱
  */
 
 import { http } from '@kit.NetworkKit'
@@ -164,4 +164,3 @@ export class IconDownloadCache {
     return unsigned.toString(16).padStart(8, '0')
   }
 }
-

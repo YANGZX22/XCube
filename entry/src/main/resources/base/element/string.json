@@ -345,6 +345,10 @@
       "value": "Language"
     },
     {
+      "name": "settings_language_desc",
+      "value": "Choose the app display language"
+    },
+    {
       "name": "settings_model_config",
       "value": "Model Configuration"
     },
@@ -365,12 +369,24 @@
       "value": "Tool Services"
     },
     {
+      "name": "settings_tools_center_list_title",
+      "value": "Tool\nServices"
+    },
+    {
       "name": "settings_tools_center_desc",
       "value": "View built-in tools and configure web search service"
     },
     {
       "name": "settings_hand_adaptive",
       "value": "Smart Grip"
+    },
+    {
+      "name": "settings_hand_adaptive_list_title",
+      "value": "Smart\nGrip"
+    },
+    {
+      "name": "settings_hand_adaptive_desc",
+      "value": "Adapt controls to your holding hand for easier one-handed use"
     },
     {
       "name": "hand_adaptive_title",
@@ -403,6 +419,10 @@
     {
       "name": "settings_notifications",
       "value": "Notifications"
+    },
+    {
+      "name": "settings_notifications_desc",
+      "value": "Manage reply completion and failure alerts"
     },
     {
       "name": "notification_enabled_title",
