@@ -22,6 +22,22 @@ import {
 import { ImmersiveSheetHeader } from './ImmersiveSheetHeader'
 import { ManuscriptPageTitle } from './index/ManuscriptPageTitle'
 
+const KNOWLEDGE_CATEGORY_PREVIEW_LIMIT: number = 3
+const KNOWLEDGE_CATEGORY_PDF: string = 'pdf'
+const KNOWLEDGE_CATEGORY_WORD: string = 'word'
+const KNOWLEDGE_CATEGORY_SPREADSHEET: string = 'spreadsheet'
+const KNOWLEDGE_CATEGORY_TEXT: string = 'text'
+const KNOWLEDGE_CATEGORY_IMAGE: string = 'image'
+const KNOWLEDGE_CATEGORY_OTHER: string = 'other'
+const KNOWLEDGE_CATEGORY_KEYS: string[] = [
+  KNOWLEDGE_CATEGORY_PDF,
+  KNOWLEDGE_CATEGORY_WORD,
+  KNOWLEDGE_CATEGORY_SPREADSHEET,
+  KNOWLEDGE_CATEGORY_TEXT,
+  KNOWLEDGE_CATEGORY_IMAGE,
+  KNOWLEDGE_CATEGORY_OTHER
+]
+
 @ComponentV2
 export struct KnowledgeBasePanel {
   @Param uploadRequestTick: number = 0
@@ -41,6 +57,7 @@ export struct KnowledgeBasePanel {
   @Local previewTextTruncated: boolean = false
   @Local previewLoading: boolean = false
   @Local previewError: string = ''
+  @Local expandedCategoryKeys: string[] = []
 
   private service: KnowledgeDocumentService = ServiceRegistry.knowledgeDocuments()
   private handledUploadRequestTick: number = 0
@@ -505,6 +522,151 @@ export struct KnowledgeBasePanel {
         'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
   }
 
+  private getDocumentCategoryKey(document: KnowledgeDocument): string {
+    const name = document.originalName.toLowerCase()
+    const mimeType = document.mimeType.toLowerCase()
+    if (this.isPdfDocument(document)) {
+      return KNOWLEDGE_CATEGORY_PDF
+    }
+    if (this.isDocxDocument(document) || name.endsWith('.doc') || mimeType === 'application/msword') {
+      return KNOWLEDGE_CATEGORY_WORD
+    }
+    if (this.isXlsxDocument(document) || name.endsWith('.xls') || name.endsWith('.csv') ||
+      mimeType === 'application/vnd.ms-excel' || mimeType === 'text/csv') {
+      return KNOWLEDGE_CATEGORY_SPREADSHEET
+    }
+    if (this.isImageDocument(document)) {
+      return KNOWLEDGE_CATEGORY_IMAGE
+    }
+    if (name.endsWith('.txt') || name.endsWith('.md') || name.endsWith('.markdown') ||
+      mimeType.startsWith('text/') || mimeType === 'application/json' ||
+      mimeType === 'application/xml' || mimeType === 'application/x-yaml') {
+      return KNOWLEDGE_CATEGORY_TEXT
+    }
+    return KNOWLEDGE_CATEGORY_OTHER
+  }
+
+  private getDocumentsForCategory(categoryKey: string): KnowledgeDocument[] {
+    const categoryDocuments = this.documents.filter((document: KnowledgeDocument): boolean => {
+      return this.getDocumentCategoryKey(document) === categoryKey
+    })
+    categoryDocuments.sort((left: KnowledgeDocument, right: KnowledgeDocument): number => {
+      if (left.createdAt !== right.createdAt) {
+        return right.createdAt - left.createdAt
+      }
+      return right.updatedAt - left.updatedAt
+    })
+    return categoryDocuments
+  }
+
+  private getVisibleCategoryKeys(): string[] {
+    return KNOWLEDGE_CATEGORY_KEYS.filter((categoryKey: string): boolean => {
+      return this.getDocumentsForCategory(categoryKey).length > 0
+    })
+  }
+
+  private isCategoryExpanded(categoryKey: string): boolean {
+    return this.expandedCategoryKeys.includes(categoryKey)
+  }
+
+  private getVisibleCategoryDocuments(categoryKey: string): KnowledgeDocument[] {
+    const categoryDocuments = this.getDocumentsForCategory(categoryKey)
+    if (this.isCategoryExpanded(categoryKey) ||
+      categoryDocuments.length <= KNOWLEDGE_CATEGORY_PREVIEW_LIMIT) {
+      return categoryDocuments
+    }
+    return categoryDocuments.slice(0, KNOWLEDGE_CATEGORY_PREVIEW_LIMIT)
+  }
+
+  private toggleCategoryExpanded(categoryKey: string): void {
+    if (this.getDocumentsForCategory(categoryKey).length <= KNOWLEDGE_CATEGORY_PREVIEW_LIMIT) {
+      return
+    }
+    this.closeAllSwipeActions()
+    this.getUIContext().animateTo({ duration: 240, curve: Curve.EaseInOut }, (): void => {
+      if (this.isCategoryExpanded(categoryKey)) {
+        this.expandedCategoryKeys = this.expandedCategoryKeys.filter((key: string): boolean => {
+          return key !== categoryKey
+        })
+      } else {
+        this.expandedCategoryKeys = this.expandedCategoryKeys.concat([categoryKey])
+      }
+    })
+  }
+
+  private getCategoryTitle(categoryKey: string): string {
+    if (categoryKey === KNOWLEDGE_CATEGORY_PDF) {
+      return 'PDF'
+    }
+    if (categoryKey === KNOWLEDGE_CATEGORY_WORD) {
+      return pickLocalizedText('Word 文档', 'Word documents')
+    }
+    if (categoryKey === KNOWLEDGE_CATEGORY_SPREADSHEET) {
+      return pickLocalizedText('表格', 'Spreadsheets')
+    }
+    if (categoryKey === KNOWLEDGE_CATEGORY_TEXT) {
+      return pickLocalizedText('文本与 Markdown', 'Text & Markdown')
+    }
+    if (categoryKey === KNOWLEDGE_CATEGORY_IMAGE) {
+      return pickLocalizedText('图片', 'Images')
+    }
+    return pickLocalizedText('其他文档', 'Other documents')
+  }
+
+  private getCategorySummary(categoryKey: string): string {
+    const count = this.getDocumentsForCategory(categoryKey).length
+    if (this.isCategoryExpanded(categoryKey)) {
+      return pickLocalizedText(`${count} 个文档 · 已展开全部`, `${count} documents · Showing all`)
+    }
+    if (count > KNOWLEDGE_CATEGORY_PREVIEW_LIMIT) {
+      return pickLocalizedText(
+        `${count} 个文档 · 显示最新 ${KNOWLEDGE_CATEGORY_PREVIEW_LIMIT} 个`,
+        `${count} documents · Latest ${KNOWLEDGE_CATEGORY_PREVIEW_LIMIT}`
+      )
+    }
+    return pickLocalizedText(`${count} 个文档`, `${count} document${count === 1 ? '' : 's'}`)
+  }
+
+  private getCategoryColor(categoryKey: string): string {
+    if (categoryKey === KNOWLEDGE_CATEGORY_PDF) {
+      return '#D9485F'
+    }
+    if (categoryKey === KNOWLEDGE_CATEGORY_WORD) {
+      return '#3E6FDB'
+    }
+    if (categoryKey === KNOWLEDGE_CATEGORY_SPREADSHEET) {
+      return '#2E8B57'
+    }
+    if (categoryKey === KNOWLEDGE_CATEGORY_IMAGE) {
+      return '#A15BC5'
+    }
+    return this.themePrimary
+  }
+
+  @Builder
+  private DocumentCategoryIcon(categoryKey: string) {
+    if (categoryKey === KNOWLEDGE_CATEGORY_WORD) {
+      Image($r('app.media.doc_docx'))
+        .width(18)
+        .height(18)
+        .fillColor(this.getCategoryColor(categoryKey))
+    } else if (categoryKey === KNOWLEDGE_CATEGORY_SPREADSHEET) {
+      Image($r('app.media.doc_xlsx'))
+        .width(18)
+        .height(18)
+        .fillColor(this.getCategoryColor(categoryKey))
+    } else {
+      SymbolGlyph(categoryKey === KNOWLEDGE_CATEGORY_PDF
+        ? $r('sys.symbol.pdf_doc')
+        : categoryKey === KNOWLEDGE_CATEGORY_IMAGE
+          ? $r('sys.symbol.picture')
+          : $r('sys.symbol.doc_text'))
+        .renderingStrategy(SymbolRenderingStrategy.SINGLE)
+        .fontSize(18)
+        .fontColor([this.getCategoryColor(categoryKey)])
+    }
+  }
+
   private getImagePreviewSource(): string {
     if (this.previewPath.startsWith('file://')) {
       return this.previewPath
@@ -818,9 +980,135 @@ export struct KnowledgeBasePanel {
     }
   }
 
+  @Builder
+  private DocumentCategoryHeader(categoryKey: string) {
+    Row({ space: 10 }) {
+      Column() {
+        this.DocumentCategoryIcon(categoryKey)
+      }
+      .width(36)
+      .height(36)
+      .borderRadius(this.isManuscriptMode ? 0 : 12)
+      .backgroundColor(this.isManuscriptMode
+        ? Color.Transparent
+        : withColorAlpha(this.getCategoryColor(categoryKey), this.isDarkMode ? '26' : '14'))
+      .justifyContent(FlexAlign.Center)
+      .alignItems(HorizontalAlign.Center)
+
+      Column({ space: 2 }) {
+        Text(this.getCategoryTitle(categoryKey))
+          .fontFamily(this.isManuscriptMode ? MANUSCRIPT_HEADING_FONT : undefined)
+          .fontSize(this.isManuscriptMode ? 18 : 14)
+          .fontWeight(this.isManuscriptMode ? 600 : FontWeight.Bold)
+          .fontColor($r('app.color.text_primary'))
+          .maxLines(1)
+          .textOverflow({ overflow: TextOverflow.Ellipsis })
+
+        Text(this.getCategorySummary(categoryKey))
+          .fontFamily(this.isManuscriptMode ? MANUSCRIPT_BODY_FONT : undefined)
+          .fontSize(this.isManuscriptMode ? 11.5 : 10.5)
+          .fontStyle(this.isManuscriptMode ? FontStyle.Italic : FontStyle.Normal)
+          .fontColor($r('app.color.text_tertiary'))
+          .maxLines(1)
+          .textOverflow({ overflow: TextOverflow.Ellipsis })
+      }
+      .layoutWeight(1)
+      .alignItems(HorizontalAlign.Start)
+
+      if (this.getDocumentsForCategory(categoryKey).length > KNOWLEDGE_CATEGORY_PREVIEW_LIMIT) {
+        Row({ space: 4 }) {
+          Text(this.isCategoryExpanded(categoryKey)
+            ? pickLocalizedText('收起', 'Collapse')
+            : pickLocalizedText('展开', 'Expand'))
+            .fontSize(11)
+            .fontWeight(FontWeight.Medium)
+            .fontColor(this.getCategoryColor(categoryKey))
+
+          SymbolGlyph($r('sys.symbol.chevron_down'))
+            .renderingStrategy(SymbolRenderingStrategy.SINGLE)
+            .fontSize(12)
+            .fontColor([this.getCategoryColor(categoryKey)])
+            .rotate({ angle: this.isCategoryExpanded(categoryKey) ? 180 : 0 })
+            .animation({ duration: 220, curve: Curve.EaseOut })
+        }
+        .height(32)
+        .padding({ left: 10, right: 10 })
+        .borderRadius(999)
+        .backgroundColor(withColorAlpha(
+          this.getCategoryColor(categoryKey),
+          this.isDarkMode ? '24' : '10'
+        ))
+        .stateStyles({
+          normal: {
+            .opacity(1)
+          },
+          pressed: {
+            .opacity(0.62)
+          }
+        })
+        .onClick((): void => {
+          this.toggleCategoryExpanded(categoryKey)
+        })
+      }
+    }
+    .width('100%')
+    .height(this.isManuscriptMode ? 64 : 60)
+    .padding({ left: this.isManuscriptMode ? 4 : 12, right: this.isManuscriptMode ? 4 : 10 })
+    .margin({
+      bottom: this.isManuscriptMode ? 0 : 8
+    })
+    .borderRadius(this.isManuscriptMode ? 0 : 14)
+    .backgroundColor(this.isManuscriptMode
+      ? Color.Transparent
+      : withColorAlpha(this.themePrimary, this.isDarkMode ? '12' : '08'))
+    .border({
+      width: this.isManuscriptMode ? { bottom: 1 } : 0.5,
+      color: this.isManuscriptMode ? getAppUiState().themeDivider : getAppUiState().themePrimaryLight
+    })
+  }
+
+  @Builder
+  private DocumentCategoryGroup(categoryKey: string) {
+    ListItemGroup({
+      header: this.DocumentCategoryHeader(categoryKey)
+    }) {
+      ForEach(this.getVisibleCategoryDocuments(categoryKey),
+        (document: KnowledgeDocument) => {
+          ListItem({ style: ListItemStyle.NONE }) {
+            this.DocumentCard(document)
+          }
+          .margin({
+            top: 0,
+            bottom: this.isManuscriptMode ? 0 : 8
+          })
+          .swipeAction({
+            start: this.UpdateSwipePanel(document),
+            end: this.DeleteSwipePanel(document)
+          })
+          .borderRadius(this.isManuscriptMode ? 0 : 12)
+          .clip(false)
+          .transition(TransitionEffect.asymmetric(
+            TransitionEffect.OPACITY.combine(TransitionEffect.translate({ y: -8 }))
+              .animation({ duration: 220, curve: Curve.EaseOut }),
+            TransitionEffect.OPACITY.combine(TransitionEffect.translate({ y: -5 }))
+              .animation({ duration: 140, curve: Curve.EaseIn })
+          ))
+        },
+        (document: KnowledgeDocument): string => `${categoryKey}_${document.id}`
+      )
+    }
+    .divider(null)
+    .margin({
+      left: this.isManuscriptMode ? 32 : 16,
+      right: this.isManuscriptMode ? 32 : 16,
+      top: this.isManuscriptMode ? 12 : 10
+    })
+  }
+
   private getDocumentOrdinal(document: KnowledgeDocument): number {
-    for (let index = 0; index < this.documents.length; index++) {
-      if (this.documents[index].id === document.id) {
+    const categoryDocuments = this.getDocumentsForCategory(this.getDocumentCategoryKey(document))
+    for (let index = 0; index < categoryDocuments.length; index++) {
+      if (categoryDocuments[index].id === document.id) {
         return index + 1
       }
     }
@@ -1080,23 +1368,9 @@ export struct KnowledgeBasePanel {
           .focusable(false)
           .selectable(false)
         } else {
-          ForEach(this.documents, (document: KnowledgeDocument, index: number) => {
-            ListItem({ style: ListItemStyle.NONE }) {
-              this.DocumentCard(document)
-            }
-            .margin({
-              left: this.isManuscriptMode ? 32 : 16,
-              right: this.isManuscriptMode ? 32 : 16,
-              top: this.isManuscriptMode ? 0 : (index === 0 ? 4 : 0),
-              bottom: this.isManuscriptMode ? 0 : 8
-            })
-            .swipeAction({
-              start: this.UpdateSwipePanel(document),
-              end: this.DeleteSwipePanel(document)
-            })
-            .borderRadius(this.isManuscriptMode ? 0 : 12)
-            .clip(false)
-          }, (document: KnowledgeDocument) => document.id)
+          ForEach(this.getVisibleCategoryKeys(), (categoryKey: string) => {
+            this.DocumentCategoryGroup(categoryKey)
+          }, (categoryKey: string): string => categoryKey)
         }
 
         if (this.isManuscriptMode && !this.isLoading && this.documents.length > 0) {
