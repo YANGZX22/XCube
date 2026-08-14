@@ -4,6 +4,7 @@ import { pickLocalizedText } from '../../utils/LocalizedTextUtils'
 import {
   SLASH_COMMAND_CANVAS,
   SLASH_COMMAND_COMPACT,
+  SLASH_COMMAND_GOAL,
   SLASH_COMMAND_MODELS,
   SLASH_COMMAND_REASONING,
   SlashCommandItem
@@ -20,6 +21,7 @@ export struct SlashCommandPanel {
   @Param currentModelId: string = ''
   @Param currentProviderId: string = ''
   @Param currentModelName: string = ''
+  @Param currentConversationGoal: string = ''
   @Event onSelectCommand: (commandId: string) => void = (_commandId: string): void => {}
   @Local pressedCommandId: string = ''
 
@@ -44,11 +46,18 @@ export struct SlashCommandPanel {
     if (commandId === SLASH_COMMAND_CANVAS) {
       return $r('sys.symbol.paintbrush_pointed_waveform')
     }
+    if (commandId === SLASH_COMMAND_GOAL) {
+      return $r('sys.symbol.checkmark_circle')
+    }
     return $r('sys.symbol.bolt')
   }
 
   private getCurrentModelIcon(): ModelIconRenderData {
     return buildModelIconRenderData(this.currentModelId, this.currentProviderId, this.currentModelName)
+  }
+
+  private getCurrentGoalPreview(): string {
+    return this.currentConversationGoal.trim().replace(/\s+/g, ' ')
   }
 
   private getCommandTitle(commandId: string): string {
@@ -63,6 +72,11 @@ export struct SlashCommandPanel {
     }
     if (commandId === SLASH_COMMAND_CANVAS) {
       return pickLocalizedText('打开 Canvas', 'Open Canvas')
+    }
+    if (commandId === SLASH_COMMAND_GOAL) {
+      return this.getCurrentGoalPreview() !== ''
+        ? pickLocalizedText('修改会话目标', 'Edit conversation goal')
+        : pickLocalizedText('设置会话目标', 'Set conversation goal')
     }
     return commandId
   }
@@ -87,6 +101,19 @@ export struct SlashCommandPanel {
     }
     if (commandId === SLASH_COMMAND_CANVAS) {
       return pickLocalizedText('激活并展开当前对话的 Canvas', 'Activate and expand Canvas for this chat')
+    }
+    if (commandId === SLASH_COMMAND_GOAL) {
+      const currentGoal = this.getCurrentGoalPreview()
+      if (currentGoal !== '') {
+        return pickLocalizedText(
+          `当前目标：${currentGoal}（点击修改）`,
+          `Current goal: ${currentGoal} (tap to edit)`
+        )
+      }
+      return pickLocalizedText(
+        '持久保存目标，并在每轮请求中重新注入',
+        'Persist a goal and reinject it on every turn'
+      )
     }
     return ''
   }
@@ -192,7 +219,7 @@ export struct SlashCommandPanel {
             .fontSize(11)
             .lineHeight(16)
             .fontColor($r('app.color.text_tertiary'))
-            .maxLines(2)
+            .maxLines(command.id === SLASH_COMMAND_GOAL && this.getCurrentGoalPreview() !== '' ? 3 : 2)
             .textOverflow({ overflow: TextOverflow.Ellipsis })
             .width('100%')
             .margin({ top: 2 })

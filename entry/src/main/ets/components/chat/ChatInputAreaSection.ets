@@ -21,6 +21,7 @@ export struct ChatInputAreaSection {
   @Param currentModelId: string = ''
   @Param currentProviderId: string = ''
   @Param currentModelName: string = ''
+  @Param currentConversationGoal: string = ''
   @Param currentProviderIconType: string = ''
   @Param currentProviderIconPath: string = ''
   @Param currentProviderTextIcon: string = ''
@@ -113,6 +114,7 @@ export struct ChatInputAreaSection {
             currentModelId: this.currentModelId,
             currentProviderId: this.currentProviderId,
             currentModelName: this.currentModelName,
+            currentConversationGoal: this.currentConversationGoal,
             onSelectCommand: (commandId: string): void => {
               this.onSlashCommand(commandId)
             }

@@ -83,14 +83,24 @@ import {
 } from '../main/ets/utils/CustomHeaderUtils'
 import { shouldShowAssistantMessageToolbar } from '../main/ets/utils/MessageBubbleDisplayUtils'
 import {
+  isGoalSlashCommandInput,
   matchSlashCommands,
+  resolveGoalSlashCommandText,
   resolveSlashCommandId,
   SLASH_COMMAND_CANVAS,
   SLASH_COMMAND_COMPACT,
+  SLASH_COMMAND_GOAL,
   SLASH_COMMAND_MODELS,
   SLASH_COMMAND_REASONING
 } from '../main/ets/utils/SlashCommandUtils'
 import {
+  buildConversationGoalSummaryPrompt,
+  buildConversationGoalSystemPrompt,
+  CONVERSATION_GOAL_PROMPT_MARKER,
+  MAX_CONVERSATION_GOAL_LENGTH
+} from '../main/ets/utils/ConversationGoalUtils'
+import {
+  ContextCompactionService,
   ContextCompactionStatus,
   getContextCompactionService
 } from '../main/ets/services/ContextCompactionService'
@@ -1170,12 +1180,13 @@ export default function refactorGuardTest() {
     })
 
     it('slashCommands_should_match_only_leading_slash_token', 0, () => {
-      expect(matchSlashCommands('/').length).assertEqual(4)
+      expect(matchSlashCommands('/').length).assertEqual(5)
       expect(matchSlashCommands('/comp')[0].id).assertEqual(SLASH_COMMAND_COMPACT)
       expect(matchSlashCommands('/COMPACT')[0].name).assertEqual('/compact')
       expect(matchSlashCommands('/mod')[0].id).assertEqual(SLASH_COMMAND_MODELS)
       expect(matchSlashCommands('/rea')[0].id).assertEqual(SLASH_COMMAND_REASONING)
       expect(matchSlashCommands('/can')[0].id).assertEqual(SLASH_COMMAND_CANVAS)
+      expect(matchSlashCommands('/go')[0].id).assertEqual(SLASH_COMMAND_GOAL)
       expect(matchSlashCommands('/unknown').length).assertEqual(0)
       // 正文里的斜杠（路径、日期）不应该弹出命令面板
       expect(matchSlashCommands('src/main/ets').length).assertEqual(0)
@@ -1225,8 +1236,39 @@ export default function refactorGuardTest() {
       expect(resolveSlashCommandId('/models')).assertEqual(SLASH_COMMAND_MODELS)
       expect(resolveSlashCommandId(' /Reasoning ')).assertEqual(SLASH_COMMAND_REASONING)
       expect(resolveSlashCommandId('/CANVAS')).assertEqual(SLASH_COMMAND_CANVAS)
+      expect(resolveSlashCommandId('/GOAL')).assertEqual(SLASH_COMMAND_GOAL)
       expect(resolveSlashCommandId('/compact now')).assertEqual('')
+      expect(resolveSlashCommandId('/goal ship it')).assertEqual('')
       expect(resolveSlashCommandId('compact')).assertEqual('')
+    })
+
+    it('goalSlashCommand_should_parse_multiline_goal_without_false_positive', 0, () => {
+      expect(isGoalSlashCommandInput('/goal')).assertTrue()
+      expect(isGoalSlashCommandInput(' /GOAL  完成首个版本 ')).assertTrue()
+      expect(isGoalSlashCommandInput('/goal\n完成首个版本\n并通过测试')).assertTrue()
+      expect(isGoalSlashCommandInput('/goalkeeper')).assertFalse()
+      expect(isGoalSlashCommandInput('请执行 /goal 完成首个版本')).assertFalse()
+      expect(resolveGoalSlashCommandText('/goal  完成首个版本  ')).assertEqual('完成首个版本')
+      expect(resolveGoalSlashCommandText('/goal\n完成首个版本\n并通过测试'))
+        .assertEqual('完成首个版本\n并通过测试')
+    })
+
+    it('conversationGoalPrompt_should_be_rebuilt_as_authoritative_system_context', 0, () => {
+      const goal = '完成“首个版本”\n并提供可验证测试'
+      const prompt = buildConversationGoalSystemPrompt(goal)
+      expect(prompt.includes(CONVERSATION_GOAL_PROMPT_MARKER)).assertTrue()
+      expect(prompt.includes(JSON.stringify(goal))).assertTrue()
+      expect(prompt.includes('每轮请求中重新注入')).assertTrue()
+      expect(prompt.includes('压缩摘要')).assertTrue()
+      expect(buildConversationGoalSystemPrompt('   ')).assertEqual('')
+
+      const summaryPrompt = buildConversationGoalSummaryPrompt(goal)
+      expect(summaryPrompt.includes(JSON.stringify(goal))).assertTrue()
+      expect(summaryPrompt.includes('已由应用独立保存')).assertTrue()
+      const compactedHistoryPrompt = ContextCompactionService.buildSummaryRequestPrompt('历史摘要正文')
+      expect(compactedHistoryPrompt.includes(CONVERSATION_GOAL_PROMPT_MARKER)).assertTrue()
+      expect(compactedHistoryPrompt.includes('唯一最新的目标来源')).assertTrue()
+      expect(MAX_CONVERSATION_GOAL_LENGTH).assertEqual(4000)
     })
   })
 }

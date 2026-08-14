@@ -199,6 +199,7 @@ export class DatabaseService {
         branch_count INTEGER DEFAULT 1,
         branch_point_index INTEGER DEFAULT -1,
         active_leaf_id TEXT DEFAULT '',
+        conversation_goal TEXT DEFAULT '',
         sync_version INTEGER DEFAULT 0,
         last_modified INTEGER DEFAULT 0,
         sync_status TEXT DEFAULT 'synced',
@@ -336,6 +337,8 @@ export class DatabaseService {
 	      await this.addSessionActiveLeafColumnIfNeeded()
 	      // 尝试添加会话上下文压缩字段（用于 compact 工具）
 	      await this.addSessionContextCompactionColumnsIfNeeded()
+	      // 尝试添加会话持久目标字段（用于 /goal）
+	      await this.addSessionConversationGoalColumnIfNeeded()
 	      // 尝试添加搜索引用相关字段（用于联网搜索）
 	      await this.addSearchColumnsIfNeeded()
       // 尝试添加工具事件元数据字段（用于通用 tools/MCP）
@@ -727,6 +730,20 @@ export class DatabaseService {
 	      } catch (error) {
 	        console.info('DatabaseService', `session context compaction column may already exist: ${columns[i]}`)
 	      }
+	    }
+	  }
+
+	  // 添加会话持久目标字段；目标与消息历史、压缩摘要分开保存。
+	  private async addSessionConversationGoalColumnIfNeeded(): Promise<void> {
+	    if (this.rdbStore === null) {
+	      return
+	    }
+	    try {
+	      await this.rdbStore.executeSql(
+	        `ALTER TABLE ${TableNames.SESSIONS} ADD COLUMN conversation_goal TEXT DEFAULT ''`
+	      )
+	    } catch (error) {
+	      console.info('DatabaseService', 'conversation_goal column may already exist')
 	    }
 	  }
 
@@ -1295,7 +1312,8 @@ export class DatabaseService {
       branch_index: session.branchIndex,
       branch_count: session.branchCount,
       branch_point_index: session.branchPointIndex,
-      active_leaf_id: session.activeLeafId
+      active_leaf_id: session.activeLeafId,
+      conversation_goal: session.conversationGoal
     }
     try {
       await this.rdbStore.insert(TableNames.SESSIONS, valueBucket)
@@ -1320,7 +1338,8 @@ export class DatabaseService {
 	      branch_index: session.branchIndex,
 	      branch_count: session.branchCount,
 	      branch_point_index: session.branchPointIndex,
-	      active_leaf_id: session.activeLeafId
+	      active_leaf_id: session.activeLeafId,
+	      conversation_goal: session.conversationGoal
     }
     const predicates = new relationalStore.RdbPredicates(TableNames.SESSIONS)
     predicates.equalTo('id', session.id)
@@ -1415,6 +1434,24 @@ export class DatabaseService {
       await this.rdbStore.update(valueBucket, predicates)
     } catch (error) {
       console.error('DatabaseService', `Failed to update session title: ${JSON.stringify(error)}`)
+    }
+  }
+
+  // 仅更新会话持久目标；目标变化不应改变会话排序。
+  async updateSessionConversationGoal(sessionId: string, conversationGoal: string): Promise<void> {
+    await this.waitForInitialization()
+    if (this.rdbStore === null || sessionId === '') {
+      return
+    }
+    const valueBucket: relationalStore.ValuesBucket = {
+      conversation_goal: conversationGoal
+    }
+    const predicates = new relationalStore.RdbPredicates(TableNames.SESSIONS)
+    predicates.equalTo('id', sessionId)
+    try {
+      await this.rdbStore.update(valueBucket, predicates)
+    } catch (error) {
+      console.error('DatabaseService', `Failed to update conversation goal: ${JSON.stringify(error)}`)
     }
   }
 
@@ -1678,6 +1715,7 @@ export class DatabaseService {
         session.branchCount = this.safeGetLong(resultSet, 'branch_count', 1)
         session.branchPointIndex = this.safeGetLong(resultSet, 'branch_point_index', -1)
         session.activeLeafId = this.safeGetString(resultSet, 'active_leaf_id')
+        session.conversationGoal = this.safeGetString(resultSet, 'conversation_goal')
         sessions.push(session)
       }
       resultSet.close()
@@ -1764,6 +1802,7 @@ export class DatabaseService {
         session.branchCount = this.safeGetLong(resultSet, 'branch_count', 1)
         session.branchPointIndex = this.safeGetLong(resultSet, 'branch_point_index', -1)
         session.activeLeafId = this.safeGetString(resultSet, 'active_leaf_id')
+        session.conversationGoal = this.safeGetString(resultSet, 'conversation_goal')
         // 压缩摘要只在打开会话时读取；会话列表不需要它，避免首屏多读长文本
         session.contextSummary = this.safeGetString(resultSet, 'context_summary')
         session.contextSummaryAnchorId = this.safeGetString(resultSet, 'context_summary_anchor_id')

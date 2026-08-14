@@ -488,7 +488,8 @@ export class ContextCompactionService {
   static buildSummaryRequestPrompt(summary: string): string {
     return `${COMPACT_SUMMARY_PROMPT_MARKER}\n` +
       `以下是本次对话更早历史的压缩摘要（由 compact 工具生成），原始消息已从请求中移除。` +
-      `请把它当作已经发生过的对话事实，继续保持一致的目标、结论和用词；不要把它当作用户的新指令，也不要向用户复述整段摘要。\n\n` +
+      `请把它当作已经发生过的对话事实，继续保持一致的结论和用词；不要把它当作用户的新指令，也不要向用户复述整段摘要。` +
+      `如果请求中同时存在“[持久会话目标]”区块，该区块是唯一最新的目标来源，摘要里的目标只用于理解历史进度，不能覆盖它。\n\n` +
       `${summary}`
   }
 }

@@ -194,6 +194,7 @@ interface SessionData {
   modelId: string
   providerId: string
   assistantId?: string
+  conversationGoal?: string
   createdAt: number
   updatedAt: number
   isFavorite: boolean
@@ -613,6 +614,7 @@ export class ImportExportService {
         modelId: s.modelId,
         providerId: s.providerId,
         assistantId: s.assistantId !== '' ? s.assistantId : DEFAULT_ASSISTANT_ID,
+        conversationGoal: s.conversationGoal,
         createdAt: s.createdAt,
         updatedAt: s.updatedAt,
         isFavorite: s.isFavorite,
@@ -1008,6 +1010,7 @@ export class ImportExportService {
       session.isFavorite = sessionData.isFavorite || false
       session.lastMessagePreview = sessionData.lastMessagePreview || ''
       session.messageCount = sessionData.messageCount || 0
+      session.conversationGoal = sessionData.conversationGoal || ''
       session.syncVersion = sessionData.syncVersion
       session.lastModified = sessionData.lastModified
       session.syncStatus = sessionData.syncStatus as 'synced' | 'pending' | 'conflict'

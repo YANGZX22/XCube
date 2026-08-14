@@ -79,6 +79,11 @@ import {
 } from '../utils/ContextWindowUtils'
 import { estimateTextTokens, RequestTokenUsageTracker } from '../utils/ModelBillingUtils'
 import { isOfficeOpenXmlDocumentAttachment } from '../services/DocumentAttachmentRegistryService'
+import {
+  buildConversationGoalSummaryPrompt,
+  buildConversationGoalSystemPrompt,
+  normalizeConversationGoal
+} from '../utils/ConversationGoalUtils'
 
 // 标题生成状态
 export interface TitleGenerationCallbacks {
@@ -313,11 +318,19 @@ export class ChatViewModel {
 	    return await this.assistantService.getRuntimeConfig(this.getCurrentAssistantIdForRequest())
 	  }
 
-	  private async buildRequestSystemPrompt(extraPrompt: string = ''): Promise<string> {
+	  private async buildRequestSystemPrompt(extraPrompt: string = '', conversationGoal?: string): Promise<string> {
 	    const globalPrompt = await this.getRenderedSystemPrompt()
 	    const assistantConfig = await this.getAssistantRuntimeConfig()
 	    const basePrompt = this.assistantService.combineSystemPrompts(globalPrompt, assistantConfig.systemPrompt)
-	    return this.assistantService.combineSystemPrompts(basePrompt, extraPrompt)
+	    const promptWithRuntimeContext = this.assistantService.combineSystemPrompts(basePrompt, extraPrompt)
+      const currentSession = this.sessionStore.getCurrentSession()
+      const effectiveGoal = conversationGoal !== undefined
+        ? conversationGoal : (currentSession !== null ? currentSession.conversationGoal : '')
+      // 目标放在最终系统提示末尾，确保工具规则、网页上下文或搜索上下文很长时仍保持显著。
+	    return this.assistantService.combineSystemPrompts(
+        promptWithRuntimeContext,
+        buildConversationGoalSystemPrompt(effectiveGoal)
+      )
 	  }
 
 	  private async getRequestTemperature(): Promise<number> {
@@ -1069,6 +1082,10 @@ export class ChatViewModel {
     const requestMessages: RequestMessage[] = [
       new RequestMessage('system', ContextCompactionService.buildManualSummarySystemPrompt())
     ]
+    const goalSummaryPrompt = buildConversationGoalSummaryPrompt(session.conversationGoal)
+    if (goalSummaryPrompt !== '') {
+      requestMessages.push(new RequestMessage('system', goalSummaryPrompt))
+    }
     // 已压缩过的会话：先带上旧摘要，保证新摘要仍然自包含
     if (ContextCompactionService.isCompactionValidForMessages(session, messages)) {
       requestMessages.push(
@@ -1430,6 +1447,25 @@ export class ChatViewModel {
     return updated
   }
 
+  async updateCurrentSessionConversationGoal(conversationGoal: string): Promise<boolean> {
+    const normalizedGoal = normalizeConversationGoal(conversationGoal)
+    const wasPending = this.sessionStore.isCurrentSessionPending()
+    const updated = await this.sessionStore.updateCurrentSessionConversationGoal(normalizedGoal)
+    if (!updated) {
+      return false
+    }
+    if (wasPending) {
+      await this.persistPendingSession()
+    }
+    this.currentSession = this.sessionStore.getCurrentSession()
+    return true
+  }
+
+  getCurrentSessionConversationGoal(): string {
+    const session = this.sessionStore.getCurrentSession()
+    return session !== null ? session.conversationGoal : ''
+  }
+
   // 发送消息并获取 AI 回复
   async sendMessage(
     content: string,
@@ -1548,7 +1584,10 @@ export class ChatViewModel {
 
 	    // 构建请求消息列表（从上下文起始位置开始，过滤掉上下文清空标记）
 	    const requestMessages: RequestMessage[] = []
-	    const renderedSystemPrompt = await this.buildRequestSystemPrompt()
+	    const renderedSystemPrompt = await this.buildRequestSystemPrompt(
+        '',
+        snapshotSession !== null ? snapshotSession.conversationGoal : ''
+      )
 	    if (renderedSystemPrompt !== '') {
 	      requestMessages.push(new RequestMessage('system', renderedSystemPrompt))
 	    }
@@ -1892,7 +1931,10 @@ ${webContext.content}
 
 	    // 构建请求消息列表
 	    const requestMessages: RequestMessage[] = []
-	    const finalSystemPromptWeb = await this.buildRequestSystemPrompt(systemPrompt)
+	    const finalSystemPromptWeb = await this.buildRequestSystemPrompt(
+        systemPrompt,
+        snapshotSession !== null ? snapshotSession.conversationGoal : ''
+      )
 	    requestMessages.push(new RequestMessage('system', finalSystemPromptWeb))
     for (let i = 0; i < historyMessages.length; i++) {
       requestMessages.push(historyMessages[i])
@@ -2246,7 +2288,10 @@ ${limitedSearchContext}
 
 	    // 构建请求消息列表
 	    const requestMessages: RequestMessage[] = []
-	    const finalSystemPromptSearch = await this.buildRequestSystemPrompt(systemPrompt)
+	    const finalSystemPromptSearch = await this.buildRequestSystemPrompt(
+        systemPrompt,
+        snapshotSession !== null ? snapshotSession.conversationGoal : ''
+      )
 	    requestMessages.push(new RequestMessage('system', finalSystemPromptSearch))
     for (let i = 0; i < historyMessages.length; i++) {
       requestMessages.push(historyMessages[i])
@@ -2696,7 +2741,10 @@ ${limitedSearchContext}
     const compactionService = getContextCompactionService()
     await compactionService.ensurePreferencesLoaded()
     const previewRequestMessages: RequestMessage[] = []
-    const previewSystemPrompt = await this.buildRequestSystemPrompt(toolUsageSystemPrompt)
+    const previewSystemPrompt = await this.buildRequestSystemPrompt(
+      toolUsageSystemPrompt,
+      snapshotSession !== null ? snapshotSession.conversationGoal : ''
+    )
     previewRequestMessages.push(new RequestMessage('system', previewSystemPrompt))
     for (let i = 0; i < historyMessages.length; i++) {
       previewRequestMessages.push(historyMessages[i])
@@ -2738,7 +2786,10 @@ ${limitedSearchContext}
       )
     }
 
-    const finalToolUsageSystemPrompt = await this.buildRequestSystemPrompt(toolUsageSystemPrompt)
+    const finalToolUsageSystemPrompt = await this.buildRequestSystemPrompt(
+      toolUsageSystemPrompt,
+      snapshotSession !== null ? snapshotSession.conversationGoal : ''
+    )
     requestMessages.push(new RequestMessage('system', finalToolUsageSystemPrompt))
     for (let i = 0; i < historyMessages.length; i++) {
       requestMessages.push(historyMessages[i])

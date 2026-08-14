@@ -205,6 +205,20 @@ export class ChatSessionStore {
     return true
   }
 
+  async updateCurrentSessionConversationGoal(conversationGoal: string): Promise<boolean> {
+    if (this.currentSession === null) {
+      return false
+    }
+
+    this.currentSession.conversationGoal = conversationGoal
+    if (this.pendingSession !== null && this.pendingSession.id === this.currentSession.id) {
+      return true
+    }
+
+    await this.databaseService.updateSessionConversationGoal(this.currentSession.id, conversationGoal)
+    return true
+  }
+
   getCurrentSession(): ChatSession | null {
     return this.currentSession
   }

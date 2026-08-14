@@ -5,6 +5,7 @@ export const SLASH_COMMAND_COMPACT: string = 'compact'
 export const SLASH_COMMAND_MODELS: string = 'models'
 export const SLASH_COMMAND_REASONING: string = 'reasoning'
 export const SLASH_COMMAND_CANVAS: string = 'canvas'
+export const SLASH_COMMAND_GOAL: string = 'goal'
 
 export class SlashCommandItem {
   id: string = ''
@@ -21,6 +22,7 @@ const SLASH_COMMANDS: SlashCommandItem[] = [
   new SlashCommandItem(SLASH_COMMAND_MODELS),
   new SlashCommandItem(SLASH_COMMAND_REASONING),
   new SlashCommandItem(SLASH_COMMAND_CANVAS),
+  new SlashCommandItem(SLASH_COMMAND_GOAL),
   new SlashCommandItem(SLASH_COMMAND_COMPACT)
 ]
 
@@ -58,4 +60,20 @@ export function resolveSlashCommandId(input: string): string {
     }
   }
   return ''
+}
+
+// /goal 后允许跟随空格、换行和多行目标正文；/goalkeeper 等普通文本不能误判为命令。
+export function isGoalSlashCommandInput(input: string): boolean {
+  const normalized = input.trim()
+  if (normalized.length < 5 || normalized.substring(0, 5).toLowerCase() !== '/goal') {
+    return false
+  }
+  return normalized.length === 5 || /^\s$/.test(normalized.substring(5, 6))
+}
+
+export function resolveGoalSlashCommandText(input: string): string {
+  if (!isGoalSlashCommandInput(input)) {
+    return ''
+  }
+  return input.trim().substring(5).trim()
 }

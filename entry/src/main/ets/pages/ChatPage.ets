@@ -132,12 +132,16 @@ import {
 } from '../utils/ContextWindowUtils'
 import { ContextCompactionStatus } from '../services/ContextCompactionService'
 import {
+  isGoalSlashCommandInput,
   resolveSlashCommandId,
+  resolveGoalSlashCommandText,
   SLASH_COMMAND_CANVAS,
   SLASH_COMMAND_COMPACT,
+  SLASH_COMMAND_GOAL,
   SLASH_COMMAND_MODELS,
   SLASH_COMMAND_REASONING
 } from '../utils/SlashCommandUtils'
+import { MAX_CONVERSATION_GOAL_LENGTH } from '../utils/ConversationGoalUtils'
 import { VisualEffectsMode } from '../models/ThemeColors'
 import { ensureManuscriptFonts, MANUSCRIPT_COMPACT_BAR_HEIGHT } from '../utils/ManuscriptVisualUtils'
 import { ImmersiveSheetHeader } from '../components/ImmersiveSheetHeader'
@@ -444,6 +448,7 @@ export struct ChatPage {
   private forcedToolIdsOnce: string[] = []
   private currentTaskId: string = ''
   @Local isSendDispatching: boolean = false
+  private isGoalCommandSaving: boolean = false
   private lastHandledAlertTimestamp: number = 0
   private isPageVisible: boolean = false
   // 兜底 watcher：页面切换时可能错过一次任务完成事件，这里只负责回收发送态，不碰消息内容同步
@@ -3906,6 +3911,7 @@ export struct ChatPage {
               currentModelId: this.currentModelId,
               currentProviderId: this.currentProvider?.id ?? '',
               currentModelName: this.currentModel,
+              currentConversationGoal: this.chatViewModel.getCurrentSessionConversationGoal(),
               currentProviderIconType: this.currentProvider?.iconType ?? 'svg',
               currentProviderIconPath: this.currentProvider?.iconPath ?? '',
               currentProviderTextIcon: this.currentProvider?.textIcon ?? '',
@@ -5488,6 +5494,7 @@ export struct ChatPage {
       this.currentTaskId === '' &&
       this.messages.length === 0 &&
       !this.hasDraftContent() &&
+      this.chatViewModel.getCurrentSessionConversationGoal().trim() === '' &&
       this.sessionId !== ''
   }
 
@@ -5507,6 +5514,24 @@ export struct ChatPage {
 
   // 同步包装方法，用于 onSend 回调
   handleSend(): void {
+    if (!this.isEditingMessage && isGoalSlashCommandInput(this.inputText)) {
+      const goalText = resolveGoalSlashCommandText(this.inputText)
+      if (goalText === '') {
+        this.handleSlashCommand(SLASH_COMMAND_GOAL)
+        return
+      }
+      if (this.pendingAttachments.length > 0) {
+        this.showChatSnack(pickLocalizedText(
+          '设置会话目标时不能附带文件',
+          'Remove attachments before setting a conversation goal'
+        ), 2500, SnackBarTone.ERROR)
+        return
+      }
+      this.saveConversationGoalFromCommand(goalText).catch((error: Object): void => {
+        console.error('ChatPage', `Failed to save conversation goal: ${JSON.stringify(error)}`)
+      })
+      return
+    }
     // 输入框里只有一条斜杠命令时按命令执行，而不是把命令原文发给模型
     const slashCommandId = resolveSlashCommandId(this.inputText)
     if (slashCommandId !== '' && this.pendingAttachments.length === 0 && !this.isEditingMessage) {
@@ -5522,12 +5547,22 @@ export struct ChatPage {
   // 输入框斜杠命令入口（面板点选或直接发送完整命令）
   private handleSlashCommand(commandId: string): void {
     if (commandId !== SLASH_COMMAND_MODELS && commandId !== SLASH_COMMAND_REASONING &&
-      commandId !== SLASH_COMMAND_CANVAS && commandId !== SLASH_COMMAND_COMPACT) {
+      commandId !== SLASH_COMMAND_CANVAS && commandId !== SLASH_COMMAND_GOAL &&
+      commandId !== SLASH_COMMAND_COMPACT) {
       return
     }
     // 命令原文不该留在草稿里
     this.clearDraftAutosaveTimer()
     this.inputText = ''
+
+    if (commandId === SLASH_COMMAND_GOAL) {
+      const currentGoal = this.chatViewModel.getCurrentSessionConversationGoal().trim()
+      this.inputText = currentGoal !== '' ? `/goal ${currentGoal}` : '/goal '
+      setTimeout((): void => {
+        focusControl.requestFocus(this.isManuscriptMode ? 'manuscriptChatInputTextArea' : 'chatInputTextArea')
+      }, 50)
+      return
+    }
 
     if (commandId === SLASH_COMMAND_MODELS) {
       this.safeStopInputSession()
@@ -5562,6 +5597,46 @@ export struct ChatPage {
       this.compactContextFromCommand().catch((error: Object): void => {
         console.error('ChatPage', `Manual compaction failed: ${JSON.stringify(error)}`)
       })
+    }
+  }
+
+  // /goal <目标>：斜杠前缀不进入聊天记录；保存后用目标正文启动一次模型推进。
+  private async saveConversationGoalFromCommand(goalText: string): Promise<void> {
+    if (this.isGoalCommandSaving) {
+      return
+    }
+    const normalizedGoal = goalText.trim()
+    if (normalizedGoal.length > MAX_CONVERSATION_GOAL_LENGTH) {
+      this.showChatSnack(pickLocalizedText(
+        `目标最多 ${MAX_CONVERSATION_GOAL_LENGTH} 个字符，请精简后重试`,
+        `Goals can contain at most ${MAX_CONVERSATION_GOAL_LENGTH} characters`
+      ), 3000, SnackBarTone.ERROR)
+      return
+    }
+
+    this.isGoalCommandSaving = true
+    try {
+      this.clearDraftAutosaveTimer()
+      const updated = await this.chatViewModel.updateCurrentSessionConversationGoal(normalizedGoal)
+      if (!updated) {
+        this.showChatSnack(pickLocalizedText(
+          '当前会话尚未就绪，请重试',
+          'The current conversation is not ready'
+        ), 2500, SnackBarTone.ERROR)
+        return
+      }
+
+      this.inputText = normalizedGoal
+      this.isNewEmptySession = false
+      // 先把去掉斜杠前缀的目标正文写回草稿；若模型配置不可用，用户仍可直接重试。
+      await this.persistCurrentDraftState(normalizedGoal, [])
+      this.showChatSnack(pickLocalizedText(
+        '会话目标已设置，后续每轮都会重新读取',
+        'Conversation goal set and reloaded on every turn'
+      ), 2500, SnackBarTone.SUCCESS)
+      await this.sendMessage()
+    } finally {
+      this.isGoalCommandSaving = false
     }
   }
 

@@ -889,6 +889,8 @@ export class ChatSession {
   @Trace contextSummaryAnchorId: string
   @Trace contextSummaryUpdatedAt: number
   @Trace contextCompactCount: number
+  // 独立于聊天历史保存的持久目标；每次模型请求都会重新注入。
+  @Trace conversationGoal: string
   // 同步相关字段(为 WebDAV 同步预留)
   @Trace syncVersion: number = 0
   @Trace lastModified: number = Date.now()
@@ -918,6 +920,7 @@ export class ChatSession {
     this.contextSummaryAnchorId = ''
     this.contextSummaryUpdatedAt = 0
     this.contextCompactCount = 0
+    this.conversationGoal = ''
     this.syncVersion = 0
     this.lastModified = Date.now()
     this.syncStatus = 'synced'
