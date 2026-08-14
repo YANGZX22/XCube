@@ -25,6 +25,7 @@ import { getSkillService } from '../services/SkillService'
 import {
   getSubAgentService,
   SUB_AGENT_MAX_TASKS,
+  SUB_AGENT_MESSAGE_TOOL_ID,
   SUB_AGENT_RESULT_TOOL_ID,
   SUB_AGENT_TOOL_ID
 } from '../services/SubAgentService'
@@ -43,7 +44,11 @@ import {
 
 export { KNOWLEDGE_SEARCH_TOOL_ID } from './KnowledgeSearchTool'
 export { COMPACT_TOOL_ID } from './CompactTool'
-export { SUB_AGENT_TOOL_ID, SUB_AGENT_RESULT_TOOL_ID } from '../services/SubAgentService'
+export {
+  SUB_AGENT_TOOL_ID,
+  SUB_AGENT_RESULT_TOOL_ID,
+  SUB_AGENT_MESSAGE_TOOL_ID
+} from '../services/SubAgentService'
 
 export const ASK_USER_TOOL_ID: string = 'ask_user'
 export const READ_SCHEDULE_TOOL_ID: string = 'read_schedule'
@@ -283,6 +288,12 @@ class SubAgentExecutor implements ToolExecutor {
 class SubAgentResultExecutor implements ToolExecutor {
   async execute(args: string): Promise<string> {
     return await getSubAgentService().collectSubAgentResults(args)
+  }
+}
+
+class SubAgentMessageExecutor implements ToolExecutor {
+  async execute(args: string): Promise<string> {
+    return await getSubAgentService().sendSubAgentMessages(args)
   }
 }
 
@@ -1890,9 +1901,13 @@ function createSubAgentToolDefinition(): ToolDefinition {
   const rawSchemaJson: string = `{
     "type": "object",
     "properties": {
+      "main_thread_work": {
+        "type": "string",
+        "description": "Required scheduling commitment: one concrete, useful deliverable the main agent will complete after dispatch and before any sub_agent_result call. Examples: perform another search, build the comparison rubric, verify known facts, analyze a reserved section, or draft the synthesis outline. Do not use sub-agents if no such parallel main-thread work exists."
+      },
       "tasks": {
         "type": "array",
-        "description": "1 to ${SUB_AGENT_MAX_TASKS} independent sub-tasks to run in parallel. Each sub-agent works in an isolated context with the same tools exposed to this conversation except sub_agent itself. Every sub-agent has its own web_search and knowledge_search budgets, independent from the main conversation and other sub-agents. Sub-agent ask_user questions open as queued dialogs and generated charts appear in the main conversation; other sub-agent tool activity is visible to the user in a live preview panel.",
+        "description": "1 to ${SUB_AGENT_MAX_TASKS} independent sub-tasks to run in parallel. Each sub-agent gets a persistent isolated conversation that can later be continued with sub_agent_message. It has the same tools exposed to this conversation except the sub-agent coordination tools. Every sub-agent has its own web_search and knowledge_search budgets, independent from the main conversation and other sub-agents. Sub-agent ask_user questions open as queued dialogs and generated charts appear in the main conversation; other sub-agent tool activity is visible to the user in a live preview panel.",
         "items": {
           "type": "object",
           "properties": {
@@ -1902,24 +1917,24 @@ function createSubAgentToolDefinition(): ToolDefinition {
             },
             "prompt": {
               "type": "string",
-              "description": "Complete standalone instructions for the sub-agent. It cannot see this conversation, so include the goal, all necessary background, constraints, and what to return."
+              "description": "Complete standalone instructions for the sub-agent. It cannot see this conversation, so include the goal, all necessary background, constraints, acceptance criteria, and what to return."
             },
             "expected_output": {
               "type": "string",
-              "description": "Optional description of the desired output format of the final report."
+              "description": "Optional description of the desired output format of the initial reply."
             }
           },
           "required": ["prompt"]
         }
       }
     },
-    "required": ["tasks"]
+    "required": ["main_thread_work", "tasks"]
   }`
   parameters.setRawSchema(JSON.parse(rawSchemaJson) as object)
 
   const func = new ToolFunction(
     SUB_AGENT_TOOL_ID,
-    `Dispatch 1-${SUB_AGENT_MAX_TASKS} autonomous sub-agents to handle independent sub-tasks in parallel. Use this when a request splits into separate research or processing tracks (e.g. comparing multiple topics, gathering info from different sources). This call returns IMMEDIATELY with a batchId while the sub-agents keep running in the background: do not idle after dispatching — keep working on your own part of the task (call other tools, organise what you already know, draft the answer structure), then call sub_agent_result to collect their reports. Do NOT use it for simple tasks you can answer directly, and write each prompt fully self-contained.`,
+    `Dispatch 1-${SUB_AGENT_MAX_TASKS} autonomous sub-agents for genuinely independent parallel work. SCHEDULING CONTRACT: before calling, reserve a concrete deliverable for the main thread and define acceptance criteria for every sub-task. This call returns IMMEDIATELY with a batchId and stable agentIds. After dispatch, work on the reserved main-thread deliverable; sub_agent_result (even wait=false) MUST NOT be your next tool call, and you must not poll. Only collect after useful main-thread work is complete and further progress depends on the replies. Collection keeps sessions alive. Quality-check every reply and promptly use sub_agent_message to correct specific gaps, request evidence, verify, or deepen the same agent. Do not use sub-agents when there is no useful main-thread work to overlap, for simple tasks, or for strongly sequential tasks.`,
     parameters
   )
 
@@ -1953,7 +1968,7 @@ function createSubAgentResultToolDefinition(): ToolDefinition {
       },
       "wait": {
         "type": "boolean",
-        "description": "Default true: block until the targeted sub-agents finish and return their full reports. Pass false to peek at their current progress (status, rounds, tool-call count) without waiting, so you can keep working and collect later."
+        "description": "Default true. true BLOCKS until the targeted replies finish and is allowed only after all useful main-thread work is complete. false returns a non-blocking status, but use it only when that status determines a concrete next action; never poll repeatedly or call it immediately after dispatch."
       }
     },
     "required": []
@@ -1962,7 +1977,7 @@ function createSubAgentResultToolDefinition(): ToolDefinition {
 
   const func = new ToolFunction(
     SUB_AGENT_RESULT_TOOL_ID,
-    'Collect the reports of sub-agents previously dispatched with sub_agent. By default it waits until they are done and returns their final reports; pass wait=false to check progress without blocking. Only call this once you have finished the work you can do yourself, and never answer a question that depends on sub-agent output before collecting it.',
+    'COLLECTION BARRIER for replies from sub_agent/sub_agent_message. Do not call this immediately after dispatch and do not use blocking wait=true as a substitute for main-thread work. First finish every useful task you can do independently. Use wait=false only when the status changes a concrete decision; never poll it consecutively. After collection, immediately run a quality gate against the goal, evidence, constraints, consistency, and required format. If a specific fixable gap exists, the next coordination action should be sub_agent_message to that agentId before drafting the final answer. Collection does not close sessions.',
     parameters
   )
 
@@ -1973,7 +1988,7 @@ function createSubAgentResultToolConfig(): ToolConfig {
   return new ToolConfig(
     SUB_AGENT_RESULT_TOOL_ID,
     '收取子智能体结果',
-    '取回已派出子智能体的最终报告，随子智能体工具一同提供',
+    '取回子智能体当前轮回复，会话可继续，随子智能体工具一同提供',
     null,
     true,
     false,
@@ -1985,18 +2000,86 @@ function createSubAgentResultToolConfig(): ToolConfig {
   )
 }
 
-// sub_agent_result 不在工具面板里单独出现，始终随 sub_agent 一起曝光给模型
+function createSubAgentMessageToolDefinition(): ToolDefinition {
+  const parameters = new ToolParameters()
+  const rawSchemaJson: string = `{
+    "type": "object",
+    "properties": {
+      "main_thread_work": {
+        "type": "string",
+        "description": "Required scheduling commitment: concrete useful work the main agent will do after sending these follow-ups and before collecting the new batch."
+      },
+      "messages": {
+        "type": "array",
+        "description": "Follow-up messages for existing sub-agent sessions. Each targeted agent must have finished and its previous reply must already have been collected with sub_agent_result.",
+        "items": {
+          "type": "object",
+          "properties": {
+            "agent_id": {
+              "type": "string",
+              "description": "The stable agentId returned by sub_agent or sub_agent_result."
+            },
+            "message": {
+              "type": "string",
+              "description": "A precise next instruction based on the quality gap in the previous reply. State what is missing or wrong, add necessary context, and define acceptance criteria for this turn. The complete prior conversation is retained; do not resend or restart the whole task."
+            },
+            "expected_output": {
+              "type": "string",
+              "description": "Optional desired format for this turn's reply."
+            }
+          },
+          "required": ["agent_id", "message"]
+        }
+      }
+    },
+    "required": ["main_thread_work", "messages"]
+  }`
+  parameters.setRawSchema(JSON.parse(rawSchemaJson) as object)
+
+  const func = new ToolFunction(
+    SUB_AGENT_MESSAGE_TOOL_ID,
+    'QUALITY-GATE FOLLOW-UP for existing sub-agent conversations. Use this promptly after collection when a reply has a concrete, material gap: missing coverage or evidence, wrong direction, contradiction, shallow analysis, failed format, or a verification need. Address the original agentId, name the exact gap, provide any new context, and define what a satisfactory next reply must contain. Preserve good work and request only the needed delta instead of restarting the task. This returns immediately with a new batchId; continue useful main-thread work before collecting again. Repeat only while another round offers material value.',
+    parameters
+  )
+  return new ToolDefinition(func)
+}
+
+function createSubAgentMessageToolConfig(): ToolConfig {
+  return new ToolConfig(
+    SUB_AGENT_MESSAGE_TOOL_ID,
+    '引导子智能体',
+    '向已有子智能体续发指令并保留完整上下文，随子智能体工具一同提供',
+    null,
+    true,
+    false,
+    ToolSourceType.BUILTIN,
+    'builtin',
+    SUB_AGENT_MESSAGE_TOOL_ID,
+    '内置工具',
+    ToolPermissionLevel.READ
+  )
+}
+
+// 两个配套工具不在工具面板里单独出现，始终随 sub_agent 一起曝光给模型。
+// 保留原函数名以兼容现有调用方。
 export function appendSubAgentResultTool(tools: ToolDefinition[]): ToolDefinition[] {
   const result: ToolDefinition[] = []
-  let alreadyPresent = false
+  let resultAlreadyPresent = false
+  let messageAlreadyPresent = false
   for (let i = 0; i < tools.length; i++) {
     result.push(tools[i])
     if (tools[i].function.name === SUB_AGENT_RESULT_TOOL_ID) {
-      alreadyPresent = true
+      resultAlreadyPresent = true
+    }
+    if (tools[i].function.name === SUB_AGENT_MESSAGE_TOOL_ID) {
+      messageAlreadyPresent = true
     }
   }
-  if (!alreadyPresent) {
+  if (!resultAlreadyPresent) {
     result.push(createSubAgentResultToolDefinition())
+  }
+  if (!messageAlreadyPresent) {
+    result.push(createSubAgentMessageToolDefinition())
   }
   return result
 }
@@ -2737,6 +2820,17 @@ export function registerBuiltinTools(): void {
       new SubAgentResultExecutor()
     )
     registry.registerTool(subAgentResultTool)
+    registeredNow += 1
+  }
+
+  if (!registry.isToolRegistered(SUB_AGENT_MESSAGE_TOOL_ID)) {
+    const subAgentMessageTool = new RegisteredTool(
+      SUB_AGENT_MESSAGE_TOOL_ID,
+      createSubAgentMessageToolConfig(),
+      createSubAgentMessageToolDefinition(),
+      new SubAgentMessageExecutor()
+    )
+    registry.registerTool(subAgentMessageTool)
     registeredNow += 1
   }
 

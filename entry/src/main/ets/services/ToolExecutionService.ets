@@ -154,7 +154,8 @@ export class ToolExecutionService {
   }
 
   // 在全局工具互斥锁内执行 task（简单的 promise 链）。
-  // 会长时间挂起的调用（ask_user、sub_agent_result）不要走这里，否则会把锁一直占住。
+  // 会长时间挂起或会启动并发工作的调用（ask_user、sub_agent_result、sub_agent_message）
+  // 不要走这里，否则会把锁一直占住或破坏主从并行。
   async runExclusively<T>(task: () => Promise<T>): Promise<T> {
     const previous = this.exclusiveChain
     let release: () => void = () => {}

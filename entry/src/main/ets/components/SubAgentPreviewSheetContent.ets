@@ -5,6 +5,7 @@ import {
   SubAgentToolEventState,
   SUB_AGENT_STATUS_CANCELLED,
   SUB_AGENT_STATUS_FAILED,
+  SUB_AGENT_STATUS_IDLE,
   SUB_AGENT_STATUS_RUNNING,
   SUB_AGENT_TOOL_EVENT_ERROR,
   SUB_AGENT_TOOL_EVENT_RUNNING
@@ -13,6 +14,7 @@ import { ImmersiveSheetHeader } from './ImmersiveSheetHeader'
 import { getAppUiState } from '../state/AppUiState'
 import { withColorAlpha } from '../utils/ColorAlphaUtils'
 import { uiMaterial } from '@kit.ArkUI'
+import { pickLocalizedText } from '../utils/LocalizedTextUtils'
 
 // 子智能体实时预览面板：展示最近一批子智能体各自调用了哪些工具、生成了什么内容。
 // 状态来自 SubAgentService 的 @ObservedV2 预览状态，运行期间实时刷新。
@@ -62,7 +64,7 @@ export struct SubAgentPreviewSheetContent {
   }
 
   private getAgentKey(agent: SubAgentLiveState, index: number): string {
-    return index.toString() + '_' + agent.name
+    return agent.agentId !== '' ? agent.agentId : index.toString() + '_' + agent.name
   }
 
   private isAgentCollapsed(agent: SubAgentLiveState, index: number): boolean {
@@ -80,15 +82,30 @@ export struct SubAgentPreviewSheetContent {
 
   private getAgentStatusText(status: string): string {
     if (status === SUB_AGENT_STATUS_RUNNING) {
-      return '运行中'
+      return pickLocalizedText('运行中', 'Running')
+    }
+    if (status === SUB_AGENT_STATUS_IDLE) {
+      return pickLocalizedText('等待引导', 'Awaiting guidance')
     }
     if (status === SUB_AGENT_STATUS_FAILED) {
-      return '失败'
+      return pickLocalizedText('失败', 'Failed')
     }
     if (status === SUB_AGENT_STATUS_CANCELLED) {
-      return '已取消'
+      return pickLocalizedText('已取消', 'Cancelled')
     }
-    return '已完成'
+    return pickLocalizedText('已完成', 'Completed')
+  }
+
+  private getAgentStatsText(agent: SubAgentLiveState): string {
+    const status = this.getAgentStatusText(agent.status)
+    const conversationTurnUnit = agent.conversationTurns === 1 ? 'conversation turn' : 'conversation turns'
+    const modelRoundUnit = agent.rounds === 1 ? 'model round' : 'model rounds'
+    const toolCallUnit = agent.toolEvents.length === 1 ? 'tool call' : 'tool calls'
+    return pickLocalizedText(
+      `${status} · 对话 ${agent.conversationTurns} 轮 · 模型 ${agent.rounds} 轮 · 工具 ${agent.toolEvents.length} 次`,
+      `${status} · ${agent.conversationTurns} ${conversationTurnUnit} · ` +
+      `${agent.rounds} ${modelRoundUnit} · ${agent.toolEvents.length} ${toolCallUnit}`
+    )
   }
 
   private getAgentStatusSymbol(status: string): Resource {
@@ -111,7 +128,7 @@ export struct SubAgentPreviewSheetContent {
   build() {
     Column() {
       ImmersiveSheetHeader({
-        title: '子智能体实时预览',
+        title: pickLocalizedText('子智能体实时预览', 'Sub-agent Live Preview'),
         onLeadingClick: (): void => {
           this.onClose()
         }
@@ -123,11 +140,16 @@ export struct SubAgentPreviewSheetContent {
             .fontSize(28)
             .fontColor([$r('app.color.text_tertiary')])
 
-          Text(this.previewState.hasEverRun ? '子智能体运行记录已失效' : '当前还没有运行过子智能体')
+          Text(this.previewState.hasEverRun
+            ? pickLocalizedText('子智能体运行记录已失效', 'Sub-agent activity is no longer available')
+            : pickLocalizedText('当前还没有运行过子智能体', 'No sub-agents have run yet'))
             .fontSize(13)
             .fontColor($r('app.color.text_tertiary'))
 
-          Text('模型调用「子智能体」工具后，这里会实时显示每个子智能体的工具调用与生成内容')
+          Text(pickLocalizedText(
+            '模型调用「子智能体」工具后，这里会实时显示每个子智能体的工具调用与生成内容',
+            'After the model invokes the Sub-agent tool, each sub-agent\'s tool calls and generated content ' +
+            'will appear here in real time.'))
             .fontSize(11)
             .fontColor($r('app.color.text_tertiary'))
             .textAlign(TextAlign.Center)
@@ -141,7 +163,7 @@ export struct SubAgentPreviewSheetContent {
           Column({ space: 10 }) {
             ForEach(this.previewState.agents, (agent: SubAgentLiveState, index: number) => {
               this.AgentCard(agent, index)
-            }, (agent: SubAgentLiveState, index: number) => index.toString() + '_' + agent.name)
+            }, (agent: SubAgentLiveState, index: number) => this.getAgentKey(agent, index))
           }
           .width('100%')
           .padding({ left: 16, right: 16, top: 4, bottom: 24 })
@@ -181,7 +203,7 @@ export struct SubAgentPreviewSheetContent {
             .textOverflow({ overflow: TextOverflow.Ellipsis })
             .width('100%')
 
-          Text(`${this.getAgentStatusText(agent.status)} · 第 ${agent.rounds} 轮 · 工具 ${agent.toolEvents.length} 次`)
+          Text(this.getAgentStatsText(agent))
             .fontSize(10)
             .fontColor($r('app.color.text_tertiary'))
             .maxLines(1)
@@ -257,7 +279,7 @@ export struct SubAgentPreviewSheetContent {
           .scrollBar(BarState.Auto)
           .align(Alignment.TopStart)
         } else if (agent.status === SUB_AGENT_STATUS_RUNNING) {
-          Text('等待模型输出...')
+          Text(pickLocalizedText('等待模型输出...', 'Waiting for model output...'))
             .fontSize(11)
             .fontColor($r('app.color.text_tertiary'))
         }

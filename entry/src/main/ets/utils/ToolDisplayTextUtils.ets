@@ -21,6 +21,8 @@ export function getLocalizedBuiltinToolName(toolId: string, fallback: string = '
       return pickLocalizedText('子智能体', 'Sub-agent')
     case 'sub_agent_result':
       return pickLocalizedText('收取子智能体结果', 'Collect Sub-agent Results')
+    case 'sub_agent_message':
+      return pickLocalizedText('引导子智能体', 'Guide Sub-agent')
     case 'canvas_document':
       return pickLocalizedText('Canvas 文档', 'Canvas Document')
     case 'pdf_to_text':
@@ -64,8 +66,11 @@ export function getLocalizedBuiltinToolDescription(toolId: string, fallback: str
       return pickLocalizedText('派出并行子智能体处理独立子任务',
         'Dispatch parallel sub-agents for independent tasks.')
     case 'sub_agent_result':
-      return pickLocalizedText('取回已派出子智能体的最终报告',
-        'Collect final reports from dispatched sub-agents.')
+      return pickLocalizedText('取回子智能体当前轮回复，会话可继续',
+        'Collect the current replies from sub-agents.')
+    case 'sub_agent_message':
+      return pickLocalizedText('向已有子智能体续发指令并保留上下文',
+        'Continue an existing sub-agent conversation.')
     case 'canvas_document':
       return pickLocalizedText('读取或修改与用户共享的 Canvas 文档',
         'Read or edit the Canvas document shared with the user.')

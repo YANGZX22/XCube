@@ -40,7 +40,7 @@
 
 - 🤖 **Any model** — 15+ providers built in, plus any OpenAI-, Anthropic-, or Gemini-compatible API
 - 🔍 **Web search & MCP** — Bocha, Bing (local), Tavily, Exa, and remote streamable MCP servers
-- 🧩 **Parallel sub-agents** — split big tasks across up to 3 agents and merge the results
+- 🧩 **Conversational sub-agents** — split big tasks across up to 3 agents, then guide each one through multiple follow-up rounds
 - 📚 **Local knowledge base** — hybrid keyword + vector RAG with built-in DOCX/XLSX parsing and OCR; files never leave the app sandbox
 - 🛠️ **Built-in tools** — Canvas documents, Python sandbox, charts, calendar, and PDF/image/DOCX/XLSX → text
 - 🔊 **Read aloud** — HarmonyOS offline TTS or ElevenLabs
@@ -63,9 +63,9 @@ OpenAI · Claude · Gemini · DeepSeek · Grok · Ollama · OpenRouter · Silico
 
 ### 🧩 Parallel sub-agents
 
-Turn on **Sub-agent** in the chat input's tool selector, and the main model can split a request — multi-topic research, source comparisons, independent documents — across up to three sub-agents running in parallel, then synthesize their reports.
+Turn on **Sub-agent** in the chat input's tool selector, and the main model can split a request — multi-topic research, source comparisons, independent documents — across up to three sub-agents running in parallel, then synthesize their reports. Each returned `agentId` remains addressable for the rest of the main response, so the main model can ask follow-up questions, correct direction, request verification, and refine the same sub-agent's work for as many rounds as needed.
 
-- Each sub-agent runs in its own isolated context with its own tool and search budget
+- Each sub-agent keeps its own isolated conversation context, tool history, and search budget across follow-up rounds
 - Watch output, tool calls, and status live in the Sub-agent Live Preview panel
 - Requires a model with full tool-calling support
 

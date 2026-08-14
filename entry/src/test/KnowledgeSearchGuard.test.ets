@@ -30,7 +30,13 @@ import {
   resolveKnowledgeToolExposure,
   shouldExposeKnowledgeSearchTool
 } from '../main/ets/pages/chat/KnowledgeToolExposurePolicy'
-import { buildSubAgentToolSet, SUB_AGENT_TOOL_ID } from '../main/ets/services/SubAgentService'
+import {
+  buildSubAgentToolSet,
+  SUB_AGENT_MESSAGE_TOOL_ID,
+  SUB_AGENT_RESULT_TOOL_ID,
+  SUB_AGENT_TOOL_ID
+} from '../main/ets/services/SubAgentService'
+import { appendSubAgentResultTool } from '../main/ets/config/BuiltinTools'
 
 function createTestToolDefinition(name: string): ToolDefinition {
   return new ToolDefinition(new ToolFunction(name, '', new ToolParameters()))
@@ -274,7 +280,9 @@ export default function knowledgeSearchGuardTest() {
       const tools = [
         createTestToolDefinition('web_search'),
         createTestToolDefinition(KNOWLEDGE_SEARCH_TOOL_ID),
-        createTestToolDefinition(SUB_AGENT_TOOL_ID)
+        createTestToolDefinition(SUB_AGENT_TOOL_ID),
+        createTestToolDefinition(SUB_AGENT_RESULT_TOOL_ID),
+        createTestToolDefinition(SUB_AGENT_MESSAGE_TOOL_ID)
       ]
 
       const subAgentTools = buildSubAgentToolSet(tools)
@@ -283,7 +291,37 @@ export default function knowledgeSearchGuardTest() {
       expect(names.includes('web_search')).assertEqual(true)
       expect(names.includes(KNOWLEDGE_SEARCH_TOOL_ID)).assertEqual(true)
       expect(names.includes(SUB_AGENT_TOOL_ID)).assertEqual(false)
-      expect(tools.length).assertEqual(3)
+      expect(names.includes(SUB_AGENT_RESULT_TOOL_ID)).assertEqual(false)
+      expect(names.includes(SUB_AGENT_MESSAGE_TOOL_ID)).assertEqual(false)
+      expect(tools.length).assertEqual(5)
+    })
+
+    it('exposes_both_sub_agent_conversation_companions_without_duplicates', 0, () => {
+      const tools = [createTestToolDefinition(SUB_AGENT_TOOL_ID)]
+      const withCompanions = appendSubAgentResultTool(tools)
+      const appendedAgain = appendSubAgentResultTool(withCompanions)
+      const names = appendedAgain.map((tool: ToolDefinition): string => tool.function.name)
+      let resultDescription = ''
+      let messageDescription = ''
+      let messageSchemaJson = ''
+      for (let i = 0; i < appendedAgain.length; i++) {
+        if (appendedAgain[i].function.name === SUB_AGENT_RESULT_TOOL_ID) {
+          resultDescription = appendedAgain[i].function.description
+        }
+        if (appendedAgain[i].function.name === SUB_AGENT_MESSAGE_TOOL_ID) {
+          messageDescription = appendedAgain[i].function.description
+          messageSchemaJson = JSON.stringify(appendedAgain[i].function.parameters.toJsonObject())
+        }
+      }
+
+      expect(names.filter((name: string): boolean => name === SUB_AGENT_RESULT_TOOL_ID).length).assertEqual(1)
+      expect(names.filter((name: string): boolean => name === SUB_AGENT_MESSAGE_TOOL_ID).length).assertEqual(1)
+      expect(appendedAgain.length).assertEqual(3)
+      expect(tools.length).assertEqual(1)
+      expect(resultDescription.includes('COLLECTION BARRIER')).assertEqual(true)
+      expect(resultDescription.includes('never poll it consecutively')).assertEqual(true)
+      expect(messageDescription.includes('QUALITY-GATE FOLLOW-UP')).assertEqual(true)
+      expect(messageSchemaJson.includes('main_thread_work')).assertEqual(true)
     })
 
     it('does_not_retrieve_when_runtime_guard_is_closed', 0, async () => {

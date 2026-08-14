@@ -9,6 +9,7 @@ import {
   COMPACT_TOOL_ID,
   KNOWLEDGE_SEARCH_TOOL_ID,
   registerBuiltinTools,
+  SUB_AGENT_MESSAGE_TOOL_ID,
   SUB_AGENT_RESULT_TOOL_ID,
   USE_SKILL_TOOL_ID
 } from '../config/BuiltinTools'
@@ -172,10 +173,11 @@ export struct ToolsCenterPanel {
     const builtin: ToolConfig[] = []
     for (let i = 0; i < allTools.length; i++) {
       // 联网搜索、Skill、上下文压缩各有独立卡片；知识库只在知识库页管理；
-      // sub_agent_result 随 sub_agent 一起曝光，不单独开关
+      // sub_agent_result/sub_agent_message 随 sub_agent 一起曝光，不单独开关
       if (allTools[i].sourceType === ToolSourceType.BUILTIN && allTools[i].id !== this.searchToolId &&
         allTools[i].id !== USE_SKILL_TOOL_ID && allTools[i].id !== KNOWLEDGE_SEARCH_TOOL_ID &&
-        allTools[i].id !== COMPACT_TOOL_ID && allTools[i].id !== SUB_AGENT_RESULT_TOOL_ID) {
+        allTools[i].id !== COMPACT_TOOL_ID && allTools[i].id !== SUB_AGENT_RESULT_TOOL_ID &&
+        allTools[i].id !== SUB_AGENT_MESSAGE_TOOL_ID) {
         builtin.push(allTools[i])
       }
     }

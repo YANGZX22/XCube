@@ -39,7 +39,7 @@ export class AppUiState {
   @Trace themeAiBubble: string = '#FDFCFF'
   @Trace themeTextPrimary: string = '#221E38'
   @Trace themeTextSecondary: string = '#645E7C'
-  @Trace themeTextTertiary: string = '#948FA8'
+  @Trace themeTextTertiary: string = '#8A8A8A'
   @Trace themeMarkdownTitle: string = '#221E38'
   @Trace themeMarkdownText: string = '#3B3554'
   @Trace themeMarkdownLink: string = '#7A68F0'

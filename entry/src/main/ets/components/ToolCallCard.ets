@@ -145,81 +145,100 @@ export struct ToolCallCard {
     Column() {
       // 标题栏
       Row() {
-        // 工具图标
-        SymbolGlyph($r('sys.symbol.gearshape'))
-          .fontSize(14)
-          .fontColor([this.isManuscriptMode || this.isExecuting
-            ? this.themePrimary : $r('app.color.text_secondary')])
-
-        // 工具名称
-        Text(getToolDisplayName(this.getPrimaryCall()))
-          .fontSize(13)
-          .fontWeight(FontWeight.Medium)
-          .fontColor(this.isManuscriptMode || this.isExecuting
-            ? this.themePrimary : $r('app.color.text_secondary'))
-          .margin({ left: 6 })
-
-        if (this.getPrimaryCall().sourceLabel.trim() !== '') {
-          Text(getLocalizedToolSourceLabel(this.getPrimaryCall().sourceLabel))
-            .fontSize(10)
-            .fontColor($r('app.color.text_tertiary'))
-            .margin({ left: 6 })
-        }
-
-        // 执行状态
-        if (this.isExecuting) {
-          // 执行中：显示跳动点
-          Row({ space: 2 }) {
-            Column()
-              .width(4)
-              .height(4)
-              .borderRadius(2)
-              .backgroundColor(this.themePrimary)
-              .scale({ x: this.dot1Scale, y: this.dot1Scale })
-
-            Column()
-              .width(4)
-              .height(4)
-              .borderRadius(2)
-              .backgroundColor(this.themePrimary)
-              .scale({ x: this.dot2Scale, y: this.dot2Scale })
-
-            Column()
-              .width(4)
-              .height(4)
-              .borderRadius(2)
-              .backgroundColor(this.themePrimary)
-              .scale({ x: this.dot3Scale, y: this.dot3Scale })
-          }
-          .margin({ left: 8 })
-        } else if (this.hasAnyResult() && !this.shouldHideStatusIcon()) {
-          // 已完成：根据结果显示成功/失败状态
-          SymbolGlyph(this.getResultStatusSymbol())
+        // 左侧信息区只使用扣除右侧操作后的剩余宽度，避免长名称挤出操作按钮。
+        Flex({ direction: FlexDirection.Row, alignItems: ItemAlign.Center }) {
+          // 工具图标
+          SymbolGlyph($r('sys.symbol.gearshape'))
             .fontSize(14)
-            .fontColor([this.getResultStatusColor()])
-            .margin({ left: 8 })
-        }
+            .fontColor([this.isManuscriptMode || this.isExecuting
+              ? this.themePrimary : $r('app.color.text_secondary')])
+            .flexShrink(0)
 
-        // 子智能体卡片：实时预览入口（bindSheet 由宿主 MessageBubble 承载）
-        if (this.isSubAgentCard()) {
-          Text(pickLocalizedText('实时预览', 'Live Preview'))
-            .fontSize(10)
+          // 工具名称
+          Text(getToolDisplayName(this.getPrimaryCall()))
+            .fontSize(13)
             .fontWeight(FontWeight.Medium)
-            .fontColor(this.themePrimary)
-            .padding({ left: 7, right: 7, top: 2, bottom: 2 })
-            .borderRadius(this.isManuscriptMode ? 0 : 9)
-            .backgroundColor(this.isManuscriptMode ? Color.Transparent : this.themePrimaryLight)
-            .border({ width: 0, color: this.themePrimary })
-            .margin({ left: 8 })
-            .onClick(() => {
-              this.onSubAgentPreview()
+            .fontColor(this.isManuscriptMode || this.isExecuting
+              ? this.themePrimary : $r('app.color.text_secondary'))
+            .maxLines(1)
+            .textOverflow({ overflow: TextOverflow.MARQUEE })
+            .marqueeOptions({
+              start: true,
+              step: 3,
+              loop: -1,
+              fromStart: true,
+              delay: 1200,
+              fadeout: true
             })
+            .flexShrink(1)
+            .margin({ left: 6 })
+
+          if (this.getPrimaryCall().sourceLabel.trim() !== '') {
+            Text(getLocalizedToolSourceLabel(this.getPrimaryCall().sourceLabel))
+              .fontSize(10)
+              .fontColor($r('app.color.text_tertiary'))
+              .flexShrink(0)
+              .margin({ left: 6 })
+          }
+
+          // 执行状态
+          if (this.isExecuting) {
+            // 执行中：显示跳动点
+            Row({ space: 2 }) {
+              Column()
+                .width(4)
+                .height(4)
+                .borderRadius(2)
+                .backgroundColor(this.themePrimary)
+                .scale({ x: this.dot1Scale, y: this.dot1Scale })
+
+              Column()
+                .width(4)
+                .height(4)
+                .borderRadius(2)
+                .backgroundColor(this.themePrimary)
+                .scale({ x: this.dot2Scale, y: this.dot2Scale })
+
+              Column()
+                .width(4)
+                .height(4)
+                .borderRadius(2)
+                .backgroundColor(this.themePrimary)
+                .scale({ x: this.dot3Scale, y: this.dot3Scale })
+            }
+            .flexShrink(0)
+            .margin({ left: 8 })
+          } else if (this.hasAnyResult() && !this.shouldHideStatusIcon()) {
+            // 已完成：根据结果显示成功/失败状态
+            SymbolGlyph(this.getResultStatusSymbol())
+              .fontSize(14)
+              .fontColor([this.getResultStatusColor()])
+              .flexShrink(0)
+              .margin({ left: 8 })
+          }
+
+          // 子智能体卡片：实时预览入口（bindSheet 由宿主 MessageBubble 承载）
+          if (this.isSubAgentCard()) {
+            Text(pickLocalizedText('实时预览', 'Live Preview'))
+              .fontSize(10)
+              .fontWeight(FontWeight.Medium)
+              .fontColor(this.themePrimary)
+              .padding({ left: 7, right: 7, top: 2, bottom: 2 })
+              .borderRadius(this.isManuscriptMode ? 0 : 9)
+              .backgroundColor(this.isManuscriptMode ? Color.Transparent : this.themePrimaryLight)
+              .border({ width: 0, color: this.themePrimary })
+              .flexShrink(0)
+              .margin({ left: 8 })
+              .onClick(() => {
+                this.onSubAgentPreview()
+              })
+          }
         }
+        .layoutWeight(1)
+        .height('100%')
+        .clip(true)
 
-        Blank()
-          .layoutWeight(1)
-
-        // 多次调用合并显示：居中的 × N 徽标
+        // 多次调用合并显示：固定在详情按钮左侧。
         if (this.entries.length > 1) {
           Text(`× ${this.entries.length}`)
             .fontSize(11)
@@ -230,12 +249,10 @@ export struct ToolCallCard {
             .borderRadius(this.isManuscriptMode ? 0 : 9)
             .backgroundColor(this.isManuscriptMode ? Color.Transparent : this.themePrimaryLight)
             .border({ width: 0, color: this.themePrimary })
+            .margin({ left: 8 })
         }
 
-        Blank()
-          .layoutWeight(1)
-
-        // 展开/折叠按钮（仅在有结果时显示）
+        // 右侧操作区按内容宽度占位，箭头始终贴右对齐，尽量把空间留给工具名称。
         if (this.hasAnyResult()) {
           Row() {
             Text(this.isExpanded ? $r('app.string.common_collapse') : $r('app.string.common_details'))
@@ -249,6 +266,8 @@ export struct ToolCallCard {
               .animation({ duration: 200, curve: Curve.EaseOut })
               .margin({ left: 2 })
           }
+          .justifyContent(FlexAlign.End)
+          .margin({ left: 8 })
           .onClick(() => {
             this.getUIContext().animateTo({ duration: 200, curve: Curve.EaseOut }, () => {
               if (this.isExpanded) {
@@ -520,7 +539,8 @@ export struct ToolCallCard {
     if (raw === undefined || raw === null) {
       return false
     }
-    return raw.toLowerCase().replace(/[\s\-]+/g, '_') === 'sub_agent'
+    const normalized = raw.toLowerCase().replace(/[\s\-]+/g, '_')
+    return normalized === 'sub_agent' || normalized === 'sub_agent_message'
   }
 
   private getResultStatusSymbol(): Resource {

@@ -15,6 +15,7 @@ import { getToolExecutionService, ToolExecutionService } from '../services/ToolE
 import {
   getSubAgentService,
   SubAgentRuntimeConfig,
+  SUB_AGENT_MESSAGE_TOOL_ID,
   SUB_AGENT_RESULT_TOOL_ID,
   SUB_AGENT_SOURCE_LABEL_PREFIX,
   SUB_AGENT_TOOL_ID
@@ -2598,8 +2599,8 @@ ${limitedSearchContext}
       }
     }
 
-    // sub_agent 派发后立即返回，收取产出要靠配套的 sub_agent_result。
-    // 它不在工具面板中单独出现，始终随 sub_agent 一起曝光。
+    // sub_agent 派发后立即返回；sub_agent_result 负责收取当前轮回复，
+    // sub_agent_message 负责向持久会话续发指令。二者始终随 sub_agent 一起曝光。
     let requestTools: ToolDefinition[] = hasSubAgentTool ? appendSubAgentResultTool(tools) : tools
 
     onAIMessageAdded(aiMessage)
@@ -2651,13 +2652,15 @@ ${limitedSearchContext}
     }
     if (hasSubAgentTool) {
       toolUsageSystemPrompt += `
-- 当任务能拆成多个彼此独立、可并行的子任务（例如多主题调研、多来源对比、多份材料分别处理）时，可调用 sub_agent 一次性派出 1-3 个子智能体并行处理，再汇总它们的结果作答。
-- sub_agent 会立即返回 batchId，子智能体随后在后台继续运行。派发之后绝对不要空等：立刻着手你自己那部分工作（调用其它工具、整理已掌握的信息、起草回答框架），把能做的先做完。
-- 派任务时要有意识地给自己也留一份：把你能直接完成的部分留在主线程做，只把真正独立、耗时的部分交给子智能体。
-- 需要子智能体产出时才调用 sub_agent_result：省略参数即收取全部未收取的批次并等待完成；传 wait=false 只查看进度而不阻塞，可用来判断是否还能再做点别的。
-- 在拿到 sub_agent_result 的结果之前，不要给出依赖子智能体产出的最终回答。
-- 子智能体看不到本对话历史，每个任务的 prompt 必须自包含：写清目标、必要背景、约束和期望输出。
-- 简单任务或强依赖前后顺序的任务不要使用 sub_agent，自己直接完成更快。`
+子智能体协作协议（必须按阶段执行）:
+1. 派发阶段：只在任务确实能拆成独立并行工作时调用 sub_agent。派发前先确定验收标准，并给主线程保留一项明确交付物（例如补充检索、建立比较框架、核对事实、分析关键部分、设计验收清单或起草答案骨架），把它写入 main_thread_work。如果主线程没有任何可并行完成的工作，就不要使用子智能体。
+2. 子任务提示必须自包含：写清目标、背景、约束、验收标准和期望输出。sub_agent 返回 batchId 与稳定 agentId 后，子智能体在后台运行。
+3. 主线程工作阶段：派发后立即完成你保留的交付物。禁止把 sub_agent_result（包括 wait=false）作为 sub_agent 之后的下一个工具调用；禁止原地轮询。只有已经产出实质性的主线程工作后，才能进入收取阶段。
+4. 收取阶段：只在“主线程能做的工作已经完成，且继续推进确实依赖子智能体回复”时调用 sub_agent_result(wait=true)。wait=true 会阻塞等待，不能用来代替自己的工作。wait=false 仅在状态会决定一项具体后续动作时使用；不得连续调用 wait=false，收到 running 后必须先继续其它工作，不能再次查看进度。
+5. 质量门阶段：每次拿到子智能体回复后，立即逐项检查目标覆盖、事实/证据、约束遵守、内部一致性和输出格式。不要直接把回复当成合格最终结果，也不要先写最终回答再回头检查。
+6. 及时引导：若发现可由原子智能体修正的明确缺口（遗漏、证据不足、方向偏差、矛盾、过于笼统、格式不符或需要复核），下一步应优先调用 sub_agent_message，而不是由主线程默默替它补写或重新创建子智能体。续发消息要指出具体缺口、补充必要信息并给出本轮验收目标；将结果中的 agentId 作为 agent_id，并在 main_thread_work 中写明等待新回复期间主线程要完成的工作。多个独立缺口可在同一次调用中并行发给不同 agentId。
+7. 停止条件：回复通过验收标准，或继续追问不会带来实质增益时，停止引导并综合作答；否则重复“续发 → 主线程继续工作 → 收取 → 质量门”。每个子智能体同一时刻只能处理一条消息，必须先收取上一轮再续发。
+8. 在拿到所有被最终答案依赖的子智能体回复之前，不得给出最终回答。简单任务或强依赖前后顺序的任务不要使用 sub_agent。`
     }
     if (hasKnowledgeSearchTool) {
       toolUsageSystemPrompt += `
@@ -3118,7 +3121,7 @@ ${preview}`
     return results
   }
 
-  // sub_agent 改为异步派发后，主智能体与后台子智能体会同时执行工具，
+  // sub_agent 改为异步派发且支持续聊后，主智能体与后台子智能体会同时执行工具，
   // 因此两条路径统一走 ToolExecutionService 的全局互斥锁，维持
   // “同一时刻只执行一个工具”的约定（审批弹窗、Pyodide WebView 都不能并发）。
   // 会长时间挂起的调用不能占锁，否则会把另一侧饿死。
@@ -3127,7 +3130,8 @@ ${preview}`
     // ask_user 等用户作答（可能数分钟）；sub_agent_result 等子智能体跑完，
     // 而子智能体自己还要抢这把锁——占着锁等它们必然死锁
     return normalized === 'ask_user' || normalized === 'user_input' || normalized === 'ask' ||
-      normalized === SUB_AGENT_TOOL_ID || normalized === SUB_AGENT_RESULT_TOOL_ID
+      normalized === SUB_AGENT_TOOL_ID || normalized === SUB_AGENT_RESULT_TOOL_ID ||
+      normalized === SUB_AGENT_MESSAGE_TOOL_ID
   }
 
   private async runToolCallGuarded(
@@ -3999,8 +4003,13 @@ ${preview}`
             onAIMessageUpdated(aiMessage)
             requestMessages.push(new RequestMessage(
               'system',
-              '你派出的子智能体已全部结束，结果如下(JSON):\n' + collectedJson +
-                '\n\n请结合这些结果给出最终回答，不要再调用 sub_agent_result。'
+              '你派出的子智能体当前轮回复已收取，结果如下(JSON):\n' + collectedJson +
+                '\n\n现在必须先执行质量门，逐项检查：目标覆盖、事实/证据、约束遵守、内部一致性、' +
+                '输出格式。不要先写最终回答。若存在可由原子智能体修正的实质缺口，下一项协调动作应是' +
+                '按 agentId 调用 sub_agent_message，明确指出缺口和验收目标；然后继续主线程可做的工作，' +
+                '并在 main_thread_work 写明等待期间的具体交付物，再用 sub_agent_result 收取新 batch。' +
+                '只有通过质量门或继续追问无实质收益时才综合作答。' +
+                '不要再次收取上面已经收取的 batch。'
             ))
             await this.executeToolCallLoop(
               apiConfig,
