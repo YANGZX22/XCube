@@ -820,9 +820,9 @@ export class ChatViewModel {
 
   private buildCompactReminderPrompt(usage: ContextUsage): string {
     return `
-上下文长度提醒(非常重要):
-- 当前对话上下文约占用 ${formatTokenCount(usage.usedTokens)} / ${formatTokenCount(usage.limitTokens)} tokens（约 ${usage.percent}%），已超过 ${usage.thresholdPercent}% 阈值。
-- 请在回答用户当前问题之前，先调用一次 compact 工具，把更早的对话历史压缩成结构化摘要。
+上下文压缩强制指令(最高优先级，必须执行):
+- 当前对话上下文约占用 ${formatTokenCount(usage.usedTokens)} / ${formatTokenCount(usage.limitTokens)} tokens（约 ${usage.percent}%），已超过 ${usage.thresholdPercent}% 阈值，继续直接回答将导致上下文溢出。
+- 你**必须**在生成任何面向用户的回答之前，先调用一次 compact 工具，把更早的对话历史压缩成结构化摘要。这不是建议，而是强制要求：在 compact 成功返回之前，禁止输出任何解释、回答或闲聊内容。
 - compact 的 summary 必须自包含：写清用户目标与约束、已确认的结论、已产出的代码/文件/数据及其位置、已排除的方案与原因、当前进度和待办；被压缩掉的原文之后不再可见。
 - compact 返回后立即基于摘要继续回答用户当前的问题，不要向用户复述摘要，也不要重复调用 compact。`
   }

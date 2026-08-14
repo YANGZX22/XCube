@@ -2153,13 +2153,13 @@ export struct ChatPage {
     }
     if (this.contextUsage.overThreshold) {
       return pickLocalizedText(
-        `已超过 ${this.contextUsage.thresholdPercent}% 阈值，下次发送会提醒模型先调用 compact 压缩历史。`,
-        `Above the ${this.contextUsage.thresholdPercent}% threshold; the next request asks the model to run compact first.`
+        `已超过 ${this.contextUsage.thresholdPercent}% 阈值，下次发送会强制模型先调用 compact 压缩历史，然后才回答。`,
+        `Above the ${this.contextUsage.thresholdPercent}% threshold; the next request forces the model to run compact before answering.`
       )
     }
     return pickLocalizedText(
-      `超过 ${this.contextUsage.thresholdPercent}% 后会提醒模型调用 compact 压缩历史。`,
-      `Above ${this.contextUsage.thresholdPercent}% the model is asked to run compact.`
+      `超过 ${this.contextUsage.thresholdPercent}% 后会强制模型先调用 compact 压缩历史，然后才回答。`,
+      `Above ${this.contextUsage.thresholdPercent}% the model is forced to run compact before answering.`
     )
   }
 

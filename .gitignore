@@ -37,3 +37,4 @@ docs/appgallery
 
 # Runtime JavaScript crash reports
 jscrash-*.txt
+/.codegenie/
