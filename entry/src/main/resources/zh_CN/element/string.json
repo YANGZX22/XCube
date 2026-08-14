@@ -1789,6 +1789,10 @@
       "value": " "
     },
     {
+      "name": "about_play_logo_animation",
+      "value": "播放 Logo 绘制动画"
+    },
+    {
       "name": "about_updates_section",
       "value": "版本更新"
     },

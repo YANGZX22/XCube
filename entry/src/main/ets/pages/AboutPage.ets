@@ -1,5 +1,5 @@
 import { Want, bundleManager, common } from '@kit.AbilityKit'
-import { uiMaterial } from '@kit.ArkUI'
+import { LengthMetricsUnit, uiMaterial } from '@kit.ArkUI'
 import { hilog } from '@kit.PerformanceAnalysisKit'
 import { HdsNavigation, HdsNavigationTitleBarOptions, HdsNavigationTitleMode } from '@kit.UIDesignKit'
 import { SettingsCompactTitleBarContent } from '../components/settings/SettingsCompactPageHeader'
@@ -24,6 +24,35 @@ import {
 
 const TAG = 'AboutPage'
 const GITHUB_URL = 'https://github.com/YANGZX22/XCube'
+const LOGO_CANVAS_SIZE = 96
+const LOGO_VIEWBOX_SIZE = 1024
+const LOGO_ANIMATION_FRAME_INTERVAL_MS = 16
+const LOGO_ANIMATION_DURATION_MS = 2550
+
+interface LogoPoint {
+  x: number
+  y: number
+}
+
+const LOGO_FRAME_POINTS: LogoPoint[] = [
+  { x: 512, y: 174 }, { x: 792, y: 336 }, { x: 792, y: 660 }, { x: 512, y: 822 },
+  { x: 232, y: 660 }, { x: 232, y: 336 }, { x: 512, y: 174 }
+]
+const LOGO_DETAIL_PATHS: LogoPoint[][] = [
+  [{ x: 232, y: 336 }, { x: 360, y: 410 }],
+  [{ x: 664, y: 410 }, { x: 792, y: 336 }],
+  [{ x: 512, y: 674 }, { x: 512, y: 822 }]
+]
+const LOGO_X_POINTS: LogoPoint[] = [
+  { x: 294, y: 310 }, { x: 390, y: 310 }, { x: 512, y: 438 }, { x: 634, y: 310 },
+  { x: 730, y: 310 }, { x: 566, y: 512 }, { x: 730, y: 714 }, { x: 634, y: 714 },
+  { x: 512, y: 586 }, { x: 390, y: 714 }, { x: 294, y: 714 }, { x: 458, y: 512 },
+  { x: 294, y: 310 }
+]
+const LOGO_APERTURE_POINTS: LogoPoint[] = [
+  { x: 512, y: 466 }, { x: 558, y: 512 }, { x: 512, y: 558 }, { x: 466, y: 512 },
+  { x: 512, y: 466 }
+]
 
 let aboutPagePathStack: NavPathStack | null = null
 
@@ -33,6 +62,9 @@ struct AboutPage {
   @Local versionName: string = '1.3.1'
   @Local isCheckingUpdate: boolean = false
   @Local showLicensesSheet: boolean = false
+  @Local isLogoAnimating: boolean = false
+  @Local logoCanvasOpacity: number = 1
+  @Local logoStaticOpacity: number = 0
 
   private get topAvoidHeight(): number {
     return getAppUiState().topAvoidHeight
@@ -62,6 +94,13 @@ struct AboutPage {
     return getAppUiState().materialLevel
   }
   private compactScroller: Scroller = new Scroller()
+  private logoAnimationTimer: number = -1
+  private logoAnimationSequence: number = 0
+  private logoAnimationElapsedMs: number = 0
+  private logoCanvasReady: boolean = false
+  private logoCanvasSettings: RenderingContextSettings = new RenderingContextSettings(true)
+  private logoCanvasContext: CanvasRenderingContext2D = new CanvasRenderingContext2D(this.logoCanvasSettings,
+    LengthMetricsUnit.DEFAULT)
 
   aboutToAppear(): void {
     try {
@@ -70,6 +109,12 @@ struct AboutPage {
     } catch (error) {
       console.error(TAG, `Get version failed: ${JSON.stringify(error)}`)
     }
+  }
+
+  aboutToDisappear(): void {
+    this.logoAnimationSequence += 1
+    this.clearLogoAnimationTimer()
+    this.resetLogoAnimation()
   }
 
   private px2vp(px: number): number {
@@ -126,11 +171,36 @@ struct AboutPage {
   }
 
   @Builder
+  private AnimatedLogoBuilder() {
+    Stack({ alignContent: Alignment.Center }) {
+      Canvas(this.logoCanvasContext)
+        .width(LOGO_CANVAS_SIZE)
+        .height(LOGO_CANVAS_SIZE)
+        .opacity(this.logoCanvasOpacity)
+        .onReady((): void => {
+          this.logoCanvasReady = true
+          this.drawLogoCanvasFrame(this.logoAnimationElapsedMs)
+        })
+
+      Image($r('app.media.foreground'))
+        .width(LOGO_CANVAS_SIZE)
+        .height(LOGO_CANVAS_SIZE)
+        .opacity(this.logoStaticOpacity)
+    }
+    .width(LOGO_CANVAS_SIZE)
+    .height(LOGO_CANVAS_SIZE)
+  }
+
+  @Builder
   private AppLogoBuilder() {
     Button({ type: ButtonType.Normal, stateEffect: false }) {
-      Image($r('app.media.foreground'))
-        .width(96)
-        .height(96)
+      if (this.isLogoAnimating) {
+        this.AnimatedLogoBuilder()
+      } else {
+        Image($r('app.media.foreground'))
+          .width(96)
+          .height(96)
+      }
     }
     .width(96)
     .height(96)
@@ -151,6 +221,10 @@ struct AboutPage {
       interactive: true,
       lightEffect: { color: undefined }
     }))
+    .accessibilityText($r('app.string.about_play_logo_animation'))
+    .onClick((): void => {
+      this.startLogoAnimation()
+    })
   }
 
   @Builder
@@ -551,6 +625,154 @@ struct AboutPage {
       hilog.error(0x0000, TAG, 'Open GitHub failed: %{public}s', JSON.stringify(err))
       this.pageToast('无法打开 GitHub 链接')
     }
+  }
+
+  private clearLogoAnimationTimer(): void {
+    if (this.logoAnimationTimer !== -1) {
+      clearInterval(this.logoAnimationTimer)
+      this.logoAnimationTimer = -1
+    }
+  }
+
+  private resetLogoAnimation(): void {
+    this.isLogoAnimating = false
+    this.logoAnimationElapsedMs = 0
+    this.logoCanvasReady = false
+    this.logoCanvasOpacity = 1
+    this.logoStaticOpacity = 0
+  }
+
+  private startLogoAnimation(): void {
+    if (this.isLogoAnimating) {
+      return
+    }
+
+    this.clearLogoAnimationTimer()
+    const sequence = this.logoAnimationSequence + 1
+    this.logoAnimationSequence = sequence
+    this.resetLogoAnimation()
+    this.isLogoAnimating = true
+    const startedAt = Date.now()
+    this.updateLogoAnimationFrame(0)
+    this.logoAnimationTimer = setInterval((): void => {
+      if (sequence !== this.logoAnimationSequence || !this.isLogoAnimating) {
+        this.clearLogoAnimationTimer()
+        return
+      }
+
+      const elapsedMs = Date.now() - startedAt
+      this.updateLogoAnimationFrame(elapsedMs)
+      if (elapsedMs >= LOGO_ANIMATION_DURATION_MS) {
+        this.clearLogoAnimationTimer()
+        this.resetLogoAnimation()
+      }
+    }, LOGO_ANIMATION_FRAME_INTERVAL_MS)
+  }
+
+  private getLogoTimelineProgress(elapsedMs: number, startMs: number, endMs: number): number {
+    if (elapsedMs <= startMs) {
+      return 0
+    }
+    if (elapsedMs >= endMs) {
+      return 1
+    }
+    return (elapsedMs - startMs) / (endMs - startMs)
+  }
+
+  private getLogoSmoothProgress(progress: number): number {
+    return progress * progress * (3 - 2 * progress)
+  }
+
+  private updateLogoAnimationFrame(elapsedMs: number): void {
+    this.logoAnimationElapsedMs = elapsedMs
+    const restoreProgress = this.getLogoSmoothProgress(this.getLogoTimelineProgress(elapsedMs, 2250,
+      LOGO_ANIMATION_DURATION_MS))
+    this.logoCanvasOpacity = 1 - restoreProgress
+    this.logoStaticOpacity = restoreProgress
+    if (this.logoCanvasReady) {
+      this.drawLogoCanvasFrame(elapsedMs)
+    }
+  }
+
+  private drawLogoCanvasFrame(elapsedMs: number): void {
+    const context = this.logoCanvasContext
+    context.clearRect(0, 0, LOGO_CANVAS_SIZE, LOGO_CANVAS_SIZE)
+    const frameProgress = this.getLogoTimelineProgress(elapsedMs, 0, 1000)
+    const detailProgress = this.getLogoTimelineProgress(elapsedMs, 700, 1150)
+    const xProgress = this.getLogoSmoothProgress(this.getLogoTimelineProgress(elapsedMs, 1000, 1700))
+    const apertureProgress = this.getLogoSmoothProgress(this.getLogoTimelineProgress(elapsedMs, 1600, 1850))
+    const xFillProgress = this.getLogoSmoothProgress(this.getLogoTimelineProgress(elapsedMs, 1850, 2250))
+    this.drawLogoPolyline(LOGO_FRAME_POINTS, frameProgress, '#8576FF', 42)
+    for (let index = 0; index < LOGO_DETAIL_PATHS.length; index += 1) {
+      this.drawLogoPolyline(LOGO_DETAIL_PATHS[index], detailProgress, '#8576FF', 42)
+    }
+    this.drawLogoPolyline(LOGO_X_POINTS, xProgress, '#FFFFFF', 32)
+    this.drawLogoPolyline(LOGO_APERTURE_POINTS, apertureProgress, '#FFFFFF', 32)
+    this.drawLogoXFill(xFillProgress)
+  }
+
+  private drawLogoXFill(progress: number): void {
+    if (progress <= 0) {
+      return
+    }
+    const scale = LOGO_CANVAS_SIZE / LOGO_VIEWBOX_SIZE
+    const context = this.logoCanvasContext
+    context.beginPath()
+    context.moveTo(LOGO_X_POINTS[0].x * scale, LOGO_X_POINTS[0].y * scale)
+    for (let index = 1; index < LOGO_X_POINTS.length; index += 1) {
+      context.lineTo(LOGO_X_POINTS[index].x * scale, LOGO_X_POINTS[index].y * scale)
+    }
+    context.closePath()
+    context.moveTo(LOGO_APERTURE_POINTS[0].x * scale, LOGO_APERTURE_POINTS[0].y * scale)
+    for (let index = 1; index < LOGO_APERTURE_POINTS.length; index += 1) {
+      context.lineTo(LOGO_APERTURE_POINTS[index].x * scale, LOGO_APERTURE_POINTS[index].y * scale)
+    }
+    context.closePath()
+    context.globalAlpha = Math.min(progress, 1)
+    context.fillStyle = '#FFFFFF'
+    context.fill('evenodd')
+    context.globalAlpha = 1
+  }
+
+  private drawLogoPolyline(points: LogoPoint[], progress: number, color: string, svgStrokeWidth: number): void {
+    if (progress <= 0 || points.length < 2) {
+      return
+    }
+    let totalLength = 0
+    for (let index = 1; index < points.length; index += 1) {
+      totalLength += this.getLogoSegmentLength(points[index - 1], points[index])
+    }
+    const targetLength = totalLength * Math.min(progress, 1)
+    let drawnLength = 0
+    const scale = LOGO_CANVAS_SIZE / LOGO_VIEWBOX_SIZE
+    const context = this.logoCanvasContext
+    context.beginPath()
+    context.moveTo(points[0].x * scale, points[0].y * scale)
+    for (let index = 1; index < points.length; index += 1) {
+      const from = points[index - 1]
+      const to = points[index]
+      const segmentLength = this.getLogoSegmentLength(from, to)
+      if (drawnLength + segmentLength <= targetLength) {
+        context.lineTo(to.x * scale, to.y * scale)
+        drawnLength += segmentLength
+        continue
+      }
+      const segmentProgress = Math.max(0, (targetLength - drawnLength) / segmentLength)
+      context.lineTo((from.x + (to.x - from.x) * segmentProgress) * scale,
+        (from.y + (to.y - from.y) * segmentProgress) * scale)
+      break
+    }
+    context.strokeStyle = color
+    context.lineWidth = svgStrokeWidth * scale
+    context.lineCap = 'round'
+    context.lineJoin = 'round'
+    context.stroke()
+  }
+
+  private getLogoSegmentLength(from: LogoPoint, to: LogoPoint): number {
+    const deltaX = to.x - from.x
+    const deltaY = to.y - from.y
+    return Math.sqrt(deltaX * deltaX + deltaY * deltaY)
   }
 
   private handleCheckForUpdates(): void {
