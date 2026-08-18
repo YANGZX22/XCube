@@ -93,6 +93,7 @@ export class PreferenceKeys {
 
   // 聊天输入设置
   static readonly CHAT_INPUT_ENTER_KEY_SEND: string = 'chat_input_enter_key_send'
+  static readonly CHAT_ORDERED_RESPONSE_HISTORY: string = 'chat_ordered_response_history'
   static readonly CANVAS_DOCUMENT_JSON: string = 'canvas_document_json'
 
   // 播报 / TTS 设置
@@ -524,6 +525,14 @@ export class PreferencesService {
   // 设置聊天输入框回车键是否发送
   async setChatInputEnterKeySend(enabled: boolean): Promise<void> {
     await this.setBoolean(PreferenceKeys.CHAT_INPUT_ENTER_KEY_SEND, enabled)
+  }
+
+  async getChatOrderedResponseHistory(): Promise<boolean> {
+    return await this.getBoolean(PreferenceKeys.CHAT_ORDERED_RESPONSE_HISTORY, false)
+  }
+
+  async setChatOrderedResponseHistory(enabled: boolean): Promise<void> {
+    await this.setBoolean(PreferenceKeys.CHAT_ORDERED_RESPONSE_HISTORY, enabled)
   }
 
   // 获取材质类型

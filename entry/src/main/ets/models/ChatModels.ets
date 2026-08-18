@@ -185,6 +185,53 @@ export class ToolResult {
   }
 }
 
+// AI 单条消息内部的展示时间线。聚合字段 content/reasoningContent 仍只保存最后一轮，
+// 这里额外保留工具循环中的历史思考、输出和工具调用顺序，供用户随时切换展示方式。
+export enum AssistantResponseSegmentType {
+  REASONING = 'reasoning',
+  CONTENT = 'content',
+  TOOL_CALLS = 'tool_calls'
+}
+
+export interface AssistantResponseSegmentJson {
+  id: string
+  type: string
+  content: string
+  toolCallIds: string[]
+}
+
+@ObservedV2
+export class AssistantResponseSegment {
+  @Trace id: string
+  @Trace type: string
+  @Trace content: string
+  @Trace toolCallIds: string[]
+
+  constructor(id: string = '', type: string = AssistantResponseSegmentType.CONTENT, content: string = '',
+    toolCallIds: string[] = []) {
+    this.id = id
+    this.type = type
+    this.content = content
+    this.toolCallIds = toolCallIds
+  }
+
+  static fromJson(json: AssistantResponseSegmentJson): AssistantResponseSegment {
+    const type = json.type === AssistantResponseSegmentType.REASONING ||
+      json.type === AssistantResponseSegmentType.TOOL_CALLS
+      ? json.type : AssistantResponseSegmentType.CONTENT
+    return new AssistantResponseSegment(json.id || '', type, json.content || '', json.toolCallIds || [])
+  }
+
+  toJson(): AssistantResponseSegmentJson {
+    return {
+      id: this.id,
+      type: this.type,
+      content: this.content,
+      toolCallIds: this.toolCallIds.slice()
+    }
+  }
+}
+
 // 工具配置（用于 UI 开关管理）
 @ObservedV2
 export class ToolConfig {
@@ -556,6 +603,7 @@ export class ChatMessage {
   // Function Calling 相关字段
   @Trace toolCalls: ToolCall[]      // AI 请求的工具调用
   @Trace toolResults: ToolResult[]  // 工具执行结果
+  @Trace responseSegments: AssistantResponseSegment[] // AI 消息内部按生成顺序保留的展示时间线
   @Trace toolCallId: string         // 用于 tool 角色消息，关联到对应的 tool_call
   @Trace documentToolHint: string   // 用户消息上的文档工具提示（不作为正文发送）
   @Trace translatedText: string     // 翻译结果
@@ -590,6 +638,7 @@ export class ChatMessage {
     this.isSearching = false
     this.toolCalls = []
     this.toolResults = []
+    this.responseSegments = []
     this.toolCallId = ''
     this.documentToolHint = ''
     this.translatedText = ''
@@ -627,6 +676,39 @@ export class ChatMessage {
   }
 }
 
+export interface BillingTimePeriodJson {
+  startMinutes: number
+  endMinutes: number
+}
+
+export class BillingTimePeriod {
+  startMinutes: number
+  endMinutes: number
+
+  constructor(startMinutes: number = 0, endMinutes: number = 0) {
+    this.startMinutes = BillingTimePeriod.normalizeMinute(startMinutes)
+    this.endMinutes = BillingTimePeriod.normalizeMinute(endMinutes)
+  }
+
+  static fromJson(json: BillingTimePeriodJson): BillingTimePeriod {
+    return new BillingTimePeriod(json.startMinutes, json.endMinutes)
+  }
+
+  toJson(): BillingTimePeriodJson {
+    return {
+      startMinutes: this.startMinutes,
+      endMinutes: this.endMinutes
+    }
+  }
+
+  private static normalizeMinute(minutes: number): number {
+    if (!Number.isFinite(minutes)) {
+      return 0
+    }
+    return Math.max(0, Math.min(1439, Math.floor(minutes)))
+  }
+}
+
 // 模型信息
 @ObservedV2
 export class ModelInfo {
@@ -654,6 +736,13 @@ export class ModelInfo {
   @Trace billingCurrency: string
   @Trace inputPricePerMillion: number
   @Trace outputPricePerMillion: number
+  // 峰谷计费以设备本地时间的“分钟/日”为边界，价格仍为“币种 / 百万 Token”
+  @Trace billingTimeOfUseEnabled: boolean
+  @Trace billingPeakPeriods: BillingTimePeriod[]
+  @Trace billingPeakInputPricePerMillion: number
+  @Trace billingPeakOutputPricePerMillion: number
+  @Trace billingOffPeakInputPricePerMillion: number
+  @Trace billingOffPeakOutputPricePerMillion: number
 
   constructor(
     id: string,
@@ -679,6 +768,12 @@ export class ModelInfo {
     this.billingCurrency = 'CNY'
     this.inputPricePerMillion = 0
     this.outputPricePerMillion = 0
+    this.billingTimeOfUseEnabled = false
+    this.billingPeakPeriods = [new BillingTimePeriod(8 * 60, 22 * 60)]
+    this.billingPeakInputPricePerMillion = 0
+    this.billingPeakOutputPricePerMillion = 0
+    this.billingOffPeakInputPricePerMillion = 0
+    this.billingOffPeakOutputPricePerMillion = 0
   }
 
   // 从扩展 JSON 对象创建
@@ -726,6 +821,39 @@ export class ModelInfo {
     if (json.outputPricePerMillion !== undefined && Number.isFinite(json.outputPricePerMillion)) {
       model.outputPricePerMillion = Math.max(0, json.outputPricePerMillion)
     }
+    if (json.billingTimeOfUseEnabled !== undefined) {
+      model.billingTimeOfUseEnabled = json.billingTimeOfUseEnabled
+    }
+    if (json.billingPeakPeriods !== undefined && json.billingPeakPeriods.length > 0) {
+      const periods: BillingTimePeriod[] = []
+      const count = Math.min(3, json.billingPeakPeriods.length)
+      for (let i = 0; i < count; i++) {
+        periods.push(BillingTimePeriod.fromJson(json.billingPeakPeriods[i]))
+      }
+      model.billingPeakPeriods = periods
+    } else if (json.billingPeakStartMinutes !== undefined && json.billingPeakEndMinutes !== undefined) {
+      // 兼容早期单时段配置。
+      model.billingPeakPeriods = [new BillingTimePeriod(
+        json.billingPeakStartMinutes,
+        json.billingPeakEndMinutes
+      )]
+    }
+    if (json.billingPeakInputPricePerMillion !== undefined &&
+      Number.isFinite(json.billingPeakInputPricePerMillion)) {
+      model.billingPeakInputPricePerMillion = Math.max(0, json.billingPeakInputPricePerMillion)
+    }
+    if (json.billingPeakOutputPricePerMillion !== undefined &&
+      Number.isFinite(json.billingPeakOutputPricePerMillion)) {
+      model.billingPeakOutputPricePerMillion = Math.max(0, json.billingPeakOutputPricePerMillion)
+    }
+    if (json.billingOffPeakInputPricePerMillion !== undefined &&
+      Number.isFinite(json.billingOffPeakInputPricePerMillion)) {
+      model.billingOffPeakInputPricePerMillion = Math.max(0, json.billingOffPeakInputPricePerMillion)
+    }
+    if (json.billingOffPeakOutputPricePerMillion !== undefined &&
+      Number.isFinite(json.billingOffPeakOutputPricePerMillion)) {
+      model.billingOffPeakOutputPricePerMillion = Math.max(0, json.billingOffPeakOutputPricePerMillion)
+    }
 
     return model
   }
@@ -747,7 +875,14 @@ export class ModelInfo {
       billingEnabled: this.billingEnabled,
       billingCurrency: this.billingCurrency,
       inputPricePerMillion: this.inputPricePerMillion,
-      outputPricePerMillion: this.outputPricePerMillion
+      outputPricePerMillion: this.outputPricePerMillion,
+      billingTimeOfUseEnabled: this.billingTimeOfUseEnabled,
+      billingPeakPeriods: this.billingPeakPeriods.slice(0, 3)
+        .map((period: BillingTimePeriod): BillingTimePeriodJson => period.toJson()),
+      billingPeakInputPricePerMillion: this.billingPeakInputPricePerMillion,
+      billingPeakOutputPricePerMillion: this.billingPeakOutputPricePerMillion,
+      billingOffPeakInputPricePerMillion: this.billingOffPeakInputPricePerMillion,
+      billingOffPeakOutputPricePerMillion: this.billingOffPeakOutputPricePerMillion
     }
     return json
   }
@@ -770,6 +905,15 @@ export interface ModelInfoExtendedJson {
   billingCurrency?: string
   inputPricePerMillion?: number
   outputPricePerMillion?: number
+  billingTimeOfUseEnabled?: boolean
+  billingPeakPeriods?: BillingTimePeriodJson[]
+  // 兼容早期单时段配置；新数据统一写入 billingPeakPeriods。
+  billingPeakStartMinutes?: number
+  billingPeakEndMinutes?: number
+  billingPeakInputPricePerMillion?: number
+  billingPeakOutputPricePerMillion?: number
+  billingOffPeakInputPricePerMillion?: number
+  billingOffPeakOutputPricePerMillion?: number
 }
 
 // 模型提供商类型

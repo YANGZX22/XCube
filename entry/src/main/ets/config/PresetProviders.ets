@@ -15,6 +15,7 @@ export interface PresetProviderConfig {
   apiStyle: ApiStyle
   openaiTransport?: OpenAITransport
   baseUrl: string
+  autoInitialize?: boolean // 是否在服务商管理中默认创建；默认为 true
   requiresApiKey?: boolean
   iconPath: string      // SVG 图标路径（已弃用，置空）
   brandColorHex: string // 品牌色（十六进制）
@@ -90,6 +91,45 @@ const PRESET_PROVIDERS: PresetProviderConfig[] = [
     textIcon: 'OR',
     textIconBgColor: '#6366F1',
     lobeIconFileName: 'openrouter-color'
+  },
+  {
+    id: 'groq',
+    name: 'Groq',
+    type: ProviderType.CUSTOM,
+    apiStyle: ApiStyle.OPENAI,
+    openaiTransport: OpenAITransport.CHAT_COMPLETIONS,
+    baseUrl: 'https://api.groq.com/openai/v1',
+    iconPath: '',
+    brandColorHex: '#F55036',
+    textIcon: 'GQ',
+    textIconBgColor: '#F55036',
+    lobeIconFileName: 'groq'
+  },
+  {
+    id: 'together',
+    name: 'Together AI',
+    type: ProviderType.CUSTOM,
+    apiStyle: ApiStyle.OPENAI,
+    openaiTransport: OpenAITransport.CHAT_COMPLETIONS,
+    baseUrl: 'https://api.together.ai/v1',
+    iconPath: '',
+    brandColorHex: '#111827',
+    textIcon: 'TA',
+    textIconBgColor: '#111827',
+    lobeIconFileName: 'together-color'
+  },
+  {
+    id: 'nvidia',
+    name: 'NVIDIA NIM',
+    type: ProviderType.CUSTOM,
+    apiStyle: ApiStyle.OPENAI,
+    openaiTransport: OpenAITransport.CHAT_COMPLETIONS,
+    baseUrl: 'https://integrate.api.nvidia.com/v1',
+    iconPath: '',
+    brandColorHex: '#76B900',
+    textIcon: 'NV',
+    textIconBgColor: '#76B900',
+    lobeIconFileName: 'nvidia-color'
   },
   {
     id: 'siliconflow',
@@ -193,6 +233,7 @@ const PRESET_PROVIDERS: PresetProviderConfig[] = [
     type: ProviderType.CUSTOM,
     apiStyle: ApiStyle.OPENAI,
     baseUrl: 'https://aiping.cn/api/v1',
+    autoInitialize: false,
     iconPath: '',
     brandColorHex: '#6C5CE7',
     textIcon: 'AP',
@@ -234,6 +275,19 @@ const PRESET_PROVIDER_IDS: Set<string> = new Set(PRESET_PROVIDERS.map(p => p.id)
  */
 export function getPresetProviders(): PresetProviderConfig[] {
   return PRESET_PROVIDERS
+}
+
+/**
+ * 获取应自动初始化到服务商管理页的预设服务商。
+ */
+export function getAutoInitializedPresetProviders(): PresetProviderConfig[] {
+  const result: PresetProviderConfig[] = []
+  for (let i = 0; i < PRESET_PROVIDERS.length; i++) {
+    if (PRESET_PROVIDERS[i].autoInitialize !== false) {
+      result.push(PRESET_PROVIDERS[i])
+    }
+  }
+  return result
 }
 
 /**

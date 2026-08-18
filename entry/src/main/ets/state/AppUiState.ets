@@ -56,6 +56,7 @@ export class AppUiState {
   @Trace chatSerifFontFamily: string = 'common'
   @Trace markdownRenderer: string = 'cangjie'
   @Trace chatInputEnterKeySend: boolean = false
+  @Trace chatOrderedResponseHistory: boolean = false
   @Trace ttsEnabled: boolean = true
   @Trace materialType: number = 100   // ADAPTIVE
   @Trace materialLevel: number = 10   // ADAPTIVE
@@ -221,6 +222,9 @@ function applyAppUiStateValue<T extends string | number | boolean>(state: AppUiS
     case AppStorageKeys.CHAT_INPUT_ENTER_KEY_SEND:
       state.chatInputEnterKeySend = value as boolean
       return
+    case AppStorageKeys.CHAT_ORDERED_RESPONSE_HISTORY:
+      state.chatOrderedResponseHistory = value as boolean
+      return
     case AppStorageKeys.MATERIAL_TYPE:
       state.materialType = value as number
       return
@@ -334,6 +338,8 @@ function createAppUiStateFromStorage(): AppUiState {
     readStorageValue<string>(AppStorageKeys.MARKDOWN_RENDERER, 'cangjie'))
   applyAppUiStateValue(state, AppStorageKeys.CHAT_INPUT_ENTER_KEY_SEND,
     readStorageValue<boolean>(AppStorageKeys.CHAT_INPUT_ENTER_KEY_SEND, false))
+  applyAppUiStateValue(state, AppStorageKeys.CHAT_ORDERED_RESPONSE_HISTORY,
+    readStorageValue<boolean>(AppStorageKeys.CHAT_ORDERED_RESPONSE_HISTORY, false))
   applyAppUiStateValue(state, AppStorageKeys.MATERIAL_TYPE,
     readStorageValue<number>(AppStorageKeys.MATERIAL_TYPE, 100))
   applyAppUiStateValue(state, AppStorageKeys.MATERIAL_LEVEL,
@@ -408,6 +414,7 @@ export function syncAppUiStateFromStorage(): void {
   state.chatSerifFontFamily = freshState.chatSerifFontFamily
   state.markdownRenderer = freshState.markdownRenderer
   state.chatInputEnterKeySend = freshState.chatInputEnterKeySend
+  state.chatOrderedResponseHistory = freshState.chatOrderedResponseHistory
   state.materialType = freshState.materialType
   state.materialLevel = freshState.materialLevel
   state.lightColorMode = freshState.lightColorMode
@@ -541,6 +548,8 @@ function resolveAppUiStatePath(path: string): string {
       return 'markdownRenderer'
     case AppStorageKeys.CHAT_INPUT_ENTER_KEY_SEND:
       return 'chatInputEnterKeySend'
+    case AppStorageKeys.CHAT_ORDERED_RESPONSE_HISTORY:
+      return 'chatOrderedResponseHistory'
     case AppStorageKeys.MATERIAL_TYPE:
       return 'materialType'
     case AppStorageKeys.MATERIAL_LEVEL:

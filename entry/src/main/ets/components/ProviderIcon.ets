@@ -6,6 +6,7 @@
 
 import { buildIconResourcePath } from '../utils/ProviderIconUtils'
 import { TRANSPARENT_BG_COLOR } from '../utils/IconGeneratorUtils'
+import { IconDownloadCache } from '../services/IconDownloadCache'
 
 export enum ProviderTextIconDisplayMode {
   BRAND = 'brand',
@@ -16,7 +17,7 @@ export function resolveProviderTextIconDisplayMode(isEnabled: boolean): Provider
   return isEnabled ? ProviderTextIconDisplayMode.BRAND : ProviderTextIconDisplayMode.DISABLED_NEUTRAL
 }
 
-// 解析自定义图片来源：兼容历史格式（裸路径自动补 file://）与新格式（http(s)/file/data URI 直接透传）
+// 网络 URL、file URI 和沙箱绝对路径都由 ArkUI Image 直接读取。
 export function resolveProviderCustomImageSource(customImagePath: string): string {
   if (customImagePath === '') {
     return ''
@@ -26,7 +27,24 @@ export function resolveProviderCustomImageSource(customImagePath: string): strin
     || lower.startsWith('data:')) {
     return customImagePath
   }
-  return 'file://' + customImagePath
+  return customImagePath
+}
+
+export function isRemoteSvgImagePath(customImagePath: string): boolean {
+  const lower = customImagePath.trim().toLowerCase()
+  if (!lower.startsWith('http://') && !lower.startsWith('https://')) {
+    return false
+  }
+  const fragmentIndex = lower.indexOf('#')
+  const withoutFragment = fragmentIndex >= 0 ? lower.substring(0, fragmentIndex) : lower
+  const queryIndex = withoutFragment.indexOf('?')
+  const cleanPath = queryIndex >= 0 ? withoutFragment.substring(0, queryIndex) : withoutFragment
+  return cleanPath.endsWith('.svg')
+}
+
+function isRemoteImagePath(customImagePath: string): boolean {
+  const lower = customImagePath.trim().toLowerCase()
+  return lower.startsWith('http://') || lower.startsWith('https://')
 }
 
 @ComponentV2
@@ -45,23 +63,60 @@ export struct ProviderIcon {
   @Param isDarkMode: boolean = false
   @Param textIconDisplayMode: ProviderTextIconDisplayMode = ProviderTextIconDisplayMode.BRAND
   @Local hasImageLoadError: boolean = false
+  @Local resolvedCustomImageSource: string = ''
+  @Local hasAttemptedImageCache: boolean = false
+
+  aboutToAppear(): void {
+    this.refreshCustomImageSource()
+  }
 
   @Monitor('customImagePath', 'iconType')
   onImageSourceChange(): void {
+    this.refreshCustomImageSource()
+  }
+
+  private refreshCustomImageSource(): void {
     this.hasImageLoadError = false
+    this.hasAttemptedImageCache = false
+    const source = this.customImagePath.trim()
+    if (this.iconType !== 'image' || source === '') {
+      this.resolvedCustomImageSource = ''
+      return
+    }
+    // 与预设供应商保持一致：优先直接渲染数据库中保存的原始 URL。
+    this.resolvedCustomImageSource = resolveProviderCustomImageSource(source)
+  }
+
+  private async prepareRemoteImage(source: string): Promise<void> {
+    const cachedPath = await IconDownloadCache.getInstance().downloadAndCache(source)
+    if (this.iconType !== 'image' || this.customImagePath.trim() !== source) {
+      return
+    }
+    if (cachedPath === '') {
+      this.hasImageLoadError = true
+      return
+    }
+    this.resolvedCustomImageSource = resolveProviderCustomImageSource(cachedPath)
+    this.hasImageLoadError = false
+  }
+
+  private handleCustomImageLoadError(): void {
+    const source = this.customImagePath.trim()
+    this.hasImageLoadError = true
+    // 兼容 URL 中没有 .svg 后缀、但服务端实际返回 SVG 的链接。
+    if (!isRemoteImagePath(source) || this.hasAttemptedImageCache) {
+      return
+    }
+    this.hasAttemptedImageCache = true
+    void this.prepareRemoteImage(source)
   }
 
   private shouldFallbackToText(): boolean {
     return this.iconType === 'image' && this.hasImageLoadError && this.textIcon !== ''
   }
 
-  // 远程 SVG 可能包含黑色/深色路径，深色主题下需配浅色背景
-  private isPresetRemoteSvgLogo(): boolean {
-    if (this.iconType !== 'image' || this.customImagePath === '' || this.hasImageLoadError) {
-      return false
-    }
-    const lower = this.customImagePath.toLowerCase()
-    return lower.includes('/logos/') || lower.endsWith('.svg')
+  private getCustomImageFit(): ImageFit {
+    return isRemoteSvgImagePath(this.customImagePath) ? ImageFit.Contain : ImageFit.Cover
   }
 
   private isDisabledNeutralMode(): boolean {
@@ -90,9 +145,6 @@ export struct ProviderIcon {
         return Color.Transparent
       }
       return this.textIconBgColor
-    }
-    if (this.isPresetRemoteSvgLogo()) {
-      return $r('app.color.model_icon_bg')
     }
     if (this.iconType === 'svg' || this.iconType === 'image') {
       return Color.Transparent
@@ -127,16 +179,16 @@ export struct ProviderIcon {
           .borderRadius(this.radius)
           .clip(true)
       }
-      else if (this.iconType === 'image' && this.customImagePath !== '' && !this.hasImageLoadError) {
-        Image(resolveProviderCustomImageSource(this.customImagePath))
+      else if (this.iconType === 'image' && this.resolvedCustomImageSource !== '' && !this.hasImageLoadError) {
+        Image(this.resolvedCustomImageSource)
           .width(this.iconSize)
           .height(this.iconSize)
-          .objectFit(ImageFit.Cover)
+          .objectFit(this.getCustomImageFit())
           .interpolation(ImageInterpolation.High)
           .borderRadius(this.radius)
           .clip(true)
           .onError(() => {
-            this.hasImageLoadError = true
+            this.handleCustomImageLoadError()
           })
       }
       else if ((this.iconType === 'text' || this.shouldFallbackToText()) && this.textIcon !== '') {
@@ -172,23 +224,58 @@ export struct ProviderIconSmall {
   @Param isDarkMode: boolean = false
   @Param textIconDisplayMode: ProviderTextIconDisplayMode = ProviderTextIconDisplayMode.BRAND
   @Local hasImageLoadError: boolean = false
+  @Local resolvedCustomImageSource: string = ''
+  @Local hasAttemptedImageCache: boolean = false
+
+  aboutToAppear(): void {
+    this.refreshCustomImageSource()
+  }
 
   @Monitor('customImagePath', 'iconType')
   onImageSourceChange(): void {
+    this.refreshCustomImageSource()
+  }
+
+  private refreshCustomImageSource(): void {
     this.hasImageLoadError = false
+    this.hasAttemptedImageCache = false
+    const source = this.customImagePath.trim()
+    if (this.iconType !== 'image' || source === '') {
+      this.resolvedCustomImageSource = ''
+      return
+    }
+    this.resolvedCustomImageSource = resolveProviderCustomImageSource(source)
+  }
+
+  private async prepareRemoteImage(source: string): Promise<void> {
+    const cachedPath = await IconDownloadCache.getInstance().downloadAndCache(source)
+    if (this.iconType !== 'image' || this.customImagePath.trim() !== source) {
+      return
+    }
+    if (cachedPath === '') {
+      this.hasImageLoadError = true
+      return
+    }
+    this.resolvedCustomImageSource = resolveProviderCustomImageSource(cachedPath)
+    this.hasImageLoadError = false
+  }
+
+  private handleCustomImageLoadError(): void {
+    const source = this.customImagePath.trim()
+    this.hasImageLoadError = true
+    if (!isRemoteImagePath(source) || this.hasAttemptedImageCache) {
+      return
+    }
+    this.hasAttemptedImageCache = true
+    void this.prepareRemoteImage(source)
   }
 
   private shouldFallbackToText(): boolean {
     return this.iconType === 'image' && this.hasImageLoadError && this.textIcon !== ''
   }
 
-  // 远程 SVG 可能包含黑色/深色路径，深色主题下需配浅色背景
-  private isPresetRemoteSvgLogo(): boolean {
-    if (this.iconType !== 'image' || this.customImagePath === '' || this.hasImageLoadError) {
-      return false
-    }
-    const lower = this.customImagePath.toLowerCase()
-    return lower.includes('/logos/') || lower.endsWith('.svg')
+  private getCustomImageFit(): ImageFit {
+    return isRemoteSvgImagePath(this.customImagePath) ? ImageFit.Contain : ImageFit.Cover
   }
 
   private isDisabledNeutralMode(): boolean {
@@ -226,16 +313,16 @@ export struct ProviderIconSmall {
         } : undefined)
         .borderRadius(this.iconSize * 0.25)
     }
-    else if (this.iconType === 'image' && this.customImagePath !== '' && !this.hasImageLoadError) {
-      Image(resolveProviderCustomImageSource(this.customImagePath))
+    else if (this.iconType === 'image' && this.resolvedCustomImageSource !== '' && !this.hasImageLoadError) {
+      Image(this.resolvedCustomImageSource)
         .width(this.iconSize)
         .height(this.iconSize)
-        .objectFit(ImageFit.Cover)
+        .objectFit(this.getCustomImageFit())
         .interpolation(ImageInterpolation.High)
         .borderRadius(this.iconSize * 0.25)
-        .backgroundColor(this.isPresetRemoteSvgLogo() ? $r('app.color.model_icon_bg') : Color.Transparent)
+        .backgroundColor(Color.Transparent)
         .onError(() => {
-          this.hasImageLoadError = true
+          this.handleCustomImageLoadError()
         })
     }
     else if ((this.iconType === 'text' || this.shouldFallbackToText()) && this.textIcon !== '') {

@@ -94,5 +94,6 @@ export function syncChatMessageFromSource(target: ChatMessage, source: ChatMessa
   target.isSearching = source.isSearching
   target.toolCalls = source.toolCalls.slice()
   target.toolResults = source.toolResults.slice()
+  target.responseSegments = source.responseSegments.slice()
   target.toolCallId = source.toolCallId
 }

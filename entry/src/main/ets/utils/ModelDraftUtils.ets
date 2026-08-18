@@ -1,4 +1,5 @@
 import {
+  BillingTimePeriod,
   InputMode,
   ModelCapabilities,
   ModelInfo,
@@ -55,5 +56,37 @@ export function applyModelDraft(target: ModelInfo, draft: ModelInfoExtendedJson)
   }
   if (draft.outputPricePerMillion !== undefined && Number.isFinite(draft.outputPricePerMillion)) {
     target.outputPricePerMillion = Math.max(0, draft.outputPricePerMillion)
+  }
+  if (draft.billingTimeOfUseEnabled !== undefined) {
+    target.billingTimeOfUseEnabled = draft.billingTimeOfUseEnabled
+  }
+  if (draft.billingPeakPeriods !== undefined && draft.billingPeakPeriods.length > 0) {
+    const periods: BillingTimePeriod[] = []
+    const count = Math.min(3, draft.billingPeakPeriods.length)
+    for (let i = 0; i < count; i++) {
+      periods.push(BillingTimePeriod.fromJson(draft.billingPeakPeriods[i]))
+    }
+    target.billingPeakPeriods = periods
+  } else if (draft.billingPeakStartMinutes !== undefined && draft.billingPeakEndMinutes !== undefined) {
+    target.billingPeakPeriods = [new BillingTimePeriod(
+      draft.billingPeakStartMinutes,
+      draft.billingPeakEndMinutes
+    )]
+  }
+  if (draft.billingPeakInputPricePerMillion !== undefined &&
+    Number.isFinite(draft.billingPeakInputPricePerMillion)) {
+    target.billingPeakInputPricePerMillion = Math.max(0, draft.billingPeakInputPricePerMillion)
+  }
+  if (draft.billingPeakOutputPricePerMillion !== undefined &&
+    Number.isFinite(draft.billingPeakOutputPricePerMillion)) {
+    target.billingPeakOutputPricePerMillion = Math.max(0, draft.billingPeakOutputPricePerMillion)
+  }
+  if (draft.billingOffPeakInputPricePerMillion !== undefined &&
+    Number.isFinite(draft.billingOffPeakInputPricePerMillion)) {
+    target.billingOffPeakInputPricePerMillion = Math.max(0, draft.billingOffPeakInputPricePerMillion)
+  }
+  if (draft.billingOffPeakOutputPricePerMillion !== undefined &&
+    Number.isFinite(draft.billingOffPeakOutputPricePerMillion)) {
+    target.billingOffPeakOutputPricePerMillion = Math.max(0, draft.billingOffPeakOutputPricePerMillion)
   }
 }

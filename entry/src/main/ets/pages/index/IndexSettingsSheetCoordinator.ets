@@ -10,6 +10,7 @@ export class IndexSettingsSheetActionCallbacks {
   onToggleNotifyOnComplete: (value: boolean) => Promise<void> = async (_value: boolean): Promise<void> => {}
   onToggleNotifyOnFailed: (value: boolean) => Promise<void> = async (_value: boolean): Promise<void> => {}
   onToggleChatInputEnterKeySend: (value: boolean) => Promise<void> = async (_value: boolean): Promise<void> => {}
+  onToggleChatOrderedResponseHistory: (value: boolean) => Promise<void> = async (_value: boolean): Promise<void> => {}
   onOpenSystemNotificationSettings: () => void = (): void => {}
 }
 

@@ -1,5 +1,12 @@
 import { describe, it, expect } from '@ohos/hypium'
-import { AttachmentType, ChatMessage, MessageAttachment, MessageRole } from '../main/ets/models/ChatModels'
+import {
+  AttachmentType,
+  BillingTimePeriod,
+  ChatMessage,
+  MessageAttachment,
+  MessageRole,
+  ModelInfo
+} from '../main/ets/models/ChatModels'
 import {
   buildContextUsageFromRequestTokens,
   estimateExtraPromptTokens,
@@ -8,8 +15,12 @@ import {
   resolveRequestMaxOutputTokens
 } from '../main/ets/utils/ContextWindowUtils'
 import {
+  doBillingPeakPeriodsOverlap,
   estimateProviderManagedAttachmentTokens,
   estimateTextTokens,
+  hasOverlappingBillingPeakPeriods,
+  isBillingPeakMinute,
+  resolveModelBillingPrices,
   RequestTokenUsageTracker
 } from '../main/ets/utils/ModelBillingUtils'
 import { ContextCompactionService } from '../main/ets/services/ContextCompactionService'
@@ -96,6 +107,77 @@ export default function tokenAccountingTest() {
       expect(message.estimatedOutputTokens).assertEqual(30)
       expect(message.tokenUsageTracked).assertEqual(true)
       expect(message.tokenUsageExact).assertEqual(false)
+    })
+
+    it('resolves_peak_and_off_peak_prices_from_device_local_time', 0, () => {
+      const model = new ModelInfo('billing-model', 'Billing model')
+      model.billingTimeOfUseEnabled = true
+      model.billingPeakPeriods = [new BillingTimePeriod(8 * 60, 22 * 60)]
+      model.billingPeakInputPricePerMillion = 10
+      model.billingPeakOutputPricePerMillion = 20
+      model.billingOffPeakInputPricePerMillion = 4
+      model.billingOffPeakOutputPricePerMillion = 8
+
+      const peak = resolveModelBillingPrices(model, new Date(2026, 0, 1, 12, 30))
+      const offPeak = resolveModelBillingPrices(model, new Date(2026, 0, 1, 23, 30))
+
+      expect(peak.isPeak).assertEqual(true)
+      expect(peak.inputPricePerMillion).assertEqual(10)
+      expect(peak.outputPricePerMillion).assertEqual(20)
+      expect(offPeak.isPeak).assertEqual(false)
+      expect(offPeak.inputPricePerMillion).assertEqual(4)
+      expect(offPeak.outputPricePerMillion).assertEqual(8)
+    })
+
+    it('supports_peak_periods_that_cross_midnight', 0, () => {
+      expect(isBillingPeakMinute(23 * 60, 22 * 60, 8 * 60)).assertEqual(true)
+      expect(isBillingPeakMinute(7 * 60 + 59, 22 * 60, 8 * 60)).assertEqual(true)
+      expect(isBillingPeakMinute(8 * 60, 22 * 60, 8 * 60)).assertEqual(false)
+      expect(isBillingPeakMinute(12 * 60, 22 * 60, 8 * 60)).assertEqual(false)
+      expect(isBillingPeakMinute(12 * 60, 8 * 60, 8 * 60)).assertEqual(false)
+    })
+
+    it('detects_overlapping_peak_periods_including_cross_midnight_ranges', 0, () => {
+      const morning = new BillingTimePeriod(8 * 60, 10 * 60)
+      const overlapping = new BillingTimePeriod(9 * 60, 11 * 60)
+      const touching = new BillingTimePeriod(10 * 60, 12 * 60)
+      const overnight = new BillingTimePeriod(22 * 60, 7 * 60)
+      const lateNight = new BillingTimePeriod(23 * 60, 23 * 60 + 30)
+      const empty = new BillingTimePeriod(8 * 60, 8 * 60)
+
+      expect(doBillingPeakPeriodsOverlap(morning, overlapping)).assertEqual(true)
+      expect(doBillingPeakPeriodsOverlap(morning, touching)).assertEqual(false)
+      expect(doBillingPeakPeriodsOverlap(overnight, lateNight)).assertEqual(true)
+      expect(doBillingPeakPeriodsOverlap(morning, overnight)).assertEqual(false)
+      expect(doBillingPeakPeriodsOverlap(morning, empty)).assertEqual(false)
+      expect(hasOverlappingBillingPeakPeriods([morning, touching, overnight])).assertEqual(false)
+      expect(hasOverlappingBillingPeakPeriods([morning, overlapping, overnight])).assertEqual(true)
+    })
+
+    it('round_trips_time_of_use_billing_configuration', 0, () => {
+      const model = new ModelInfo('billing-model', 'Billing model')
+      model.billingTimeOfUseEnabled = true
+      model.billingPeakPeriods = [
+        new BillingTimePeriod(7 * 60, 9 * 60),
+        new BillingTimePeriod(12 * 60, 14 * 60),
+        new BillingTimePeriod(21 * 60 + 30, 7 * 60 + 15)
+      ]
+      model.billingPeakInputPricePerMillion = 12.5
+      model.billingPeakOutputPricePerMillion = 25
+      model.billingOffPeakInputPricePerMillion = 3.25
+      model.billingOffPeakOutputPricePerMillion = 6.5
+
+      const restored = ModelInfo.fromExtendedJson(model.toExtendedJson())
+      expect(restored.billingTimeOfUseEnabled).assertEqual(true)
+      expect(restored.billingPeakPeriods.length).assertEqual(3)
+      expect(restored.billingPeakPeriods[0].startMinutes).assertEqual(7 * 60)
+      expect(restored.billingPeakPeriods[1].endMinutes).assertEqual(14 * 60)
+      expect(restored.billingPeakPeriods[2].startMinutes).assertEqual(21 * 60 + 30)
+      expect(restored.billingPeakPeriods[2].endMinutes).assertEqual(7 * 60 + 15)
+      expect(restored.billingPeakInputPricePerMillion).assertEqual(12.5)
+      expect(restored.billingPeakOutputPricePerMillion).assertEqual(25)
+      expect(restored.billingOffPeakInputPricePerMillion).assertEqual(3.25)
+      expect(restored.billingOffPeakOutputPricePerMillion).assertEqual(6.5)
     })
   })
 }

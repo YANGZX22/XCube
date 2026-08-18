@@ -25,6 +25,7 @@ export interface SettingsChangeCallback {
   onNotificationSettingsChanged?: (enabled: boolean, notifyOnComplete: boolean, notifyOnFailed: boolean) => void
   onChatFontSizeChanged?: (size: number) => void
   onChatInputSettingsChanged?: (enterKeySend: boolean) => void
+  onChatDisplaySettingsChanged?: (orderedResponseHistory: boolean) => void
   onMaterialSettingsChanged?: (materialType: number, materialLevel: number, lightColorMode: string) => void
 }
 
@@ -42,6 +43,7 @@ export class SettingsManager {
   private chatSerifFontFamily: string = 'common'
   private markdownRenderer: MarkdownRenderer = MarkdownRenderer.CANGJIE
   private chatInputEnterKeySend: boolean = false
+  private chatOrderedResponseHistory: boolean = false
   private ttsEnabled: boolean = true
   private materialType: number = 100    // ADAPTIVE
   private materialLevel: number = 10    // ADAPTIVE
@@ -89,6 +91,7 @@ export class SettingsManager {
     this.chatSerifFontFamily = await preferencesService.getChatSerifFontFamily()
     this.markdownRenderer = await preferencesService.getMarkdownRenderer()
     this.chatInputEnterKeySend = await preferencesService.getChatInputEnterKeySend()
+    this.chatOrderedResponseHistory = await preferencesService.getChatOrderedResponseHistory()
     this.ttsEnabled = await preferencesService.getBoolean(PreferenceKeys.TTS_ENABLED, true)
     this.materialType = await preferencesService.getMaterialType()
     this.materialLevel = await preferencesService.getMaterialLevel()
@@ -100,6 +103,7 @@ export class SettingsManager {
     setAppUiStateValue(AppStorageKeys.CHAT_SERIF_FONT_FAMILY, this.chatSerifFontFamily)
     setAppUiStateValue(AppStorageKeys.MARKDOWN_RENDERER, this.markdownRenderer)
     setAppUiStateValue(AppStorageKeys.CHAT_INPUT_ENTER_KEY_SEND, this.chatInputEnterKeySend)
+    setAppUiStateValue(AppStorageKeys.CHAT_ORDERED_RESPONSE_HISTORY, this.chatOrderedResponseHistory)
     setAppUiStateValue(AppStorageKeys.TTS_ENABLED, this.ttsEnabled)
     setAppUiStateValue(AppStorageKeys.CHAT_LIST_IMMERSIVE_MATERIAL, this.chatListImmersiveMaterial)
     setAppUiStateValue(AppStorageKeys.KNOWLEDGE_LIST_IMMERSIVE_MATERIAL, this.knowledgeListImmersiveMaterial)
@@ -120,6 +124,7 @@ export class SettingsManager {
     this.chatSerifFontFamily = await preferencesService.getChatSerifFontFamily()
     this.markdownRenderer = await preferencesService.getMarkdownRenderer()
     this.chatInputEnterKeySend = await preferencesService.getChatInputEnterKeySend()
+    this.chatOrderedResponseHistory = await preferencesService.getChatOrderedResponseHistory()
     this.ttsEnabled = await preferencesService.getBoolean(PreferenceKeys.TTS_ENABLED, true)
     this.materialType = await preferencesService.getMaterialType()
     this.materialLevel = await preferencesService.getMaterialLevel()
@@ -131,6 +136,7 @@ export class SettingsManager {
     setAppUiStateValue(AppStorageKeys.CHAT_SERIF_FONT_FAMILY, this.chatSerifFontFamily)
     setAppUiStateValue(AppStorageKeys.MARKDOWN_RENDERER, this.markdownRenderer)
     setAppUiStateValue(AppStorageKeys.CHAT_INPUT_ENTER_KEY_SEND, this.chatInputEnterKeySend)
+    setAppUiStateValue(AppStorageKeys.CHAT_ORDERED_RESPONSE_HISTORY, this.chatOrderedResponseHistory)
     setAppUiStateValue(AppStorageKeys.TTS_ENABLED, this.ttsEnabled)
     setAppUiStateValue(AppStorageKeys.CHAT_LIST_IMMERSIVE_MATERIAL, this.chatListImmersiveMaterial)
     setAppUiStateValue(AppStorageKeys.KNOWLEDGE_LIST_IMMERSIVE_MATERIAL, this.knowledgeListImmersiveMaterial)
@@ -407,6 +413,27 @@ export class SettingsManager {
       const callback = this.callbacks[i]
       if (callback.onChatInputSettingsChanged !== undefined) {
         callback.onChatInputSettingsChanged(enabled)
+      }
+    }
+  }
+
+  getChatOrderedResponseHistory(): boolean {
+    return this.chatOrderedResponseHistory
+  }
+
+  async setChatOrderedResponseHistory(enabled: boolean): Promise<void> {
+    if (this.chatOrderedResponseHistory === enabled) {
+      return
+    }
+
+    this.chatOrderedResponseHistory = enabled
+    await getPreferencesService().setChatOrderedResponseHistory(enabled)
+    setAppUiStateValue(AppStorageKeys.CHAT_ORDERED_RESPONSE_HISTORY, enabled)
+
+    for (let i = 0; i < this.callbacks.length; i++) {
+      const callback = this.callbacks[i]
+      if (callback.onChatDisplaySettingsChanged !== undefined) {
+        callback.onChatDisplaySettingsChanged(enabled)
       }
     }
   }

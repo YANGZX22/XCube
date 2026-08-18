@@ -8,9 +8,12 @@ import {
   ModelInfo,
   ProviderType,
   ModelInfoExtendedJson,
+  BillingTimePeriodJson,
   MessageAttachment,
   AttachmentType,
-  SearchReference
+  SearchReference,
+  AssistantResponseSegment,
+  AssistantResponseSegmentJson
 } from '../models/ChatModels'
 import { Assistant, DEFAULT_ASSISTANT_ID, createDefaultAssistant } from '../models/AssistantModels'
 import { DEFAULT_PRIMARY_COLOR } from '../config/ThemeDefaults'
@@ -54,6 +57,12 @@ interface ModelJsonData {
   billingCurrency?: string
   inputPricePerMillion?: number
   outputPricePerMillion?: number
+  billingTimeOfUseEnabled?: boolean
+  billingPeakPeriods?: BillingTimePeriodJson[]
+  billingPeakInputPricePerMillion?: number
+  billingPeakOutputPricePerMillion?: number
+  billingOffPeakInputPricePerMillion?: number
+  billingOffPeakOutputPricePerMillion?: number
 }
 
 // 能力配置 JSON 数据
@@ -236,6 +245,7 @@ export class DatabaseService {
         model_name TEXT,
         timestamp INTEGER,
         reasoning_content TEXT,
+        response_timeline_json TEXT DEFAULT '',
         translated_text TEXT DEFAULT '',
         translated_lang TEXT DEFAULT '',
         billing_enabled INTEGER DEFAULT 0,
@@ -318,6 +328,7 @@ export class DatabaseService {
       await this.addSortOrderColumnIfNeeded()
       // 尝试添加 reasoning_content 字段（用于推理模型）
       await this.addReasoningContentColumnIfNeeded()
+      await this.addMessageResponseTimelineColumnIfNeeded()
       // 尝试添加 is_preset 和 icon_path 字段（用于供应商图标管理）
       await this.addProviderIconColumnsIfNeeded()
       await this.addApiPathColumnIfNeeded()
@@ -387,6 +398,20 @@ export class DatabaseService {
     } catch (error) {
       // 如果字段已存在，会抛出错误，忽略即可
       console.info('DatabaseService', 'reasoning_content column may already exist')
+    }
+  }
+
+  // 保存单条 AI 消息内多轮思考、输出与工具调用的原始展示顺序。
+  private async addMessageResponseTimelineColumnIfNeeded(): Promise<void> {
+    if (this.rdbStore === null) {
+      return
+    }
+    try {
+      await this.rdbStore.executeSql(
+        `ALTER TABLE ${TableNames.MESSAGES} ADD COLUMN response_timeline_json TEXT DEFAULT ''`
+      )
+    } catch (error) {
+      console.info('DatabaseService', 'response_timeline_json column may already exist')
     }
   }
 
@@ -1853,6 +1878,7 @@ export class DatabaseService {
       model_id: message.modelId || '',
       timestamp: message.timestamp,
       reasoning_content: message.reasoningContent,
+      response_timeline_json: this.serializeResponseTimeline(message),
       translated_text: message.translatedText || '',
       translated_lang: message.translatedLang || '',
       billing_enabled: message.billingEnabled ? 1 : 0,
@@ -1887,6 +1913,36 @@ export class DatabaseService {
     } catch (error) {
       console.error('DatabaseService', `Failed to add message: ${JSON.stringify(error)}`)
     }
+  }
+
+  private serializeResponseTimeline(message: ChatMessage): string {
+    if (message.responseSegments.length === 0) {
+      return ''
+    }
+    const data: AssistantResponseSegmentJson[] = []
+    for (let i = 0; i < message.responseSegments.length; i++) {
+      data.push(message.responseSegments[i].toJson())
+    }
+    return JSON.stringify(data)
+  }
+
+  private parseResponseTimeline(raw: string): AssistantResponseSegment[] {
+    const segments: AssistantResponseSegment[] = []
+    if (raw === '') {
+      return segments
+    }
+    try {
+      const data = JSON.parse(raw) as AssistantResponseSegmentJson[]
+      for (let i = 0; i < data.length; i++) {
+        const segment = AssistantResponseSegment.fromJson(data[i])
+        if (segment.content !== '' || segment.toolCallIds.length > 0) {
+          segments.push(segment)
+        }
+      }
+    } catch (error) {
+      console.error('DatabaseService', `Failed to parse response timeline: ${JSON.stringify(error)}`)
+    }
+    return segments
   }
 
   async refreshSessionSummaryForSession(sessionId: string): Promise<void> {
@@ -2004,6 +2060,7 @@ export class DatabaseService {
     message.modelId = this.safeGetString(resultSet, 'model_id')
     message.timestamp = resultSet.getLong(resultSet.getColumnIndex('timestamp'))
     message.reasoningContent = this.safeGetString(resultSet, 'reasoning_content')
+    message.responseSegments = this.parseResponseTimeline(this.safeGetString(resultSet, 'response_timeline_json'))
     message.translatedText = this.safeGetString(resultSet, 'translated_text')
     message.translatedLang = this.safeGetString(resultSet, 'translated_lang')
     message.billingEnabled = this.safeGetLong(resultSet, 'billing_enabled') === 1
@@ -2295,7 +2352,14 @@ export class DatabaseService {
         billingEnabled: model.billingEnabled,
         billingCurrency: model.billingCurrency,
         inputPricePerMillion: model.inputPricePerMillion,
-        outputPricePerMillion: model.outputPricePerMillion
+        outputPricePerMillion: model.outputPricePerMillion,
+        billingTimeOfUseEnabled: model.billingTimeOfUseEnabled,
+        billingPeakPeriods: model.billingPeakPeriods.slice(0, 3)
+          .map((period): BillingTimePeriodJson => period.toJson()),
+        billingPeakInputPricePerMillion: model.billingPeakInputPricePerMillion,
+        billingPeakOutputPricePerMillion: model.billingPeakOutputPricePerMillion,
+        billingOffPeakInputPricePerMillion: model.billingOffPeakInputPricePerMillion,
+        billingOffPeakOutputPricePerMillion: model.billingOffPeakOutputPricePerMillion
       }
       modelsArray.push(modelObj)
     }

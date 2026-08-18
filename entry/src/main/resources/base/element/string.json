@@ -845,10 +845,6 @@
       "value": "Optimize search queries (uses SiliconFlow by default)"
     },
     {
-      "name": "system_service",
-      "value": "System Service"
-    },
-    {
       "name": "select_models",
       "value": "Select Models"
     },
@@ -1742,11 +1738,11 @@
     },
     {
       "name": "settings_chat_input",
-      "value": "Chat Input"
+      "value": "Chat Settings"
     },
     {
       "name": "settings_chat_input_desc",
-      "value": "Keyboard return key behavior"
+      "value": "Input and message display"
     },
     {
       "name": "chat_input_independent_send_button_title",
@@ -1755,6 +1751,14 @@
     {
       "name": "chat_input_independent_send_button_desc",
       "value": "When enabled, the New Line key on the keyboard is replaced with Send"
+    },
+    {
+      "name": "chat_ordered_response_history_title",
+      "value": "Show response history in order"
+    },
+    {
+      "name": "chat_ordered_response_history_desc",
+      "value": "Show every reasoning, tool result, and output in generation order. When off, only the latest response is shown with tools at the top."
     },
     {
       "name": "system_prompt_edit_title",

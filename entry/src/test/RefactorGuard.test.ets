@@ -41,7 +41,11 @@ import {
   getSettingsPageCompactTabsOverlayInset,
   getSettingsPageCompactTabsTotalInset
 } from '../main/ets/utils/SettingsPageLayoutHelper'
-import { ProviderTextIconDisplayMode, resolveProviderTextIconDisplayMode } from '../main/ets/components/ProviderIcon'
+import {
+  isRemoteSvgImagePath,
+  ProviderTextIconDisplayMode,
+  resolveProviderTextIconDisplayMode
+} from '../main/ets/components/ProviderIcon'
 import {
   getProviderDetailPaneBottomInset,
   ProviderDetailPresentationMode
@@ -407,6 +411,13 @@ export default function refactorGuardTest() {
     it('resolveProviderTextIconDisplayMode_should_neutralize_disabled_provider_icons', 0, () => {
       expect(resolveProviderTextIconDisplayMode(true)).assertEqual(ProviderTextIconDisplayMode.BRAND)
       expect(resolveProviderTextIconDisplayMode(false)).assertEqual(ProviderTextIconDisplayMode.DISABLED_NEUTRAL)
+    })
+
+    it('remote_svg_image_path_should_ignore_query_and_fragment', 0, () => {
+      expect(isRemoteSvgImagePath('https://example.com/icon.svg')).assertEqual(true)
+      expect(isRemoteSvgImagePath('https://example.com/ICON.SVG?raw=1#logo')).assertEqual(true)
+      expect(isRemoteSvgImagePath('https://example.com/icon.png')).assertEqual(false)
+      expect(isRemoteSvgImagePath('file:///data/icon.svg')).assertEqual(false)
     })
 
     it('getProviderDetailPaneBottomInset_should_only_apply_in_detail_pane_mode', 0, () => {

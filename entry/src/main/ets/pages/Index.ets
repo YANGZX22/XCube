@@ -271,6 +271,7 @@ struct Index {
   }
   @Local chatFontSize: number = 15
   @Local chatInputEnterKeySend: boolean = false
+  @Local chatOrderedResponseHistory: boolean = false
   @Local materialType: number = 100
   @Local materialLevel: number = 10
   @Local lightColorMode: string = 'default'
@@ -868,6 +869,10 @@ struct Index {
         this.chatInputEnterKeySend = enterKeySend
         this.syncSettingsSummaryToStorage()
       },
+      onChatDisplaySettingsChanged: (orderedResponseHistory: boolean): void => {
+        this.chatOrderedResponseHistory = orderedResponseHistory
+        this.syncSettingsSummaryToStorage()
+      },
       onMaterialSettingsChanged: (materialType: number, materialLevel: number, lightColorMode: string): void => {
         this.materialType = materialType
         this.materialLevel = materialLevel
@@ -889,6 +894,7 @@ struct Index {
     this.notifyOnFailed = this.settingsManager.getNotifyOnFailedEnabled()
     this.chatFontSize = this.settingsManager.getChatFontSize()
     this.chatInputEnterKeySend = this.settingsManager.getChatInputEnterKeySend()
+    this.chatOrderedResponseHistory = this.settingsManager.getChatOrderedResponseHistory()
     this.materialType = this.settingsManager.getMaterialType()
     this.materialLevel = this.settingsManager.getMaterialLevel()
     this.lightColorMode = this.settingsManager.getLightColorMode()
@@ -1035,6 +1041,7 @@ struct Index {
     this.notifyOnFailed = this.settingsManager.getNotifyOnFailedEnabled()
     this.chatFontSize = this.settingsManager.getChatFontSize()
     this.chatInputEnterKeySend = this.settingsManager.getChatInputEnterKeySend()
+    this.chatOrderedResponseHistory = this.settingsManager.getChatOrderedResponseHistory()
     this.materialType = this.settingsManager.getMaterialType()
     this.materialLevel = this.settingsManager.getMaterialLevel()
     this.lightColorMode = this.settingsManager.getLightColorMode()
@@ -1053,6 +1060,7 @@ struct Index {
     AppStorage.setOrCreate(AppStorageKeys.SETTING_HAND_ADAPTIVE_UNSUPPORTED, this.handAdaptiveUnsupported)
     setAppUiStateValue(AppStorageKeys.CHAT_FONT_SIZE, this.chatFontSize)
     setAppUiStateValue(AppStorageKeys.CHAT_INPUT_ENTER_KEY_SEND, this.chatInputEnterKeySend)
+    setAppUiStateValue(AppStorageKeys.CHAT_ORDERED_RESPONSE_HISTORY, this.chatOrderedResponseHistory)
     setAppUiStateValue(AppStorageKeys.MATERIAL_TYPE, this.materialType)
     setAppUiStateValue(AppStorageKeys.MATERIAL_LEVEL, this.materialLevel)
     setAppUiStateValue(AppStorageKeys.LIGHT_COLOR_MODE, this.lightColorMode)
@@ -3094,6 +3102,11 @@ struct Index {
   private showKnowledgeUsageInfo(): void {
     this.getUIContext().showAlertDialog({
       title: $r('app.string.tab_knowledge'),
+      backgroundColor: Color.Transparent,
+      backgroundBlurStyle: BlurStyle.NONE,
+      systemMaterial: new uiMaterial.ImmersiveMaterial({
+        style: uiMaterial.ImmersiveStyle.THICK
+      }),
       message: $r('app.string.knowledge_usage_message'),
       primaryButton: {
         value: $r('app.string.knowledge_usage_acknowledge'),
@@ -5861,6 +5874,7 @@ struct Index {
           notifyOnComplete: this.notifyOnComplete,
           notifyOnFailed: this.notifyOnFailed,
           chatInputEnterKeySend: this.chatInputEnterKeySend,
+          chatOrderedResponseHistory: this.chatOrderedResponseHistory,
           handAdaptiveEnabled: this.handAdaptiveEnabled,
           handAdaptiveNewChat: this.handAdaptiveNewChat,
           handAdaptiveUnsupported: this.handAdaptiveUnsupported,
@@ -5887,6 +5901,7 @@ struct Index {
       notifyOnComplete: this.notifyOnComplete,
       notifyOnFailed: this.notifyOnFailed,
       chatInputEnterKeySend: this.chatInputEnterKeySend,
+      chatOrderedResponseHistory: this.chatOrderedResponseHistory,
       handAdaptiveEnabled: this.handAdaptiveEnabled,
       handAdaptiveNewChat: this.handAdaptiveNewChat,
       handAdaptiveUnsupported: this.handAdaptiveUnsupported,
@@ -5904,6 +5919,7 @@ struct Index {
       notifyOnComplete: this.notifyOnComplete,
       notifyOnFailed: this.notifyOnFailed,
       chatInputEnterKeySend: this.chatInputEnterKeySend,
+      chatOrderedResponseHistory: this.chatOrderedResponseHistory,
       handAdaptiveEnabled: this.handAdaptiveEnabled,
       handAdaptiveNewChat: this.handAdaptiveNewChat,
       handAdaptiveUnsupported: this.handAdaptiveUnsupported,
@@ -5921,6 +5937,7 @@ struct Index {
       notifyOnComplete: this.notifyOnComplete,
       notifyOnFailed: this.notifyOnFailed,
       chatInputEnterKeySend: this.chatInputEnterKeySend,
+      chatOrderedResponseHistory: this.chatOrderedResponseHistory,
       handAdaptiveEnabled: this.handAdaptiveEnabled,
       handAdaptiveNewChat: this.handAdaptiveNewChat,
       handAdaptiveUnsupported: this.handAdaptiveUnsupported,
@@ -5977,6 +5994,11 @@ struct Index {
       this.chatInputEnterKeySend = value
       this.syncSettingsSummaryToStorage()
       await this.settingsManager.setChatInputEnterKeySend(value)
+    }
+    callbacks.onToggleChatOrderedResponseHistory = async (value: boolean): Promise<void> => {
+      this.chatOrderedResponseHistory = value
+      this.syncSettingsSummaryToStorage()
+      await this.settingsManager.setChatOrderedResponseHistory(value)
     }
     callbacks.onOpenSystemNotificationSettings = (): void => {
       this.openSystemNotificationSettings()

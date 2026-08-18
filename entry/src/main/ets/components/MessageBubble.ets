@@ -1,4 +1,4 @@
-import { ChatMessage, MessageRole, MessageAttachment, AttachmentType, ToolCall, ToolResult } from '../models/ChatModels'
+import { AssistantResponseSegment, AssistantResponseSegmentType, ChatMessage, MessageRole, MessageAttachment, AttachmentType, ToolCall, ToolResult } from '../models/ChatModels'
 import { VisualEffectsMode } from '../models/ThemeColors'
 import { pasteboard } from '@kit.BasicServicesKit'
 import { image } from '@kit.ImageKit'
@@ -102,6 +102,7 @@ export struct MessageBubble {
   @Param previewAttachments: MessageAttachment[] = []  // 编辑时的实时预览附件
   @Param isFirstAssistantMessage: boolean = false
   @Local isReasoningExpanded: boolean = false  // 推理内容是否展开
+  @Local expandedTimelineReasoningIds: string[] = []
   @Local translatedText: string = ''  // 翻译结果
   @Local isTranslating: boolean = false  // 是否正在翻译
   @Local showTranslation: boolean = false  // 是否显示翻译结果
@@ -338,6 +339,7 @@ export struct MessageBubble {
     this.syncMessageScopedState()
     this.syncDerivedRenderCaches()
     this.isReasoningExpanded = false
+    this.expandedTimelineReasoningIds = []
   }
 
   // 消息状态变化回调（优化跳动点动画性能）
@@ -1181,12 +1183,27 @@ export struct MessageBubble {
 
   // 按工具身份（规范化函数名 + 来源标签）合并同一消息内的多次调用；
   // 同一消息的 AskUser 调用合并成一个结果栏，被隐藏的调用（如已有搜索引用的联网搜索）不入组
-  private getToolCallRenderGroups(): ToolCallRenderGroup[] {
+  private containsToolCallId(toolCallIds: string[], toolCallId: string): boolean {
+    if (toolCallIds.length === 0) {
+      return true
+    }
+    for (let i = 0; i < toolCallIds.length; i++) {
+      if (toolCallIds[i] === toolCallId) {
+        return true
+      }
+    }
+    return false
+  }
+
+  private getToolCallRenderGroups(toolCallIds: string[] = []): ToolCallRenderGroup[] {
     const groups: ToolCallRenderGroup[] = []
     const groupIndex = new Map<string, ToolCallRenderGroup>()
     let askGroup: ToolCallRenderGroup | undefined = undefined
     for (let i = 0; i < this.message.toolCalls.length; i++) {
       const toolCall = this.message.toolCalls[i]
+      if (!this.containsToolCallId(toolCallIds, toolCall.id)) {
+        continue
+      }
       if (this.isAskUserToolCall(toolCall)) {
         if (askGroup === undefined) {
           askGroup = new ToolCallRenderGroup()
@@ -1284,10 +1301,13 @@ export struct MessageBubble {
     }
   }
 
-  private getVChartPayloads(): MessageVChartPayload[] {
+  private getVChartPayloads(toolCallIds: string[] = []): MessageVChartPayload[] {
     const payloads: MessageVChartPayload[] = []
     for (let i = 0; i < this.message.toolCalls.length; i++) {
       const toolCall = this.message.toolCalls[i]
+      if (!this.containsToolCallId(toolCallIds, toolCall.id)) {
+        continue
+      }
       if (!this.isMathChartToolCall(toolCall)) {
         continue
       }
@@ -2160,6 +2180,283 @@ export struct MessageBubble {
     }))
   }
 
+  private getOrderedResponseSegments(): AssistantResponseSegment[] {
+    if (this.message.responseSegments.length > 0) {
+      return this.message.responseSegments
+    }
+
+    // 旧消息没有时间线字段，只能按现有可恢复信息生成稳定的兼容顺序。
+    const segments: AssistantResponseSegment[] = []
+    if (this.message.reasoningContent.trim() !== '') {
+      segments.push(new AssistantResponseSegment(
+        `${this.message.id}_legacy_reasoning`,
+        AssistantResponseSegmentType.REASONING,
+        this.message.reasoningContent
+      ))
+    }
+    if (this.message.toolCalls.length > 0) {
+      const toolCallIds: string[] = []
+      for (let i = 0; i < this.message.toolCalls.length; i++) {
+        toolCallIds.push(this.message.toolCalls[i].id)
+      }
+      segments.push(new AssistantResponseSegment(
+        `${this.message.id}_legacy_tools`,
+        AssistantResponseSegmentType.TOOL_CALLS,
+        '',
+        toolCallIds
+      ))
+    }
+    if (this.message.content.trim() !== '') {
+      segments.push(new AssistantResponseSegment(
+        `${this.message.id}_legacy_content`,
+        AssistantResponseSegmentType.CONTENT,
+        this.message.content
+      ))
+    }
+    return segments
+  }
+
+  private isTimelineReasoningExpanded(segment: AssistantResponseSegment): boolean {
+    for (let i = 0; i < this.expandedTimelineReasoningIds.length; i++) {
+      if (this.expandedTimelineReasoningIds[i] === segment.id) {
+        return true
+      }
+    }
+    return this.isActiveTimelineSegment(segment)
+  }
+
+  private isActiveTimelineSegment(segment: AssistantResponseSegment): boolean {
+    const segments = this.getOrderedResponseSegments()
+    return this.message.isGenerating && segments.length > 0 && segments[segments.length - 1].id === segment.id
+  }
+
+  private toggleTimelineReasoning(segmentId: string): void {
+    const nextIds = this.expandedTimelineReasoningIds.slice()
+    const index = nextIds.indexOf(segmentId)
+    if (index >= 0) {
+      nextIds.splice(index, 1)
+    } else {
+      nextIds.push(segmentId)
+    }
+    this.expandedTimelineReasoningIds = nextIds
+  }
+
+  private shouldShowTimelineSearchReferences(segment: AssistantResponseSegment): boolean {
+    if (!this.message.hasSearchReferences()) {
+      return false
+    }
+    let lastWebSearchCallId = ''
+    for (let i = 0; i < this.message.toolCalls.length; i++) {
+      if (this.isWebSearchToolCall(this.message.toolCalls[i])) {
+        lastWebSearchCallId = this.message.toolCalls[i].id
+      }
+    }
+    return lastWebSearchCallId !== '' && this.containsToolCallId(segment.toolCallIds, lastWebSearchCallId)
+  }
+
+  @Builder
+  private TimelineSegmentMarkdown(segment: AssistantResponseSegment, compact: boolean = false) {
+    ChatMarkdownRenderer({
+      content: segment.content,
+      isInputEnded: !this.isActiveTimelineSegment(segment),
+      incrementalAnalysis: this.isActiveTimelineSegment(segment),
+      useCangjieComponent: true,
+      chatFontSize: this.chatFontSize,
+      compact: compact,
+      latexFontSize: this.chatFontSize,
+      textColorOverride: compact ? getAppUiState().themeTextSecondary : '',
+      titleColorOverride: compact ? getAppUiState().themeTextSecondary : '',
+      textTypeface: compact ? 'HarmonyOS Sans' : this.chatBubbleTypeface,
+      themeRenderKey: this.themeRenderKey,
+      onOpenLink: (title: string, url: string): void => {
+        this.openWebSheetForLink(title, url)
+      },
+      onImageClick: (src: string): void => {
+        this.onImageClick([src], 0)
+      },
+      onCopyText: (text: string): void => {
+        this.copyToClipboard(text)
+      },
+      onCopyCode: (code: string): void => {
+        this.copyToClipboard(code)
+      },
+      onCodeFullScreen: (code: string, _codeType: string): void => {
+        this.copyToClipboard(code)
+      }
+    })
+      .constraintSize({ maxWidth: '100%' })
+      .backgroundColor(Color.Transparent)
+  }
+
+  @Builder
+  private TimelineReasoningSection(segment: AssistantResponseSegment) {
+    Column() {
+      Row() {
+        SymbolGlyph($r('sys.symbol.AI_deep_thinking'))
+          .fontSize(14)
+          .fontColor([this.isManuscriptMode || this.isActiveTimelineSegment(segment)
+            ? this.themePrimary : $r('app.color.text_secondary')])
+
+        Text(this.isActiveTimelineSegment(segment) ?
+          $r('app.string.reasoning_thinking') : $r('app.string.reasoning_process'))
+          .fontSize(13)
+          .fontWeight(FontWeight.Medium)
+          .fontColor(this.isManuscriptMode || this.isActiveTimelineSegment(segment)
+            ? this.themePrimary : $r('app.color.text_secondary'))
+          .margin({ left: 6 })
+
+        Blank().layoutWeight(1)
+
+        Row() {
+          Text(this.isTimelineReasoningExpanded(segment) ?
+            $r('app.string.common_collapse') : $r('app.string.common_details'))
+            .fontSize(11)
+            .fontColor(this.isManuscriptMode ? this.themePrimary : $r('app.color.text_tertiary'))
+
+          SymbolGlyph($r('sys.symbol.chevron_down'))
+            .fontSize(12)
+            .fontColor([this.isManuscriptMode ? this.themePrimary : $r('app.color.text_tertiary')])
+            .rotate({ angle: this.isTimelineReasoningExpanded(segment) ? 180 : 0 })
+            .margin({ left: 2 })
+        }
+      }
+      .width('100%')
+      .height(this.isManuscriptMode ? MANUSCRIPT_COMPACT_BAR_HEIGHT : 36)
+      .padding({ left: this.isManuscriptMode ? 14 : 10, right: this.isManuscriptMode ? 14 : 10 })
+      .alignItems(VerticalAlign.Center)
+      .onClick(() => {
+        this.toggleTimelineReasoning(segment.id)
+      })
+
+      if (this.isTimelineReasoningExpanded(segment) && segment.content.trim().length > 0) {
+        Column() {
+          this.TimelineSegmentMarkdown(segment, true)
+        }
+        .width('100%')
+        .padding({ left: 10, right: 10, bottom: 8 })
+      }
+    }
+    .width('100%')
+    .backgroundColor(Color.Transparent)
+    .borderRadius(this.isManuscriptMode ? 0 : 12)
+    .border({
+      width: this.isManuscriptMode ? { top: 1, bottom: 1 } : 0.5,
+      color: this.isManuscriptMode ? getAppUiState().themeDivider : this.getTimelineRailColor()
+    })
+    .clip(false)
+    .systemMaterial(this.isManuscriptMode ? undefined : new uiMaterial.ImmersiveMaterial({
+      style: uiMaterial.ImmersiveStyle.REGULAR,
+      materialColor: this.getTimelineBackgroundColor(),
+      applyShadow: false,
+      interactive: false,
+      lightEffect: { color: undefined }
+    }))
+    .shadow({
+      radius: this.isManuscriptMode ? 0 : 12,
+      color: this.isManuscriptMode ? Color.Transparent :
+        (this.isDarkMode ? 'rgba(0, 0, 0, 0.32)' : 'rgba(15, 23, 42, 0.14)'),
+      offsetX: 0,
+      offsetY: 0
+    })
+    .margin({ bottom: 8 })
+  }
+
+  @Builder
+  private TimelineToolSection(segment: AssistantResponseSegment) {
+    Column() {
+      ForEach(this.getToolCallRenderGroups(segment.toolCallIds), (group: ToolCallRenderGroup) => {
+        if (group.isAskUser) {
+          AskUserCard({
+            toolCall: group.askUserCalls.length > 0 ? group.askUserCalls[0] : new ToolCall(),
+            toolCalls: group.askUserCalls,
+            isAnswered: this.areAllAskUserCallsAnswered(group.askUserCalls),
+            compactMode: true,
+            resultContents: this.getAskUserResultContents(group.askUserCalls),
+            onAnswer: (toolCallId: string, answerJson: string): void => {
+              this.onAskUserAnswer(toolCallId, answerJson)
+            },
+            onRequestAnswer: (toolCallId: string): void => {
+              this.onAskUserOpen(toolCallId)
+            }
+          })
+            .margin({ bottom: 6 })
+        } else {
+          ToolCallCard({
+            entries: group.entries,
+            isExecuting: group.anyExecuting,
+            onSubAgentPreview: (): void => {
+              this.showSubAgentPreviewSheet = true
+            }
+          })
+            .margin({ bottom: 6 })
+        }
+      }, (group: ToolCallRenderGroup, index: number) => this.buildToolCallRenderGroupKey(group, index))
+
+      if (this.shouldShowTimelineSearchReferences(segment)) {
+        SearchReferenceCard({
+          query: this.extractSearchQuery(),
+          searchEngine: this.message.searchEngine || 'Web',
+          references: this.message.searchReferences,
+          sourceLabel: this.getSearchSourceLabel()
+        })
+          .margin({ bottom: 6 })
+      }
+
+      if (this.getVChartPayloads(segment.toolCallIds).length > 0) {
+        ForEach(this.getVChartPayloads(segment.toolCallIds), (payload: MessageVChartPayload) => {
+          VChartCard({
+            specJson: payload.specJson,
+            summary: payload.summary,
+            chartType: payload.chartType
+          })
+            .margin({ bottom: 6 })
+        }, (payload: MessageVChartPayload) => payload.id)
+      }
+    }
+    .width('100%')
+  }
+
+  @Builder
+  private TimelineContentSection(segment: AssistantResponseSegment) {
+    Column() {
+      if (!this.isActiveTimelineSegment(segment) && this.hasHtmlBlocks(segment.content)) {
+        ForEach(this.splitContentToSegments(segment.content), (contentSegment: ContentSegment) => {
+          if (contentSegment.isHtml) {
+            HtmlPreviewCard({
+              htmlCode: contentSegment.renderContent,
+              onCopyCode: (code: string): void => {
+                this.copyToClipboard(code)
+                showToast(this.getUIContext(), $r('app.string.copy_success'))
+              }
+            })
+          } else {
+            this.StaticMarkdown(contentSegment.renderContent, false, '', '', true)
+          }
+        }, (contentSegment: ContentSegment, index: number) => `${segment.id}_${index}`)
+      } else {
+        this.TimelineSegmentMarkdown(segment)
+      }
+    }
+    .width('100%')
+    .margin({ bottom: 8 })
+  }
+
+  @Builder
+  private OrderedResponseTimeline() {
+    Column() {
+      ForEach(this.getOrderedResponseSegments(), (segment: AssistantResponseSegment) => {
+        if (segment.type === AssistantResponseSegmentType.REASONING && segment.content.trim().length > 0) {
+          this.TimelineReasoningSection(segment)
+        } else if (segment.type === AssistantResponseSegmentType.TOOL_CALLS) {
+          this.TimelineToolSection(segment)
+        } else if (segment.type === AssistantResponseSegmentType.CONTENT && segment.content.trim().length > 0) {
+          this.TimelineContentSection(segment)
+        }
+      }, (segment: AssistantResponseSegment) => segment.id)
+    }
+    .width('100%')
+  }
+
   @Builder
   AssistantMessage() {
     Row() {
@@ -2226,7 +2523,7 @@ export struct MessageBubble {
 
           Column() {
             // ========== 工具调用区域 ==========
-            if (this.message.hasToolCalls()) {
+            if (!getAppUiState().chatOrderedResponseHistory && this.message.hasToolCalls()) {
               ForEach(this.getToolCallRenderGroups(), (group: ToolCallRenderGroup) => {
                 if (group.isAskUser) {
                   AskUserCard({
@@ -2256,7 +2553,7 @@ export struct MessageBubble {
               }, (group: ToolCallRenderGroup, index: number) => this.buildToolCallRenderGroupKey(group, index))
             }
 
-            if (this.getVChartPayloads().length > 0) {
+            if (!getAppUiState().chatOrderedResponseHistory && this.getVChartPayloads().length > 0) {
               ForEach(this.getVChartPayloads(), (payload: MessageVChartPayload) => {
                 VChartCard({
                   specJson: payload.specJson,
@@ -2268,7 +2565,7 @@ export struct MessageBubble {
             }
 
             // ========== 搜索引用区域 ==========
-            if (this.message.hasSearchReferences()) {
+            if (!getAppUiState().chatOrderedResponseHistory && this.message.hasSearchReferences()) {
               SearchReferenceCard({
                 query: this.extractSearchQuery(),
                 searchEngine: this.message.searchEngine || 'Web',
@@ -2284,42 +2581,50 @@ export struct MessageBubble {
             }
 
             // ========== 推理内容区域（可折叠） ==========
-            if (this.message.hasReasoningContent()) {
+            if (!getAppUiState().chatOrderedResponseHistory && this.message.hasReasoningContent()) {
               this.ReasoningSection()
             }
 
             // ========== 加载状态或主要内容区域 ==========
-            if (this.message.content.length === 0 && this.message.reasoningContent.length === 0 &&
-                (this.message.isGenerating || this.message.isSearching)) {
-              if (this.message.isSearching) {
+            if (getAppUiState().chatOrderedResponseHistory) {
+              if (this.getOrderedResponseSegments().length > 0) {
+                this.OrderedResponseTimeline()
+              } else if (this.message.isSearching) {
                 this.SearchingIndicatorInline()
               }
             } else {
-              if (this.hasHtmlSegments()) {
-                ForEach(this.getContentSegments(),
-                  (segment: ContentSegment, index: number) => {
-                    if (segment.isHtml) {
-                      HtmlPreviewCard({
-                        htmlCode: segment.renderContent,
-                        onCopyCode: (code: string) => {
-                          this.copyToClipboard(code)
-                          showToast(this.getUIContext(), $r('app.string.copy_success'))
-                        }
-                      })
-                    } else {
-                      this.StaticMarkdown(segment.renderContent, false, '', '', true)
-                    }
-                  },
-                  (segment: ContentSegment, index: number) => {
-                    return 'segment_' + this.message.id + '_' + index.toString()
-                  }
-                )
-              } else {
-                Column() {
-                  this.MessageContentMarkdown()
+              if (this.message.content.length === 0 && this.message.reasoningContent.length === 0 &&
+                  (this.message.isGenerating || this.message.isSearching)) {
+                if (this.message.isSearching) {
+                  this.SearchingIndicatorInline()
                 }
-                  .width('100%')
-                  .transition(TransitionEffect.OPACITY.animation({ duration: 200 }))
+              } else {
+                if (this.hasHtmlSegments()) {
+                  ForEach(this.getContentSegments(),
+                    (segment: ContentSegment, index: number) => {
+                      if (segment.isHtml) {
+                        HtmlPreviewCard({
+                          htmlCode: segment.renderContent,
+                          onCopyCode: (code: string) => {
+                            this.copyToClipboard(code)
+                            showToast(this.getUIContext(), $r('app.string.copy_success'))
+                          }
+                        })
+                      } else {
+                        this.StaticMarkdown(segment.renderContent, false, '', '', true)
+                      }
+                    },
+                    (segment: ContentSegment, index: number) => {
+                      return 'segment_' + this.message.id + '_' + index.toString()
+                    }
+                  )
+                } else {
+                  Column() {
+                    this.MessageContentMarkdown()
+                  }
+                    .width('100%')
+                    .transition(TransitionEffect.OPACITY.animation({ duration: 200 }))
+                }
               }
             }
 

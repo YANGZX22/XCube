@@ -278,6 +278,39 @@ export struct KnowledgeBasePanel {
       )
       return
     }
+    this.getUIContext().showAlertDialog({
+      title: pickLocalizedText('确认更新知识库', 'Update knowledge base?'),
+      backgroundColor: Color.Transparent,
+      backgroundBlurStyle: BlurStyle.NONE,
+      systemMaterial: new uiMaterial.ImmersiveMaterial({
+        style: uiMaterial.ImmersiveStyle.THICK
+      }),
+      message: pickLocalizedText(
+        `将重新处理全部 ${this.documents.length} 个知识文件，并重建关键词索引与语义向量。是否继续？`,
+        `This will process all ${this.documents.length} knowledge file(s) again and rebuild their ` +
+          'keyword indexes and semantic vectors. Continue?'
+      ),
+      primaryButton: {
+        value: $r('app.string.cancel'),
+        action: () => {
+        }
+      },
+      secondaryButton: {
+        value: pickLocalizedText('确认更新', 'Update'),
+        action: () => {
+          this.startRefreshAllDocuments()
+        }
+      }
+    })
+  }
+
+  private startRefreshAllDocuments(): void {
+    if (this.isWorking) {
+      this.showKnowledgeSnack(
+        pickLocalizedText('知识库正在处理，请稍后再试', 'The knowledge base is busy. Try again shortly.')
+      )
+      return
+    }
     this.performRefreshAllDocuments().catch((error: Object): void => {
       console.error('KnowledgeBasePanel', `Refresh all documents failed: ${JSON.stringify(error)}`)
       this.processingDocumentId = ''

@@ -1,4 +1,4 @@
-import { ChatMessage, MessageAttachment, SearchReference, ToolCall, ToolResult } from '../../models/ChatModels'
+import { AssistantResponseSegment, ChatMessage, MessageAttachment, SearchReference, ToolCall, ToolResult } from '../../models/ChatModels'
 
 function encodeValue(value: string): string {
   return `${value.length}:${value};`
@@ -95,6 +95,19 @@ function buildToolResultListSignature(toolResults: ToolResult[]): string {
   return buildStringListSignature(signatures)
 }
 
+function buildResponseTimelineSignature(segments: AssistantResponseSegment[]): string {
+  const signatures: string[] = []
+  for (let i = 0; i < segments.length; i++) {
+    signatures.push([
+      encodeValue(segments[i].id),
+      encodeValue(segments[i].type),
+      encodeValue(segments[i].content),
+      buildStringListSignature(segments[i].toolCallIds)
+    ].join(''))
+  }
+  return buildStringListSignature(signatures)
+}
+
 export function buildChatMessageRowRenderSignature(
   message: ChatMessage,
   showDateDivider: boolean,
@@ -175,6 +188,7 @@ export function buildChatMessageContentRenderSignature(
     buildSearchReferenceListSignature(message.searchReferences),
     buildToolCallListSignature(message.toolCalls),
     buildToolResultListSignature(message.toolResults),
+    buildResponseTimelineSignature(message.responseSegments),
     encodeValue(message.toolCallId),
     encodeValue(isEditing ? previewContent : ''),
     isEditing ? buildAttachmentSignature(previewAttachments) : buildAttachmentSignature([])

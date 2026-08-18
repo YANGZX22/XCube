@@ -23,7 +23,9 @@ import {
   MessageRole,
   SearchReference,
   ToolCall,
-  ToolResult
+  ToolResult,
+  AssistantResponseSegment,
+  AssistantResponseSegmentJson
 } from '../models/ChatModels'
 import { Assistant, DEFAULT_ASSISTANT_ID } from '../models/AssistantModels'
 import { DatabaseService } from './DatabaseService'
@@ -215,6 +217,7 @@ interface MessageData {
   modelName: string
   modelId?: string
   reasoningContent: string
+  responseTimeline?: AssistantResponseSegmentJson[]
   billingEnabled?: boolean
   billingCurrency?: string
   inputPricePerMillion?: number
@@ -695,6 +698,8 @@ export class ImportExportService {
             modelName: m.modelName,
             modelId: m.modelId,
             reasoningContent: m.reasoningContent,
+            responseTimeline: m.responseSegments.map((segment: AssistantResponseSegment): AssistantResponseSegmentJson =>
+              segment.toJson()),
             billingEnabled: m.billingEnabled,
             billingCurrency: m.billingCurrency,
             inputPricePerMillion: m.inputPricePerMillion,
@@ -1029,6 +1034,11 @@ export class ImportExportService {
           )
           message.timestamp = msgData.timestamp
           message.reasoningContent = msgData.reasoningContent || ''
+          if (msgData.responseTimeline && msgData.responseTimeline.length > 0) {
+            for (const segmentData of msgData.responseTimeline) {
+              message.responseSegments.push(AssistantResponseSegment.fromJson(segmentData))
+            }
+          }
           message.billingEnabled = msgData.billingEnabled || false
           message.billingCurrency = msgData.billingCurrency || ''
           message.inputPricePerMillion = msgData.inputPricePerMillion || 0

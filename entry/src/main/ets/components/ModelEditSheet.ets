@@ -2,12 +2,27 @@
  * 模型编辑半模态组件
  * 单页滚动布局：核心信息 → 能力标签 → 可折叠高级参数
  */
-import { ModelInfo, InputMode, OutputMode, ModelInfoExtendedJson } from '../models/ChatModels'
+import {
+  BillingTimePeriod,
+  BillingTimePeriodJson,
+  ModelInfo,
+  InputMode,
+  OutputMode,
+  ModelInfoExtendedJson
+} from '../models/ChatModels'
 import { LengthMetrics, uiMaterial } from '@kit.ArkUI'
 import { getAppUiState } from '../state/AppUiState'
 import { pickLocalizedText } from '../utils/LocalizedTextUtils'
-import { normalizeBillingCurrency, parseBillingPrice } from '../utils/ModelBillingUtils'
+import {
+  hasOverlappingBillingPeakPeriods,
+  normalizeBillingCurrency,
+  normalizeBillingMinuteOfDay,
+  parseBillingPrice
+} from '../utils/ModelBillingUtils'
+import { showToast } from '../utils/ToastUtil'
 import { ImmersiveSheetHeader } from './ImmersiveSheetHeader'
+
+const DEFAULT_CONTEXT_LENGTH: number = 256000
 
 @ComponentV2
 struct ModelCapabilityButton {
@@ -19,6 +34,9 @@ struct ModelCapabilityButton {
   private get themePrimary(): string {
     return getAppUiState().themePrimary
   }
+  private get themePrimaryLight(): string {
+    return getAppUiState().themePrimaryLight
+  }
 
   build() {
     Button({ type: ButtonType.Capsule, stateEffect: false }) {
@@ -29,23 +47,20 @@ struct ModelCapabilityButton {
 
         Text(this.label)
           .fontSize(13)
-          .fontWeight(this.selected ? FontWeight.Medium : FontWeight.Regular)
+          .fontWeight(FontWeight.Regular)
           .fontColor(this.selected ? this.themePrimary : $r('app.color.text_primary'))
       }
       .alignItems(VerticalAlign.Center)
     }
     .height(36)
     .padding({ left: 12, right: 14 })
-    .backgroundColor(Color.Transparent)
+    .backgroundColor(this.selected ? this.themePrimaryLight : Color.Transparent)
     .systemMaterial(new uiMaterial.ImmersiveMaterial({
       style: uiMaterial.ImmersiveStyle.REGULAR,
+      materialColor: this.selected ? this.themePrimaryLight : Color.Transparent,
       interactive: true,
       lightEffect: { color: undefined }
     }))
-    .border({
-      width: this.selected ? 1.2 : 0.5,
-      color: this.selected ? this.themePrimary : $r('app.color.divider')
-    })
     .onClick(() => {
       this.onTap()
     })
@@ -86,6 +101,18 @@ export struct ModelEditSheet {
   @Local billingCurrencySelectedIndex: number = 0
   @Local inputPriceText: string = ''
   @Local outputPriceText: string = ''
+  @Local billingTimeOfUseEnabled: boolean = false
+  @Local billingPeakPeriods: BillingTimePeriod[] = [new BillingTimePeriod(8 * 60, 22 * 60)]
+  @Local billingPeakInputPriceText: string = ''
+  @Local billingPeakOutputPriceText: string = ''
+  @Local billingOffPeakInputPriceText: string = ''
+  @Local billingOffPeakOutputPriceText: string = ''
+  private billingPickerPeriodIndex: number = -1
+  private billingPickerIsStart: boolean = true
+  private billingPickerSelectedMinutes: number = 0
+  private billingPickerInitialTime: Date = new Date(2000, 0, 1, 0, 0, 0, 0)
+  private billingTimePickerDialogId: number = -1
+  private billingEmptyPeriodAnchored: boolean[] = [false, false, false]
   private readonly billingCurrencies: string[] = ['CNY', 'USD', 'EUR', 'GBP', 'JPY', 'KRW']
   private readonly billingCurrencyOptions: SelectOption[] = [
     { value: 'CNY' },
@@ -103,8 +130,13 @@ export struct ModelEditSheet {
   @Event onAdvancedExpandedChange: (expanded: boolean) => void = (_expanded: boolean): void => {
   }
 
+  private get shouldUseFullHeight(): boolean {
+    return this.isAdvancedExpanded || this.billingEnabled
+  }
+
   aboutToAppear(): void {
     this.syncDraftFromModel()
+    this.updateSheetExpansion()
   }
 
   private syncDraftFromModel(): void {
@@ -131,6 +163,253 @@ export struct ModelEditSheet {
       this.model.inputPricePerMillion.toString() : ''
     this.outputPriceText = this.model.outputPricePerMillion > 0 ?
       this.model.outputPricePerMillion.toString() : ''
+    this.billingTimeOfUseEnabled = this.model.billingTimeOfUseEnabled
+    this.billingPeakPeriods = this.copyBillingPeakPeriods(this.model.billingPeakPeriods)
+    this.billingEmptyPeriodAnchored = [false, false, false]
+    this.billingPeakInputPriceText = this.formatBillingPriceForInput(this.model.billingPeakInputPricePerMillion)
+    this.billingPeakOutputPriceText = this.formatBillingPriceForInput(this.model.billingPeakOutputPricePerMillion)
+    this.billingOffPeakInputPriceText = this.formatBillingPriceForInput(this.model.billingOffPeakInputPricePerMillion)
+    this.billingOffPeakOutputPriceText = this.formatBillingPriceForInput(this.model.billingOffPeakOutputPricePerMillion)
+  }
+
+  private formatBillingPriceForInput(price: number): string {
+    return price > 0 ? price.toString() : ''
+  }
+
+  private formatBillingTime(minutes: number): string {
+    const normalized = normalizeBillingMinuteOfDay(minutes)
+    const hour = Math.floor(normalized / 60).toString().padStart(2, '0')
+    const minute = (normalized % 60).toString().padStart(2, '0')
+    return `${hour}:${minute}`
+  }
+
+  private copyBillingPeakPeriods(source: BillingTimePeriod[]): BillingTimePeriod[] {
+    const result: BillingTimePeriod[] = []
+    const count = Math.min(3, source.length)
+    for (let i = 0; i < count; i++) {
+      result.push(new BillingTimePeriod(source[i].startMinutes, source[i].endMinutes))
+    }
+    if (result.length === 0) {
+      result.push(new BillingTimePeriod(8 * 60, 22 * 60))
+    }
+    return result
+  }
+
+  private updateBillingPeakPeriod(index: number, startMinutes?: number, endMinutes?: number): void {
+    const next = this.copyBillingPeakPeriods(this.billingPeakPeriods)
+    if (index < 0 || index >= next.length) {
+      return
+    }
+    if (startMinutes !== undefined) {
+      next[index].startMinutes = normalizeBillingMinuteOfDay(startMinutes)
+    }
+    if (endMinutes !== undefined) {
+      next[index].endMinutes = normalizeBillingMinuteOfDay(endMinutes)
+    }
+    this.billingPeakPeriods = next
+  }
+
+  private addBillingPeakPeriod(): void {
+    if (this.billingPeakPeriods.length >= 3) {
+      return
+    }
+    const next = this.copyBillingPeakPeriods(this.billingPeakPeriods)
+    next.push(new BillingTimePeriod(0, 0))
+    this.billingPeakPeriods = next
+    this.billingEmptyPeriodAnchored[next.length - 1] = false
+  }
+
+  private removeBillingPeakPeriod(index: number): void {
+    if (this.billingPeakPeriods.length <= 1) {
+      return
+    }
+    const next: BillingTimePeriod[] = []
+    for (let i = 0; i < this.billingPeakPeriods.length; i++) {
+      if (i !== index) {
+        next.push(new BillingTimePeriod(
+          this.billingPeakPeriods[i].startMinutes,
+          this.billingPeakPeriods[i].endMinutes
+        ))
+      }
+    }
+    this.billingPeakPeriods = next
+    const nextAnchored: boolean[] = []
+    for (let i = 0; i < this.billingEmptyPeriodAnchored.length; i++) {
+      if (i !== index) {
+        nextAnchored.push(this.billingEmptyPeriodAnchored[i])
+      }
+    }
+    while (nextAnchored.length < 3) {
+      nextAnchored.push(false)
+    }
+    this.billingEmptyPeriodAnchored = nextAnchored
+  }
+
+  private showBillingTimePicker(periodIndex: number, isStart: boolean, minutes: number): void {
+    const normalized = normalizeBillingMinuteOfDay(minutes)
+    this.billingPickerPeriodIndex = periodIndex
+    this.billingPickerIsStart = isStart
+    this.billingPickerSelectedMinutes = normalized
+    this.billingPickerInitialTime = new Date(
+      2000, 0, 1, Math.floor(normalized / 60), normalized % 60, 0, 0
+    )
+    this.getUIContext().getPromptAction().openCustomDialog({
+      builder: (): void => {
+        this.BillingTimePickerDialog()
+      },
+      autoCancel: true,
+      alignment: DialogAlignment.Center,
+      cornerRadius: 24,
+      backgroundColor: Color.Transparent,
+      backgroundBlurStyle: BlurStyle.NONE,
+      systemMaterial: new uiMaterial.ImmersiveMaterial({
+        style: uiMaterial.ImmersiveStyle.THICK
+      })
+    })
+      .then((dialogId: number): void => {
+        this.billingTimePickerDialogId = dialogId
+      })
+      .catch((error: Object): void => {
+        console.error('ModelEditSheet', `Failed to open time picker: ${JSON.stringify(error)}`)
+      })
+  }
+
+  private closeBillingTimePickerDialog(): void {
+    if (this.billingTimePickerDialogId < 0) {
+      return
+    }
+    this.getUIContext().getPromptAction().closeCustomDialog(this.billingTimePickerDialogId)
+    this.billingTimePickerDialogId = -1
+  }
+
+  private acceptBillingTimePicker(): void {
+    if (this.billingPickerPeriodIndex < 0) {
+      this.closeBillingTimePickerDialog()
+      return
+    }
+    const next = this.copyBillingPeakPeriods(this.billingPeakPeriods)
+    if (this.billingPickerPeriodIndex >= next.length) {
+      this.closeBillingTimePickerDialog()
+      return
+    }
+    const editingPeriod = next[this.billingPickerPeriodIndex]
+    if (editingPeriod.startMinutes === editingPeriod.endMinutes &&
+      !this.billingEmptyPeriodAnchored[this.billingPickerPeriodIndex]) {
+      // 新增时段先用首次选择的时间作为锚点，保持空区间，随后再设置另一端。
+      editingPeriod.startMinutes = this.billingPickerSelectedMinutes
+      editingPeriod.endMinutes = this.billingPickerSelectedMinutes
+    } else if (this.billingPickerIsStart) {
+      editingPeriod.startMinutes = this.billingPickerSelectedMinutes
+    } else {
+      editingPeriod.endMinutes = this.billingPickerSelectedMinutes
+    }
+    if (hasOverlappingBillingPeakPeriods(next)) {
+      this.showBillingPeriodOverlapMessage()
+      return
+    }
+    this.billingPeakPeriods = next
+    this.billingEmptyPeriodAnchored[this.billingPickerPeriodIndex] =
+      editingPeriod.startMinutes === editingPeriod.endMinutes
+    this.closeBillingTimePickerDialog()
+  }
+
+  private showBillingPeriodOverlapMessage(): void {
+    showToast(this.getUIContext(), pickLocalizedText(
+      '峰时段不能重叠，请调整开始或结束时间',
+      'Peak periods cannot overlap. Adjust the start or end time.'
+    ))
+  }
+
+  private saveDraft(): void {
+    if (this.billingEnabled && this.billingTimeOfUseEnabled &&
+      hasOverlappingBillingPeakPeriods(this.billingPeakPeriods)) {
+      this.showBillingPeriodOverlapMessage()
+      return
+    }
+    this.onSave(this.buildDraft())
+  }
+
+  private updateBillingPickerSelection(value: TimePickerResult): void {
+    if (value.hour === undefined || value.minute === undefined) {
+      return
+    }
+    this.billingPickerSelectedMinutes = value.hour * 60 + value.minute
+  }
+
+  private get billingTimePickerTitle(): string {
+    return this.billingPickerIsStart ?
+      pickLocalizedText('选择开始时间', 'Select start time') :
+      pickLocalizedText('选择结束时间', 'Select end time')
+  }
+
+  @Builder
+  private BillingTimePickerDialog() {
+    Column({ space: 16 }) {
+      Text(this.billingTimePickerTitle)
+        .fontSize(18)
+        .fontWeight(FontWeight.Bold)
+        .fontColor($r('app.color.text_primary'))
+        .width('100%')
+        .textAlign(TextAlign.Start)
+
+      TimePicker({ selected: this.billingPickerInitialTime })
+        .useMilitaryTime(true)
+        .enableCascade(true)
+        .selectedTextStyle({
+          color: this.themePrimary,
+          font: { weight: FontWeight.Medium }
+        })
+        .onChange((value: TimePickerResult): void => {
+          this.updateBillingPickerSelection(value)
+        })
+
+      Row({ space: 12 }) {
+        Button(pickLocalizedText('取消', 'Cancel'))
+          .layoutWeight(1)
+          .height(40)
+          .fontSize(14)
+          .fontColor($r('app.color.status_error'))
+          .type(ButtonType.Capsule)
+          .stateEffect(false)
+          .backgroundColor(Color.Transparent)
+          .onClick(() => {
+            this.closeBillingTimePickerDialog()
+          })
+
+        Button(pickLocalizedText('确定', 'Done'))
+          .layoutWeight(1)
+          .height(40)
+          .fontSize(14)
+          .fontColor(Color.White)
+          .type(ButtonType.Capsule)
+          .stateEffect(false)
+          .backgroundColor(this.themePrimary)
+          .onClick(() => {
+            this.acceptBillingTimePicker()
+          })
+      }
+      .width('100%')
+    }
+    .width('100%')
+    .padding(20)
+    .alignItems(HorizontalAlign.Start)
+  }
+
+  private updateSheetExpansion(): void {
+    this.onAdvancedExpandedChange(this.shouldUseFullHeight)
+  }
+
+  private setBillingTimeOfUseEnabled(enabled: boolean): void {
+    if (enabled &&
+      this.billingPeakInputPriceText === '' && this.billingPeakOutputPriceText === '' &&
+      this.billingOffPeakInputPriceText === '' && this.billingOffPeakOutputPriceText === '') {
+      this.billingPeakInputPriceText = this.inputPriceText
+      this.billingPeakOutputPriceText = this.outputPriceText
+      this.billingOffPeakInputPriceText = this.inputPriceText
+      this.billingOffPeakOutputPriceText = this.outputPriceText
+    }
+    this.billingTimeOfUseEnabled = enabled
+    this.updateSheetExpansion()
   }
 
   private getBillingCurrencyIndex(currency: string): number {
@@ -150,7 +429,7 @@ export struct ModelEditSheet {
       id: this.model.id,
       name: this.tempName,
       contextLength: Number.isFinite(parsedContextLength) && parsedContextLength > 0 ?
-        Math.floor(parsedContextLength) : 0,
+        Math.floor(parsedContextLength) : DEFAULT_CONTEXT_LENGTH,
       isEnabled: this.model.isEnabled,
       isRecommended: this.model.isRecommended,
       modelType: this.model.modelType,
@@ -169,6 +448,14 @@ export struct ModelEditSheet {
       billingCurrency: this.billingCurrency,
       inputPricePerMillion: parseBillingPrice(this.inputPriceText),
       outputPricePerMillion: parseBillingPrice(this.outputPriceText),
+      billingTimeOfUseEnabled: this.billingTimeOfUseEnabled,
+      billingPeakPeriods: this.billingPeakPeriods.slice(0, 3).map(
+        (period: BillingTimePeriod): BillingTimePeriodJson => period.toJson()
+      ),
+      billingPeakInputPricePerMillion: parseBillingPrice(this.billingPeakInputPriceText),
+      billingPeakOutputPricePerMillion: parseBillingPrice(this.billingPeakOutputPriceText),
+      billingOffPeakInputPricePerMillion: parseBillingPrice(this.billingOffPeakInputPriceText),
+      billingOffPeakOutputPricePerMillion: parseBillingPrice(this.billingOffPeakOutputPriceText),
       parameters: {
         temperature: this.paramTemperature,
         topP: this.paramTopP,
@@ -230,10 +517,10 @@ export struct ModelEditSheet {
       }
       .scrollBar(BarState.Off)
       .edgeEffect(EdgeEffect.Spring)
-      .layoutWeight(this.isAdvancedExpanded ? 1 : 0)
+      .layoutWeight(this.shouldUseFullHeight ? 1 : 0)
     }
     .width('100%')
-    .height(this.isAdvancedExpanded ? '100%' : 'auto')
+    .height(this.shouldUseFullHeight ? '100%' : 'auto')
     .backgroundColor(Color.Transparent)
   }
 
@@ -247,7 +534,7 @@ export struct ModelEditSheet {
         this.onCancel()
       },
       onTrailingClick: (): void => {
-        this.onSave(this.buildDraft())
+        this.saveDraft()
       }
     })
   }
@@ -323,7 +610,7 @@ export struct ModelEditSheet {
 
       TextInput({
         text: this.contextLengthText,
-        placeholder: pickLocalizedText('未知（请填写模型真实窗口）', 'Unknown (enter the model window)')
+        placeholder: pickLocalizedText('默认 256000', 'Default: 256000')
       })
         .width('100%')
         .height(44)
@@ -339,13 +626,6 @@ export struct ModelEditSheet {
         .onChange((value: string) => {
           this.contextLengthText = value
         })
-
-      Text(pickLocalizedText(
-        '留空表示未知；应用不会再自动按 4K 计算。',
-        'Leave empty if unknown; the app no longer assumes 4K.'
-      ))
-        .fontSize(11)
-        .fontColor($r('app.color.text_tertiary'))
     }
     .width('100%')
     .alignItems(HorizontalAlign.Start)
@@ -442,6 +722,7 @@ export struct ModelEditSheet {
           .switchPointColor(Color.White)
           .onChange((value: boolean) => {
             this.billingEnabled = value
+            this.updateSheetExpansion()
           })
       }
       .width('100%')
@@ -482,25 +763,105 @@ export struct ModelEditSheet {
         .width('100%')
         .alignItems(VerticalAlign.Center)
 
-        Row({ space: 10 }) {
-          this.BillingPriceInput(
-            pickLocalizedText('输入价格', 'Input price'),
-            this.inputPriceText,
+        Row() {
+          Column({ space: 3 }) {
+            Text(pickLocalizedText('峰谷计费', 'Time-of-use pricing'))
+              .fontSize(13)
+              .fontColor($r('app.color.text_primary'))
+
+            Text(pickLocalizedText('按设备当前时区选择峰时或谷时价格',
+              'Choose peak or off-peak prices using the device time zone'))
+              .fontSize(11)
+              .fontColor($r('app.color.text_tertiary'))
+          }
+          .layoutWeight(1)
+          .alignItems(HorizontalAlign.Start)
+
+          Toggle({ type: ToggleType.Switch, isOn: this.billingTimeOfUseEnabled })
+            .selectedColor(this.themePrimary)
+            .systemMaterial(new uiMaterial.Material())
+            .switchPointColor(Color.White)
+            .onChange((value: boolean) => {
+              this.setBillingTimeOfUseEnabled(value)
+            })
+        }
+        .width('100%')
+        .alignItems(VerticalAlign.Center)
+
+        if (this.billingTimeOfUseEnabled) {
+          Column({ space: 8 }) {
+            Row() {
+              Text(pickLocalizedText('峰时段（设备本地时间）', 'Peak periods (device local time)'))
+                .fontSize(12)
+                .fontColor($r('app.color.text_secondary'))
+                .layoutWeight(1)
+
+              if (this.billingPeakPeriods.length < 3) {
+                Button(pickLocalizedText('添加时段', 'Add period'))
+                  .height(30)
+                  .fontSize(11)
+                  .fontColor(this.themePrimary)
+                  .type(ButtonType.Capsule)
+                  .stateEffect(false)
+                  .backgroundColor(Color.Transparent)
+                  .systemMaterial(new uiMaterial.ImmersiveMaterial({
+                    style: uiMaterial.ImmersiveStyle.REGULAR,
+                    materialColor: Color.Transparent,
+                    interactive: true,
+                    lightEffect: { color: undefined }
+                  }))
+                  .onClick(() => {
+                    this.addBillingPeakPeriod()
+                  })
+              }
+            }
+            .width('100%')
+            .alignItems(VerticalAlign.Center)
+
+            ForEach(this.billingPeakPeriods, (period: BillingTimePeriod, index: number) => {
+              this.BillingPeriodRow(period, index)
+            }, (period: BillingTimePeriod, index: number): string =>
+              `${index}_${period.startMinutes}_${period.endMinutes}`)
+          }
+          .width('100%')
+          .alignItems(HorizontalAlign.Start)
+
+          this.BillingPricePair(
+            pickLocalizedText('峰时价格', 'Peak prices'),
+            this.billingPeakInputPriceText,
+            this.billingPeakOutputPriceText,
             (value: string): void => {
-              this.inputPriceText = value
+              this.billingPeakInputPriceText = value
+            },
+            (value: string): void => {
+              this.billingPeakOutputPriceText = value
             }
           )
 
-          this.BillingPriceInput(
-            pickLocalizedText('输出价格', 'Output price'),
+          this.BillingPricePair(
+            pickLocalizedText('谷时价格', 'Off-peak prices'),
+            this.billingOffPeakInputPriceText,
+            this.billingOffPeakOutputPriceText,
+            (value: string): void => {
+              this.billingOffPeakInputPriceText = value
+            },
+            (value: string): void => {
+              this.billingOffPeakOutputPriceText = value
+            }
+          )
+        } else {
+          this.BillingPricePair(
+            pickLocalizedText('标准价格', 'Standard prices'),
+            this.inputPriceText,
             this.outputPriceText,
+            (value: string): void => {
+              this.inputPriceText = value
+            },
             (value: string): void => {
               this.outputPriceText = value
             }
           )
         }
-        .width('100%')
-        .alignItems(VerticalAlign.Top)
 
         Text(pickLocalizedText(
           `单位：${this.billingCurrency} / 百万 Token`,
@@ -515,6 +876,119 @@ export struct ModelEditSheet {
     .padding(16)
     .alignItems(HorizontalAlign.Start)
     .backgroundColor(Color.Transparent)
+  }
+
+  @Builder
+  BillingPeriodRow(period: BillingTimePeriod, index: number) {
+    Row({ space: 8 }) {
+      Text(`${index + 1}`)
+        .fontSize(12)
+        .fontWeight(FontWeight.Medium)
+        .fontColor($r('app.color.text_secondary'))
+        .width(18)
+        .textAlign(TextAlign.Center)
+
+      this.BillingTimeButton(
+        pickLocalizedText('开始', 'Start'),
+        period.startMinutes,
+        (): void => {
+          this.showBillingTimePicker(index, true, period.startMinutes)
+        }
+      )
+
+      SymbolGlyph($r('sys.symbol.chevron_right'))
+        .fontSize(13)
+        .fontColor([$r('app.color.text_tertiary')])
+
+      this.BillingTimeButton(
+        pickLocalizedText('结束', 'End'),
+        period.endMinutes,
+        (): void => {
+          this.showBillingTimePicker(index, false, period.endMinutes)
+        }
+      )
+
+      if (this.billingPeakPeriods.length > 1) {
+        Button() {
+          SymbolGlyph($r('sys.symbol.trash'))
+            .fontSize(14)
+            .fontColor([$r('app.color.text_tertiary')])
+        }
+        .type(ButtonType.Circle)
+        .stateEffect(false)
+        .width(32)
+        .height(32)
+        .backgroundColor(Color.Transparent)
+        .onClick(() => {
+          this.removeBillingPeakPeriod(index)
+        })
+      }
+    }
+    .width('100%')
+    .alignItems(VerticalAlign.Center)
+  }
+
+  @Builder
+  BillingTimeButton(label: string, minutes: number, onTap: () => void) {
+    Button() {
+      Column({ space: 2 }) {
+        Text(label)
+          .fontSize(10)
+          .fontColor($r('app.color.text_tertiary'))
+
+        Text(this.formatBillingTime(minutes))
+          .fontSize(15)
+          .fontWeight(FontWeight.Medium)
+          .fontColor(this.themePrimary)
+      }
+    }
+    .layoutWeight(1)
+    .height(50)
+    .backgroundColor(Color.Transparent)
+    .borderRadius(14)
+    .systemMaterial(new uiMaterial.ImmersiveMaterial({
+      style: uiMaterial.ImmersiveStyle.ULTRA_THIN,
+      materialColor: Color.Transparent,
+      applyShadow: false
+    }))
+    .onClick(() => {
+      onTap()
+    })
+  }
+
+  @Builder
+  BillingPricePair(
+    title: string,
+    inputValue: string,
+    outputValue: string,
+    onInputChange: (value: string) => void,
+    onOutputChange: (value: string) => void
+  ) {
+    Column({ space: 7 }) {
+      Text(title)
+        .fontSize(12)
+        .fontWeight(FontWeight.Medium)
+        .fontColor($r('app.color.text_secondary'))
+        .width('100%')
+
+      Row({ space: 10 }) {
+        this.BillingPriceInput(
+          pickLocalizedText('输入', 'Input'),
+          inputValue,
+          onInputChange
+        )
+
+        this.BillingPriceInput(
+          pickLocalizedText('输出', 'Output'),
+          outputValue,
+          onOutputChange
+        )
+      }
+      .width('100%')
+      .alignItems(VerticalAlign.Top)
+    }
+    .width('100%')
+    .alignItems(HorizontalAlign.Start)
   }
 
   @Builder
@@ -570,7 +1044,7 @@ export struct ModelEditSheet {
         const expanded = !this.isAdvancedExpanded
         this.getUIContext().animateTo({ duration: 200, curve: Curve.EaseOut }, () => {
           this.isAdvancedExpanded = expanded
-          this.onAdvancedExpandedChange(expanded)
+          this.updateSheetExpansion()
         })
       })
 

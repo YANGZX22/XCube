@@ -146,6 +146,9 @@ export class ChatManualSearchFlow {
     if (taskId === '') {
       return
     }
+    // 手动联网搜索不会经过 ChatViewModel.sendMessage()，需要在这里开启新的去重周期。
+    // 否则上一条消息返回过的 URL 会在本次搜索中被全部过滤。
+    this.deps.webSearchService.resetSearchResultDedup()
     const requestId = this.createManualSearchRequestId()
     this.currentSearchRequestId = requestId
 

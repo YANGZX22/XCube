@@ -845,10 +845,6 @@
       "value": "联网搜索时优化查询关键词（默认使用硅基流动）"
     },
     {
-      "name": "system_service",
-      "value": "系统服务"
-    },
-    {
       "name": "select_models",
       "value": "选择模型"
     },
@@ -1742,11 +1738,11 @@
     },
     {
       "name": "settings_chat_input",
-      "value": "聊天输入"
+      "value": "聊天设置"
     },
     {
       "name": "settings_chat_input_desc",
-      "value": "设置键盘回车键行为"
+      "value": "输入与消息展示设置"
     },
     {
       "name": "chat_input_independent_send_button_title",
@@ -1755,6 +1751,14 @@
     {
       "name": "chat_input_independent_send_button_desc",
       "value": "开启后，键盘上的换行按钮会被替换成发送"
+    },
+    {
+      "name": "chat_ordered_response_history_title",
+      "value": "按序展示历史思考与输出"
+    },
+    {
+      "name": "chat_ordered_response_history_desc",
+      "value": "开启后按生成顺序展示每段思考、工具结果和输出；关闭后仅展示最后回复，工具栏统一位于顶部。"
     },
     {
       "name": "system_prompt_edit_title",

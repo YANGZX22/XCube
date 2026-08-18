@@ -1697,11 +1697,14 @@ export struct ProviderDetailPanel {
             Column({ space: 2 }) {
               if (this.isCreateMode) {
                 TextInput({ text: this.provider?.name ?? '', placeholder: $r('app.string.provider_name_placeholder') })
+                  .width('88%')
+                  .height(44)
                   .fontSize(20)
                   .fontWeight(FontWeight.Bold)
                   .fontColor($r('app.color.text_primary'))
-                  .backgroundColor(this.themePrimaryLight)
+                  .backgroundColor((this.provider?.name.length ?? 0) > 0 ? Color.Transparent : this.themePrimaryLight)
                   .borderRadius(8)
+                  .border({ width: 1, color: this.themePrimary })
                   .padding({ left: 8, right: 4, top: 0, bottom: 0 })
                   .onChange((value: string) => {
                     if (this.provider !== null) {
@@ -1714,11 +1717,14 @@ export struct ProviderDetailPanel {
                   })
               } else if (this.provider !== null && !this.provider.isPreset) {
                 TextInput({ text: this.provider?.name ?? '', placeholder: $r('app.string.provider_name_placeholder') })
+                  .width('88%')
+                  .height(44)
                   .fontSize(20)
                   .fontWeight(FontWeight.Bold)
                   .fontColor($r('app.color.text_primary'))
-                  .backgroundColor(this.themePrimaryLight)
+                  .backgroundColor((this.provider?.name.length ?? 0) > 0 ? Color.Transparent : this.themePrimaryLight)
                   .borderRadius(8)
+                  .border({ width: 1, color: this.themePrimary })
                   .padding({ left: 8, right: 4, top: 0, bottom: 0 })
                   .onChange((value: string) => {
                     if (this.provider !== null) {
@@ -1744,17 +1750,15 @@ export struct ProviderDetailPanel {
             .layoutWeight(1)
             .alignItems(HorizontalAlign.Start)
 
-            if (this.provider?.id !== 'siliconflow') {
-              Toggle({ type: ToggleType.Switch, isOn: this.provider?.isConnected ?? false })
-                .selectedColor(this.themePrimary)
-                .systemMaterial(new uiMaterial.Material())
-                .switchPointColor(Color.White)
-                .onChange((isOn: boolean) => {
-                  if (this.provider !== null && this.provider.isConnected !== isOn) {
-                    this.toggleEnabled()
-                  }
-                })
-            }
+            Toggle({ type: ToggleType.Switch, isOn: this.provider?.isConnected ?? false })
+              .selectedColor(this.themePrimary)
+              .systemMaterial(new uiMaterial.Material())
+              .switchPointColor(Color.White)
+              .onChange((isOn: boolean) => {
+                if (this.provider !== null && this.provider.isConnected !== isOn) {
+                  this.toggleEnabled()
+                }
+              })
           }
           .alignItems(VerticalAlign.Top)
           .width('100%')
@@ -1856,11 +1860,14 @@ export struct ProviderDetailPanel {
           Column() {
             if (this.isCreateMode) {
               TextInput({ text: this.provider?.name ?? '', placeholder: $r('app.string.provider_name_placeholder') })
+                .width('88%')
+                .height(44)
                 .fontSize(18)
                 .fontWeight(FontWeight.Bold)
                 .fontColor($r('app.color.text_primary'))
-                .backgroundColor(this.themePrimaryLight)
+                .backgroundColor((this.provider?.name.length ?? 0) > 0 ? Color.Transparent : this.themePrimaryLight)
                 .borderRadius(8)
+                .border({ width: 1, color: this.themePrimary })
                 .padding({ left: 8, right: 4, top: 0, bottom: 0 })
                 .onChange((value: string) => {
                   if (this.provider !== null) {
@@ -1874,11 +1881,14 @@ export struct ProviderDetailPanel {
                 })
             } else if (this.provider !== null && !this.provider.isPreset) {
               TextInput({ text: this.provider?.name ?? '', placeholder: $r('app.string.provider_name_placeholder') })
+                .width('88%')
+                .height(44)
                 .fontSize(18)
                 .fontWeight(FontWeight.Bold)
                 .fontColor($r('app.color.text_primary'))
-                .backgroundColor(this.themePrimaryLight)
+                .backgroundColor((this.provider?.name.length ?? 0) > 0 ? Color.Transparent : this.themePrimaryLight)
                 .borderRadius(8)
+                .border({ width: 1, color: this.themePrimary })
                 .padding({ left: 8, right: 4, top: 0, bottom: 0 })
                 .onChange((value: string) => {
                   if (this.provider !== null) {
@@ -1904,19 +1914,17 @@ export struct ProviderDetailPanel {
           .margin({ left: 10 })
           .layoutWeight(1)
 
-          // 启用开关（系统服务不可禁用）
-          if (this.provider?.id !== 'siliconflow') {
-            Toggle({ type: ToggleType.Switch, isOn: this.provider?.isConnected ?? false })
-              .selectedColor(this.themePrimary)
-              .systemMaterial(new uiMaterial.Material())
-              .switchPointColor(Color.White)
-              .onChange((isOn: boolean) => {
-                // 只有当状态真正改变时才处理（避免重复触发）
-                if (this.provider !== null && this.provider.isConnected !== isOn) {
-                  this.toggleEnabled()
-                }
-              })
-          }
+          // 启用开关
+          Toggle({ type: ToggleType.Switch, isOn: this.provider?.isConnected ?? false })
+            .selectedColor(this.themePrimary)
+            .systemMaterial(new uiMaterial.Material())
+            .switchPointColor(Color.White)
+            .onChange((isOn: boolean) => {
+              // 只有当状态真正改变时才处理（避免重复触发）
+              if (this.provider !== null && this.provider.isConnected !== isOn) {
+                this.toggleEnabled()
+              }
+            })
         }
         .width('100%')
         .padding({ left: 16, right: 16, top: 12, bottom: 12 })

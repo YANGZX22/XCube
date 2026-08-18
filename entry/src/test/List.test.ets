@@ -13,8 +13,10 @@ import appVersionUtilsTest from './AppVersionUtils.test';
 import tokenAccountingTest from './TokenAccounting.test';
 import jsonResponseUtilsTest from './JsonResponseUtils.test';
 import lobeIconResolverTest from './LobeIconResolver.test';
+import presetProvidersTest from './PresetProviders.test';
 import officeOpenXmlTextParserTest from './OfficeOpenXmlTextParser.test';
 import officeDocumentToolTest from './OfficeDocumentTool.test';
+import responseTimelineTest from './ResponseTimeline.test';
 
 export default function testsuite() {
   localUnitTest();
@@ -32,6 +34,8 @@ export default function testsuite() {
   tokenAccountingTest();
   jsonResponseUtilsTest();
   lobeIconResolverTest();
+  presetProvidersTest();
   officeOpenXmlTextParserTest();
   officeDocumentToolTest();
+  responseTimelineTest();
 }

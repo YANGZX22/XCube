@@ -45,6 +45,7 @@ struct ChatInputSettingsPage {
   }
 
   @Local chatInputEnterKeySend: boolean = false
+  @Local chatOrderedResponseHistory: boolean = false
 
   private settingsManager = ServiceRegistry.settings()
   private compactScroller: Scroller = new Scroller()
@@ -59,6 +60,7 @@ struct ChatInputSettingsPage {
 
   private reloadSettings(): void {
     this.chatInputEnterKeySend = this.settingsManager.getChatInputEnterKeySend()
+    this.chatOrderedResponseHistory = this.settingsManager.getChatOrderedResponseHistory()
   }
 
   private getContentMaxWidth(): number {
@@ -105,6 +107,18 @@ struct ChatInputSettingsPage {
         setAppUiStateValue(AppStorageKeys.CHAT_INPUT_ENTER_KEY_SEND, previousValue)
       }
     }
+    callbacks.onToggleChatOrderedResponseHistory = async (value: boolean): Promise<void> => {
+      const previousValue = this.chatOrderedResponseHistory
+      this.chatOrderedResponseHistory = value
+      setAppUiStateValue(AppStorageKeys.CHAT_ORDERED_RESPONSE_HISTORY, value)
+      try {
+        await this.settingsManager.setChatOrderedResponseHistory(value)
+      } catch (error) {
+        console.error('ChatInputSettingsPage', `Failed to set response history display: ${JSON.stringify(error)}`)
+        this.chatOrderedResponseHistory = previousValue
+        setAppUiStateValue(AppStorageKeys.CHAT_ORDERED_RESPONSE_HISTORY, previousValue)
+      }
+    }
     return callbacks
   }
 
@@ -122,6 +136,7 @@ struct ChatInputSettingsPage {
           IndexSettingsSheetContent({
             settingsSheetType: SettingsSheetType.CHAT_INPUT,
             chatInputEnterKeySend: this.chatInputEnterKeySend,
+            chatOrderedResponseHistory: this.chatOrderedResponseHistory,
             callbacks: this.buildCallbacks()
           })
         }

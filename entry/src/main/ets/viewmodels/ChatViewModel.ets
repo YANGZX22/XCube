@@ -24,7 +24,7 @@ import { appendSubAgentResultTool } from '../config/BuiltinTools'
 import { getProviderViewModel, ProviderViewModel } from './ProviderViewModel'
 import { getAssistantService, AssistantService, AssistantRuntimeConfig } from '../services/AssistantService'
 import { getSkillService, SkillConfig } from '../services/SkillService'
-import { ChatMessage, ChatSession, MessageRole, ProviderType, ApiStyle, OpenAITransport, MessageAttachment, AttachmentType, ReasoningLevel, ToolDefinition, ToolCall, ToolResult, SearchReference, ModelParameters, ModelProvider } from '../models/ChatModels'
+import { ChatMessage, ChatSession, MessageRole, ProviderType, ApiStyle, OpenAITransport, MessageAttachment, AttachmentType, ReasoningLevel, ToolDefinition, ToolCall, ToolResult, SearchReference, ModelParameters, ModelProvider, AssistantResponseSegment, AssistantResponseSegmentType } from '../models/ChatModels'
 import { WebSearchResult, SearchResult, getWebSearchService } from '../services/WebSearchService'
 import { http } from '@kit.NetworkKit'
 import { HttpRequestController } from '../services/HttpService'
@@ -2546,6 +2546,10 @@ ${limitedSearchContext}
     customHeadersJson?: string
   ): Promise<void> {
     const cancelSnapshot = this.cancelToken
+    // 工具模式拥有独立的用户请求生命周期。每次发送都必须清空上一轮的搜索分页与
+    // URL 去重状态，否则相同关键词会被误当成上一轮的后续页，博查还会因此改写查询词。
+    this.toolExecutionService.resetWebSearchQueryState()
+    getWebSearchService().resetSearchResultDedup()
     // 首次发送消息时，先持久化待处理的会话
     await this.persistPendingSession()
     if (this.isCancelled(cancelSnapshot)) {
@@ -3623,6 +3627,59 @@ ${preview}`
     let streamedReasoningLength = 0
     let roundGeneratedContent = ''
     let roundGeneratedReasoning = ''
+    const roundResponseSegmentStartIndex = aiMessage.responseSegments.length
+    let roundReasoningSegmentIndex = -1
+    let roundContentSegmentIndex = -1
+
+    const appendResponseTextSegment = (type: AssistantResponseSegmentType, content: string): void => {
+      if (content === '') {
+        return
+      }
+      const segments = aiMessage.responseSegments
+
+      // 部分模型会在同一轮中交替发送 reasoning/content 数据包。这里按工具调用轮次归并，
+      // 保证一轮最多只有一段思考和一段连续正文，避免正文被多个思考栏反复切开。
+      if (type === AssistantResponseSegmentType.REASONING) {
+        if (roundReasoningSegmentIndex >= 0) {
+          segments[roundReasoningSegmentIndex].content += content
+          return
+        }
+
+        const reasoningSegment = new AssistantResponseSegment(
+          `${aiMessage.id}_${segments.length}_${type}`,
+          type,
+          content
+        )
+        if (roundContentSegmentIndex >= 0) {
+          segments.splice(roundContentSegmentIndex, 0, reasoningSegment)
+          roundReasoningSegmentIndex = roundContentSegmentIndex
+          roundContentSegmentIndex += 1
+        } else {
+          segments.push(reasoningSegment)
+          roundReasoningSegmentIndex = segments.length - 1
+        }
+        return
+      }
+
+      if (roundContentSegmentIndex >= 0) {
+        segments[roundContentSegmentIndex].content += content
+        return
+      }
+      segments.push(new AssistantResponseSegment(
+        `${aiMessage.id}_${segments.length}_${type}`,
+        type,
+        content
+      ))
+      roundContentSegmentIndex = segments.length - 1
+    }
+
+    const discardCurrentRoundResponseSegments = (): void => {
+      if (aiMessage.responseSegments.length > roundResponseSegmentStartIndex) {
+        aiMessage.responseSegments = aiMessage.responseSegments.slice(0, roundResponseSegmentStartIndex)
+      }
+      roundReasoningSegmentIndex = -1
+      roundContentSegmentIndex = -1
+    }
 
     const rollbackStreamedRoundOutput = (): void => {
       if (streamedContentLength > 0 && aiMessage.content.length >= streamedContentLength) {
@@ -3657,6 +3714,7 @@ ${preview}`
         return
       }
       roundGeneratedContent += content
+      appendResponseTextSegment(AssistantResponseSegmentType.CONTENT, content)
       if (roundHasToolCallDelta) {
         roundContentBuffer += content
         return
@@ -3671,6 +3729,7 @@ ${preview}`
         return
       }
       roundGeneratedReasoning += content
+      appendResponseTextSegment(AssistantResponseSegmentType.REASONING, content)
       if (roundHasToolCallDelta) {
         roundReasoningBuffer += content
         return
@@ -3785,6 +3844,7 @@ ${preview}`
 
         if (forceKnowledgeSearchInThisRound && !this.hasCanonicalKnowledgeSearchCall(toolCalls)) {
           rollbackStreamedRoundOutput()
+          discardCurrentRoundResponseSegments()
           roundContentBuffer = ''
           roundReasoningBuffer = ''
           if (iteration === 0) {
@@ -3857,6 +3917,16 @@ ${preview}`
             }
             aiMessage.toolCalls.push(toolCalls[i])
           }
+          const responseToolCallIds: string[] = []
+          for (let i = 0; i < toolCalls.length; i++) {
+            responseToolCallIds.push(toolCalls[i].id)
+          }
+          aiMessage.responseSegments.push(new AssistantResponseSegment(
+            `${aiMessage.id}_${aiMessage.responseSegments.length}_${AssistantResponseSegmentType.TOOL_CALLS}`,
+            AssistantResponseSegmentType.TOOL_CALLS,
+            '',
+            responseToolCallIds
+          ))
           onAIMessageUpdated(aiMessage)
 
           // 通知工具调用开始
@@ -4049,6 +4119,7 @@ ${preview}`
             }
             // 本轮正文是在缺少子智能体结果时写出来的，回滚后重答
             rollbackStreamedRoundOutput()
+            discardCurrentRoundResponseSegments()
             roundContentBuffer = ''
             roundReasoningBuffer = ''
             onAIMessageUpdated(aiMessage)

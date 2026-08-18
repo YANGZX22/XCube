@@ -1,4 +1,4 @@
-import { ChatMessage, MessageAttachment, ModelInfo } from '../models/ChatModels'
+import { BillingTimePeriod, ChatMessage, MessageAttachment, ModelInfo } from '../models/ChatModels'
 
 export class ModelBillingSnapshot {
   enabled: boolean = false
@@ -12,8 +12,21 @@ export class ModelBillingSnapshot {
     }
     this.enabled = model.billingEnabled
     this.currency = normalizeBillingCurrency(model.billingCurrency)
-    this.inputPricePerMillion = normalizeBillingPrice(model.inputPricePerMillion)
-    this.outputPricePerMillion = normalizeBillingPrice(model.outputPricePerMillion)
+    const prices = resolveModelBillingPrices(model)
+    this.inputPricePerMillion = prices.inputPricePerMillion
+    this.outputPricePerMillion = prices.outputPricePerMillion
+  }
+}
+
+export class ResolvedBillingPrices {
+  inputPricePerMillion: number
+  outputPricePerMillion: number
+  isPeak: boolean
+
+  constructor(inputPricePerMillion: number, outputPricePerMillion: number, isPeak: boolean) {
+    this.inputPricePerMillion = inputPricePerMillion
+    this.outputPricePerMillion = outputPricePerMillion
+    this.isPeak = isPeak
   }
 }
 
@@ -35,6 +48,92 @@ export function parseBillingPrice(text: string): number {
     return 0
   }
   return normalizeBillingPrice(Number(normalized))
+}
+
+export function normalizeBillingMinuteOfDay(minutes: number): number {
+  if (!Number.isFinite(minutes)) {
+    return 0
+  }
+  return Math.max(0, Math.min(1439, Math.floor(minutes)))
+}
+
+// start === end 表示峰时段为空；跨午夜时（如 22:00–08:00）按两段峰时处理。
+export function isBillingPeakMinute(currentMinutes: number, startMinutes: number, endMinutes: number): boolean {
+  const current = normalizeBillingMinuteOfDay(currentMinutes)
+  const start = normalizeBillingMinuteOfDay(startMinutes)
+  const end = normalizeBillingMinuteOfDay(endMinutes)
+  if (start === end) {
+    return false
+  }
+  if (start < end) {
+    return current >= start && current < end
+  }
+  return current >= start || current < end
+}
+
+export function isBillingPeakInPeriods(currentMinutes: number, periods: BillingTimePeriod[]): boolean {
+  const count = Math.min(3, periods.length)
+  for (let i = 0; i < count; i++) {
+    if (isBillingPeakMinute(currentMinutes, periods[i].startMinutes, periods[i].endMinutes)) {
+      return true
+    }
+  }
+  return false
+}
+
+// 峰时段是左闭右开的环形区间；首尾相接不算重叠，start === end 的空时段也不参与判断。
+export function doBillingPeakPeriodsOverlap(
+  first: BillingTimePeriod,
+  second: BillingTimePeriod
+): boolean {
+  const firstStart = normalizeBillingMinuteOfDay(first.startMinutes)
+  const firstEnd = normalizeBillingMinuteOfDay(first.endMinutes)
+  const secondStart = normalizeBillingMinuteOfDay(second.startMinutes)
+  const secondEnd = normalizeBillingMinuteOfDay(second.endMinutes)
+  if (firstStart === firstEnd || secondStart === secondEnd) {
+    return false
+  }
+  return isBillingPeakMinute(firstStart, secondStart, secondEnd) ||
+    isBillingPeakMinute(secondStart, firstStart, firstEnd)
+}
+
+export function hasOverlappingBillingPeakPeriods(periods: BillingTimePeriod[]): boolean {
+  const count = Math.min(3, periods.length)
+  for (let firstIndex = 0; firstIndex < count; firstIndex++) {
+    for (let secondIndex = firstIndex + 1; secondIndex < count; secondIndex++) {
+      if (doBillingPeakPeriodsOverlap(periods[firstIndex], periods[secondIndex])) {
+        return true
+      }
+    }
+  }
+  return false
+}
+
+export function getDeviceLocalMinuteOfDay(date: Date = new Date()): number {
+  return date.getHours() * 60 + date.getMinutes()
+}
+
+export function resolveModelBillingPrices(model: ModelInfo, date: Date = new Date()): ResolvedBillingPrices {
+  if (!model.billingTimeOfUseEnabled) {
+    return new ResolvedBillingPrices(
+      normalizeBillingPrice(model.inputPricePerMillion),
+      normalizeBillingPrice(model.outputPricePerMillion),
+      false
+    )
+  }
+  const isPeak = isBillingPeakInPeriods(getDeviceLocalMinuteOfDay(date), model.billingPeakPeriods)
+  if (isPeak) {
+    return new ResolvedBillingPrices(
+      normalizeBillingPrice(model.billingPeakInputPricePerMillion),
+      normalizeBillingPrice(model.billingPeakOutputPricePerMillion),
+      true
+    )
+  }
+  return new ResolvedBillingPrices(
+    normalizeBillingPrice(model.billingOffPeakInputPricePerMillion),
+    normalizeBillingPrice(model.billingOffPeakOutputPricePerMillion),
+    false
+  )
 }
 
 export function estimateTextTokens(text: string): number {

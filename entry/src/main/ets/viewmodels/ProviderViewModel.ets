@@ -13,6 +13,8 @@ import {
   OutputMode,
   ModelCapabilitiesJson,
   ModelParametersJson,
+  BillingTimePeriod,
+  BillingTimePeriodJson,
   ProviderIconType
 } from '../models/ChatModels'
 import {
@@ -20,6 +22,7 @@ import {
   isPresetProvider,
   getEffectiveApiKey,
   getPresetProviderById,
+  getAutoInitializedPresetProviders,
   isPresetProviderApiKeyRequired,
   applyPresetIconDefaults,
   getPresetProviderLogoUrl
@@ -370,6 +373,39 @@ export class ProviderViewModel {
           if (modelObj.outputPricePerMillion !== undefined && Number.isFinite(modelObj.outputPricePerMillion)) {
             modelInfo.outputPricePerMillion = Math.max(0, modelObj.outputPricePerMillion)
           }
+          if (modelObj.billingTimeOfUseEnabled !== undefined) {
+            modelInfo.billingTimeOfUseEnabled = modelObj.billingTimeOfUseEnabled
+          }
+          if (modelObj.billingPeakPeriods !== undefined && modelObj.billingPeakPeriods.length > 0) {
+            const periods: BillingTimePeriod[] = []
+            const count = Math.min(3, modelObj.billingPeakPeriods.length)
+            for (let j = 0; j < count; j++) {
+              periods.push(BillingTimePeriod.fromJson(modelObj.billingPeakPeriods[j]))
+            }
+            modelInfo.billingPeakPeriods = periods
+          } else if (modelObj.billingPeakStartMinutes !== undefined &&
+            modelObj.billingPeakEndMinutes !== undefined) {
+            modelInfo.billingPeakPeriods = [new BillingTimePeriod(
+              modelObj.billingPeakStartMinutes,
+              modelObj.billingPeakEndMinutes
+            )]
+          }
+          if (modelObj.billingPeakInputPricePerMillion !== undefined &&
+            Number.isFinite(modelObj.billingPeakInputPricePerMillion)) {
+            modelInfo.billingPeakInputPricePerMillion = Math.max(0, modelObj.billingPeakInputPricePerMillion)
+          }
+          if (modelObj.billingPeakOutputPricePerMillion !== undefined &&
+            Number.isFinite(modelObj.billingPeakOutputPricePerMillion)) {
+            modelInfo.billingPeakOutputPricePerMillion = Math.max(0, modelObj.billingPeakOutputPricePerMillion)
+          }
+          if (modelObj.billingOffPeakInputPricePerMillion !== undefined &&
+            Number.isFinite(modelObj.billingOffPeakInputPricePerMillion)) {
+            modelInfo.billingOffPeakInputPricePerMillion = Math.max(0, modelObj.billingOffPeakInputPricePerMillion)
+          }
+          if (modelObj.billingOffPeakOutputPricePerMillion !== undefined &&
+            Number.isFinite(modelObj.billingOffPeakOutputPricePerMillion)) {
+            modelInfo.billingOffPeakOutputPricePerMillion = Math.max(0, modelObj.billingOffPeakOutputPricePerMillion)
+          }
 
           provider.models.push(modelInfo)
         }
@@ -565,34 +601,29 @@ export class ProviderViewModel {
       }
     }
 
-    // 所有预置服务商 ID（硅基流动放在最前面）
-    const allPresetIds = ['siliconflow', 'openai', 'anthropic', 'deepseek', 'gemini', 'openrouter', 'qwen', 'kimi', 'zhipu', 'doubao', 'minimax', 'aihubmix', 'grok', 'mimo', 'ollama']
-
-    for (let i = 0; i < allPresetIds.length; i++) {
-      const presetId = allPresetIds[i]
+    const presetProviders = getAutoInitializedPresetProviders()
+    for (let i = 0; i < presetProviders.length; i++) {
+      const preset = presetProviders[i]
       // 如果服务商不存在，则添加
-      if (!existingIds.has(presetId)) {
-        const preset = getPresetProviderById(presetId)
-        if (preset !== null) {
-          const provider = new ModelProvider(
-            preset.id,
-            preset.name,
-            preset.type,
-            'message',
-            $r('app.color.brand_custom'),
-            preset.baseUrl,
-            preset.apiStyle
-          )
-          provider.apiKey = ''
-          provider.requiresApiKey = isPresetProviderApiKeyRequired(preset.id)
-          provider.isConnected = preset.id === 'siliconflow'  // 仅硅基流动默认启用
-          provider.isPreset = true
-          provider.iconPath = ''
-          provider.apiPath = ''
-          provider.openaiTransport = preset.openaiTransport !== undefined ? preset.openaiTransport : OpenAITransport.CHAT_COMPLETIONS
-          applyPresetIconDefaults(provider, preset.id)
-          await this.saveProvider(provider)
-        }
+      if (!existingIds.has(preset.id)) {
+        const provider = new ModelProvider(
+          preset.id,
+          preset.name,
+          preset.type,
+          'message',
+          $r('app.color.brand_custom'),
+          preset.baseUrl,
+          preset.apiStyle
+        )
+        provider.apiKey = ''
+        provider.requiresApiKey = isPresetProviderApiKeyRequired(preset.id)
+        provider.isConnected = preset.id === 'siliconflow'  // 仅硅基流动默认启用
+        provider.isPreset = true
+        provider.iconPath = ''
+        provider.apiPath = ''
+        provider.openaiTransport = preset.openaiTransport !== undefined ? preset.openaiTransport : OpenAITransport.CHAT_COMPLETIONS
+        applyPresetIconDefaults(provider, preset.id)
+        await this.saveProvider(provider)
       }
     }
   }
@@ -616,6 +647,15 @@ interface ModelData {
   billingCurrency?: string
   inputPricePerMillion?: number
   outputPricePerMillion?: number
+  billingTimeOfUseEnabled?: boolean
+  billingPeakPeriods?: BillingTimePeriodJson[]
+  // 兼容早期单时段配置。
+  billingPeakStartMinutes?: number
+  billingPeakEndMinutes?: number
+  billingPeakInputPricePerMillion?: number
+  billingPeakOutputPricePerMillion?: number
+  billingOffPeakInputPricePerMillion?: number
+  billingOffPeakOutputPricePerMillion?: number
 }
 
 // 导出获取实例方法
