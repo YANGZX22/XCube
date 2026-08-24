@@ -376,6 +376,9 @@ export class ProviderViewModel {
           if (modelObj.billingTimeOfUseEnabled !== undefined) {
             modelInfo.billingTimeOfUseEnabled = modelObj.billingTimeOfUseEnabled
           }
+          if (modelObj.billingRestDayOffPeakEnabled !== undefined) {
+            modelInfo.billingRestDayOffPeakEnabled = modelObj.billingRestDayOffPeakEnabled
+          }
           if (modelObj.billingPeakPeriods !== undefined && modelObj.billingPeakPeriods.length > 0) {
             const periods: BillingTimePeriod[] = []
             const count = Math.min(3, modelObj.billingPeakPeriods.length)
@@ -648,6 +651,7 @@ interface ModelData {
   inputPricePerMillion?: number
   outputPricePerMillion?: number
   billingTimeOfUseEnabled?: boolean
+  billingRestDayOffPeakEnabled?: boolean
   billingPeakPeriods?: BillingTimePeriodJson[]
   // 兼容早期单时段配置。
   billingPeakStartMinutes?: number

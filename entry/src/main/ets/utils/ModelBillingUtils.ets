@@ -113,6 +113,12 @@ export function getDeviceLocalMinuteOfDay(date: Date = new Date()): number {
   return date.getHours() * 60 + date.getMinutes()
 }
 
+// 设备本地日期的周六、周日视为法定休息日；中国调休与节假日需外部日历才能准确识别。
+export function isDeviceLocalRestDay(date: Date = new Date()): boolean {
+  const dayOfWeek = date.getDay()
+  return dayOfWeek === 0 || dayOfWeek === 6
+}
+
 export function resolveModelBillingPrices(model: ModelInfo, date: Date = new Date()): ResolvedBillingPrices {
   if (!model.billingTimeOfUseEnabled) {
     return new ResolvedBillingPrices(
@@ -121,7 +127,9 @@ export function resolveModelBillingPrices(model: ModelInfo, date: Date = new Dat
       false
     )
   }
-  const isPeak = isBillingPeakInPeriods(getDeviceLocalMinuteOfDay(date), model.billingPeakPeriods)
+  const useRestDayOffPeak = model.billingRestDayOffPeakEnabled && isDeviceLocalRestDay(date)
+  const isPeak = !useRestDayOffPeak &&
+    isBillingPeakInPeriods(getDeviceLocalMinuteOfDay(date), model.billingPeakPeriods)
   if (isPeak) {
     return new ResolvedBillingPrices(
       normalizeBillingPrice(model.billingPeakInputPricePerMillion),

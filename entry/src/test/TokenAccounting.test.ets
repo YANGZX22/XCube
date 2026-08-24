@@ -20,6 +20,7 @@ import {
   estimateTextTokens,
   hasOverlappingBillingPeakPeriods,
   isBillingPeakMinute,
+  isDeviceLocalRestDay,
   resolveModelBillingPrices,
   RequestTokenUsageTracker
 } from '../main/ets/utils/ModelBillingUtils'
@@ -137,6 +138,28 @@ export default function tokenAccountingTest() {
       expect(isBillingPeakMinute(12 * 60, 8 * 60, 8 * 60)).assertEqual(false)
     })
 
+    it('uses_off_peak_prices_on_device_local_rest_days_when_enabled', 0, () => {
+      const model = new ModelInfo('billing-model', 'Billing model')
+      model.billingTimeOfUseEnabled = true
+      model.billingPeakPeriods = [new BillingTimePeriod(8 * 60, 22 * 60)]
+      model.billingPeakInputPricePerMillion = 10
+      model.billingPeakOutputPricePerMillion = 20
+      model.billingOffPeakInputPricePerMillion = 4
+      model.billingOffPeakOutputPricePerMillion = 8
+
+      const saturday = new Date(2026, 0, 3, 12, 30)
+      const monday = new Date(2026, 0, 5, 12, 30)
+      expect(isDeviceLocalRestDay(saturday)).assertEqual(true)
+      expect(isDeviceLocalRestDay(monday)).assertEqual(false)
+      expect(resolveModelBillingPrices(model, saturday).isPeak).assertEqual(true)
+
+      model.billingRestDayOffPeakEnabled = true
+      expect(resolveModelBillingPrices(model, saturday).isPeak).assertEqual(false)
+      expect(resolveModelBillingPrices(model, saturday).inputPricePerMillion).assertEqual(4)
+      expect(resolveModelBillingPrices(model, monday).isPeak).assertEqual(true)
+      expect(resolveModelBillingPrices(model, monday).inputPricePerMillion).assertEqual(10)
+    })
+
     it('detects_overlapping_peak_periods_including_cross_midnight_ranges', 0, () => {
       const morning = new BillingTimePeriod(8 * 60, 10 * 60)
       const overlapping = new BillingTimePeriod(9 * 60, 11 * 60)
@@ -157,6 +180,7 @@ export default function tokenAccountingTest() {
     it('round_trips_time_of_use_billing_configuration', 0, () => {
       const model = new ModelInfo('billing-model', 'Billing model')
       model.billingTimeOfUseEnabled = true
+      model.billingRestDayOffPeakEnabled = true
       model.billingPeakPeriods = [
         new BillingTimePeriod(7 * 60, 9 * 60),
         new BillingTimePeriod(12 * 60, 14 * 60),
@@ -169,6 +193,7 @@ export default function tokenAccountingTest() {
 
       const restored = ModelInfo.fromExtendedJson(model.toExtendedJson())
       expect(restored.billingTimeOfUseEnabled).assertEqual(true)
+      expect(restored.billingRestDayOffPeakEnabled).assertEqual(true)
       expect(restored.billingPeakPeriods.length).assertEqual(3)
       expect(restored.billingPeakPeriods[0].startMinutes).assertEqual(7 * 60)
       expect(restored.billingPeakPeriods[1].endMinutes).assertEqual(14 * 60)

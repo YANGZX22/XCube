@@ -102,6 +102,7 @@ export struct ModelEditSheet {
   @Local inputPriceText: string = ''
   @Local outputPriceText: string = ''
   @Local billingTimeOfUseEnabled: boolean = false
+  @Local billingRestDayOffPeakEnabled: boolean = false
   @Local billingPeakPeriods: BillingTimePeriod[] = [new BillingTimePeriod(8 * 60, 22 * 60)]
   @Local billingPeakInputPriceText: string = ''
   @Local billingPeakOutputPriceText: string = ''
@@ -164,6 +165,7 @@ export struct ModelEditSheet {
     this.outputPriceText = this.model.outputPricePerMillion > 0 ?
       this.model.outputPricePerMillion.toString() : ''
     this.billingTimeOfUseEnabled = this.model.billingTimeOfUseEnabled
+    this.billingRestDayOffPeakEnabled = this.model.billingRestDayOffPeakEnabled
     this.billingPeakPeriods = this.copyBillingPeakPeriods(this.model.billingPeakPeriods)
     this.billingEmptyPeriodAnchored = [false, false, false]
     this.billingPeakInputPriceText = this.formatBillingPriceForInput(this.model.billingPeakInputPricePerMillion)
@@ -449,6 +451,7 @@ export struct ModelEditSheet {
       inputPricePerMillion: parseBillingPrice(this.inputPriceText),
       outputPricePerMillion: parseBillingPrice(this.outputPriceText),
       billingTimeOfUseEnabled: this.billingTimeOfUseEnabled,
+      billingRestDayOffPeakEnabled: this.billingRestDayOffPeakEnabled,
       billingPeakPeriods: this.billingPeakPeriods.slice(0, 3).map(
         (period: BillingTimePeriod): BillingTimePeriodJson => period.toJson()
       ),
@@ -709,7 +712,10 @@ export struct ModelEditSheet {
             .fontWeight(FontWeight.Medium)
             .fontColor($r('app.color.text_primary'))
 
-          Text(pickLocalizedText('在消息和使用统计中显示预估费用', 'Show estimated cost in messages and usage statistics'))
+          Text(pickLocalizedText(
+            '预估对话费用，可能因缓存和 Token 统计方式不同而与实际费用略有差异',
+            'Estimated conversation costs may differ slightly from actual charges due to caching and token-counting methods'
+          ))
             .fontSize(12)
             .fontColor($r('app.color.text_tertiary'))
         }
@@ -825,6 +831,24 @@ export struct ModelEditSheet {
           }
           .width('100%')
           .alignItems(HorizontalAlign.Start)
+
+          Row({ space: 8 }) {
+            Checkbox()
+              .select(this.billingRestDayOffPeakEnabled)
+              .selectedColor(this.themePrimary)
+              .hitTestBehavior(HitTestMode.None)
+
+            Text(pickLocalizedText('法定休息日为谷价', 'Use off-peak prices on statutory rest days'))
+              .fontSize(12)
+              .fontColor($r('app.color.text_secondary'))
+              .layoutWeight(1)
+          }
+          .width('100%')
+          .height(36)
+          .alignItems(VerticalAlign.Center)
+          .onClick(() => {
+            this.billingRestDayOffPeakEnabled = !this.billingRestDayOffPeakEnabled
+          })
 
           this.BillingPricePair(
             pickLocalizedText('峰时价格', 'Peak prices'),

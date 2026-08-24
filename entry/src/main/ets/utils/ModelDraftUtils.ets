@@ -60,6 +60,9 @@ export function applyModelDraft(target: ModelInfo, draft: ModelInfoExtendedJson)
   if (draft.billingTimeOfUseEnabled !== undefined) {
     target.billingTimeOfUseEnabled = draft.billingTimeOfUseEnabled
   }
+  if (draft.billingRestDayOffPeakEnabled !== undefined) {
+    target.billingRestDayOffPeakEnabled = draft.billingRestDayOffPeakEnabled
+  }
   if (draft.billingPeakPeriods !== undefined && draft.billingPeakPeriods.length > 0) {
     const periods: BillingTimePeriod[] = []
     const count = Math.min(3, draft.billingPeakPeriods.length)

@@ -58,6 +58,7 @@ interface ModelJsonData {
   inputPricePerMillion?: number
   outputPricePerMillion?: number
   billingTimeOfUseEnabled?: boolean
+  billingRestDayOffPeakEnabled?: boolean
   billingPeakPeriods?: BillingTimePeriodJson[]
   billingPeakInputPricePerMillion?: number
   billingPeakOutputPricePerMillion?: number
@@ -2354,6 +2355,7 @@ export class DatabaseService {
         inputPricePerMillion: model.inputPricePerMillion,
         outputPricePerMillion: model.outputPricePerMillion,
         billingTimeOfUseEnabled: model.billingTimeOfUseEnabled,
+        billingRestDayOffPeakEnabled: model.billingRestDayOffPeakEnabled,
         billingPeakPeriods: model.billingPeakPeriods.slice(0, 3)
           .map((period): BillingTimePeriodJson => period.toJson()),
         billingPeakInputPricePerMillion: model.billingPeakInputPricePerMillion,

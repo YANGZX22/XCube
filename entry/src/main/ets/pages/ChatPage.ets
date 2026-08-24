@@ -1164,12 +1164,6 @@ export struct ChatPage {
             .textAlign(TextAlign.Center)
         }
 
-        Text(this.getContextUsageHintText())
-          .fontSize(12)
-          .lineHeight(18)
-          .fontColor($r('app.color.text_tertiary'))
-          .textAlign(TextAlign.Center)
-          .width('100%')
       }
       .width('100%')
     }
@@ -2142,25 +2136,6 @@ export struct ChatPage {
       return $r('app.color.status_warning')
     }
     return this.themePrimary
-  }
-
-  private getContextUsageHintText(): string {
-    if (this.contextUsage.compacted) {
-      return pickLocalizedText(
-        '更早的历史已压缩为摘要，聊天记录不受影响。',
-        'Earlier history is compacted into a summary; your chat records are unchanged.'
-      )
-    }
-    if (this.contextUsage.overThreshold) {
-      return pickLocalizedText(
-        `已超过 ${this.contextUsage.thresholdPercent}% 阈值，下次发送会强制模型先调用 compact 压缩历史，然后才回答。`,
-        `Above the ${this.contextUsage.thresholdPercent}% threshold; the next request forces the model to run compact before answering.`
-      )
-    }
-    return pickLocalizedText(
-      `超过 ${this.contextUsage.thresholdPercent}% 后会强制模型先调用 compact 压缩历史，然后才回答。`,
-      `Above ${this.contextUsage.thresholdPercent}% the model is forced to run compact before answering.`
-    )
   }
 
   private openContextUsageDialog(): void {

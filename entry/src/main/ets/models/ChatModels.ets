@@ -738,6 +738,7 @@ export class ModelInfo {
   @Trace outputPricePerMillion: number
   // 峰谷计费以设备本地时间的“分钟/日”为边界，价格仍为“币种 / 百万 Token”
   @Trace billingTimeOfUseEnabled: boolean
+  @Trace billingRestDayOffPeakEnabled: boolean
   @Trace billingPeakPeriods: BillingTimePeriod[]
   @Trace billingPeakInputPricePerMillion: number
   @Trace billingPeakOutputPricePerMillion: number
@@ -769,6 +770,7 @@ export class ModelInfo {
     this.inputPricePerMillion = 0
     this.outputPricePerMillion = 0
     this.billingTimeOfUseEnabled = false
+    this.billingRestDayOffPeakEnabled = false
     this.billingPeakPeriods = [new BillingTimePeriod(8 * 60, 22 * 60)]
     this.billingPeakInputPricePerMillion = 0
     this.billingPeakOutputPricePerMillion = 0
@@ -824,6 +826,9 @@ export class ModelInfo {
     if (json.billingTimeOfUseEnabled !== undefined) {
       model.billingTimeOfUseEnabled = json.billingTimeOfUseEnabled
     }
+    if (json.billingRestDayOffPeakEnabled !== undefined) {
+      model.billingRestDayOffPeakEnabled = json.billingRestDayOffPeakEnabled
+    }
     if (json.billingPeakPeriods !== undefined && json.billingPeakPeriods.length > 0) {
       const periods: BillingTimePeriod[] = []
       const count = Math.min(3, json.billingPeakPeriods.length)
@@ -877,6 +882,7 @@ export class ModelInfo {
       inputPricePerMillion: this.inputPricePerMillion,
       outputPricePerMillion: this.outputPricePerMillion,
       billingTimeOfUseEnabled: this.billingTimeOfUseEnabled,
+      billingRestDayOffPeakEnabled: this.billingRestDayOffPeakEnabled,
       billingPeakPeriods: this.billingPeakPeriods.slice(0, 3)
         .map((period: BillingTimePeriod): BillingTimePeriodJson => period.toJson()),
       billingPeakInputPricePerMillion: this.billingPeakInputPricePerMillion,
@@ -906,6 +912,7 @@ export interface ModelInfoExtendedJson {
   inputPricePerMillion?: number
   outputPricePerMillion?: number
   billingTimeOfUseEnabled?: boolean
+  billingRestDayOffPeakEnabled?: boolean
   billingPeakPeriods?: BillingTimePeriodJson[]
   // 兼容早期单时段配置；新数据统一写入 billingPeakPeriods。
   billingPeakStartMinutes?: number
