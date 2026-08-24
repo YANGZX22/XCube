@@ -105,6 +105,9 @@ Upload DOCX, XLSX, PDF, Markdown, text, or images in the Knowledge Base tab. DOC
 | **Petal Navigation** | Send a searched place, coordinates, or a saved-place label to Petal Maps for route navigation |
 | **Ask user** | Lets the model raise a confirmation card when it hits a critical ambiguity |
 
+> [!IMPORTANT]
+> Before using map features, open **File → Project Structure → Signing Configs → Enable open capabilities** in DevEco Studio, enable **Map Kit**, and apply the configuration. If the debug Profile was generated before Map Kit was enabled, request or download a new Profile and update the signing configuration. An app without Map Kit enabled typically receives error `1002600004`. See the [Map Kit integration guide](docs/map-kit-integration.md#上线前必须完成的控制台配置) for the complete setup.
+
 Saved-place labels and coordinates remain in local app storage and are exposed to the model only when the corresponding tool is enabled. Precise current location and Map Kit features require location and map permissions.
 
 #### * Enable ModLens vision for text-only models

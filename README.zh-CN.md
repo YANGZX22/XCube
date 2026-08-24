@@ -105,6 +105,9 @@ OpenAI · Claude · Gemini · DeepSeek · Grok · Ollama · OpenRouter · Silico
 | **花瓣导航** | 将搜索地点、坐标或已保存的常用地点标签交给花瓣地图进行路线导航 |
 | **向用户提问** | 模型遇到关键歧义时，可显示确认卡片向用户提问 |
 
+> [!IMPORTANT]
+> 使用地图相关功能前，必须在 DevEco Studio 中打开 **File → Project Structure → Signing Configs → Enable open capabilities**，启用 **Map Kit** 并应用配置。如果调试 Profile 早于该能力生成，还需重新申请或下载 Profile 并更新签名配置。未启用 Map Kit 通常会返回错误码 `1002600004`。完整步骤参见[Map Kit 集成说明](docs/map-kit-integration.md#上线前必须完成的控制台配置)。
+
 常用地点及其坐标保存在应用本地，只有启用对应工具后模型才能读取；获取当前精确位置和使用 Map Kit 时需要授予应用位置与地图权限。
 
 #### * 为文本模型启用 ModLens 视觉理解
