@@ -22,6 +22,7 @@ import { getWebDAVSyncService, WebDAVSyncService } from './WebDAVSyncService'
 import { getCalendarWriteService, CalendarWriteService } from './CalendarWriteService'
 import { getCanvasDocumentService, CanvasDocumentService } from './CanvasDocumentService'
 import { getContextCompactionService, ContextCompactionService } from './ContextCompactionService'
+import { getModLensVisionService, ModLensVisionService } from './ModLensVisionService'
 import {
   getDocumentAttachmentRegistryService,
   DocumentAttachmentRegistryService
@@ -159,6 +160,10 @@ export class ServiceRegistry {
 
   static contextCompaction(): ContextCompactionService {
     return getContextCompactionService()
+  }
+
+  static modLensVision(): ModLensVisionService {
+    return getModLensVisionService()
   }
 
   static chat(): ChatViewModel {

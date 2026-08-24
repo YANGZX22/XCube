@@ -96,10 +96,19 @@ Upload DOCX, XLSX, PDF, Markdown, text, or images in the Knowledge Base tab. DOC
 | **Math charts** | Generate [VChart](https://ohpm.openharmony.cn/#/cn/detail/@visactor%2Fharmony-vchart) visualizations — line, bar, pie, scatter, Sankey, word cloud, and more |
 | **PDF → text** (`pdf_to_text`) | Extract the PDF text layer, with automatic local CoreVisionKit OCR fallback for scans |
 | **Image → text** (`image_to_text`) | Recognize text in images with local CoreVisionKit OCR |
+| **ModLens Vision** (`vision_read_image`) | Optionally provide OCR, layout, semantic, and visual evidence to text-only models through ModLens |
 | **DOCX → text** (`docx_to_text`) | Locally extract DOCX headings, paragraphs, lists, and tables without passing the raw file to models that lack document input |
 | **XLSX → text** (`xlsx_to_text`) | Locally extract worksheets, cells, dates, and formula results without passing the raw file to models that lack document input |
 | **Calendar** | Read a user-confirmed date range or create events, with privacy controls |
 | **Ask user** | Lets the model raise a confirmation card when it hits a critical ambiguity |
+
+#### Enable ModLens vision for text-only models
+
+HarmonyOS apps cannot run the Node.js CLI required by ModLens directly, so the repository includes a lightweight companion gateway. Follow [`tools/modlens-gateway/README.md`](tools/modlens-gateway/README.md) to start it on a computer or server, then open **Settings → Tools → ModLens Vision**, enter the address, test the connection, and enable the tool.
+
+- Images leave the device only after the gateway is explicitly configured and the tool is enabled; ModLens then sends them to its configured vision provider
+- The fallback tool is automatically hidden when the active model already has native vision
+- The existing local `image_to_text` OCR path remains available when ModLens is disabled or unavailable, or when the model cannot call tools
 
 ### 🔊 Read aloud
 

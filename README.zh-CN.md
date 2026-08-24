@@ -96,10 +96,19 @@ OpenAI · Claude · Gemini · DeepSeek · Grok · Ollama · OpenRouter · Silico
 | **数学图表** | 生成基于 [VChart](https://ohpm.openharmony.cn/#/cn/detail/@visactor%2Fharmony-vchart) 的折线图、柱状图、饼图、散点图、桑基图、词云图等可视化 |
 | **PDF 转文本** (`pdf_to_text`) | 提取 PDF 文本层；扫描件自动回退到本地 CoreVisionKit OCR |
 | **图片转文本** (`image_to_text`) | 使用本地 CoreVisionKit OCR 识别图片文字 |
+| **ModLens 视觉理解** (`vision_read_image`) | 可选地通过 ModLens 为无视觉模型提供图片 OCR、布局、语义与视觉线索 |
 | **DOCX 转文本** (`docx_to_text`) | 在本地提取 DOCX 的标题、段落、列表和表格，不把原始文件交给不支持文档输入的模型 |
 | **XLSX 转文本** (`xlsx_to_text`) | 在本地提取 XLSX 的工作表、单元格、日期及公式结果，不把原始文件交给不支持文档输入的模型 |
 | **日历** | 在隐私控制下读取用户确认的日期范围，或创建新的日程事件 |
 | **向用户提问** | 模型遇到关键歧义时，可显示确认卡片向用户提问 |
+
+#### 为文本模型启用 ModLens 视觉理解
+
+HarmonyOS 应用不能直接运行 ModLens 所需的 Node.js CLI，因此项目提供了一个轻量伴随网关。按 [`tools/modlens-gateway/README.md`](tools/modlens-gateway/README.md) 在电脑或服务器启动网关，再进入 **设置 → 工具中心 → ModLens 视觉理解** 填写地址、测试连接并启用工具。
+
+- 只有显式配置并启用工具后，图片才会发送到网关及 ModLens 中配置的视觉 provider
+- 当前模型已有原生视觉能力时，应用会自动隐藏该回退工具
+- 网关不可用、未启用或模型不支持工具调用时，现有本地 `image_to_text` OCR 路径保持可用
 
 ### 🔊 回复播报
 

@@ -8,11 +8,13 @@ import { ServiceRegistry } from '../services/ServiceRegistry'
 import {
   COMPACT_TOOL_ID,
   KNOWLEDGE_SEARCH_TOOL_ID,
+  MODLENS_READ_IMAGE_TOOL_ID,
   registerBuiltinTools,
   SUB_AGENT_MESSAGE_TOOL_ID,
   SUB_AGENT_RESULT_TOOL_ID,
   USE_SKILL_TOOL_ID
 } from '../config/BuiltinTools'
+import { MODLENS_DEFAULT_GATEWAY_URL } from '../services/ModLensVisionService'
 import { ContextCompactionService } from '../services/ContextCompactionService'
 import {
   COMPACT_THRESHOLD_PERCENT_STEP,
@@ -86,6 +88,14 @@ export struct ToolsCenterPanel {
   @Local isLoading: boolean = false
   @Local isRefreshingMcpServers: boolean = false
   @Local showSearchConfigSheet: boolean = false
+  @Local showModLensConfigSheet: boolean = false
+  @Local modLensGatewayUrl: string = ''
+  @Local modLensGatewayToken: string = ''
+  @Local modLensConnectionMessage: string = ''
+  @Local modLensConnectionOk: boolean = false
+  @Local isTestingModLens: boolean = false
+  @Local isSavingModLens: boolean = false
+  @Local enableModLensAfterSave: boolean = false
   @Local contextCompactEnabled: boolean = true
   @Local contextCompactThresholdPercent: number = DEFAULT_COMPACT_THRESHOLD_PERCENT
   @Local contextCompactMaxTokens: number = DEFAULT_CONTEXT_LIMIT_TOKENS
@@ -215,6 +225,73 @@ export struct ToolsCenterPanel {
       })
   }
 
+  private handleBuiltinToolSelectionChanged(toolId: string, enabled: boolean): void {
+    if (toolId === MODLENS_READ_IMAGE_TOOL_ID && enabled && this.modLensGatewayUrl.trim() === '') {
+      this.enableModLensAfterSave = true
+      this.modLensConnectionMessage = ''
+      this.showModLensConfigSheet = true
+      return
+    }
+    this.handleToolSelectionChanged(toolId, enabled)
+  }
+
+  private openModLensConfig(): void {
+    this.enableModLensAfterSave = false
+    this.modLensConnectionMessage = ''
+    this.showModLensConfigSheet = true
+  }
+
+  private async loadModLensConfig(): Promise<void> {
+    const config = await ServiceRegistry.modLensVision().loadConfig()
+    this.modLensGatewayUrl = config.endpoint
+    this.modLensGatewayToken = config.token
+  }
+
+  private handleTestModLensConnection(): void {
+    if (this.isTestingModLens) {
+      return
+    }
+    this.isTestingModLens = true
+    this.modLensConnectionMessage = ''
+    ServiceRegistry.modLensVision().testConnection(this.modLensGatewayUrl, this.modLensGatewayToken)
+      .then((result): void => {
+        this.modLensConnectionOk = result.ok
+        this.modLensConnectionMessage = result.message
+      })
+      .catch((error: Object): void => {
+        this.modLensConnectionOk = false
+        this.modLensConnectionMessage = `连接失败: ${JSON.stringify(error)}`
+      })
+      .finally((): void => {
+        this.isTestingModLens = false
+      })
+  }
+
+  private handleSaveModLensConfig(): void {
+    if (this.isSavingModLens) {
+      return
+    }
+    this.isSavingModLens = true
+    ServiceRegistry.modLensVision().saveConfig(this.modLensGatewayUrl, this.modLensGatewayToken)
+      .then((config): void => {
+        this.modLensGatewayUrl = config.endpoint
+        this.modLensGatewayToken = config.token
+        if (this.enableModLensAfterSave) {
+          this.handleToolSelectionChanged(MODLENS_READ_IMAGE_TOOL_ID, true)
+        }
+        this.enableModLensAfterSave = false
+        this.showModLensConfigSheet = false
+        this.showToolsSnack(pickLocalizedText('ModLens 配置已保存', 'ModLens configuration saved'),
+          2000, SnackBarTone.SUCCESS)
+      })
+      .catch((error: Object): void => {
+        this.showToolsSnack(`${error}`, 2200, SnackBarTone.ERROR)
+      })
+      .finally((): void => {
+        this.isSavingModLens = false
+      })
+  }
+
   private async loadContextCompactSettings(): Promise<void> {
     const compactionService = ContextCompactionService.getInstance()
     await compactionService.loadPreferences()
@@ -269,6 +346,7 @@ export struct ToolsCenterPanel {
     try {
       await this.loadToolEnabledStates()
       await this.loadSelectedToolIds()
+      await this.loadModLensConfig()
       await this.loadSearchSettings()
       await this.loadContextCompactSettings()
       await this.loadSkills()
@@ -1365,6 +1443,147 @@ export struct ToolsCenterPanel {
   }
 
   @Builder
+  ModLensConfigSheetBuilder() {
+    Column() {
+      ImmersiveSheetHeader({
+        title: pickLocalizedText('ModLens 视觉理解', 'ModLens Vision'),
+        showTrailing: true,
+        trailingColor: this.themePrimary,
+        onLeadingClick: (): void => {
+          this.enableModLensAfterSave = false
+          this.showModLensConfigSheet = false
+        },
+        onTrailingClick: (): void => {
+          this.handleSaveModLensConfig()
+        }
+      })
+
+      Scroll() {
+        Column({ space: 16 }) {
+          Text(pickLocalizedText(
+            'ModLens 为未开启视觉能力的模型生成 OCR、布局、语义与视觉线索。需先在电脑或服务器运行项目内 tools/modlens-gateway。',
+            'ModLens produces OCR, layout, semantic, and visual evidence for models without native vision. Run tools/modlens-gateway on a computer or server first.'
+          ))
+            .fontSize(12)
+            .lineHeight(18)
+            .fontColor($r('app.color.text_secondary'))
+            .width('100%')
+
+          Column({ space: 8 }) {
+            Text(pickLocalizedText('网关地址', 'Gateway URL'))
+              .fontSize(12)
+              .fontColor($r('app.color.text_secondary'))
+              .width('100%')
+
+            TextInput({
+              text: this.modLensGatewayUrl,
+              placeholder: MODLENS_DEFAULT_GATEWAY_URL
+            })
+              .onChange((value: string) => {
+                this.modLensGatewayUrl = value
+                this.modLensConnectionMessage = ''
+              })
+              .fontSize(13)
+              .width('100%')
+              .height(42)
+              .borderRadius(10)
+              .backgroundColor(getAppUiState().themeBackground)
+              .padding({ left: 12, right: 12 })
+
+            Text(pickLocalizedText(
+              '真机请填写运行网关的电脑局域网地址，例如 http://192.168.1.10:8787。',
+              'For a physical device, use the LAN address of the computer running the gateway, for example http://192.168.1.10:8787.'
+            ))
+              .fontSize(11)
+              .lineHeight(16)
+              .fontColor($r('app.color.text_tertiary'))
+              .width('100%')
+          }
+          .width('100%')
+          .padding(14)
+          .borderRadius(16)
+          .border({ width: 0.5, color: getAppUiState().themePrimaryLight })
+          .backgroundColor(Color.Transparent)
+          .systemMaterial(createToolServiceCardMaterial(false))
+
+          Column({ space: 8 }) {
+            Text(pickLocalizedText('Bearer 令牌（推荐）', 'Bearer token (recommended)'))
+              .fontSize(12)
+              .fontColor($r('app.color.text_secondary'))
+              .width('100%')
+
+            TextInput({
+              text: this.modLensGatewayToken,
+              placeholder: pickLocalizedText('与网关环境变量中的令牌一致', 'Same value as the gateway environment token')
+            })
+              .onChange((value: string) => {
+                this.modLensGatewayToken = value
+                this.modLensConnectionMessage = ''
+              })
+              .type(InputType.Password)
+              .enableAutoFill(false)
+              .fontSize(13)
+              .width('100%')
+              .height(42)
+              .borderRadius(10)
+              .backgroundColor(getAppUiState().themeBackground)
+              .padding({ left: 12, right: 12 })
+          }
+          .width('100%')
+          .padding(14)
+          .borderRadius(16)
+          .border({ width: 0.5, color: getAppUiState().themePrimaryLight })
+          .backgroundColor(Color.Transparent)
+          .systemMaterial(createToolServiceCardMaterial(false))
+
+          Text(pickLocalizedText(
+            '隐私提示：启用后，当前会话中由模型选择读取的图片会发送到该网关，并继续发送给 ModLens 配置的视觉 provider。原有“图片转文本”工具仍只在设备本地执行 OCR。',
+            'Privacy: once enabled, images the model chooses to read are sent to this gateway and then to the vision provider configured in ModLens. The existing Image to Text tool continues to run OCR only on device.'
+          ))
+            .fontSize(11)
+            .lineHeight(17)
+            .fontColor('#D98400')
+            .width('100%')
+            .padding(12)
+            .borderRadius(12)
+            .backgroundColor(withColorAlpha('#D98400', '1A'))
+
+          Button(this.isTestingModLens
+            ? pickLocalizedText('正在测试…', 'Testing…')
+            : pickLocalizedText('测试连接', 'Test connection'))
+            .width('100%')
+            .height(42)
+            .type(ButtonType.Capsule)
+            .stateEffect(false)
+            .enabled(!this.isTestingModLens && !this.isSavingModLens)
+            .backgroundColor(this.themePrimary)
+            .fontColor(Color.White)
+            .onClick(() => {
+              this.handleTestModLensConnection()
+            })
+
+          if (this.modLensConnectionMessage !== '') {
+            Text(this.modLensConnectionMessage)
+              .fontSize(12)
+              .lineHeight(18)
+              .fontColor(this.modLensConnectionOk ? this.themePrimary : '#D9485F')
+              .width('100%')
+              .textAlign(TextAlign.Center)
+          }
+        }
+        .width('100%')
+        .padding({ left: 16, right: 16, bottom: 24 })
+      }
+      .width('100%')
+      .layoutWeight(1)
+      .scrollBar(BarState.Off)
+    }
+    .width('100%')
+    .height('100%')
+    .backgroundColor(getAppUiState().themeBackground)
+  }
+
+  @Builder
   SearchConfigSheetBuilder() {
     Column() {
       ImmersiveSheetHeader({
@@ -2350,8 +2569,12 @@ export struct ToolsCenterPanel {
                   BuiltinToolCardItem({
                     tool: tool,
                     selected: this.isToolSelected(tool.id),
+                    configurable: tool.id === MODLENS_READ_IMAGE_TOOL_ID,
                     onToggle: (enabled: boolean): void => {
-                      this.handleToolSelectionChanged(tool.id, enabled)
+                      this.handleBuiltinToolSelectionChanged(tool.id, enabled)
+                    },
+                    onConfigure: (): void => {
+                      this.openModLensConfig()
                     }
                   })
                 }, (tool: ToolConfig) => tool.id)
@@ -2505,6 +2728,25 @@ export struct ToolsCenterPanel {
           onDisappear: () => {
             this.showSearchConfigSheet = false
             this.loadSearchSettings()
+          }
+        })
+
+      Column()
+        .width(0)
+        .height(0)
+        .bindSheet($$this.showModLensConfigSheet, this.ModLensConfigSheetBuilder(), {
+          height: SheetSize.LARGE,
+          detents: [SheetSize.LARGE],
+          showClose: false,
+          dragBar: true,
+          blurStyle: BlurStyle.Regular,
+          onWillAppear: () => {
+            this.loadModLensConfig()
+          },
+          onDisappear: () => {
+            this.showModLensConfigSheet = false
+            this.enableModLensAfterSave = false
+            this.loadModLensConfig()
           }
         })
 
@@ -3151,7 +3393,9 @@ struct SkillListCardItem {
 struct BuiltinToolCardItem {
   @Param tool: ToolConfig = new ToolConfig()
   @Param selected: boolean = false
+  @Param configurable: boolean = false
   @Event onToggle: (enabled: boolean) => void = (_enabled: boolean): void => {}
+  @Event onConfigure: () => void = (): void => {}
 
   private get themePrimary(): string {
     return getAppUiState().themePrimary
@@ -3208,6 +3452,9 @@ struct BuiltinToolCardItem {
       return $r('sys.symbol.pdf_doc')
     }
     if (toolId === 'image_to_text') {
+      return $r('sys.symbol.picture')
+    }
+    if (toolId === 'vision_read_image') {
       return $r('sys.symbol.picture')
     }
     if (toolId === 'use_skill') {
@@ -3313,6 +3560,19 @@ struct BuiltinToolCardItem {
           .border({ width: this.isWriteTool() ? 0 : 1, color: this.themePrimary })
 
         Blank()
+
+        if (this.configurable) {
+          Button(pickLocalizedText('配置', 'Configure'))
+            .height(28)
+            .fontSize(11)
+            .type(ButtonType.Capsule)
+            .stateEffect(false)
+            .fontColor(this.themePrimary)
+            .backgroundColor(this.themePrimaryLight)
+            .onClick(() => {
+              this.onConfigure()
+            })
+        }
       }
       .width('100%')
     }

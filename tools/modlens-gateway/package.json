@@ -1,0 +1,17 @@
+{
+  "name": "chatcube-modlens-gateway",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Local HTTP bridge between ChatCube and ModLens",
+  "engines": {
+    "node": ">=22.19"
+  },
+  "scripts": {
+    "start": "node src/server.mjs",
+    "test": "node --test"
+  },
+  "dependencies": {
+    "@liustack/modlens": "3.24.1"
+  }
+}

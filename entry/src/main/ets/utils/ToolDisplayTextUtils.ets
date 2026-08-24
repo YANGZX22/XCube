@@ -29,6 +29,8 @@ export function getLocalizedBuiltinToolName(toolId: string, fallback: string = '
       return pickLocalizedText('PDF 转文本', 'PDF to Text')
     case 'image_to_text':
       return pickLocalizedText('图片转文本', 'Image to Text')
+    case 'vision_read_image':
+      return pickLocalizedText('ModLens 视觉理解', 'ModLens Vision')
     case 'docx_to_text':
       return pickLocalizedText('DOCX 转文本', 'DOCX to Text')
     case 'xlsx_to_text':
@@ -80,6 +82,9 @@ export function getLocalizedBuiltinToolDescription(toolId: string, fallback: str
     case 'image_to_text':
       return pickLocalizedText('使用本地 OCR 读取图片中的文字',
         'Extract text from images with local OCR.')
+    case 'vision_read_image':
+      return pickLocalizedText('通过 ModLens 获取图片 OCR、布局与语义证据',
+        'Get image OCR, layout, and semantic evidence through ModLens.')
     case 'docx_to_text':
       return pickLocalizedText('在本地读取 DOCX 中的标题、段落、列表和表格',
         'Extract headings, paragraphs, lists, and tables from DOCX files locally.')

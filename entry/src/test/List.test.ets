@@ -17,6 +17,7 @@ import presetProvidersTest from './PresetProviders.test';
 import officeOpenXmlTextParserTest from './OfficeOpenXmlTextParser.test';
 import officeDocumentToolTest from './OfficeDocumentTool.test';
 import responseTimelineTest from './ResponseTimeline.test';
+import modLensVisionServiceTest from './ModLensVisionService.test';
 
 export default function testsuite() {
   localUnitTest();
@@ -38,4 +39,5 @@ export default function testsuite() {
   officeOpenXmlTextParserTest();
   officeDocumentToolTest();
   responseTimelineTest();
+  modLensVisionServiceTest();
 }
