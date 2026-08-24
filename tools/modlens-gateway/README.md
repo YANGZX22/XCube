@@ -44,6 +44,7 @@ npm start
 | `MODLENS_GATEWAY_PORT` | `8787` | 监听端口 |
 | `MODLENS_GATEWAY_TOKEN` | 空 | Bearer 令牌；非回环监听时必填 |
 | `MODLENS_TIMEOUT_MS` | `180000` | ModLens 单次分析超时 |
+| `MODLENS_MAX_CONCURRENT` | `1` | 最大并发分析数；超过时返回 429，避免耗尽内存或模型额度 |
 | `MODLENS_PROVIDER` | 空 | 固定使用指定 provider，例如 `openai`；设置后不自动回退 |
 | `MODLENS_WORKDIR` | 网关目录 | ModLens provider 工作目录 |
 | `MODLENS_CLI_PATH` | 项目依赖中的 CLI | 自定义 ModLens CLI 路径 |

@@ -16,8 +16,10 @@ const gatewayRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 const host = (process.env.MODLENS_GATEWAY_HOST ?? '127.0.0.1').trim()
 const port = parsePositiveInteger(process.env.MODLENS_GATEWAY_PORT, 8787, 65535)
 const requestTimeoutMs = parsePositiveInteger(process.env.MODLENS_TIMEOUT_MS, 180000, 900000)
+const maxConcurrentAnalyses = parsePositiveInteger(process.env.MODLENS_MAX_CONCURRENT, 1, 16)
 const authToken = (process.env.MODLENS_GATEWAY_TOKEN ?? '').trim()
 const provider = (process.env.MODLENS_PROVIDER ?? '').trim()
+let activeAnalyses = 0
 
 if (!isLoopbackHost(host) && authToken === '') {
   throw new Error('MODLENS_GATEWAY_TOKEN is required when listening on a non-loopback address')
@@ -173,15 +175,24 @@ async function analyze(request, response) {
     respond(response, 401, { ok: false, error: 'Unauthorized' })
     return
   }
-  const payload = validateAnalyzePayload(await readJsonBody(request))
-  const tempDirectory = await mkdtemp(join(tmpdir(), 'chatcube-modlens-'))
-  const imagePath = join(tempDirectory, payload.fileName)
+  if (activeAnalyses >= maxConcurrentAnalyses) {
+    respond(response, 429, { ok: false, error: 'Vision gateway is busy; retry later' })
+    return
+  }
+  activeAnalyses += 1
   try {
-    await writeFile(imagePath, payload.imageBuffer, { mode: 0o600 })
-    const output = await runModLens(imagePath, payload.prompt)
-    respond(response, 200, { ok: true, output })
+    const payload = validateAnalyzePayload(await readJsonBody(request))
+    const tempDirectory = await mkdtemp(join(tmpdir(), 'chatcube-modlens-'))
+    const imagePath = join(tempDirectory, payload.fileName)
+    try {
+      await writeFile(imagePath, payload.imageBuffer, { mode: 0o600 })
+      const output = await runModLens(imagePath, payload.prompt)
+      respond(response, 200, { ok: true, output })
+    } finally {
+      await rm(tempDirectory, { recursive: true, force: true })
+    }
   } finally {
-    await rm(tempDirectory, { recursive: true, force: true })
+    activeAnalyses -= 1
   }
 }
 
@@ -195,7 +206,11 @@ const server = createServer(async (request, response) => {
       respond(response, 200, {
         ok: true,
         service: 'chatcube-modlens-gateway',
-        modlensVersion: await readModLensVersion()
+        modlensVersion: await readModLensVersion(),
+        capacity: {
+          active: activeAnalyses,
+          maximum: maxConcurrentAnalyses
+        }
       })
       return
     }
