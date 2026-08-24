@@ -28,9 +28,12 @@ import { ContextCompactionService } from '../main/ets/services/ContextCompaction
 
 export default function tokenAccountingTest() {
   describe('tokenAccountingTest', () => {
-    it('does_not_inflate_a_configured_small_context_window', 0, () => {
+    it('uses_the_configured_window_or_the_256k_default', 0, () => {
       expect(resolveContextWindowTokens(1024, 500000)).assertEqual(1024)
-      expect(resolveContextWindowTokens(0, 500000)).assertEqual(0)
+      const defaultWindow = resolveContextWindowTokens(0, 500000)
+      expect(defaultWindow).assertEqual(256000)
+      expect(resolveContextInputBudgetTokens(defaultWindow, 32768)).assertEqual(223232)
+      expect(resolveContextWindowTokens(Number.NaN, 200000)).assertEqual(200000)
     })
 
     it('reserves_output_tokens_from_the_effective_input_budget', 0, () => {

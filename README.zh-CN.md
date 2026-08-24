@@ -10,7 +10,7 @@
 
 <p align="center">
   <img src="https://img.shields.io/badge/HarmonyOS-7_(API_26)-4285F4" alt="HarmonyOS 7" />
-  <a href="./CHANGELOG.md"><img src="https://img.shields.io/badge/version-1.3.1-2ea44f" alt="版本 1.3.1" /></a>
+  <a href="./CHANGELOG.md"><img src="https://img.shields.io/badge/version-1.3.5-2ea44f" alt="版本 1.3.5" /></a>
   <a href="./LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue" alt="MIT License" /></a>
 </p>
 

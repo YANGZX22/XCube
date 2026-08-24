@@ -757,8 +757,8 @@ export class ChatViewModel {
 
   // ============ 上下文长度窗口与 compact 工具 ============
 
-  // 返回 0 表示当前模型的上下文窗口未知（供应商未加载完成或模型未配置 contextLength）。
-  // 此时不能用默认值冒充真实窗口，否则会把长会话误判成已满。
+  // 返回 0 表示供应商未加载完成或模型未找到。
+  // 模型存在但未配置 contextLength 时，resolveContextWindowTokens 会按默认 256K 计入预算。
   private getCurrentModelContextWindow(providerId: string, modelId: string): number {
     const provider = this.providerViewModel.getProviderById(providerId)
     if (provider === null) {

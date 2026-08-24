@@ -21,8 +21,7 @@ import {
 } from '../utils/ModelBillingUtils'
 import { showToast } from '../utils/ToastUtil'
 import { ImmersiveSheetHeader } from './ImmersiveSheetHeader'
-
-const DEFAULT_CONTEXT_LENGTH: number = 256000
+import { DEFAULT_MODEL_CONTEXT_WINDOW_TOKENS } from '../utils/ContextWindowUtils'
 
 @ComponentV2
 struct ModelCapabilityButton {
@@ -431,7 +430,7 @@ export struct ModelEditSheet {
       id: this.model.id,
       name: this.tempName,
       contextLength: Number.isFinite(parsedContextLength) && parsedContextLength > 0 ?
-        Math.floor(parsedContextLength) : DEFAULT_CONTEXT_LENGTH,
+        Math.floor(parsedContextLength) : DEFAULT_MODEL_CONTEXT_WINDOW_TOKENS,
       isEnabled: this.model.isEnabled,
       isRecommended: this.model.isRecommended,
       modelType: this.model.modelType,

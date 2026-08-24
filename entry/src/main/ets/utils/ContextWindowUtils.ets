@@ -4,6 +4,9 @@ import { estimateConversationInputTokens, estimateTextTokens } from './ModelBill
 // 仅保留兼容导出。模型窗口不再被强行抬高到该值，配置多少就按多少计算。
 export const MIN_CONTEXT_WINDOW_TOKENS: number = 2048
 
+// 模型的上下文长度未填写时使用的默认窗口。
+export const DEFAULT_MODEL_CONTEXT_WINDOW_TOKENS: number = 256000
+
 // 用户可设置的上下文长度窗口上限：超大窗口模型（例如 1M）按该上限计算用量，
 // 避免把全部窗口都当成可用预算
 export const MIN_CONTEXT_LIMIT_TOKENS: number = 100000
@@ -91,13 +94,11 @@ export class ContextUsage {
   }
 }
 
-// 解析模型实际可用的上下文长度窗口。
-// 模型未找到或未配置 contextLength 时返回 0（未知），不要用默认值冒充真实窗口。
+// 解析模型实际可用的上下文长度窗口。未填写 contextLength 时按 256K 处理，
+// 然后再受用户设置的上下文长度上限约束。模型未找到的情况由调用方保持为 0。
 export function resolveContextWindowTokens(contextLength: number, maxLimitTokens: number): number {
-  if (!Number.isFinite(contextLength) || contextLength <= 0) {
-    return 0
-  }
-  const modelWindow = Math.floor(contextLength)
+  const modelWindow = Number.isFinite(contextLength) && contextLength > 0 ?
+    Math.floor(contextLength) : DEFAULT_MODEL_CONTEXT_WINDOW_TOKENS
   return Math.min(modelWindow, normalizeContextLimitTokens(maxLimitTokens))
 }
 

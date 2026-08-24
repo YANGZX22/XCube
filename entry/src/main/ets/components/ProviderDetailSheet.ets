@@ -155,6 +155,7 @@ export struct ProviderDetailPanel {
   }
 
   @Local provider: ModelProvider | null = null
+  @Local providerNameText: string = ''
   @Local isLoading: boolean = true
   @Local isTesting: boolean = false
   @Local isFetchingModels: boolean = false
@@ -227,6 +228,7 @@ export struct ProviderDetailPanel {
     this.searchKeywords = ''
     this.modelGroups = []
     this.provider = null
+    this.providerNameText = ''
     this.showEditSheet = false
     this.editingModel = null
     this.isModelEditAdvancedExpanded = false
@@ -264,6 +266,7 @@ export struct ProviderDetailPanel {
       provider.textIcon = iconConfig.text
       provider.textIconBgColor = iconConfig.bgColor
       this.provider = provider
+      this.providerNameText = provider.name
       this.providerCustomHeaderEntries = this.parseProviderHeaderEntries(provider.customHeadersJson)
       this.showProviderCustomHeadersEditor = this.providerCustomHeaderEntries.length > 0
       this.balanceConfig = this.parseBalanceConfig(provider.balanceConfigJson)
@@ -276,6 +279,7 @@ export struct ProviderDetailPanel {
     const provider = this.providerViewModel.getProviderById(this.providerId)
     if (provider !== null) {
       this.provider = provider
+      this.providerNameText = provider.name
       this.providerCustomHeaderEntries = this.parseProviderHeaderEntries(provider.customHeadersJson)
       this.showProviderCustomHeadersEditor = this.providerCustomHeaderEntries.length > 0
       this.balanceConfig = this.parseBalanceConfig(provider.balanceConfigJson)
@@ -1696,17 +1700,18 @@ export struct ProviderDetailPanel {
 
             Column({ space: 2 }) {
               if (this.isCreateMode) {
-                TextInput({ text: this.provider?.name ?? '', placeholder: $r('app.string.provider_name_placeholder') })
+                TextInput({ text: this.providerNameText, placeholder: $r('app.string.provider_name_placeholder') })
                   .width('88%')
                   .height(44)
                   .fontSize(20)
                   .fontWeight(FontWeight.Bold)
                   .fontColor($r('app.color.text_primary'))
-                  .backgroundColor((this.provider?.name.length ?? 0) > 0 ? Color.Transparent : this.themePrimaryLight)
+                  .backgroundColor(this.providerNameText.length > 0 ? Color.Transparent : this.themePrimaryLight)
                   .borderRadius(8)
-                  .border({ width: 1, color: this.themePrimary })
+                  .border({ width: this.providerNameText.length > 0 ? 0 : 1, color: this.themePrimary })
                   .padding({ left: 8, right: 4, top: 0, bottom: 0 })
                   .onChange((value: string) => {
+                    this.providerNameText = value
                     if (this.provider !== null) {
                       this.provider.name = value
                       if (this.provider.iconType === 'text') {
@@ -1716,17 +1721,18 @@ export struct ProviderDetailPanel {
                     }
                   })
               } else if (this.provider !== null && !this.provider.isPreset) {
-                TextInput({ text: this.provider?.name ?? '', placeholder: $r('app.string.provider_name_placeholder') })
+                TextInput({ text: this.providerNameText, placeholder: $r('app.string.provider_name_placeholder') })
                   .width('88%')
                   .height(44)
                   .fontSize(20)
                   .fontWeight(FontWeight.Bold)
                   .fontColor($r('app.color.text_primary'))
-                  .backgroundColor((this.provider?.name.length ?? 0) > 0 ? Color.Transparent : this.themePrimaryLight)
+                  .backgroundColor(this.providerNameText.length > 0 ? Color.Transparent : this.themePrimaryLight)
                   .borderRadius(8)
-                  .border({ width: 1, color: this.themePrimary })
+                  .border({ width: this.providerNameText.length > 0 ? 0 : 1, color: this.themePrimary })
                   .padding({ left: 8, right: 4, top: 0, bottom: 0 })
                   .onChange((value: string) => {
+                    this.providerNameText = value
                     if (this.provider !== null) {
                       this.provider.name = value
                     }
@@ -1859,17 +1865,18 @@ export struct ProviderDetailPanel {
 
           Column() {
             if (this.isCreateMode) {
-              TextInput({ text: this.provider?.name ?? '', placeholder: $r('app.string.provider_name_placeholder') })
+              TextInput({ text: this.providerNameText, placeholder: $r('app.string.provider_name_placeholder') })
                 .width('88%')
                 .height(44)
                 .fontSize(18)
                 .fontWeight(FontWeight.Bold)
                 .fontColor($r('app.color.text_primary'))
-                .backgroundColor((this.provider?.name.length ?? 0) > 0 ? Color.Transparent : this.themePrimaryLight)
+                .backgroundColor(this.providerNameText.length > 0 ? Color.Transparent : this.themePrimaryLight)
                 .borderRadius(8)
-                .border({ width: 1, color: this.themePrimary })
+                .border({ width: this.providerNameText.length > 0 ? 0 : 1, color: this.themePrimary })
                 .padding({ left: 8, right: 4, top: 0, bottom: 0 })
                 .onChange((value: string) => {
+                  this.providerNameText = value
                   if (this.provider !== null) {
                     this.provider.name = value
                     // 自动更新文字图标
@@ -1880,17 +1887,18 @@ export struct ProviderDetailPanel {
                   }
                 })
             } else if (this.provider !== null && !this.provider.isPreset) {
-              TextInput({ text: this.provider?.name ?? '', placeholder: $r('app.string.provider_name_placeholder') })
+              TextInput({ text: this.providerNameText, placeholder: $r('app.string.provider_name_placeholder') })
                 .width('88%')
                 .height(44)
                 .fontSize(18)
                 .fontWeight(FontWeight.Bold)
                 .fontColor($r('app.color.text_primary'))
-                .backgroundColor((this.provider?.name.length ?? 0) > 0 ? Color.Transparent : this.themePrimaryLight)
+                .backgroundColor(this.providerNameText.length > 0 ? Color.Transparent : this.themePrimaryLight)
                 .borderRadius(8)
-                .border({ width: 1, color: this.themePrimary })
+                .border({ width: this.providerNameText.length > 0 ? 0 : 1, color: this.themePrimary })
                 .padding({ left: 8, right: 4, top: 0, bottom: 0 })
                 .onChange((value: string) => {
+                  this.providerNameText = value
                   if (this.provider !== null) {
                     this.provider.name = value
                   }
