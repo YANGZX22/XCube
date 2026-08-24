@@ -11,6 +11,13 @@ import {
   parseModLensOutput,
   validateAnalyzePayload
 } from './core.mjs'
+import {
+  createAuthConfig,
+  createLoginRateLimiter,
+  issueSessionToken,
+  verifyCredentials,
+  verifySessionToken
+} from './auth.mjs'
 
 const gatewayRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 const host = (process.env.MODLENS_GATEWAY_HOST ?? '127.0.0.1').trim()
@@ -19,6 +26,8 @@ const requestTimeoutMs = parsePositiveInteger(process.env.MODLENS_TIMEOUT_MS, 18
 const maxConcurrentAnalyses = parsePositiveInteger(process.env.MODLENS_MAX_CONCURRENT, 1, 16)
 const authToken = (process.env.MODLENS_GATEWAY_TOKEN ?? '').trim()
 const provider = (process.env.MODLENS_PROVIDER ?? '').trim()
+const accountAuth = createAuthConfig()
+const loginRateLimiter = createLoginRateLimiter()
 let activeAnalyses = 0
 
 if (!isLoopbackHost(host) && authToken === '') {
@@ -33,37 +42,43 @@ function parsePositiveInteger(value, fallback, maximum) {
   return parsed
 }
 
-function respond(response, statusCode, body) {
+function respond(response, statusCode, body, extraHeaders = {}) {
   const payload = JSON.stringify(body)
   response.writeHead(statusCode, {
     'Content-Type': 'application/json; charset=utf-8',
     'Content-Length': Buffer.byteLength(payload),
     'Cache-Control': 'no-store',
-    'X-Content-Type-Options': 'nosniff'
+    'X-Content-Type-Options': 'nosniff',
+    ...extraHeaders
   })
   response.end(payload)
 }
 
 function tokenMatches(authorization) {
-  if (authToken === '') {
+  if (authToken === '' && accountAuth === null) {
     return true
   }
   if (typeof authorization !== 'string' || !authorization.startsWith('Bearer ')) {
     return false
   }
   const supplied = authorization.slice(7).trim()
-  const expectedHash = createHash('sha256').update(authToken).digest()
-  const suppliedHash = createHash('sha256').update(supplied).digest()
-  return timingSafeEqual(expectedHash, suppliedHash)
+  if (authToken !== '') {
+    const expectedHash = createHash('sha256').update(authToken).digest()
+    const suppliedHash = createHash('sha256').update(supplied).digest()
+    if (timingSafeEqual(expectedHash, suppliedHash)) {
+      return true
+    }
+  }
+  return accountAuth !== null && verifySessionToken(accountAuth, supplied)
 }
 
-async function readJsonBody(request) {
+async function readJsonBody(request, maximumBytes = MAX_JSON_BODY_BYTES) {
   const chunks = []
   let size = 0
   for await (const chunk of request) {
     size += chunk.length
-    if (size > MAX_JSON_BODY_BYTES) {
-      throw new Error(`Request body exceeds the ${MAX_JSON_BODY_BYTES} byte limit`)
+    if (size > maximumBytes) {
+      throw new Error(`Request body exceeds the ${maximumBytes} byte limit`)
     }
     chunks.push(chunk)
   }
@@ -73,6 +88,53 @@ async function readJsonBody(request) {
   } catch (_error) {
     throw new Error('Request body is not valid JSON')
   }
+}
+
+function getLoginClientKey(request) {
+  const forwardedFor = request.headers['x-forwarded-for']
+  if (typeof forwardedFor === 'string') {
+    const addresses = forwardedFor.split(',').map((value) => value.trim()).filter(Boolean)
+    if (addresses.length > 0) {
+      // Apache appends the actual peer address. Using the last value prevents a
+      // direct client from bypassing the per-client limit with a forged prefix.
+      return addresses.at(-1).slice(0, 128)
+    }
+  }
+  return request.socket.remoteAddress ?? 'unknown'
+}
+
+async function login(request, response) {
+  if (accountAuth === null) {
+    respond(response, 404, { ok: false, error: 'Not found' })
+    return
+  }
+  if (!request.headers['content-type']?.toLowerCase().startsWith('application/json')) {
+    respond(response, 415, { ok: false, error: 'Content-Type must be application/json' })
+    return
+  }
+  const clientKey = getLoginClientKey(request)
+  const rateLimit = loginRateLimiter.consume(clientKey)
+  if (!rateLimit.allowed) {
+    respond(response, 429, { ok: false, error: 'Too many login attempts; retry later' }, {
+      'Retry-After': `${rateLimit.retryAfterSeconds}`
+    })
+    return
+  }
+  const payload = await readJsonBody(request, 4096)
+  if (payload === null || typeof payload !== 'object' || Array.isArray(payload) ||
+    !verifyCredentials(accountAuth, payload.username, payload.password)) {
+    respond(response, 401, { ok: false, error: 'Invalid credentials' })
+    return
+  }
+  loginRateLimiter.resetClient(clientKey)
+  const session = issueSessionToken(accountAuth)
+  respond(response, 200, {
+    ok: true,
+    tokenType: 'Bearer',
+    token: session.token,
+    expiresAt: new Date(session.expiresAt * 1000).toISOString(),
+    expiresIn: session.expiresIn
+  })
 }
 
 async function resolveModLensCli() {
@@ -212,6 +274,10 @@ const server = createServer(async (request, response) => {
           maximum: maxConcurrentAnalyses
         }
       })
+      return
+    }
+    if (request.method === 'POST' && request.url === '/auth/login') {
+      await login(request, response)
       return
     }
     if (request.method === 'POST' && request.url === '/analyze') {
