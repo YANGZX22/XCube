@@ -4,6 +4,7 @@ import { BusinessError } from '@kit.BasicServicesKit'
 import { geoLocationManager } from '@kit.LocationKit'
 import { map, mapCommon, navi, petalMaps, site } from '@kit.MapKit'
 import { fileIo } from '@kit.CoreFileKit'
+import { getSavedPlacesService } from './SavedPlacesService'
 
 export const MAP_ACTION_SEARCH: string = 'search_places'
 export const MAP_ACTION_ROUTE: string = 'plan_route'
@@ -173,10 +174,19 @@ class ResolvedCoordinate {
 class ResolvedPlace {
   site: site.Site | null = null
   coordinate: ResolvedCoordinate
+  savedLabel: string = ''
+  savedName: string = ''
+  savedAddress: string = ''
+  savedSiteId: string = ''
 
-  constructor(coordinate: ResolvedCoordinate, resolvedSite: site.Site | null = null) {
+  constructor(coordinate: ResolvedCoordinate, resolvedSite: site.Site | null = null,
+    savedLabel: string = '', savedName: string = '', savedAddress: string = '', savedSiteId: string = '') {
     this.coordinate = coordinate
     this.site = resolvedSite
+    this.savedLabel = savedLabel
+    this.savedName = savedName
+    this.savedAddress = savedAddress
+    this.savedSiteId = savedSiteId
   }
 }
 
@@ -245,6 +255,71 @@ export class MapKitService {
     }
   }
 
+  async searchPlaceCandidates(query: string, limit: number = 10, language: string = 'zh_CN',
+    bias?: MapCoordinateArgs): Promise<MapPlaceResult[]> {
+    try {
+      const keyword = query.trim()
+      if (keyword === '') {
+        return []
+      }
+      const biasLocation = this.readCoordinate(bias)
+      const params: site.SearchByTextParams = {
+        query: keyword,
+        location: biasLocation === null ? undefined : biasLocation,
+        language: this.normalizeLanguage(language),
+        pageIndex: 1,
+        pageSize: Math.max(1, Math.min(MAX_RESULT_LIMIT, Math.round(limit)))
+      }
+      const response = await site.searchByText(this.ensureContext(), params)
+      const sites = response.sites || []
+      const result: MapPlaceResult[] = []
+      for (let i = 0; i < sites.length; i++) {
+        if (sites[i].location !== undefined) {
+          result.push(this.toPlaceResult(sites[i]))
+        }
+      }
+      return result
+    } catch (error) {
+      throw this.toMapError(error)
+    }
+  }
+
+  async reverseGeocodePlace(location: mapCommon.LatLng, language: string = 'zh_CN'): Promise<MapPlaceResult> {
+    try {
+      const response = await site.reverseGeocode(this.ensureContext(), {
+        location: location,
+        radius: 200,
+        language: this.normalizeLanguage(language),
+        isExtension: true
+      })
+      const pois = response.pois || []
+      const nearest = pois.length > 0 ? pois[0] : undefined
+      const result = new MapPlaceResult()
+      result.siteId = nearest?.siteId || ''
+      result.name = nearest?.name || response.addressDescription || '地图选点'
+      result.address = nearest?.address || response.addressDescription || ''
+      result.latitude = location.latitude
+      result.longitude = location.longitude
+      result.distanceMeters = nearest?.distance
+      return result
+    } catch (error) {
+      throw this.toMapError(error)
+    }
+  }
+
+  async getCurrentPlace(language: string = 'zh_CN'): Promise<MapPlaceResult> {
+    try {
+      const coordinate = await this.getCurrentMapCoordinate()
+      const result = await this.reverseGeocodePlace(coordinate.location, language)
+      if (result.name.trim() === '') {
+        result.name = '当前位置'
+      }
+      return result
+    } catch (error) {
+      throw this.toMapError(error)
+    }
+  }
+
   async searchOrPlanRoute(request: MapSearchRouteRequest): Promise<MapSearchRouteResult> {
     try {
       const action = normalizeMapAction(request.action)
@@ -267,9 +342,9 @@ export class MapKitService {
         this.normalizeCoordinateType(request.coordinateType || request.coordinate_type),
         request.language
       )
-      const destinationName = this.resolveSiteName(destination.site, request.destination || '目的地')
+      const destinationName = this.resolvePlaceName(destination, request.destination || '目的地')
       const destinationPoiId = (request.destinationSiteId || request.destination_site_id ||
-        destination.site?.siteId || '').trim()
+        destination.savedSiteId || destination.site?.siteId || '').trim()
       const action = this.normalizeOpenAction(request.action)
       const vehicleType = this.toVehicleType(request.travelMode || request.travel_mode)
 
@@ -295,8 +370,9 @@ export class MapKitService {
         }
         if (origin !== null) {
           params.originPosition = origin.coordinate.location
-          params.originName = this.resolveSiteName(origin.site, request.origin || '')
-          const originPoiId = (request.originSiteId || request.origin_site_id || origin.site?.siteId || '').trim()
+          params.originName = this.resolvePlaceName(origin, request.origin || '')
+          const originPoiId = (request.originSiteId || request.origin_site_id || origin.savedSiteId ||
+            origin.site?.siteId || '').trim()
           params.originPoiId = originPoiId !== '' ? originPoiId : undefined
         }
         await petalMaps.openMapNavi(context, params)
@@ -310,8 +386,9 @@ export class MapKitService {
         }
         if (origin !== null) {
           params.originPosition = origin.coordinate.location
-          params.originName = this.resolveSiteName(origin.site, request.origin || '')
-          const originPoiId = (request.originSiteId || request.origin_site_id || origin.site?.siteId || '').trim()
+          params.originName = this.resolvePlaceName(origin, request.origin || '')
+          const originPoiId = (request.originSiteId || request.origin_site_id || origin.savedSiteId ||
+            origin.site?.siteId || '').trim()
           params.originPoiId = originPoiId !== '' ? originPoiId : undefined
         }
         await petalMaps.openMapRoutePlan(context, params)
@@ -514,7 +591,8 @@ export class MapKitService {
     }
     const destinationResult = destination.site !== null
       ? this.toPlaceResult(destination.site)
-      : this.toCoordinatePlaceResult(destination.coordinate.location, destinationText)
+      : this.toCoordinatePlaceResult(destination.coordinate.location,
+        this.resolvePlaceName(destination, destinationText), destination.savedAddress)
     const result = new MapSearchRouteResult()
     result.action = MAP_ACTION_ROUTE
     result.usedCurrentLocation = didUseCurrentLocation
@@ -543,8 +621,8 @@ export class MapKitService {
     }
     visualization.origin = this.toVisualPlace(
       origin.coordinate.location,
-      didUseCurrentLocation ? '当前位置' : this.resolveSiteName(origin.site, originText || '起点'),
-      origin.site?.formatAddress || ''
+      didUseCurrentLocation ? '当前位置' : this.resolvePlaceName(origin, originText || '起点'),
+      origin.savedAddress || origin.site?.formatAddress || ''
     )
     visualization.destination = this.toVisualPlaceFromResult(destinationResult)
     if (routeResult.routes.length > 0) {
@@ -570,6 +648,16 @@ export class MapKitService {
     const keyword = (query || '').trim()
     if (keyword === '') {
       throw new Error('缺少目的地名称或坐标')
+    }
+    const savedPlace = await getSavedPlacesService().resolveLabel(keyword)
+    if (savedPlace !== null) {
+      const savedCoordinateType = this.normalizeCoordinateType(savedPlace.coordinateType)
+      const savedCoordinate = await this.rectifyCoordinate({
+        latitude: savedPlace.latitude,
+        longitude: savedPlace.longitude
+      }, savedCoordinateType)
+      return new ResolvedPlace(savedCoordinate, null, savedPlace.label, savedPlace.name,
+        savedPlace.address, savedPlace.siteId)
     }
     const params: site.SearchByTextParams = {
       query: keyword,
@@ -663,12 +751,23 @@ export class MapKitService {
     return result
   }
 
-  private toCoordinatePlaceResult(location: mapCommon.LatLng, name: string): MapPlaceResult {
+  private toCoordinatePlaceResult(location: mapCommon.LatLng, name: string, address: string = ''): MapPlaceResult {
     const result = new MapPlaceResult()
     result.name = name.trim() !== '' ? name.trim() : '目的地'
+    result.address = address
     result.latitude = location.latitude
     result.longitude = location.longitude
     return result
+  }
+
+  private resolvePlaceName(value: ResolvedPlace, fallback: string): string {
+    if (value.savedLabel.trim() !== '') {
+      return value.savedLabel
+    }
+    if (value.savedName.trim() !== '') {
+      return value.savedName
+    }
+    return this.resolveSiteName(value.site, fallback)
   }
 
   private toVisualPlace(location: mapCommon.LatLng, name: string, address: string): MapVisualPlace {

@@ -52,10 +52,17 @@ import {
   MAP_SEARCH_ROUTE_TOOL_ID,
   OPEN_MAP_ROUTE_TOOL_ID
 } from './MapTool'
+import {
+  createSavedPlacesToolConfig,
+  createSavedPlacesToolDefinition,
+  SAVED_PLACES_TOOL_ID,
+  SavedPlacesExecutor
+} from './SavedPlacesTool'
 
 export { KNOWLEDGE_SEARCH_TOOL_ID } from './KnowledgeSearchTool'
 export { COMPACT_TOOL_ID } from './CompactTool'
 export { MAP_SEARCH_ROUTE_TOOL_ID, OPEN_MAP_ROUTE_TOOL_ID } from './MapTool'
+export { SAVED_PLACES_TOOL_ID } from './SavedPlacesTool'
 export {
   SUB_AGENT_TOOL_ID,
   SUB_AGENT_RESULT_TOOL_ID,
@@ -3105,6 +3112,17 @@ export function registerBuiltinTools(): void {
     registeredNow += 1
   }
 
+  if (!registry.isToolRegistered(SAVED_PLACES_TOOL_ID)) {
+    const savedPlacesTool = new RegisteredTool(
+      SAVED_PLACES_TOOL_ID,
+      createSavedPlacesToolConfig(),
+      createSavedPlacesToolDefinition(),
+      new SavedPlacesExecutor()
+    )
+    registry.registerTool(savedPlacesTool)
+    registeredNow += 1
+  }
+
   if (!registry.isToolRegistered(OPEN_MAP_ROUTE_TOOL_ID)) {
     const openMapRouteTool = new RegisteredTool(
       OPEN_MAP_ROUTE_TOOL_ID,
@@ -3141,6 +3159,7 @@ export function getBuiltinToolIds(): string[] {
     MATH_CHART_TOOL_ID,
     READ_SCHEDULE_TOOL_ID,
     WRITE_SCHEDULE_TOOL_ID,
+    SAVED_PLACES_TOOL_ID,
     MAP_SEARCH_ROUTE_TOOL_ID,
     OPEN_MAP_ROUTE_TOOL_ID
   ]

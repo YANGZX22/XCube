@@ -19,6 +19,7 @@ import officeDocumentToolTest from './OfficeDocumentTool.test';
 import responseTimelineTest from './ResponseTimeline.test';
 import modLensVisionServiceTest from './ModLensVisionService.test';
 import mapToolTest from './MapTool.test';
+import savedPlacesServiceTest from './SavedPlacesService.test';
 
 export default function testsuite() {
   localUnitTest();
@@ -42,4 +43,5 @@ export default function testsuite() {
   responseTimelineTest();
   modLensVisionServiceTest();
   mapToolTest();
+  savedPlacesServiceTest();
 }

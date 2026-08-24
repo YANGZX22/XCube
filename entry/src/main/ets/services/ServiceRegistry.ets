@@ -21,6 +21,7 @@ import { getWebDAVService, WebDAVService } from './WebDAVService'
 import { getWebDAVSyncService, WebDAVSyncService } from './WebDAVSyncService'
 import { getCalendarWriteService, CalendarWriteService } from './CalendarWriteService'
 import { getMapKitService, MapKitService } from './MapKitService'
+import { getSavedPlacesService, SavedPlacesService } from './SavedPlacesService'
 import { getCanvasDocumentService, CanvasDocumentService } from './CanvasDocumentService'
 import { getContextCompactionService, ContextCompactionService } from './ContextCompactionService'
 import { getModLensVisionService, ModLensVisionService } from './ModLensVisionService'
@@ -145,6 +146,10 @@ export class ServiceRegistry {
 
   static mapKit(): MapKitService {
     return getMapKitService()
+  }
+
+  static savedPlaces(): SavedPlacesService {
+    return getSavedPlacesService()
   }
 
   static canvasDocument(): CanvasDocumentService {

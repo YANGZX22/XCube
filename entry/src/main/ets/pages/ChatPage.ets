@@ -53,6 +53,7 @@ import {
   PDF_TO_TEXT_TOOL_ID,
   PYTHON_SANDBOX_TOOL_ID,
   READ_SCHEDULE_TOOL_ID,
+  SAVED_PLACES_TOOL_ID,
   SUB_AGENT_MESSAGE_TOOL_ID,
   SUB_AGENT_RESULT_TOOL_ID,
   USE_SKILL_TOOL_ID,
@@ -2607,6 +2608,7 @@ export struct ChatPage {
       !this.toolRegistry.isToolRegistered(SUB_AGENT_RESULT_TOOL_ID) ||
       !this.toolRegistry.isToolRegistered(USE_SKILL_TOOL_ID) ||
       !this.toolRegistry.isToolRegistered(MATH_CHART_TOOL_ID) ||
+      !this.toolRegistry.isToolRegistered(SAVED_PLACES_TOOL_ID) ||
       !this.toolRegistry.isToolRegistered(MAP_SEARCH_ROUTE_TOOL_ID) ||
       !this.toolRegistry.isToolRegistered(OPEN_MAP_ROUTE_TOOL_ID) ||
       !this.toolRegistry.isToolRegistered(READ_SCHEDULE_TOOL_ID) ||

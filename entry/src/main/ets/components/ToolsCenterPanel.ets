@@ -10,6 +10,7 @@ import {
   KNOWLEDGE_SEARCH_TOOL_ID,
   MODLENS_READ_IMAGE_TOOL_ID,
   registerBuiltinTools,
+  SAVED_PLACES_TOOL_ID,
   SUB_AGENT_MESSAGE_TOOL_ID,
   SUB_AGENT_RESULT_TOOL_ID,
   USE_SKILL_TOOL_ID
@@ -34,6 +35,7 @@ import { formatLocalizedCount, pickLocalizedText } from '../utils/LocalizedTextU
 import { withColorAlpha } from '../utils/ColorAlphaUtils'
 import { ChatFloatingImmersiveButton } from './ChatFloatingImmersiveButton'
 import { ImmersiveSheetHeader } from './ImmersiveSheetHeader'
+import { SavedPlacesCard } from './SavedPlacesCard'
 import { getLocalizedBuiltinToolDescription, getLocalizedBuiltinToolName } from '../utils/ToolDisplayTextUtils'
 import {
   buildCustomHeadersJson,
@@ -187,7 +189,7 @@ export struct ToolsCenterPanel {
       if (allTools[i].sourceType === ToolSourceType.BUILTIN && allTools[i].id !== this.searchToolId &&
         allTools[i].id !== USE_SKILL_TOOL_ID && allTools[i].id !== KNOWLEDGE_SEARCH_TOOL_ID &&
         allTools[i].id !== COMPACT_TOOL_ID && allTools[i].id !== SUB_AGENT_RESULT_TOOL_ID &&
-        allTools[i].id !== SUB_AGENT_MESSAGE_TOOL_ID) {
+        allTools[i].id !== SUB_AGENT_MESSAGE_TOOL_ID && allTools[i].id !== SAVED_PLACES_TOOL_ID) {
         builtin.push(allTools[i])
       }
     }
@@ -2564,6 +2566,13 @@ export struct ToolsCenterPanel {
                 }
               })
 
+              SavedPlacesCard({
+                toolEnabled: this.isToolSelected(SAVED_PLACES_TOOL_ID),
+                onToggle: (enabled: boolean): void => {
+                  this.handleBuiltinToolSelectionChanged(SAVED_PLACES_TOOL_ID, enabled)
+                }
+              })
+
               if (this.builtinTools.length > 0) {
                 ForEach(this.builtinTools, (tool: ToolConfig) => {
                   BuiltinToolCardItem({
@@ -3471,6 +3480,9 @@ struct BuiltinToolCardItem {
     }
     if (toolId === 'map_search_route') {
       return $r('sys.symbol.map')
+    }
+    if (toolId === 'saved_places') {
+      return $r('sys.symbol.location_north_up_right')
     }
     if (toolId === 'open_map_route') {
       return $r('sys.symbol.navigation')

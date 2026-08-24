@@ -60,6 +60,7 @@ export class PreferenceKeys {
   static readonly CHAT_SELECTED_TOOL_IDS_JSON: string = 'chat_selected_tool_ids_json'
   static readonly MODLENS_GATEWAY_URL: string = 'modlens_gateway_url'
   static readonly MODLENS_GATEWAY_TOKEN: string = 'modlens_gateway_token'
+  static readonly SAVED_PLACES_JSON: string = 'saved_places_json'
   static readonly CHAT_REASONING_LEVEL: string = 'chat_reasoning_level'
   static readonly KNOWLEDGE_CONVERSATION_ENABLED: string = 'knowledge_conversation_enabled'
   static readonly KNOWLEDGE_EMBEDDING_SELECTION_JSON: string = 'knowledge_embedding_selection_json'

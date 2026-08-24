@@ -10,7 +10,8 @@ import {
 import {
   getBuiltinToolIds,
   MAP_SEARCH_ROUTE_TOOL_ID,
-  OPEN_MAP_ROUTE_TOOL_ID
+  OPEN_MAP_ROUTE_TOOL_ID,
+  SAVED_PLACES_TOOL_ID
 } from '../main/ets/config/BuiltinTools'
 
 export default function mapToolTest() {
@@ -32,6 +33,7 @@ export default function mapToolTest() {
       const ids = getBuiltinToolIds()
       expect(ids.includes(MAP_SEARCH_ROUTE_TOOL_ID)).assertTrue()
       expect(ids.includes(OPEN_MAP_ROUTE_TOOL_ID)).assertTrue()
+      expect(ids.includes(SAVED_PLACES_TOOL_ID)).assertTrue()
     })
 
     it('builds_map_visualization_for_legacy_tool_results', 0, () => {

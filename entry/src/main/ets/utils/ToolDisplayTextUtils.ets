@@ -47,6 +47,8 @@ export function getLocalizedBuiltinToolName(toolId: string, fallback: string = '
       return pickLocalizedText('写入日程', 'Write Calendar')
     case 'map_search_route':
       return pickLocalizedText('地图', 'Map')
+    case 'saved_places':
+      return pickLocalizedText('常用地点', 'Saved Places')
     case 'open_map_route':
       return pickLocalizedText('花瓣导航', 'Petal Navigation')
     case 'knowledge_search':
@@ -113,6 +115,9 @@ export function getLocalizedBuiltinToolDescription(toolId: string, fallback: str
     case 'map_search_route':
       return pickLocalizedText('推荐地点并规划驾车、步行或骑行路线',
         'Find places and plan driving, walking, or cycling routes.')
+    case 'saved_places':
+      return pickLocalizedText('读取用户保存的地点标签、地址和坐标',
+        'Read user-saved place labels, addresses, and coordinates.')
     case 'open_map_route':
       return pickLocalizedText('经用户确认后在花瓣地图中查看路线或发起导航',
         'Open a route or start navigation in Petal Maps after approval.')

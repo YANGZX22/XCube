@@ -70,7 +70,8 @@ export struct ChatToolPickerSheetContent {
   }
 
   private resolveBuiltinCategoryKey(toolId: string): string {
-    if (toolId === 'web_search' || toolId === 'map_search_route' || toolId === 'open_map_route') {
+    if (toolId === 'web_search' || toolId === 'saved_places' || toolId === 'map_search_route' ||
+      toolId === 'open_map_route') {
       return 'search_map'
     }
     if (toolId === 'read_schedule' || toolId === 'write_schedule' || toolId === 'canvas_document' ||
@@ -227,6 +228,9 @@ export struct ChatToolPickerSheetContent {
     }
     if (toolId === 'map_search_route') {
       return $r('sys.symbol.map')
+    }
+    if (toolId === 'saved_places') {
+      return $r('sys.symbol.location_north_up_right')
     }
     if (toolId === 'open_map_route') {
       return $r('sys.symbol.navigation')

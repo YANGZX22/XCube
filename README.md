@@ -42,7 +42,7 @@
 - 🔍 **Web search & MCP** — Bocha, Bing (local), Tavily, Exa, and remote streamable MCP servers
 - 🧩 **Conversational sub-agents** — split big tasks across up to 3 agents, then guide each one through multiple follow-up rounds
 - 📚 **Local knowledge base** — hybrid keyword + vector RAG with built-in DOCX/XLSX parsing and OCR; files never leave the app sandbox
-- 🛠️ **Built-in tools** — Canvas documents, Python sandbox, charts, calendar, and PDF/image/DOCX/XLSX → text
+- 🛠️ **Built-in tools** — Canvas documents, Python sandbox, charts, calendar, Map Kit maps and saved places, plus PDF/image/DOCX/XLSX → text
 - 🔊 **Read aloud** — HarmonyOS offline TTS or ElevenLabs
 - 🔒 **Privacy by design** — explicit tool permissions and confirmation flows throughout
 
@@ -100,7 +100,12 @@ Upload DOCX, XLSX, PDF, Markdown, text, or images in the Knowledge Base tab. DOC
 | **DOCX → text** (`docx_to_text`) | Locally extract DOCX headings, paragraphs, lists, and tables without passing the raw file to models that lack document input |
 | **XLSX → text** (`xlsx_to_text`) | Locally extract worksheets, cells, dates, and formula results without passing the raw file to models that lack document input |
 | **Calendar** | Read a user-confirmed date range or create events, with privacy controls |
+| **Map** | Use HarmonyOS Map Kit to search for places and show the current location, destination, route polyline, precise location, and map following directly in chat |
+| **Saved places** (`saved_places`) | Save any number of labels such as “Home” or “Work” under **Settings → Tools → Saved Places**, using place search, map selection, or the current precise location, so models can resolve and use them by label |
+| **Petal Navigation** | Send a searched place, coordinates, or a saved-place label to Petal Maps for route navigation |
 | **Ask user** | Lets the model raise a confirmation card when it hits a critical ambiguity |
+
+Saved-place labels and coordinates remain in local app storage and are exposed to the model only when the corresponding tool is enabled. Precise current location and Map Kit features require location and map permissions.
 
 #### * Enable ModLens vision for text-only models
 

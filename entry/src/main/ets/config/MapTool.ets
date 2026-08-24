@@ -81,7 +81,7 @@ export function createMapSearchRouteToolDefinition(): ToolDefinition {
       },
       "origin": {
         "type": "string",
-        "description": "路线起点名称。省略时应设置 use_current_location=true。"
+        "description": "路线起点名称或用户保存的常用地点标签，例如‘公司’。省略时应设置 use_current_location=true。"
       },
       "origin_location": {
         "type": "object",
@@ -94,7 +94,7 @@ export function createMapSearchRouteToolDefinition(): ToolDefinition {
       },
       "destination": {
         "type": "string",
-        "description": "路线目的地的完整名称或地址。action=plan_route 且未提供 destination_location 时必填。"
+        "description": "路线目的地的完整名称、地址或用户保存的常用地点标签，例如‘家’。action=plan_route 且未提供 destination_location 时必填。"
       },
       "destination_location": {
         "type": "object",
@@ -137,7 +137,7 @@ export function createMapSearchRouteToolDefinition(): ToolDefinition {
   parameters.setRawSchema(JSON.parse(rawSchemaJson) as object)
   return new ToolDefinition(new ToolFunction(
     MAP_SEARCH_ROUTE_TOOL_ID,
-    '使用华为 Map Kit 搜索公共地点、查找附近兴趣点，或规划驾车、步行、骑行路线。适合回答“附近有什么”“推荐一个目的地”“怎么去”等问题。推荐地点时先搜索候选并根据返回的距离、评分、营业信息做比较；不要虚构未返回的信息。仅在用户明确涉及当前位置、附近或从这里出发时设置 use_current_location=true。工具只返回规划结果，不会自动打开地图应用。',
+    '使用华为 Map Kit 搜索公共地点、查找附近兴趣点，或规划驾车、步行、骑行路线。适合回答“附近有什么”“推荐一个目的地”“怎么去”等问题。路线起终点可直接使用用户保存的常用地点标签，例如“家”“公司”；工具会优先匹配精确标签。推荐地点时先搜索候选并根据返回的距离、评分、营业信息做比较；不要虚构未返回的信息。仅在用户明确涉及当前位置、附近或从这里出发时设置 use_current_location=true。工具只返回规划结果，不会自动打开地图应用。',
     parameters
   ))
 }
@@ -170,7 +170,7 @@ export function createOpenMapRouteToolDefinition(): ToolDefinition {
       },
       "destination": {
         "type": "string",
-        "description": "目的地的完整名称或地址。未提供 destination_location 时必填。"
+        "description": "目的地的完整名称、地址或用户保存的常用地点标签，例如‘家’。未提供 destination_location 时必填。"
       },
       "destination_site_id": {
         "type": "string",
@@ -187,7 +187,7 @@ export function createOpenMapRouteToolDefinition(): ToolDefinition {
       },
       "origin": {
         "type": "string",
-        "description": "可选起点；省略时由花瓣地图使用用户当前位置。"
+        "description": "可选起点名称、地址或用户保存的常用地点标签；省略时由花瓣地图使用用户当前位置。"
       },
       "origin_location": {
         "type": "object",
@@ -218,7 +218,7 @@ export function createOpenMapRouteToolDefinition(): ToolDefinition {
   parameters.setRawSchema(JSON.parse(rawSchemaJson) as object)
   return new ToolDefinition(new ToolFunction(
     OPEN_MAP_ROUTE_TOOL_ID,
-    '在花瓣地图中打开路线规划或发起导航。只有当用户明确要求“打开地图/带我去/开始导航/查看路线”时才调用；不要仅因用户询问路线或请求推荐而调用。此操作会切换到地图应用，执行前应用会要求用户审批。若地点可能重名，先调用 map_search_route 确认准确地点，再传入其名称、siteId 和坐标。',
+    '在花瓣地图中打开路线规划或发起导航。只有当用户明确要求“打开地图/带我去/开始导航/查看路线”时才调用；不要仅因用户询问路线或请求推荐而调用。起终点可直接使用用户保存的常用地点标签，例如“家”“公司”，工具会优先匹配精确标签。此操作会切换到地图应用，执行前应用会要求用户审批。若公共地点可能重名，先调用 map_search_route 确认准确地点，再传入其名称、siteId 和坐标。',
     parameters
   ))
 }
