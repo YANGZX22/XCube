@@ -15,6 +15,7 @@ export struct ChatToolExecutionApprovalSheetContent {
   @Param argumentsTruncated: boolean = false
   @Param showRawArguments: boolean = false
   @Param showWriteSafetyUi: boolean = true
+  @Param showRiskNotice: boolean = true
   @Param showReadScheduleRangeUi: boolean = false
   @Param readScheduleDaysBeforeText: string = '0'
   @Param readScheduleDaysAfterText: string = '7'
@@ -102,7 +103,7 @@ export struct ChatToolExecutionApprovalSheetContent {
         .backgroundColor(this.themeSurface)
       }
 
-      if (this.showWriteSafetyUi) {
+      if (this.showWriteSafetyUi && this.showRiskNotice) {
         Column({ space: 6 }) {
           Text(pickLocalizedText('风险提醒', 'Risk Notice'))
             .fontSize(11)

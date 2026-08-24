@@ -51,6 +51,7 @@ export struct ChatMessageListSection {
   }
   @Event onFileAttachmentClick: (attachment: MessageAttachment) => void = (_attachment: MessageAttachment): void => {}
   @Event onOpenLink: (title: string, url: string) => void = (_title: string, _url: string): void => {}
+  @Event onOpenMap: (visualizationJson: string) => void = (_visualizationJson: string): void => {}
   @Event onTTS: (messageId: string, content: string) => void = (_messageId: string, _content: string): void => {}
   @Event onTTSStop: () => void = (): void => {}
   @Event onAskUserAnswer: (toolCallId: string, answerJson: string) => void =
@@ -393,6 +394,9 @@ export struct ChatMessageListSection {
                 },
                 onOpenLink: (title: string, url: string): void => {
                   this.onOpenLink(title, url)
+                },
+                onOpenMap: (visualizationJson: string): void => {
+                  this.onOpenMap(visualizationJson)
                 },
                 onTTS: (messageId: string, content: string): void => {
                   this.onTTS(messageId, content)

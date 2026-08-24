@@ -1,6 +1,9 @@
-# ChatCube ModLens Gateway
+# XCube ModLens Gateway
 
-这个伴随进程把手机端当前会话中的图片交给 [ModLens](https://github.com/liustack/modlens)，并将结构化视觉证据返回给 XCube 的 `vision_read_image` 工具。手机应用本身不能运行 Node.js，因此网关需运行在电脑或服务器上。
+DeepSeek 和 GLM 等主力对话模型是为纯文本模型，无法进行图片识别。为方便不具备视觉能力的模型使用视觉功能，这个伴随进程把手机端当前会话中的图片交给 [ModLens](https://github.com/liustack/modlens)，并将结构化视觉证据返回给 XCube 的 `vision_read_image` 工具。然而手机应用本身不能运行 Node.js，因此该网关需运行在电脑或服务器上。
+
+> [!Note]
+> 该功能为可选功能，非必须依赖项。
 
 ## 启动
 
@@ -28,11 +31,32 @@ npm start
 
 然后在 XCube「设置 → 工具中心 → ModLens 视觉理解」中填写 `http://电脑局域网IP:8787` 与相同令牌。非回环地址未设置令牌时，网关会拒绝启动。
 
+## XCube 如何取得连接凭据
+
+XCube 自带的是这个伴随网关，不包含浏览器登录前端，也没有默认用户名或密码。常规连接凭据是由网关运行者自行生成的 `MODLENS_GATEWAY_TOKEN`，然后把同一个值填写到 XCube 的 Bearer 字段。
+
+可以在运行网关的电脑上生成随机 token：
+
+```bash
+openssl rand -base64 32
+```
+
+使用生成值启动局域网网关：
+
+```bash
+MODLENS_GATEWAY_HOST=0.0.0.0 \
+MODLENS_GATEWAY_TOKEN='<上一步生成的随机值>' \
+npm start
+```
+
+`POST /auth/login` 和 `MODLENS_AUTH_*` 是供自行搭建网页或其他客户端时复用的**可选单账号接口**，不是 XCube 自带的登录页。你的 `yangzixiao.com/vision/` 前端和 GCE 配置属于另一个 PRISM 网站项目，应在该项目的部署文档中单独维护。
+
 ## 接口与安全
 
 - `GET /health`：检查网关和已安装的 ModLens 版本。
 - `POST /analyze`：接收一张 base64 图片和可选关注点，内部调用固定版本的 ModLens CLI。
 - `POST /auth/login`：可选的单账号登录接口，校验密码派生哈希后签发短时 Bearer；不会向前端暴露主令牌或 provider 密钥。
+- 仅在启用可选单账号接口时，登录失败才会写入运行进程的结构化安全审计日志；不会记录用户名、密码、请求体或令牌。以 systemd 运行时可从 journal 中读取，本地 `npm start` 时则输出到进程日志。
 - 单张图片最大 25 MiB，只接受经文件签名识别的 JPEG、PNG、GIF、WebP。
 - 图片仅写入权限为 `0600` 的临时目录，请求结束即删除；HTTP 响应禁止缓存。
 - 图片会继续发送给你在 ModLens 中选择的视觉 provider。不要对不受信网络直接暴露此端口；跨公网部署时应在前面配置 HTTPS 反向代理。
@@ -54,3 +78,5 @@ npm start
 | `MODLENS_PROVIDER` | 空 | 固定使用指定 provider，例如 `openai`；设置后不自动回退 |
 | `MODLENS_WORKDIR` | 网关目录 | ModLens provider 工作目录 |
 | `MODLENS_CLI_PATH` | 项目依赖中的 CLI | 自定义 ModLens CLI 路径 |
+
+启用单账号接口时，时区、UTC 偏移和语言由外部登录客户端提交，仅用于辅助判断，可能被伪造；IP 记录同时保存其来源。

@@ -45,6 +45,10 @@ export function getLocalizedBuiltinToolName(toolId: string, fallback: string = '
       return pickLocalizedText('读取日程', 'Read Calendar')
     case 'write_schedule':
       return pickLocalizedText('写入日程', 'Write Calendar')
+    case 'map_search_route':
+      return pickLocalizedText('地图', 'Map')
+    case 'open_map_route':
+      return pickLocalizedText('花瓣导航', 'Petal Navigation')
     case 'knowledge_search':
       return pickLocalizedText('知识库检索', 'Knowledge Search')
     case 'compact_context':
@@ -106,6 +110,12 @@ export function getLocalizedBuiltinToolDescription(toolId: string, fallback: str
     case 'write_schedule':
       return pickLocalizedText('经用户确认后写入系统日历事件',
         'Create calendar events after user approval.')
+    case 'map_search_route':
+      return pickLocalizedText('推荐地点并规划驾车、步行或骑行路线',
+        'Find places and plan driving, walking, or cycling routes.')
+    case 'open_map_route':
+      return pickLocalizedText('经用户确认后在花瓣地图中查看路线或发起导航',
+        'Open a route or start navigation in Petal Maps after approval.')
     case 'knowledge_search':
       return pickLocalizedText('按需检索知识库中已上传的文件',
         'Search files uploaded to the knowledge base.')

@@ -42,9 +42,20 @@ import {
   createCompactToolConfig,
   createCompactToolDefinition
 } from './CompactTool'
+import {
+  createMapSearchRouteExecutor,
+  createMapSearchRouteToolConfig,
+  createMapSearchRouteToolDefinition,
+  createOpenMapRouteExecutor,
+  createOpenMapRouteToolConfig,
+  createOpenMapRouteToolDefinition,
+  MAP_SEARCH_ROUTE_TOOL_ID,
+  OPEN_MAP_ROUTE_TOOL_ID
+} from './MapTool'
 
 export { KNOWLEDGE_SEARCH_TOOL_ID } from './KnowledgeSearchTool'
 export { COMPACT_TOOL_ID } from './CompactTool'
+export { MAP_SEARCH_ROUTE_TOOL_ID, OPEN_MAP_ROUTE_TOOL_ID } from './MapTool'
 export {
   SUB_AGENT_TOOL_ID,
   SUB_AGENT_RESULT_TOOL_ID,
@@ -3083,6 +3094,28 @@ export function registerBuiltinTools(): void {
     registeredNow += 1
   }
 
+  if (!registry.isToolRegistered(MAP_SEARCH_ROUTE_TOOL_ID)) {
+    const mapSearchRouteTool = new RegisteredTool(
+      MAP_SEARCH_ROUTE_TOOL_ID,
+      createMapSearchRouteToolConfig(),
+      createMapSearchRouteToolDefinition(),
+      createMapSearchRouteExecutor()
+    )
+    registry.registerTool(mapSearchRouteTool)
+    registeredNow += 1
+  }
+
+  if (!registry.isToolRegistered(OPEN_MAP_ROUTE_TOOL_ID)) {
+    const openMapRouteTool = new RegisteredTool(
+      OPEN_MAP_ROUTE_TOOL_ID,
+      createOpenMapRouteToolConfig(),
+      createOpenMapRouteToolDefinition(),
+      createOpenMapRouteExecutor()
+    )
+    registry.registerTool(openMapRouteTool)
+    registeredNow += 1
+  }
+
   console.info(
     'BuiltinTools',
     `Builtin tools ready: total=${registry.getToolCount()}, newlyRegistered=${registeredNow}`
@@ -3107,6 +3140,8 @@ export function getBuiltinToolIds(): string[] {
     CANVAS_DOCUMENT_TOOL_ID,
     MATH_CHART_TOOL_ID,
     READ_SCHEDULE_TOOL_ID,
-    WRITE_SCHEDULE_TOOL_ID
+    WRITE_SCHEDULE_TOOL_ID,
+    MAP_SEARCH_ROUTE_TOOL_ID,
+    OPEN_MAP_ROUTE_TOOL_ID
   ]
 }

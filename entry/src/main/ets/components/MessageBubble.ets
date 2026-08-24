@@ -12,6 +12,7 @@ import { SUB_AGENT_SOURCE_LABEL_PREFIX } from '../services/SubAgentService'
 import { AskUserCard } from './AskUserCard'
 import { HtmlPreviewCard } from './HtmlPreviewCard'
 import { VChartCard } from './VChartCard'
+import { MapResultCard } from './map/MapResultCard'
 import { TypingDots } from './TypingDots'
 import { ChatMarkdownRenderer } from './ChatMarkdownRenderer'
 import { AssistantAvatarView } from './AssistantAvatar'
@@ -19,7 +20,7 @@ import { hilog } from '@kit.PerformanceAnalysisKit'
 import { SymbolGlyphModifier, uiMaterial } from '@kit.ArkUI'
 import { getAppUiState } from '../state/AppUiState'
 import { withColorAlpha } from '../utils/ColorAlphaUtils'
-import { MATH_CHART_TOOL_ID } from '../config/BuiltinTools'
+import { MAP_SEARCH_ROUTE_TOOL_ID, MATH_CHART_TOOL_ID } from '../config/BuiltinTools'
 import { formatBillingAmount } from '../utils/ModelBillingUtils'
 import { ImmersiveSheetHeader } from './ImmersiveSheetHeader'
 import { resolveChatSerifFontFamily } from '../utils/ChatSerifFontUtils'
@@ -80,6 +81,16 @@ class MessageVChartPayload {
     this.specJson = specJson
     this.summary = summary
     this.chartType = chartType
+  }
+}
+
+class MessageMapPayload {
+  id: string = ''
+  resultContent: string = ''
+
+  constructor(id: string, resultContent: string) {
+    this.id = id
+    this.resultContent = resultContent
   }
 }
 
@@ -228,6 +239,7 @@ export struct MessageBubble {
   @Event onImageClick: (images: Array<string>, index: number) => void = () => {}
   @Event onFileAttachmentClick: (attachment: MessageAttachment) => void = (_attachment: MessageAttachment): void => {}
   @Event onOpenLink: (title: string, url: string) => void = () => {}
+  @Event onOpenMap: (visualizationJson: string) => void = (_visualizationJson: string): void => {}
   // TTS朗读回调
   @Event onTTS: (messageId: string, content: string) => void = () => {}
   @Event onTTSStop: () => void = () => {}
@@ -1181,6 +1193,12 @@ export struct MessageBubble {
     return normalizedFunctionName === MATH_CHART_TOOL_ID || normalizedToolId === MATH_CHART_TOOL_ID
   }
 
+  private isMapSearchToolCall(toolCall: ToolCall): boolean {
+    const normalizedFunctionName = this.normalizeToolFunctionName(toolCall.functionName)
+    const normalizedToolId = this.normalizeToolFunctionName(toolCall.toolId)
+    return normalizedFunctionName === MAP_SEARCH_ROUTE_TOOL_ID || normalizedToolId === MAP_SEARCH_ROUTE_TOOL_ID
+  }
+
   // 按工具身份（规范化函数名 + 来源标签）合并同一消息内的多次调用；
   // 同一消息的 AskUser 调用合并成一个结果栏，被隐藏的调用（如已有搜索引用的联网搜索）不入组
   private containsToolCallId(toolCallIds: string[], toolCallId: string): boolean {
@@ -1329,6 +1347,22 @@ export struct MessageBubble {
         payload.summary ?? '',
         payload.chartType ?? payload.chart_type ?? 'line'
       ))
+    }
+    return payloads
+  }
+
+  private getMapPayloads(toolCallIds: string[] = []): MessageMapPayload[] {
+    const payloads: MessageMapPayload[] = []
+    for (let i = 0; i < this.message.toolCalls.length; i++) {
+      const toolCall = this.message.toolCalls[i]
+      if (!this.containsToolCallId(toolCallIds, toolCall.id) || !this.isMapSearchToolCall(toolCall)) {
+        continue
+      }
+      const toolResult = this.findToolResultForCall(toolCall.id)
+      if (toolResult === null || toolResult.isError || toolResult.content.trim() === '') {
+        continue
+      }
+      payloads.push(new MessageMapPayload(toolCall.id, toolResult.content))
     }
     return payloads
   }
@@ -2412,6 +2446,18 @@ export struct MessageBubble {
             .margin({ bottom: 6 })
         }, (payload: MessageVChartPayload) => payload.id)
       }
+
+      if (this.getMapPayloads(segment.toolCallIds).length > 0) {
+        ForEach(this.getMapPayloads(segment.toolCallIds), (payload: MessageMapPayload) => {
+          MapResultCard({
+            toolResultContent: payload.resultContent,
+            onOpenMap: (visualizationJson: string): void => {
+              this.onOpenMap(visualizationJson)
+            }
+          })
+            .margin({ bottom: 6 })
+        }, (payload: MessageMapPayload) => payload.id)
+      }
     }
     .width('100%')
   }
@@ -2562,6 +2608,19 @@ export struct MessageBubble {
                 })
                   .margin({ bottom: 6 })
               }, (payload: MessageVChartPayload) => payload.id)
+            }
+
+
+            if (!getAppUiState().chatOrderedResponseHistory && this.getMapPayloads().length > 0) {
+              ForEach(this.getMapPayloads(), (payload: MessageMapPayload) => {
+                MapResultCard({
+                  toolResultContent: payload.resultContent,
+                  onOpenMap: (visualizationJson: string): void => {
+                    this.onOpenMap(visualizationJson)
+                  }
+                })
+                  .margin({ bottom: 6 })
+              }, (payload: MessageMapPayload) => payload.id)
             }
 
             // ========== 搜索引用区域 ==========

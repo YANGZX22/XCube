@@ -97,6 +97,10 @@
       "value": "This app needs calendar access to add schedules that you explicitly approve."
     },
     {
+      "name": "permission_location_reason",
+      "value": "This app uses your precise location only when you ask AI to find nearby places, plan a route, or navigate from your current location."
+    },
+    {
       "name": "voice_input",
       "value": "Voice Input"
     },

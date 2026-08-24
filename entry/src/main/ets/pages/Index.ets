@@ -345,6 +345,7 @@ struct Index {
   private settingsNavPathStack: NavPathStack = new NavPathStack()
   private static readonly CHAT_DETAIL_EMPTY_ROUTE: string = 'ChatDetailEmpty'
   private static readonly CHAT_PAGE_ROUTE: string = 'ChatPage'
+  private static readonly MAP_ROUTE_PAGE_ROUTE: string = 'MapRoutePage'
   private settingsReturnTabIndex: number = Index.TAB_SETTINGS
   @Local currentSettingsRouteName: string = ''
   // 返回键退出控制
@@ -569,6 +570,11 @@ struct Index {
 
   private isChatDetailRouteActive(): boolean {
     return this.currentChatRouteName === Index.CHAT_PAGE_ROUTE
+  }
+
+  private isChatFullScreenDestinationActive(): boolean {
+    return this.currentChatRouteName === Index.CHAT_PAGE_ROUTE ||
+      this.currentChatRouteName === Index.MAP_ROUTE_PAGE_ROUTE
   }
 
   private openSettingsDestination(routeName: SettingsRouteName, param: Object | null = null): void {
@@ -1798,7 +1804,7 @@ struct Index {
 
   private shouldHideCompactTabsBar(): boolean {
     return shouldHideCompactTabsBarForIndex(this.currentTabIndex, this.currentSettingsRouteName,
-      this.isChatDetailRouteActive())
+      this.isChatFullScreenDestinationActive())
   }
 
   @Builder

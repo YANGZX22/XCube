@@ -18,6 +18,7 @@ import {
   verifyCredentials,
   verifySessionToken
 } from './auth.mjs'
+import { logLoginFailure } from './audit.mjs'
 
 const gatewayRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 const host = (process.env.MODLENS_GATEWAY_HOST ?? '127.0.0.1').trim()
@@ -105,24 +106,37 @@ function getLoginClientKey(request) {
 
 async function login(request, response) {
   if (accountAuth === null) {
+    logLoginFailure(request, 'login_not_configured')
     respond(response, 404, { ok: false, error: 'Not found' })
     return
   }
   if (!request.headers['content-type']?.toLowerCase().startsWith('application/json')) {
+    logLoginFailure(request, 'unsupported_content_type')
     respond(response, 415, { ok: false, error: 'Content-Type must be application/json' })
     return
   }
   const clientKey = getLoginClientKey(request)
   const rateLimit = loginRateLimiter.consume(clientKey)
   if (!rateLimit.allowed) {
+    logLoginFailure(request, 'rate_limited')
     respond(response, 429, { ok: false, error: 'Too many login attempts; retry later' }, {
       'Retry-After': `${rateLimit.retryAfterSeconds}`
     })
     return
   }
-  const payload = await readJsonBody(request, 4096)
+  let payload
+  try {
+    payload = await readJsonBody(request, 4096)
+  } catch (error) {
+    const reason = error instanceof Error && error.message.includes('exceeds')
+      ? 'request_too_large'
+      : 'invalid_json'
+    logLoginFailure(request, reason)
+    throw error
+  }
   if (payload === null || typeof payload !== 'object' || Array.isArray(payload) ||
     !verifyCredentials(accountAuth, payload.username, payload.password)) {
+    logLoginFailure(request, 'invalid_credentials', payload?.client)
     respond(response, 401, { ok: false, error: 'Invalid credentials' })
     return
   }

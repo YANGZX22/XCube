@@ -97,6 +97,10 @@
       "value": "此应用需要日历权限，用于在您明确确认后写入日程。"
     },
     {
+      "name": "permission_location_reason",
+      "value": "仅当您要求 AI 推荐附近地点、从当前位置规划路线或导航时，此应用才会使用您的精确位置。"
+    },
+    {
       "name": "voice_input",
       "value": "语音输入"
     },

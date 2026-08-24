@@ -47,7 +47,9 @@ import {
   IMAGE_TO_TEXT_TOOL_ID,
   MODLENS_READ_IMAGE_TOOL_ID,
   KNOWLEDGE_SEARCH_TOOL_ID,
+  MAP_SEARCH_ROUTE_TOOL_ID,
   MATH_CHART_TOOL_ID,
+  OPEN_MAP_ROUTE_TOOL_ID,
   PDF_TO_TEXT_TOOL_ID,
   PYTHON_SANDBOX_TOOL_ID,
   READ_SCHEDULE_TOOL_ID,
@@ -147,6 +149,7 @@ import { VisualEffectsMode } from '../models/ThemeColors'
 import { ensureManuscriptFonts, MANUSCRIPT_COMPACT_BAR_HEIGHT } from '../utils/ManuscriptVisualUtils'
 import { ImmersiveSheetHeader } from '../components/ImmersiveSheetHeader'
 import { AskUserCard } from '../components/AskUserCard'
+import { MapRoutePageParams } from './MapRoutePage'
 
 const DOMAIN = 0x0003
 const TAG = 'ChatPage'
@@ -314,6 +317,7 @@ export struct ChatPage {
   @Local toolExecutionApprovalArgumentsTruncated: boolean = false
   @Local showRawToolExecutionApprovalArguments: boolean = false
   @Local showToolExecutionApprovalSafetyUi: boolean = true
+  @Local showToolExecutionApprovalRiskNotice: boolean = true
   @Local toolExecutionApprovalTitle: string = ''
   @Local showReadScheduleRangeUi: boolean = false
   @Local readScheduleDaysBeforeText: string = '0'
@@ -1791,6 +1795,17 @@ export struct ChatPage {
     this.showMessageWebSheet = true
   }
 
+  private handleMapOpen(visualizationJson: string): void {
+    if (visualizationJson.trim() === '') {
+      return
+    }
+    this.safeStopInputSession()
+    this.navPathStack.pushPath({
+      name: 'MapRoutePage',
+      param: { visualizationJson: visualizationJson } as MapRoutePageParams
+    })
+  }
+
   private async handlePdfAttachmentPreview(attachment: MessageAttachment): Promise<void> {
     if (!this.isPdfAttachment(attachment) || attachment.filePath.trim() === '') {
       this.showError(pickLocalizedText('无法预览该 PDF 文件', 'Unable to preview this PDF file'))
@@ -2592,6 +2607,8 @@ export struct ChatPage {
       !this.toolRegistry.isToolRegistered(SUB_AGENT_RESULT_TOOL_ID) ||
       !this.toolRegistry.isToolRegistered(USE_SKILL_TOOL_ID) ||
       !this.toolRegistry.isToolRegistered(MATH_CHART_TOOL_ID) ||
+      !this.toolRegistry.isToolRegistered(MAP_SEARCH_ROUTE_TOOL_ID) ||
+      !this.toolRegistry.isToolRegistered(OPEN_MAP_ROUTE_TOOL_ID) ||
       !this.toolRegistry.isToolRegistered(READ_SCHEDULE_TOOL_ID) ||
       !this.toolRegistry.isToolRegistered(WRITE_SCHEDULE_TOOL_ID)) {
       registerBuiltinTools()
@@ -2917,6 +2934,35 @@ export struct ChatPage {
       console.error('ChatPage', `Failed to update selected MCP tool group: ${JSON.stringify(error)}`)
       this.showError(pickLocalizedText('工具选择保存失败', 'Failed to save tool selection'))
     })
+  }
+
+  private handleAllToolSelectionToggle(toolIds: string[], enabled: boolean): void {
+    const nextToolIds = [...this.getActiveComposerSelectedToolIds()]
+    let shouldRebuildAvailableTools = false
+    for (let i = 0; i < toolIds.length; i++) {
+      const toolId = toolIds[i]
+      const registeredTool = this.toolRegistry.getTool(toolId)
+      if (registeredTool !== undefined && !this.isMcpChatTool(registeredTool.config)) {
+        this.applyToolSettingToggleBeforeSelection(toolId, enabled)
+        if (this.isSettingsControlledBuiltinTool(toolId)) {
+          shouldRebuildAvailableTools = true
+        }
+      }
+      const index = nextToolIds.indexOf(toolId)
+      if (enabled && index < 0) {
+        nextToolIds.push(toolId)
+      }
+      if (!enabled && index >= 0) {
+        nextToolIds.splice(index, 1)
+      }
+    }
+    this.updateActiveComposerSelectedToolIds(nextToolIds).catch((error: Object) => {
+      console.error('ChatPage', `Failed to update all selected tools: ${JSON.stringify(error)}`)
+      this.showError(pickLocalizedText('工具选择保存失败', 'Failed to save tool selection'))
+    })
+    if (shouldRebuildAvailableTools) {
+      this.rebuildAvailableChatTools()
+    }
   }
 
   private hasSelectedTools(): boolean {
@@ -3795,6 +3841,9 @@ export struct ChatPage {
           onOpenLink: (title: string, url: string): void => {
             this.handleMessageLinkOpen(title, url)
           },
+          onOpenMap: (visualizationJson: string): void => {
+            this.handleMapOpen(visualizationJson)
+          },
           onTTS: (messageId: string, content: string): void => {
             this.handleTTS(messageId, content)
           },
@@ -4501,6 +4550,9 @@ export struct ChatPage {
       },
       onToggleMcpGroup: (toolIds: string[], enabled: boolean): void => {
         this.handleMcpToolGroupSelectionToggle(toolIds, enabled)
+      },
+      onToggleAll: (toolIds: string[], enabled: boolean): void => {
+        this.handleAllToolSelectionToggle(toolIds, enabled)
       }
     })
   }
@@ -4544,6 +4596,7 @@ export struct ChatPage {
       argumentsTruncated: this.toolExecutionApprovalArgumentsTruncated,
       showRawArguments: this.showRawToolExecutionApprovalArguments,
       showWriteSafetyUi: this.showToolExecutionApprovalSafetyUi,
+      showRiskNotice: this.showToolExecutionApprovalRiskNotice,
       showReadScheduleRangeUi: this.showReadScheduleRangeUi,
       readScheduleDaysBeforeText: this.readScheduleDaysBeforeText,
       readScheduleDaysAfterText: this.readScheduleDaysAfterText,
@@ -5928,6 +5981,7 @@ export struct ChatPage {
     this.toolExecutionApprovalArgumentsTruncated = false
     this.showRawToolExecutionApprovalArguments = false
     this.showToolExecutionApprovalSafetyUi = true
+    this.showToolExecutionApprovalRiskNotice = true
     this.toolExecutionApprovalTitle = ''
     this.showReadScheduleRangeUi = false
     this.readScheduleDaysBeforeText = '0'
@@ -6012,6 +6066,7 @@ export struct ChatPage {
       this.toolExecutionApprovalArgumentsTruncated = preview.rawTruncated
       this.showRawToolExecutionApprovalArguments = false
       this.showToolExecutionApprovalSafetyUi = toolId !== WRITE_SCHEDULE_TOOL_ID && toolId !== READ_SCHEDULE_TOOL_ID
+      this.showToolExecutionApprovalRiskNotice = toolId !== OPEN_MAP_ROUTE_TOOL_ID
       this.showReadScheduleRangeUi = toolId === READ_SCHEDULE_TOOL_ID
       if (this.showReadScheduleRangeUi) {
         this.configureReadScheduleRangeState(argumentsJson)

@@ -2930,14 +2930,14 @@ struct ContextCompactCardItem {
         ChatFloatingImmersiveButton({
           barWidth: 44,
           barHeight: 44,
-          iconResource: $r('sys.symbol.wrench_and_screwdriver'),
+          iconResource: $r('sys.symbol.doc_zipper'),
           iconSize: 20,
           iconColor: [this.themePrimary],
           responsePadding: 0,
           onButtonClick: (): void => {}
         }) {
           Stack({ alignContent: Alignment.Center }) {
-            SymbolGlyph($r('sys.symbol.wrench_and_screwdriver'))
+            SymbolGlyph($r('sys.symbol.doc_zipper'))
               .renderingStrategy(SymbolRenderingStrategy.SINGLE)
               .fontSize(20)
               .fontColor([this.themePrimary])
@@ -3455,7 +3455,7 @@ struct BuiltinToolCardItem {
       return $r('sys.symbol.picture')
     }
     if (toolId === 'vision_read_image') {
-      return $r('sys.symbol.picture')
+      return $r('sys.symbol.picture_badge_arrowshape_turn_right_up')
     }
     if (toolId === 'use_skill') {
       return $r('sys.symbol.more')
@@ -3468,6 +3468,15 @@ struct BuiltinToolCardItem {
     }
     if (toolId === 'write_schedule') {
       return $r('sys.symbol.calendar_badge_plus')
+    }
+    if (toolId === 'map_search_route') {
+      return $r('sys.symbol.map')
+    }
+    if (toolId === 'open_map_route') {
+      return $r('sys.symbol.navigation')
+    }
+    if (toolId === 'compact') {
+      return $r('sys.symbol.doc_zipper')
     }
     return $r('sys.symbol.wrench_and_screwdriver')
   }

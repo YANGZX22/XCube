@@ -20,6 +20,7 @@ import { getAssistantService, AssistantService } from './AssistantService'
 import { getWebDAVService, WebDAVService } from './WebDAVService'
 import { getWebDAVSyncService, WebDAVSyncService } from './WebDAVSyncService'
 import { getCalendarWriteService, CalendarWriteService } from './CalendarWriteService'
+import { getMapKitService, MapKitService } from './MapKitService'
 import { getCanvasDocumentService, CanvasDocumentService } from './CanvasDocumentService'
 import { getContextCompactionService, ContextCompactionService } from './ContextCompactionService'
 import { getModLensVisionService, ModLensVisionService } from './ModLensVisionService'
@@ -140,6 +141,10 @@ export class ServiceRegistry {
 
   static calendarWrite(): CalendarWriteService {
     return getCalendarWriteService()
+  }
+
+  static mapKit(): MapKitService {
+    return getMapKitService()
   }
 
   static canvasDocument(): CanvasDocumentService {

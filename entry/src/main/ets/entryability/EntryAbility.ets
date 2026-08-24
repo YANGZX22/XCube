@@ -161,6 +161,7 @@ export default class EntryAbility extends UIAbility {
       ServiceRegistry.backgroundGuard().initialize(this.context)
       ServiceRegistry.backgroundGuard().onAppBackgroundChanged(false)
       ServiceRegistry.calendarWrite().initialize(this.context)
+      ServiceRegistry.mapKit().initialize(this.context)
     } catch (error) {
       if (error instanceof AppError) {
         hilog.error(

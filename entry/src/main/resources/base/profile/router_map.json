@@ -6,6 +6,11 @@
       "buildFunction": "ChatPageBuilder"
     },
     {
+      "name": "MapRoutePage",
+      "pageSourceFile": "src/main/ets/pages/MapRoutePage.ets",
+      "buildFunction": "MapRoutePageBuilder"
+    },
+    {
       "name": "ChatDetailEmpty",
       "pageSourceFile": "src/main/ets/pages/ChatDetailEmptyPage.ets",
       "buildFunction": "ChatDetailEmptyPageBuilder"
