@@ -23,7 +23,7 @@
 > [!IMPORTANT]
 > XCube requires **HarmonyOS 7 (API 26.0.0) or later**. Users on HarmonyOS 6 or earlier must first join the [Huawei Beta Test Program](https://cn.club.vmall.com/mhw/assets/file-html-app/3b2bca9630d0fcb2bb2dfac09ee415ea20230529103243/index.html?ts=1785306752202#/) before installing the app. Refer to the program website for current test dates.
 
-> [!NOTE] Version history
+> [!NOTE]
 > XCube continues [YANGZX22/chatcube](https://github.com/YANGZX22/chatcube), which was originally forked from [LongLiveY96/ChatCube](https://github.com/LongLiveY96/ChatCube). Copyright and MIT license notices from both earlier versions are preserved in full.
 
 ## Screenshots
@@ -82,10 +82,10 @@ The Knowledge Base tab accepts DOCX, XLSX, PDF, Markdown, text, and image upload
 - **Two embedding options** — on-device ArkData Embedding on PC/2-in-1 devices, or any OpenAI-compatible Embedding API
 - **Local data storage** — files, OCR results, indexes, and vectors are stored in the app sandbox
 
-> [!NOTE] NOTE 1
+> [!NOTE]
 > On-device ArkData Embedding currently supports 2-in-1 devices only. Phones and tablets can use an API Embedding model; keyword retrieval remains available when no Embedding API is configured.
 
-> [!NOTE] NOTE 2
+> [!NOTE]
 > Office parsing currently supports the OOXML `.docx` and `.xlsx` formats. Legacy `.doc`/`.xls` files, encrypted files, macros, chart content, and OCR of images embedded in documents are not supported. Formulas use the cached value saved in the workbook when available; otherwise, the formula expression is preserved.
 
 ### 🛠️ Built-in Tools

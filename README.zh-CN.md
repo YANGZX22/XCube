@@ -23,7 +23,7 @@
 > [!IMPORTANT]
 > XCube 要求设备运行 **HarmonyOS 7（API 26.0.0）或更高版本**。HarmonyOS 6 及更早版本的用户需先加入[花粉 Beta 版测试计划](https://cn.club.vmall.com/mhw/assets/file-html-app/3b2bca9630d0fcb2bb2dfac09ee415ea20230529103243/index.html?ts=1785306752202#/)，再安装本应用。测试计划时间以网站为准。
 
-> [!NOTE] 历史版本说明
+> [!NOTE]
 > XCube 延续自 [YANGZX22/chatcube](https://github.com/YANGZX22/chatcube)，该项目最初由 [LongLiveY96/ChatCube](https://github.com/LongLiveY96/ChatCube) 分支而来。两个早期版本的版权与 MIT 许可证声明均完整保留。
 
 ## 界面截图
@@ -82,36 +82,36 @@ OpenAI · Claude · Gemini · DeepSeek · Grok · Ollama · OpenRouter · Silico
 - **两种向量方案** —— PC／2-in-1 设备可使用本地 ArkData Embedding，也可接入任意 OpenAI 兼容的 Embedding API
 - **本地数据存储** —— 文件、OCR 结果、索引和向量均存放在应用沙箱内
 
-> [!NOTE] NOTE 1
+> [!NOTE]
 > 本地 ArkData Embedding 目前仅支持 2-in-1 设备。手机和平板可以使用 API Embedding；未配置 Embedding API 时，关键词检索仍可正常使用。
 
-> [!NOTE] NOTE 2
+> [!NOTE]
 > Office 解析目前支持 OOXML 格式 `.docx` 和 `.xlsx`，不支持旧版 `.doc`／`.xls`、加密文件、宏、图表内容或文档内图片 OCR。公式优先读取文件保存的缓存结果，无缓存时保留公式表达式。
 
 ### 🛠️ 内置工具
 
-| 工具 | 功能 |
-|------|------|
-| **向用户提问** | 模型遇到关键歧义时，可通过确认卡片请求用户补充信息 |
-| **联网搜索** | 在搜索预算内获取实时信息；超出预算时请求用户确认 |
-| **Canvas 文档** | 在对话区域旁维护用户与 AI 均可编辑的共享文档，并支持 Markdown 预览 |
-| **计划模式** | 由模型创建多步骤任务计划，并在各步骤实际完成后更新状态。计划状态仅允许模型修改；用户可通过 `/plan` 打开只读面板查看当前执行项与总体进度。计划按会话保存在本地，并在再次进入会话时自动恢复 |
-| **Python 沙箱** | 运行 Python 进行计算、数据处理和中间推导 |
-| **数学图表** | 生成基于 [VChart](https://ohpm.openharmony.cn/#/cn/detail/@visactor%2Fharmony-vchart) 的折线图、柱状图、饼图、散点图、桑基图、词云图等可视化 |
-| **PDF 转文本** | 提取 PDF 文本层；扫描件自动回退到本地 Core Vision Kit OCR |
-| **图片转文本** | 使用本地 Core Vision Kit OCR 识别图片文字 |
-| **ModLens 视觉理解*** | 通过 [ModLens](https://github.com/liustack/modlens) 为无视觉模型提供图片 OCR、布局、语义与视觉线索，需要单独部署 |
-| **DOCX 转文本** | 在本地提取 DOCX 的标题、段落、列表和表格，不把原始文件交给不支持文档输入的模型 |
-| **XLSX 转文本** | 在本地提取 XLSX 的工作表、单元格、日期及公式结果，不把原始文件交给不支持文档输入的模型 |
-| **日历** | 在隐私控制下读取用户确认的日期范围，或创建新的日程事件 |
-| **地图** | 使用 HarmonyOS Map Kit 搜索地点，并在聊天中展示当前位置、目的地、路线折线、精确位置与地图跟随 |
-| **常用地点**** | 在 **设置 → 工具 → 常用地点** 中通过地点搜索、地图选点或当前精确位置保存任意数量的标签（如“家”“公司”），供模型按标签读取和使用 |
-| **花瓣导航** | 将搜索地点、坐标或已保存的常用地点标签交给花瓣地图进行路线导航 |
+| 工具                           | 功能 |
+|------------------------------|------|
+| **向用户提问**                    | 模型遇到关键歧义时，可通过确认卡片请求用户补充信息 |
+| **联网搜索**                     | 在搜索预算内获取实时信息；超出预算时请求用户确认 |
+| **Canvas 文档**                | 在对话区域旁维护用户与 AI 均可编辑的共享文档，并支持 Markdown 预览 |
+| **计划模式**                     | 由模型创建多步骤任务计划，并在各步骤实际完成后更新状态。计划状态仅允许模型修改；用户可通过 `/plan` 打开只读面板查看当前执行项与总体进度。计划按会话保存在本地，并在再次进入会话时自动恢复 |
+| **Python 沙箱**                | 运行 Python 进行计算、数据处理和中间推导 |
+| **数学图表**                     | 生成基于 [VChart](https://ohpm.openharmony.cn/#/cn/detail/@visactor%2Fharmony-vchart) 的折线图、柱状图、饼图、散点图、桑基图、词云图等可视化 |
+| **PDF 转文本**                  | 提取 PDF 文本层；扫描件自动回退到本地 Core Vision Kit OCR |
+| **图片转文本**                    | 使用本地 Core Vision Kit OCR 识别图片文字 |
+| **ModLens 视觉理解**<sup>*</sup> | 通过 [ModLens](https://github.com/liustack/modlens) 为无视觉模型提供图片 OCR、布局、语义与视觉线索，需要单独部署 |
+| **DOCX 转文本**                 | 在本地提取 DOCX 的标题、段落、列表和表格，不把原始文件交给不支持文档输入的模型 |
+| **XLSX 转文本**                 | 在本地提取 XLSX 的工作表、单元格、日期及公式结果，不把原始文件交给不支持文档输入的模型 |
+| **日历**                       | 在隐私控制下读取用户确认的日期范围，或创建新的日程事件 |
+| **地图**                       | 使用 HarmonyOS Map Kit 搜索地点，并在聊天中展示当前位置、目的地、路线折线、精确位置与地图跟随 |
+| **常用地点**<sup>#</sup>         | 在 **设置 → 工具 → 常用地点** 中通过地点搜索、地图选点或当前精确位置保存任意数量的标签（如“家”“公司”），供模型按标签读取和使用 |
+| **花瓣导航**                     | 将搜索地点、坐标或已保存的常用地点标签交给花瓣地图进行路线导航 |
 
 > [!IMPORTANT]
 > 使用地图相关功能前，必须在 DevEco Studio 中打开 **File → Project Structure → Signing Configs → Enable open capabilities**，启用 **Map Kit** 并应用配置。如果调试 Profile 早于该能力生成，还需重新申请或下载 Profile 并更新签名配置。未启用 Map Kit 通常会返回错误码 `1002600004`。完整步骤参见[Map Kit 集成说明](docs/map-kit-integration.md#上线前必须完成的控制台配置)。
 
-#### * [可选] 为文本模型启用 ModLens 视觉理解
+#### <sup>*</sup>[可选] 为文本模型启用 ModLens 视觉理解
 
 HarmonyOS 应用无法直接运行 ModLens 所需的 Node.js CLI，因此项目提供可选的轻量伴随网关，供用户部署至计算机或服务器。请按照 [`tools/modlens-gateway/README.md`](tools/modlens-gateway/README.md) 启动网关，再进入 **设置 → 工具中心 → ModLens 视觉理解** 填写地址、测试连接并启用工具。
 
@@ -119,7 +119,7 @@ HarmonyOS 应用无法直接运行 ModLens 所需的 Node.js CLI，因此项目�
 - 当前模型已有原生视觉能力时，应用会自动隐藏该回退工具
 - 网关不可用、未启用或模型不支持工具调用时，可选用 `image_to_text`
 
-#### ** 常用地点及其坐标保存在应用本地，只有启用对应工具后模型才能读取；获取当前精确位置和使用 Map Kit 时需要授予应用位置与地图权限。
+#### <sup>#</sup>常用地点及其坐标保存在应用本地，只有启用对应工具后模型才能读取；获取当前精确位置和使用 Map Kit 时需要授予应用位置与地图权限。
 
 ### 🔊 回复播报
 
