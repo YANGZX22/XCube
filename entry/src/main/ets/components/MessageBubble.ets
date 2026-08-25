@@ -94,6 +94,26 @@ class MessageMapPayload {
   }
 }
 
+// @Local 数组要整体替换才会触发刷新，这两个 helper 统一返回新数组
+function appendUniqueId(ids: string[], id: string): string[] {
+  if (ids.includes(id)) {
+    return ids
+  }
+  const next = ids.slice()
+  next.push(id)
+  return next
+}
+
+function removeId(ids: string[], id: string): string[] {
+  const index = ids.indexOf(id)
+  if (index < 0) {
+    return ids
+  }
+  const next = ids.slice()
+  next.splice(index, 1)
+  return next
+}
+
 @ComponentV2
 export struct MessageBubble {
   @Param message: ChatMessage = new ChatMessage('', MessageRole.USER, '')
@@ -113,7 +133,10 @@ export struct MessageBubble {
   @Param previewAttachments: MessageAttachment[] = []  // 编辑时的实时预览附件
   @Param isFirstAssistantMessage: boolean = false
   @Local isReasoningExpanded: boolean = false  // 推理内容是否展开
+  // 用户显式展开/折叠过的推理段。两个列表都需要：生成中的推理段默认展开，
+  // 只记录"展开过"就无法表达"用户主动折叠了正在生成的推理段"。
   @Local expandedTimelineReasoningIds: string[] = []
+  @Local collapsedTimelineReasoningIds: string[] = []
   @Local translatedText: string = ''  // 翻译结果
   @Local isTranslating: boolean = false  // 是否正在翻译
   @Local showTranslation: boolean = false  // 是否显示翻译结果
@@ -352,6 +375,7 @@ export struct MessageBubble {
     this.syncDerivedRenderCaches()
     this.isReasoningExpanded = false
     this.expandedTimelineReasoningIds = []
+    this.collapsedTimelineReasoningIds = []
   }
 
   // 消息状态变化回调（优化跳动点动画性能）
@@ -403,6 +427,8 @@ export struct MessageBubble {
   private resetMessageScopedState(): void {
     this.translationRequestToken++
     this.isReasoningExpanded = false
+    this.expandedTimelineReasoningIds = []
+    this.collapsedTimelineReasoningIds = []
     this.translatedText = this.message.translatedText
     this.isTranslating = false
     this.showTranslation = this.message.translatedText !== ''
@@ -2251,10 +2277,12 @@ export struct MessageBubble {
   }
 
   private isTimelineReasoningExpanded(segment: AssistantResponseSegment): boolean {
-    for (let i = 0; i < this.expandedTimelineReasoningIds.length; i++) {
-      if (this.expandedTimelineReasoningIds[i] === segment.id) {
-        return true
-      }
+    // 用户的显式选择优先于"生成中默认展开"，否则思考过程中永远折不起来
+    if (this.collapsedTimelineReasoningIds.includes(segment.id)) {
+      return false
+    }
+    if (this.expandedTimelineReasoningIds.includes(segment.id)) {
+      return true
     }
     return this.isActiveTimelineSegment(segment)
   }
@@ -2264,15 +2292,15 @@ export struct MessageBubble {
     return this.message.isGenerating && segments.length > 0 && segments[segments.length - 1].id === segment.id
   }
 
-  private toggleTimelineReasoning(segmentId: string): void {
-    const nextIds = this.expandedTimelineReasoningIds.slice()
-    const index = nextIds.indexOf(segmentId)
-    if (index >= 0) {
-      nextIds.splice(index, 1)
-    } else {
-      nextIds.push(segmentId)
-    }
-    this.expandedTimelineReasoningIds = nextIds
+  // 以当前实际展示状态为准取反，保证一次点击就有可见变化
+  private toggleTimelineReasoning(segment: AssistantResponseSegment): void {
+    const shouldExpand = !this.isTimelineReasoningExpanded(segment)
+    this.expandedTimelineReasoningIds =
+      shouldExpand ? appendUniqueId(this.expandedTimelineReasoningIds, segment.id)
+        : removeId(this.expandedTimelineReasoningIds, segment.id)
+    this.collapsedTimelineReasoningIds =
+      shouldExpand ? removeId(this.collapsedTimelineReasoningIds, segment.id)
+        : appendUniqueId(this.collapsedTimelineReasoningIds, segment.id)
   }
 
   private shouldShowTimelineSearchReferences(segment: AssistantResponseSegment): boolean {
@@ -2359,7 +2387,7 @@ export struct MessageBubble {
       .padding({ left: this.isManuscriptMode ? 14 : 10, right: this.isManuscriptMode ? 14 : 10 })
       .alignItems(VerticalAlign.Center)
       .onClick(() => {
-        this.toggleTimelineReasoning(segment.id)
+        this.toggleTimelineReasoning(segment)
       })
 
       if (this.isTimelineReasoningExpanded(segment) && segment.content.trim().length > 0) {
