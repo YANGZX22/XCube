@@ -30,15 +30,14 @@
 
 <table>
   <tr>
-    <td align="center"><img src="docs/screenshots/IMAGE1.jpg" width="220" /><br/><sub>会话列表</sub></td>
-    <td align="center"><img src="docs/screenshots/IMAGE2.jpg" width="220" /><br/><sub>知识库</sub></td>
-    <td align="center"><img src="docs/screenshots/IMAGE3.jpg" width="220" /><br/><sub>子智能体协同</sub></td>
+    <td align="center"><img src="docs/screenshots/conversation-list.png" width="220" /><br/><sub>对话列表</sub></td>
+    <td align="center"><img src="docs/screenshots/knowledge-list.png" width="220" /><br/><sub>知识库</sub></td>
+    <td align="center"><img src="docs/screenshots/answer-using-knowledge-base.png" width="220" /><br/><sub>RAG 智能问答</sub></td>
   </tr>
   <tr>
-    <td align="center"><img src="docs/screenshots/IMAGE4.jpg" width="220" /><br/><sub>上下文</sub></td>
-    <td align="center"><img src="docs/screenshots/IMAGE5.jpg" width="220" /><br/><sub>手稿模式对话</sub></td>
-    <td align="center"><img src="docs/screenshots/IMAGE6.jpg" width="220" /><br/><sub>手稿模式会话列表</sub></td>
-  </tr>
+    <td align="center"><img src="docs/screenshots/work-with-sub-agents.png" width="220" /><br/><sub>和子智能体协调工作</sub></td>
+    <td align="center"><img src="docs/screenshots/map.png" width="220" /><br/><sub>集成地图与导航</sub></td>
+    <td align="center"><img src="docs/screenshots/modlens.png" width="220" /><br/><sub>更好视觉支持</sub></td>
 </table>
 
 ## 项目概览
