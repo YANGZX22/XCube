@@ -9,6 +9,9 @@ export const MANUSCRIPT_BODY_FONT: string = `${LORA_ALIAS},${MANUSCRIPT_CJK_ALIA
 export const MANUSCRIPT_COMPACT_BAR_HEIGHT: number = 36
 export const MANUSCRIPT_COMPOSER_TOOLBAR_HEIGHT: number = 28
 export const MANUSCRIPT_BOTTOM_TOOLBAR_HEIGHT: number = 48
+// 星标行高度。生成时钉在输入区、结束后落回列表末尾，两处共用同一高度，
+// 交接时列表内容不会因为高度差而位移。
+export const MANUSCRIPT_END_MARK_ROW_HEIGHT: number = 38
 
 let manuscriptFontsRegistered: boolean = false
 

@@ -1,5 +1,9 @@
 import { getAppUiState } from '../../state/AppUiState'
-import { MANUSCRIPT_BODY_FONT } from '../../utils/ManuscriptVisualUtils'
+import {
+  MANUSCRIPT_BODY_FONT,
+  MANUSCRIPT_END_MARK_ROW_HEIGHT,
+  MANUSCRIPT_HEADING_FONT
+} from '../../utils/ManuscriptVisualUtils'
 
 const actionVerbs: string[] = [
   'Accomplishing', 'Actioning', 'Actualizing', 'Architecting', 'Baking', 'Beaming', "Beboppin'", 'Befuddling',
@@ -140,5 +144,34 @@ export struct ManuscriptWorkingIndicator {
       .textOverflow({ overflow: TextOverflow.Clip })
       .opacity(this.textOpacity)
       .textAlign(TextAlign.Start)
+  }
+}
+
+/**
+ * 生成期间钉在输入区上方的星标行。
+ *
+ * 放在列表里时，它跟着流式增长的正文一起被顶下去、又被滚动纠偏拉回来，
+ * 每个数据块抖一次。移到输入区之后它不再参与列表布局，位置恒定；
+ * 生成结束由列表末尾的静态星标接手（两者高度相同，交接不产生位移）。
+ */
+@ComponentV2
+export struct ManuscriptWorkingMark {
+  private get accentColor(): string {
+    return getAppUiState().isDarkMode ? '#C99A52' : '#B68235'
+  }
+
+  build() {
+    Row({ space: 7 }) {
+      Text('\u2042')
+        .fontFamily(MANUSCRIPT_HEADING_FONT)
+        .fontSize(13)
+        .fontColor(this.accentColor)
+
+      ManuscriptWorkingIndicator()
+    }
+    .width('100%')
+    .height(MANUSCRIPT_END_MARK_ROW_HEIGHT)
+    .justifyContent(FlexAlign.Center)
+    .alignItems(VerticalAlign.Center)
   }
 }

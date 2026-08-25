@@ -147,7 +147,12 @@ import {
 } from '../utils/SlashCommandUtils'
 import { MAX_CONVERSATION_GOAL_LENGTH } from '../utils/ConversationGoalUtils'
 import { VisualEffectsMode } from '../models/ThemeColors'
-import { ensureManuscriptFonts, MANUSCRIPT_COMPACT_BAR_HEIGHT } from '../utils/ManuscriptVisualUtils'
+import {
+  ensureManuscriptFonts,
+  MANUSCRIPT_COMPACT_BAR_HEIGHT,
+  MANUSCRIPT_END_MARK_ROW_HEIGHT
+} from '../utils/ManuscriptVisualUtils'
+import { ManuscriptWorkingMark } from '../components/chat/ManuscriptWorkingIndicator'
 import { ImmersiveSheetHeader } from '../components/ImmersiveSheetHeader'
 import { AskUserCard } from '../components/AskUserCard'
 import { MapRoutePageParams } from './MapRoutePage'
@@ -389,6 +394,19 @@ export struct ChatPage {
   }
   private get isManuscriptMode(): boolean {
     return getAppUiState().visualEffectsMode === VisualEffectsMode.MANUSCRIPT
+  }
+  // 手稿模式生成期间：星标行钉在输入区上方，不再跟随列表内容滚动
+  private get isManuscriptWorkingMarkPinned(): boolean {
+    if (!this.isManuscriptMode || this.messages.length === 0) {
+      return false
+    }
+    for (let i = this.messages.length - 1; i >= 0; i--) {
+      const message = this.messages[i]
+      if (message.role === MessageRole.ASSISTANT && (message.isGenerating || message.isSearching)) {
+        return true
+      }
+    }
+    return false
   }
   private get chatFontSize(): number {
     return getAppUiState().chatFontSize
@@ -1999,7 +2017,7 @@ export struct ChatPage {
   }
 
   private getManuscriptEndMarkItemCount(): number {
-    return this.isManuscriptMode && this.messages.length > 0 ? 1 : 0
+    return this.isManuscriptMode && this.messages.length > 0 && !this.isManuscriptWorkingMarkPinned ? 1 : 0
   }
 
   private getBottomAnchorListIndex(): number {
@@ -3812,6 +3830,7 @@ export struct ChatPage {
           showDraftPreview: this.hasDraftContent(),
           draftPreviewTimeText: this.getPreviewTimeText(),
           bottomPadding: this.getListBottomPadding(),
+          isWorkingMarkPinned: this.isManuscriptWorkingMarkPinned,
           topInsetHeight: this.getMessageListContentTopSpacerHeight(),
           currentModelId: this.currentModelId,
           assistantName: this.currentAssistantName,
@@ -3959,6 +3978,15 @@ export struct ChatPage {
         // 底部输入栏容器（非多选模式时显示）
         if (!this.isMultiSelectMode) {
           Column() {
+            if (this.isManuscriptWorkingMarkPinned) {
+              ManuscriptWorkingMark()
+                .transition(
+                  TransitionEffect.OPACITY
+                    .combine(TransitionEffect.translate({ y: 8 }))
+                    .animation({ duration: 220, curve: Curve.EaseOut })
+                )
+            }
+
             ChatInputAreaSection({
               inputText: this.inputText,
               onInputTextChange: (value: string): void => {
@@ -5453,12 +5481,14 @@ export struct ChatPage {
 
   // 计算列表底部留白高度：优先跟随底部遮挡层的实测高度，避免和输入区布局漂移
   private getListBottomPadding(): number {
+    // 星标行移到输入区后不再占列表高度，这里补回同样的留白，交接前后视觉位置不变
+    const pinnedMarkHeight = this.isManuscriptWorkingMarkPinned ? MANUSCRIPT_END_MARK_ROW_HEIGHT : 0
     const measuredHeight = this.getActiveBottomOverlayHeight()
     if (measuredHeight > 0) {
-      return measuredHeight
+      return measuredHeight + pinnedMarkHeight
     }
     return getListBottomPaddingForChat(this.pendingAttachments.length, this.isEditingMessage,
-      this.px2vp(this.bottomAvoidHeight))
+      this.px2vp(this.bottomAvoidHeight)) + pinnedMarkHeight
   }
 
   // 获取预览气泡的时间文本

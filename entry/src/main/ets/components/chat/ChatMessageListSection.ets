@@ -1,6 +1,5 @@
 import { ChatMessage, MessageAttachment, MessageRole } from '../../models/ChatModels'
 import { DraftPreviewBubble } from './DraftPreviewBubble'
-import { ManuscriptWorkingIndicator } from './ManuscriptWorkingIndicator'
 import { shouldShowMessageHeader } from '../../utils/MessageListUtils'
 import { CHAT_MESSAGE_LIST_ITEM_REUSE_ID, ChatMessageListItem } from './ChatMessageListItem'
 import {
@@ -11,7 +10,11 @@ import {
 } from './ChatMessageListDataSource'
 import { getAppUiState } from '../../state/AppUiState'
 import { VisualEffectsMode } from '../../models/ThemeColors'
-import { ensureManuscriptFonts, MANUSCRIPT_HEADING_FONT } from '../../utils/ManuscriptVisualUtils'
+import {
+  ensureManuscriptFonts,
+  MANUSCRIPT_END_MARK_ROW_HEIGHT,
+  MANUSCRIPT_HEADING_FONT
+} from '../../utils/ManuscriptVisualUtils'
 
 @ComponentV2
 export struct ChatMessageListSection {
@@ -28,6 +31,8 @@ export struct ChatMessageListSection {
   @Param showDraftPreview: boolean = false
   @Param draftPreviewTimeText: string = ''
   @Param bottomPadding: number = 0
+  // 生成期间星标由输入区上方的 ManuscriptWorkingMark 接管，列表末尾不再渲染
+  @Param isWorkingMarkPinned: boolean = false
   @Param topInsetHeight: number = 0
   @Param currentModelId: string = ''
   @Param assistantName: string = '默认助手'
@@ -86,16 +91,6 @@ export struct ChatMessageListSection {
       }
     }
     return true
-  }
-
-  private hasWorkingAssistantMessage(): boolean {
-    for (let i = this.messages.length - 1; i >= 0; i--) {
-      const message = this.messages[i]
-      if (message.role === MessageRole.ASSISTANT && (message.isGenerating || message.isSearching)) {
-        return true
-      }
-    }
-    return false
   }
 
   @Monitor('syncVersion')
@@ -424,30 +419,21 @@ export struct ChatMessageListSection {
             }
           }, (item: ChatMessageRowData): string => item.key)
 
-          if (getAppUiState().visualEffectsMode === VisualEffectsMode.MANUSCRIPT && this.messages.length > 0) {
+          if (getAppUiState().visualEffectsMode === VisualEffectsMode.MANUSCRIPT &&
+            this.messages.length > 0 && !this.isWorkingMarkPinned) {
             ListItem({ style: ListItemStyle.NONE }) {
-              if (this.hasWorkingAssistantMessage()) {
-                Row({ space: 7 }) {
-                  Text('⁂')
-                    .fontFamily(MANUSCRIPT_HEADING_FONT)
-                    .fontSize(13)
-                    .fontColor(getAppUiState().isDarkMode ? '#C99A52' : '#B68235')
-
-                  ManuscriptWorkingIndicator()
-                }
-                .width('100%')
-                .justifyContent(FlexAlign.Center)
-                .alignItems(VerticalAlign.Center)
-                .padding({ top: 12, bottom: 8 })
-              } else {
+              Row() {
                 Text('⁂')
-                  .width('100%')
                   .fontFamily(MANUSCRIPT_HEADING_FONT)
                   .fontSize(13)
                   .fontColor(getAppUiState().isDarkMode ? '#C99A52' : '#B68235')
-                  .textAlign(TextAlign.Center)
-                  .padding({ top: 12, bottom: 8 })
               }
+              .width('100%')
+              .height(MANUSCRIPT_END_MARK_ROW_HEIGHT)
+              .justifyContent(FlexAlign.Center)
+              .alignItems(VerticalAlign.Center)
+              // 生成结束后星标从输入区交接回这里，淡入衔接
+              .transition(TransitionEffect.OPACITY.animation({ duration: 260, curve: Curve.EaseOut }))
             }
           }
 
