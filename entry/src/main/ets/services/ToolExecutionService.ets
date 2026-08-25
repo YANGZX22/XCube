@@ -2,6 +2,34 @@ import { ToolCall, ToolResult } from '../models/ChatModels'
 import { ASK_USER_TOOL_ID } from '../config/BuiltinTools'
 import { getToolRegistry, RegisteredTool, ToolRegistry } from './ToolRegistry'
 
+interface ToolExecutionErrorLike {
+  code?: number | string
+  message?: string
+}
+
+/** Error.message/code are commonly non-enumerable, so JSON.stringify(Error) alone usually produces `{}`. */
+export function formatToolExecutionError(error: Object): string {
+  const value = error as ToolExecutionErrorLike
+  const code = value.code === undefined ? '' : `${value.code}`.trim()
+  const message = (value.message || '').trim()
+  if (code !== '' && message !== '') {
+    return `code=${code}, message=${message}`
+  }
+  if (message !== '') {
+    return message
+  }
+  if (code !== '') {
+    return `code=${code}`
+  }
+  try {
+    const serialized = JSON.stringify(error)
+    if (serialized !== '' && serialized !== '{}' && serialized !== 'null') {
+      return serialized
+    }
+  } catch (_error) {}
+  return '未知错误（工具未提供错误码或错误信息）'
+}
+
 // 取消检查回调类型
 type CancelCheckCallback = () => boolean
 type ToolApprovalCallback = (toolCall: ToolCall, tool: RegisteredTool) => Promise<ToolApprovalResult>
@@ -529,10 +557,11 @@ export class ToolExecutionService {
         registeredTool.config.sourceLabel
       )
     } catch (error) {
-      console.error('ToolExecutionService', `Tool execution error: ${JSON.stringify(error)}`)
+      const errorDetail = formatToolExecutionError(error)
+      console.error('ToolExecutionService', `Tool execution error: ${errorDetail}`)
       return new ToolResult(
         toolCall.id,
-        JSON.stringify({ error: `工具执行失败: ${JSON.stringify(error)}` }),
+        JSON.stringify({ error: `工具执行失败: ${errorDetail}` }),
         true,
         registeredTool.config.name,
         registeredTool.config.sourceLabel

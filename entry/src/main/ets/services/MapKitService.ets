@@ -17,6 +17,53 @@ const MAX_RESULT_LIMIT: number = 10
 const MAX_VISUALIZATION_CACHE_SIZE: number = 24
 const MAX_PERSISTED_VISUALIZATION_COUNT: number = 128
 const VISUALIZATION_DIRECTORY_NAME: string = 'map_visualizations'
+const MAX_MAP_OPERATION_ATTEMPTS: number = 3
+const MAP_RETRY_DELAYS_MS: number[] = [250, 750]
+
+export class NonRetryableMapError extends Error {
+  constructor(message: string) {
+    super(message)
+  }
+}
+
+/**
+ * Map Kit and Location Kit both document a small set of failures that can be transient. Keep this list explicit so
+ * invalid parameters, denied permissions, disabled services, billing, and quota exhaustion fail fast. Map Kit
+ * authentication is included because its documented causes also include network timeouts during the initial handshake.
+ * Some device/SDK combinations reject with a bare Error or `{}`; those failures are retried unless they originated
+ * from one of the local validation/permission checks represented by NonRetryableMapError.
+ */
+export function shouldRetryMapOperation(error: Object, attemptIndex: number): boolean {
+  if (attemptIndex < 0 || attemptIndex >= MAX_MAP_OPERATION_ATTEMPTS - 1) {
+    return false
+  }
+  if (error instanceof NonRetryableMapError) {
+    return false
+  }
+  const code = (error as BusinessError).code
+  if (code === undefined || code === 0) {
+    return true
+  }
+  switch (code) {
+    // Map Kit: internal/connectivity/QPS/server/route-region resolution failures.
+    case 1002600001:
+    case 1002600002:
+    case 1002600003:
+    case 1002600005:
+    case 1002600007:
+    case 1002600010:
+    case 1002600011:
+    case 1002600013:
+    case 1002600999:
+    // Location Kit: service startup, positioning, or response timeout failures.
+    case 3301000:
+    case 3301200:
+    case 3301700:
+      return true
+    default:
+      return false
+  }
+}
 
 export interface MapCoordinateArgs {
   latitude?: number | string
@@ -212,6 +259,19 @@ export function normalizeMapAction(value: string | undefined): string {
   return MAP_ACTION_SEARCH
 }
 
+export function buildImmediateDrivingRouteParams(
+  origin: mapCommon.LatLng,
+  destination: mapCommon.LatLng,
+  language: string
+): navi.DrivingRouteParams {
+  return {
+    origins: [origin],
+    destination: destination,
+    language: language,
+    alternatives: true
+  }
+}
+
 export class MapKitService {
   private static instance: MapKitService | null = null
   private context: common.UIAbilityContext | null = null
@@ -321,15 +381,27 @@ export class MapKitService {
   }
 
   async searchOrPlanRoute(request: MapSearchRouteRequest): Promise<MapSearchRouteResult> {
-    try {
-      const action = normalizeMapAction(request.action)
-      if (action === MAP_ACTION_ROUTE) {
-        return await this.planRoute(request)
+    for (let attemptIndex = 0; attemptIndex < MAX_MAP_OPERATION_ATTEMPTS; attemptIndex++) {
+      try {
+        const action = normalizeMapAction(request.action)
+        if (action === MAP_ACTION_ROUTE) {
+          return await this.planRoute(request)
+        }
+        return await this.searchPlaces(request)
+      } catch (error) {
+        if (!shouldRetryMapOperation(error, attemptIndex)) {
+          throw this.toMapError(error)
+        }
+        const businessError = error as BusinessError
+        const errorCode = businessError.code === undefined ? 'none' : `${businessError.code}`
+        console.warn(
+          'MapKitService',
+          `Transient map operation failure; retrying attempt=${attemptIndex + 2}, code=${errorCode}`
+        )
+        await this.waitForRetry(MAP_RETRY_DELAYS_MS[attemptIndex])
       }
-      return await this.searchPlaces(request)
-    } catch (error) {
-      throw this.toMapError(error)
     }
+    throw new NonRetryableMapError('地图服务调用失败')
   }
 
   async openMap(request: MapOpenRequest): Promise<MapOpenResult> {
@@ -410,7 +482,7 @@ export class MapKitService {
     const context = this.ensureContext()
     const query = (request.query || '').trim()
     if (query === '') {
-      throw new Error('地点搜索需要 query 参数')
+      throw new NonRetryableMapError('地点搜索需要 query 参数')
     }
     const limit = this.normalizeLimit(request.limit)
     const radius = this.normalizeRadius(request.radiusMeters ?? request.radius_meters)
@@ -436,7 +508,7 @@ export class MapKitService {
     let totalCount = 0
     if (nearby) {
       if (center === null) {
-        throw new Error('附近搜索需要当前位置或 center 坐标')
+        throw new NonRetryableMapError('附近搜索需要当前位置或 center 坐标')
       }
       const params: site.NearbySearchParams = {
         query: query,
@@ -544,7 +616,7 @@ export class MapKitService {
       origin = new ResolvedPlace(await this.getCurrentMapCoordinate())
       didUseCurrentLocation = true
     } else {
-      throw new Error('路线规划需要 origin、origin_location，或 use_current_location=true')
+      throw new NonRetryableMapError('路线规划需要 origin、origin_location，或 use_current_location=true')
     }
 
     const destination = await this.resolveEndpoint(
@@ -556,7 +628,7 @@ export class MapKitService {
     )
     const travelMode = normalizeMapTravelMode(request.travelMode || request.travel_mode)
     if (travelMode === 'transit') {
-      throw new Error('应用内路线规划暂不支持公共交通；可使用“花瓣导航”工具查看公交路线')
+      throw new NonRetryableMapError('应用内路线规划暂不支持公共交通；可使用“花瓣导航”工具查看公交路线')
     }
     const language = this.normalizeLanguage(request.language)
     let routeResult: navi.RouteResult
@@ -575,13 +647,11 @@ export class MapKitService {
       }
       routeResult = await navi.getCyclingRoutes(context, params)
     } else {
-      const params: navi.DrivingRouteParams = {
-        origins: [origin.coordinate.location],
-        destination: destination.coordinate.location,
-        language: language,
-        alternatives: true,
-        departAt: Math.floor(Date.now() / 1000)
-      }
+      const params = buildImmediateDrivingRouteParams(
+        origin.coordinate.location,
+        destination.coordinate.location,
+        language
+      )
       routeResult = await navi.getDrivingRoutes(context, params)
     }
 
@@ -647,7 +717,7 @@ export class MapKitService {
     }
     const keyword = (query || '').trim()
     if (keyword === '') {
-      throw new Error('缺少目的地名称或坐标')
+      throw new NonRetryableMapError('缺少目的地名称或坐标')
     }
     const savedPlace = await getSavedPlacesService().resolveLabel(keyword)
     if (savedPlace !== null) {
@@ -675,7 +745,7 @@ export class MapKitService {
         return new ResolvedPlace(corrected, sites[i])
       }
     }
-    throw new Error(`未找到“${keyword}”的可用坐标`)
+    throw new NonRetryableMapError(`未找到“${keyword}”的可用坐标`)
   }
 
   private async getCurrentMapCoordinate(): Promise<ResolvedCoordinate> {
@@ -975,7 +1045,7 @@ export class MapKitService {
       return null
     }
     if (latitude < -85.2 || latitude > 85.2 || longitude < -180 || longitude >= 180) {
-      throw new Error('经纬度超出 Map Kit 支持范围')
+      throw new NonRetryableMapError('经纬度超出 Map Kit 支持范围')
     }
     return { latitude: latitude, longitude: longitude }
   }
@@ -1072,9 +1142,15 @@ export class MapKitService {
 
   private ensureContext(): common.UIAbilityContext {
     if (this.context === null) {
-      throw new Error('地图服务尚未初始化')
+      throw new NonRetryableMapError('地图服务尚未初始化')
     }
     return this.context
+  }
+
+  private async waitForRetry(delayMs: number): Promise<void> {
+    await new Promise<void>((resolve): void => {
+      setTimeout(resolve, delayMs)
+    })
   }
 
   private async ensurePreciseLocationPermission(): Promise<void> {
@@ -1088,20 +1164,23 @@ export class MapKitService {
         [precisePermission, approximatePermission]
       )
       if (result.authResults.length < 2 || result.authResults[0] !== 0 || result.authResults[1] !== 0) {
-        throw new Error('用户未授权精确位置；请选择精确位置，或提供起点/搜索中心坐标后重试')
+        throw new NonRetryableMapError('用户未授权精确位置；请选择精确位置，或提供起点/搜索中心坐标后重试')
       }
     } catch (error) {
-      if (error instanceof Error) {
-        if (error.message.startsWith('用户未授权精确位置')) {
-          throw error
-        }
-        throw new Error('申请精确位置权限失败: ' + error.message)
+      if (error instanceof NonRetryableMapError) {
+        throw error
       }
-      throw new Error('申请精确位置权限失败: ' + JSON.stringify(error))
+      if (error instanceof Error) {
+        throw new NonRetryableMapError('申请精确位置权限失败: ' + error.message)
+      }
+      throw new NonRetryableMapError('申请精确位置权限失败: ' + JSON.stringify(error))
     }
   }
 
   private toMapError(error: Object): Error {
+    if (error instanceof NonRetryableMapError) {
+      return error
+    }
     if (error instanceof Error) {
       const businessError = error as BusinessError
       if (businessError.code === 1002600004) {
@@ -1113,9 +1192,15 @@ export class MapKitService {
       if (businessError.code !== undefined && businessError.code !== 0) {
         return new Error(`地图服务调用失败（${businessError.code}）：${businessError.message}`)
       }
-      return error
+      const message = error.message.trim()
+      return message === ''
+        ? new Error('地图服务调用失败（SDK 未提供错误码或错误信息）')
+        : new Error(`地图服务调用失败（SDK 未提供错误码）：${message}`)
     }
-    return new Error('地图服务调用失败: ' + JSON.stringify(error))
+    const serialized = JSON.stringify(error)
+    return serialized === '' || serialized === '{}'
+      ? new Error('地图服务调用失败（SDK 未提供错误码或错误信息）')
+      : new Error('地图服务调用失败: ' + serialized)
   }
 }
 
