@@ -113,10 +113,12 @@ export struct ChatInputBar {
   @Param manuscriptScrollBottomLoading: boolean = false
   @Param showManuscriptHistory: boolean = false
   @Param showManuscriptCanvas: boolean = false
+  @Param showManuscriptPlan: boolean = false
   @Event onManuscriptScrollTop: () => void = () => {}
   @Event onManuscriptScrollBottom: () => void = () => {}
   @Event onManuscriptHistory: () => void = () => {}
   @Event onManuscriptCanvas: () => void = () => {}
+  @Event onManuscriptPlan: () => void = () => {}
   // 最近截图检测回调（通知父组件渲染 banner）
   @Event onRecentPhotoDetected: (detected: boolean) => void = () => {
   }
@@ -407,6 +409,12 @@ export struct ChatInputBar {
           if (this.showManuscriptCanvas) {
             this.ManuscriptFooterIconButton($r('sys.symbol.paintbrush_pointed_waveform'), false, () => {
               this.onManuscriptCanvas()
+            })
+          }
+
+          if (this.showManuscriptPlan) {
+            this.ManuscriptFooterIconButton($r('sys.symbol.list_checkmark'), false, () => {
+              this.onManuscriptPlan()
             })
           }
         }

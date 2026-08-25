@@ -42,7 +42,7 @@
 - 🔍 **Web search & MCP** — Bocha, Bing (local), Tavily, Exa, and remote streamable MCP servers
 - 🧩 **Conversational sub-agents** — split big tasks across up to 3 agents, then guide each one through multiple follow-up rounds
 - 📚 **Local knowledge base** — hybrid keyword + vector RAG with built-in DOCX/XLSX parsing and OCR; files never leave the app sandbox
-- 🛠️ **Built-in tools** — Canvas documents, Python sandbox, charts, calendar, Map Kit maps and saved places, plus PDF/image/DOCX/XLSX → text
+- 🛠️ **Built-in tools** — Canvas documents, plan mode, Python sandbox, charts, calendar, Map Kit maps and saved places, plus PDF/image/DOCX/XLSX → text
 - 🔊 **Read aloud** — HarmonyOS offline TTS or ElevenLabs
 - 🔒 **Privacy by design** — explicit tool permissions and confirmation flows throughout
 
@@ -92,6 +92,7 @@ Upload DOCX, XLSX, PDF, Markdown, text, or images in the Knowledge Base tab. DOC
 |------|--------------|
 | **Web search** | Fetch real-time information within a search budget; extras need your approval |
 | **Canvas document** | A shared doc beside the chat that you and the AI can both edit, with Markdown preview |
+| **Plan mode** (`plan_mode`) | The model lays out a multi-step plan and ticks each step off as it finishes it, so you can watch progress in a panel beside the chat |
 | **Python sandbox** | Run Python for calculations, data processing, and intermediate reasoning |
 | **Math charts** | Generate [VChart](https://ohpm.openharmony.cn/#/cn/detail/@visactor%2Fharmony-vchart) visualizations — line, bar, pie, scatter, Sankey, word cloud, and more |
 | **PDF → text** (`pdf_to_text`) | Extract the PDF text layer, with automatic local CoreVisionKit OCR fallback for scans |
@@ -117,6 +118,17 @@ HarmonyOS apps cannot run the Node.js CLI required by ModLens directly, so the r
 - Images leave the device only after the gateway is explicitly configured and the tool is enabled; ModLens then sends them to its configured vision provider
 - The fallback tool is automatically hidden when the active model already has native vision
 - When the gateway is unavailable or disabled, or when the model cannot call tools, you can use `image_to_text` instead
+
+### ✅ Plan mode
+
+Long tasks stop being a black box. When the model takes on something that needs several steps, it calls `plan_mode` to write the steps down, then ticks each one off **at the moment it finishes that step** — not in a batch at the end. A panel beside the chat shows the list and a running count, so you can see what is done, what is in progress, and what is still ahead.
+
+- **The model ticks its own steps.** The tool tells it in no uncertain terms that ticking is its job and must happen as each step completes; saying "done" in the reply text without calling the tool doesn't count, because the panel is what you actually see.
+- **You can tick too.** Tap any step to flip it, for when the model forgets one or you finish something yourself.
+- **`/plan` opens the panel** at any time. The steps still come from the model — the command just makes the panel visible and tells it a plan is wanted.
+- **One plan per conversation**, stored locally with the chat and restored when you come back to it.
+
+Steps are only meant to be ticked when the work behind them actually exists and can be checked, so a full panel means real progress rather than optimism. A one- or two-step answer won't get a plan at all.
 
 ### 🔊 Read aloud
 

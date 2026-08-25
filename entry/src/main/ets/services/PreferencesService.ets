@@ -98,6 +98,7 @@ export class PreferenceKeys {
   static readonly CHAT_INPUT_ENTER_KEY_SEND: string = 'chat_input_enter_key_send'
   static readonly CHAT_ORDERED_RESPONSE_HISTORY: string = 'chat_ordered_response_history'
   static readonly CANVAS_DOCUMENT_JSON: string = 'canvas_document_json'
+  static readonly PLAN_JSON: string = 'plan_json'
 
   // 播报 / TTS 设置
   static readonly TTS_ENABLED: string = 'tts_enabled'

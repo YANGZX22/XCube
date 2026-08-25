@@ -123,6 +123,14 @@ import { DEFAULT_PRIMARY_COLOR } from '../config/ThemeDefaults'
 import { pickLocalizedText } from '../utils/LocalizedTextUtils'
 import { normalizeAssistantAvatarValue } from '../components/AssistantAvatar'
 import { CanvasDocumentService } from '../services/CanvasDocumentService'
+import {
+  PLAN_STEP_DONE,
+  PLAN_STEP_PENDING,
+  PlanService,
+  PlanState,
+  PlanStep
+} from '../services/PlanService'
+import { PlanPanel } from '../components/chat/PlanPanel'
 import { DocumentAttachmentRegistryService } from '../services/DocumentAttachmentRegistryService'
 import { getPdfTextExtractionService } from '../services/PdfTextExtractionService'
 import { getImageTextRecognitionService } from '../services/ImageTextRecognitionService'
@@ -146,6 +154,7 @@ import {
   SLASH_COMMAND_COMPACT,
   SLASH_COMMAND_GOAL,
   SLASH_COMMAND_MODELS,
+  SLASH_COMMAND_PLAN,
   SLASH_COMMAND_REASONING
 } from '../utils/SlashCommandUtils'
 import { MAX_CONVERSATION_GOAL_LENGTH } from '../utils/ConversationGoalUtils'
@@ -345,6 +354,11 @@ export struct ChatPage {
   @Local isCanvasMarkdownPreview: boolean = false
   @Local canvasMarkdownSwitchRotation: number = 0
   @Local canvasMarkdownRenderToggle: boolean = false
+  @Local isPlanPanelOpen: boolean = false
+  @Local planTitle: string = 'Plan'
+  @Local planSteps: PlanStep[] = []
+  @Local planActivated: boolean = false
+  @Local planRevision: number = 0
   // 推理级别状态
   @Local reasoningLevel: ReasoningLevel = ReasoningLevel.OFF
   @Local reasoningPanelOpenRequestTick: number = 0
@@ -459,6 +473,7 @@ export struct ChatPage {
   private mcpService: McpService = ServiceRegistry.mcp()
   private skillService: SkillService = ServiceRegistry.skill()
   private canvasDocumentService: CanvasDocumentService = ServiceRegistry.canvasDocument()
+  private planService: PlanService = ServiceRegistry.plan()
   private documentAttachmentRegistry: DocumentAttachmentRegistryService = ServiceRegistry.documentAttachmentRegistry()
   private chatTaskOrchestrator = ServiceRegistry.chatTaskOrchestrator()
   private ttsService: TTSService = getTTSService()
@@ -788,6 +803,7 @@ export struct ChatPage {
 
     this.applyLoadedSessionData(loadResult)
     await this.loadCanvasDocumentState()
+    await this.loadPlanState()
     await this.applyLoadedProviders(loadResult.providers)
 
     this.isLoading = false
@@ -950,6 +966,9 @@ export struct ChatPage {
     }
     if (this.isCanvasPanelOpen === open) {
       return
+    }
+    if (open) {
+      this.setPlanPanelOpen(false)
     }
     this.getUIContext().animateTo({
       duration: 260,
@@ -1197,6 +1216,205 @@ export struct ChatPage {
     .width(280)
     .padding({ left: 20, right: 20, top: 24, bottom: 20 })
     .alignItems(HorizontalAlign.Center)
+  }
+
+  // ---------------- 计划模式（plan_mode 工具 + /plan） ----------------
+
+  private async loadPlanState(loadPanelPreference: boolean = true): Promise<void> {
+    const plan = await this.planService.loadPlan(this.sessionId)
+    this.applyPlanState(plan)
+    if (loadPanelPreference && !this.shouldPlanExistForCurrentChat()) {
+      this.isPlanPanelOpen = false
+    }
+  }
+
+  private applyPlanState(plan: PlanState): void {
+    this.planTitle = plan.title
+    // @Local 数组要整体替换才会触发刷新
+    this.planSteps = plan.steps
+    this.planActivated = plan.activated
+    this.planRevision = plan.revision
+  }
+
+  // 计划面板只在这轮对话真的有计划时才出现，避免给单轮问答加一个空面板
+  private shouldPlanExistForCurrentChat(): boolean {
+    return this.planActivated || this.planSteps.length > 0
+  }
+
+  private shouldShowPlanWorkspace(): boolean {
+    return !this.showImagePreview && !this.isMultiSelectMode && this.shouldPlanExistForCurrentChat()
+  }
+
+  private setPlanPanelOpen(open: boolean): void {
+    if (open && !this.shouldPlanExistForCurrentChat()) {
+      return
+    }
+    if (this.isPlanPanelOpen === open) {
+      return
+    }
+    // 两个面板占同一块区域，同时展开会互相盖住
+    if (open) {
+      this.setCanvasPanelOpen(false)
+    }
+    this.getUIContext().animateTo({ duration: 220, curve: Curve.FastOutSlowIn }, () => {
+      this.isPlanPanelOpen = open
+    })
+    if (open) {
+      this.loadPlanState(false).catch((error: Error): void => {
+        console.error('ChatPage', `Failed to reload plan: ${JSON.stringify(error)}`)
+      })
+    }
+  }
+
+  // 模型通过 plan_mode 改了计划：刷新面板，并在计划刚建立时自动弹出一次
+  onPlanRefreshChanged(): void {
+    if (!this.isPageVisible) {
+      return
+    }
+    const hadPlan = this.shouldPlanExistForCurrentChat()
+    this.loadPlanState(false)
+      .then((): void => {
+        if (!hadPlan && this.shouldPlanExistForCurrentChat()) {
+          this.setPlanPanelOpen(true)
+        }
+      })
+      .catch((error: Error): void => {
+        console.error('ChatPage', `Failed to refresh plan: ${JSON.stringify(error)}`)
+      })
+  }
+
+  // 用户也能勾选：模型漏勾时不至于只能干看着
+  private handlePlanStepToggle(index: number): void {
+    if (index < 0 || index >= this.planSteps.length) {
+      return
+    }
+    const nextStatus = this.planSteps[index].status === PLAN_STEP_DONE ? PLAN_STEP_PENDING : PLAN_STEP_DONE
+    this.planService.setStepStatusAtIndex(index, nextStatus, 'user', this.sessionId)
+      .then((plan: PlanState): void => {
+        this.applyPlanState(plan)
+      })
+      .catch((error: Error): void => {
+        console.error('ChatPage', `Failed to toggle plan step: ${JSON.stringify(error)}`)
+      })
+  }
+
+  private handlePlanClear(): void {
+    this.planService.clearPlan('user', this.sessionId)
+      .then((plan: PlanState): void => {
+        this.applyPlanState(plan)
+        this.setPlanPanelOpen(false)
+        this.showChatSnack(pickLocalizedText('计划已清空', 'Plan cleared'), 2000)
+      })
+      .catch((error: Error): void => {
+        console.error('ChatPage', `Failed to clear plan: ${JSON.stringify(error)}`)
+        this.showError(pickLocalizedText('计划清空失败', 'Failed to clear the plan'))
+      })
+  }
+
+  // /plan：激活计划面板。步骤由模型通过 plan_mode 写入，这里只负责让面板可见。
+  private async activatePlanFromCommand(): Promise<void> {
+    const plan = await this.planService.activatePlan('user', this.sessionId)
+    this.applyPlanState(plan)
+    this.setPlanPanelOpen(true)
+  }
+
+  @Builder
+  private PlanFloatingButtonContentBuilder() {
+    Stack({ alignContent: Alignment.Center }) {
+      SymbolGlyph($r('sys.symbol.list_checkmark'))
+        .fontSize(18)
+        .fontColor([this.themePrimary])
+    }
+    .width('100%')
+    .height('100%')
+  }
+
+  // Canvas 按钮也在右下角时，计划按钮往左让开一个按钮位，两者不重叠
+  private getPlanButtonRightPadding(): number {
+    return this.shouldShowCanvasWorkspace() && !this.isCanvasPanelOpen ? 64 : 16
+  }
+
+  @Builder
+  private PlanWorkspaceBuilder() {
+    if (this.shouldShowPlanWorkspace()) {
+      if (this.isPlanPanelOpen) {
+        Row() {
+          Stack({ alignContent: Alignment.TopStart }) {
+            PlanPanel({
+              planTitle: this.planTitle,
+              steps: this.planSteps,
+              onToggleStep: (index: number): void => {
+                this.handlePlanStepToggle(index)
+              },
+              onClearPlan: (): void => {
+                this.handlePlanClear()
+              },
+              onClosePanel: (): void => {
+                this.setPlanPanelOpen(false)
+              }
+            })
+          }
+          .width(this.getCanvasPanelWidthVp())
+          .height(this.getCanvasPanelHeightVp())
+          .backgroundColor(this.isManuscriptMode ? this.themeSurface : Color.Transparent)
+          .borderRadius(this.isManuscriptMode ? 3 : 18)
+          .border({
+            width: this.isManuscriptMode ? 1 : 0,
+            color: this.isManuscriptMode ? getAppUiState().themeDivider : this.themePrimary
+          })
+          .systemMaterial(this.isManuscriptMode ? undefined : new uiMaterial.ImmersiveMaterial({
+            style: uiMaterial.ImmersiveStyle.REGULAR,
+            materialColor: Color.Transparent,
+            applyShadow: false,
+            interactive: false,
+            lightEffect: undefined
+          }))
+          .transition(
+            TransitionEffect.OPACITY.combine(
+              TransitionEffect.translate({ x: 18 })
+            ).animation({ duration: 220, curve: Curve.FastOutSlowIn })
+          )
+        }
+        .width('100%')
+        .height(this.getCanvasPanelHeightVp())
+        .padding({ left: 12, right: 16 })
+        .justifyContent(FlexAlign.End)
+        .position({ x: 0, y: this.getMessageListTopSpacerHeight() + 8 })
+        .zIndex(17)
+      } else if (!this.isManuscriptMode) {
+        Row() {
+          ChatFloatingImmersiveButton({
+            barWidth: 40,
+            barHeight: 40,
+            iconResource: $r('sys.symbol.list_checkmark'),
+            iconSize: 18,
+            iconColor: [this.themePrimary],
+            onButtonClick: (): void => {
+              this.setPlanPanelOpen(true)
+            }
+          }) {
+            this.PlanFloatingButtonContentBuilder()
+          }
+        }
+        .width('100%')
+        .padding({ right: this.getPlanButtonRightPadding() })
+        .justifyContent(FlexAlign.End)
+        // 同上：计划按钮行叠在 Canvas 按钮行之上，必须放行触摸，否则 Canvas 按钮点不动
+        .hitTestBehavior(HitTestMode.Transparent)
+        .position({ x: 0, y: '100%' })
+        .translate({
+          x: 0,
+          y: this.getCanvasButtonTranslateY()
+        })
+        .animation({ duration: 200, curve: Curve.EaseOut })
+        .zIndex(12)
+        .transition(
+          TransitionEffect.OPACITY.combine(
+            TransitionEffect.translate({ x: 12 })
+          ).animation({ duration: 180, curve: Curve.EaseOut })
+        )
+      }
+    }
   }
 
   @Builder
@@ -1523,6 +1741,8 @@ export struct ChatPage {
         .width('100%')
         .padding({ right: 16 })
         .justifyContent(FlexAlign.End)
+        // 整行铺满宽度只为把按钮推到右侧；不放行触摸的话，它会挡住同样铺满的计划按钮行
+        .hitTestBehavior(HitTestMode.Transparent)
         .position({ x: 0, y: '100%' })
         .translate({
           x: 0,
@@ -1620,6 +1840,7 @@ export struct ChatPage {
       observeAppUiState(AppStorageKeys.OPEN_SESSION_PAYLOAD, (): void => this.onOpenSessionPayloadChanged()),
       observeAppUiState(AppStorageKeys.TASK_EVENT_TICK, (): void => this.onTaskEventTickChanged()),
       observeAppUiState(AppStorageKeys.CANVAS_DOCUMENT_REFRESH_AT, (): void => this.onCanvasDocumentRefreshChanged()),
+      observeAppUiState(AppStorageKeys.PLAN_REFRESH_AT, (): void => this.onPlanRefreshChanged()),
       observeAppUiState(AppStorageKeys.ASSISTANT_AVATAR_REFRESH_AT, (): void => this.onAssistantAvatarRefreshChanged()),
       observeAppUiState(AppStorageKeys.APP_IN_BACKGROUND, (): void => this.onAppBackgroundChanged())
     ]
@@ -1659,6 +1880,9 @@ export struct ChatPage {
     if (sessionChanged) {
       this.loadCanvasDocumentState(false).catch((error: Error): void => {
         console.error('ChatPage', `Failed to sync canvas after session resolve: ${JSON.stringify(error)}`)
+      })
+      this.loadPlanState(false).catch((error: Error): void => {
+        console.error('ChatPage', `Failed to sync plan after session resolve: ${JSON.stringify(error)}`)
       })
     }
   }
@@ -3978,6 +4202,8 @@ export struct ChatPage {
 
         this.CanvasWorkspaceBuilder()
 
+        this.PlanWorkspaceBuilder()
+
         // 底部输入栏容器（非多选模式时显示）
         if (!this.isMultiSelectMode) {
           Column() {
@@ -4108,6 +4334,7 @@ export struct ChatPage {
               manuscriptScrollBottomLoading: this.shouldShowScrollToBottomLoadingButton(),
               showManuscriptHistory: this.shouldShowHistoryPreviewFloatingBar(),
               showManuscriptCanvas: this.shouldShowCanvasWorkspace(),
+              showManuscriptPlan: this.shouldShowPlanWorkspace(),
               onManuscriptScrollTop: (): void => {
                 this.handleScrollToTopRequest()
               },
@@ -4119,6 +4346,9 @@ export struct ChatPage {
               },
               onManuscriptCanvas: (): void => {
                 this.setCanvasPanelOpen(!this.isCanvasPanelOpen)
+              },
+              onManuscriptPlan: (): void => {
+                this.setPlanPanelOpen(!this.isPlanPanelOpen)
               }
             })
               .onAreaChange((_oldArea: Area, newArea: Area) => {
@@ -5659,12 +5889,19 @@ export struct ChatPage {
   private handleSlashCommand(commandId: string): void {
     if (commandId !== SLASH_COMMAND_MODELS && commandId !== SLASH_COMMAND_REASONING &&
       commandId !== SLASH_COMMAND_CANVAS && commandId !== SLASH_COMMAND_GOAL &&
-      commandId !== SLASH_COMMAND_COMPACT) {
+      commandId !== SLASH_COMMAND_PLAN && commandId !== SLASH_COMMAND_COMPACT) {
       return
     }
     // 命令原文不该留在草稿里
     this.clearDraftAutosaveTimer()
     this.inputText = ''
+
+    if (commandId === SLASH_COMMAND_PLAN) {
+      this.activatePlanFromCommand().catch((error: Object): void => {
+        console.error('ChatPage', `Failed to activate plan: ${JSON.stringify(error)}`)
+      })
+      return
+    }
 
     if (commandId === SLASH_COMMAND_GOAL) {
       const currentGoal = this.chatViewModel.getCurrentSessionConversationGoal().trim()

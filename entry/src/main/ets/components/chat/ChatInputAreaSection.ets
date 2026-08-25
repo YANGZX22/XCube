@@ -67,10 +67,12 @@ export struct ChatInputAreaSection {
   @Param manuscriptScrollBottomLoading: boolean = false
   @Param showManuscriptHistory: boolean = false
   @Param showManuscriptCanvas: boolean = false
+  @Param showManuscriptPlan: boolean = false
   @Event onManuscriptScrollTop: () => void = () => {}
   @Event onManuscriptScrollBottom: () => void = () => {}
   @Event onManuscriptHistory: () => void = () => {}
   @Event onManuscriptCanvas: () => void = () => {}
+  @Event onManuscriptPlan: () => void = () => {}
 
   private getEffectiveContentMaxWidth(): number {
     return this.contentMaxWidth > 0 ? this.contentMaxWidth : 99999
@@ -198,6 +200,7 @@ export struct ChatInputAreaSection {
           manuscriptScrollBottomLoading: this.manuscriptScrollBottomLoading,
           showManuscriptHistory: this.showManuscriptHistory,
           showManuscriptCanvas: this.showManuscriptCanvas,
+          showManuscriptPlan: this.showManuscriptPlan,
           onManuscriptScrollTop: (): void => {
             this.onManuscriptScrollTop()
           },
@@ -206,6 +209,9 @@ export struct ChatInputAreaSection {
           },
           onManuscriptHistory: (): void => {
             this.onManuscriptHistory()
+          },
+          onManuscriptPlan: (): void => {
+            this.onManuscriptPlan()
           },
           onManuscriptCanvas: (): void => {
             this.onManuscriptCanvas()

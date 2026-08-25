@@ -5,6 +5,7 @@ import {
   SLASH_COMMAND_CANVAS,
   SLASH_COMMAND_COMPACT,
   SLASH_COMMAND_GOAL,
+  SLASH_COMMAND_PLAN,
   SLASH_COMMAND_MODELS,
   SLASH_COMMAND_REASONING,
   SlashCommandItem
@@ -73,6 +74,9 @@ export struct SlashCommandPanel {
     if (commandId === SLASH_COMMAND_CANVAS) {
       return pickLocalizedText('打开 Canvas', 'Open Canvas')
     }
+    if (commandId === SLASH_COMMAND_PLAN) {
+      return pickLocalizedText('打开计划面板', 'Open the plan panel')
+    }
     if (commandId === SLASH_COMMAND_GOAL) {
       return this.getCurrentGoalPreview() !== ''
         ? pickLocalizedText('修改会话目标', 'Edit conversation goal')
@@ -101,6 +105,12 @@ export struct SlashCommandPanel {
     }
     if (commandId === SLASH_COMMAND_CANVAS) {
       return pickLocalizedText('激活并展开当前对话的 Canvas', 'Activate and expand Canvas for this chat')
+    }
+    if (commandId === SLASH_COMMAND_PLAN) {
+      return pickLocalizedText(
+        '让模型列出多步任务的计划，并在完成时逐条勾选',
+        'Let the model lay out a multi-step plan and tick steps off as it goes'
+      )
     }
     if (commandId === SLASH_COMMAND_GOAL) {
       const currentGoal = this.getCurrentGoalPreview()

@@ -21,6 +21,7 @@ import modLensVisionServiceTest from './ModLensVisionService.test';
 import mapToolTest from './MapTool.test';
 import savedPlacesServiceTest from './SavedPlacesService.test';
 import slashCommandUtilsTest from './SlashCommandUtils.test';
+import planServiceTest from './PlanService.test';
 
 export default function testsuite() {
   localUnitTest();
@@ -46,4 +47,5 @@ export default function testsuite() {
   mapToolTest();
   savedPlacesServiceTest();
   slashCommandUtilsTest();
+  planServiceTest();
 }

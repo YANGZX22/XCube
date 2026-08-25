@@ -6,6 +6,7 @@ export const SLASH_COMMAND_MODELS: string = 'models'
 export const SLASH_COMMAND_REASONING: string = 'reasoning'
 export const SLASH_COMMAND_CANVAS: string = 'canvas'
 export const SLASH_COMMAND_GOAL: string = 'goal'
+export const SLASH_COMMAND_PLAN: string = 'plan'
 
 export class SlashCommandItem {
   id: string = ''
@@ -22,6 +23,7 @@ const SLASH_COMMANDS: SlashCommandItem[] = [
   new SlashCommandItem(SLASH_COMMAND_MODELS),
   new SlashCommandItem(SLASH_COMMAND_REASONING),
   new SlashCommandItem(SLASH_COMMAND_CANVAS),
+  new SlashCommandItem(SLASH_COMMAND_PLAN),
   new SlashCommandItem(SLASH_COMMAND_GOAL),
   new SlashCommandItem(SLASH_COMMAND_COMPACT)
 ]

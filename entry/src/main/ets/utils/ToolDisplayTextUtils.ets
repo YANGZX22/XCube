@@ -25,6 +25,9 @@ export function getLocalizedBuiltinToolName(toolId: string, fallback: string = '
       return pickLocalizedText('引导子智能体', 'Guide Sub-agent')
     case 'canvas_document':
       return pickLocalizedText('Canvas 文档', 'Canvas Document')
+    case 'plan_mode':
+    case 'plan':
+      return pickLocalizedText('计划模式', 'Plan Mode')
     case 'pdf_to_text':
       return pickLocalizedText('PDF 转文本', 'PDF to Text')
     case 'image_to_text':
@@ -82,6 +85,10 @@ export function getLocalizedBuiltinToolDescription(toolId: string, fallback: str
     case 'canvas_document':
       return pickLocalizedText('读取或修改与用户共享的 Canvas 文档',
         'Read or edit the Canvas document shared with the user.')
+    case 'plan_mode':
+    case 'plan':
+      return pickLocalizedText('列出多步任务的计划，并在完成时逐条勾选',
+        'Lay out a multi-step plan and tick each step off on completion.')
     case 'pdf_to_text':
       return pickLocalizedText('读取 PDF 文本，扫描件可自动使用 OCR',
         'Extract text from PDFs, with OCR fallback for scans.')

@@ -53,6 +53,12 @@ import {
   OPEN_MAP_ROUTE_TOOL_ID
 } from './MapTool'
 import {
+  createPlanModeToolConfig,
+  createPlanModeToolDefinition,
+  PLAN_MODE_TOOL_ID,
+  PlanModeExecutor
+} from './PlanTool'
+import {
   createSavedPlacesToolConfig,
   createSavedPlacesToolDefinition,
   SAVED_PLACES_TOOL_ID,
@@ -63,6 +69,7 @@ export { KNOWLEDGE_SEARCH_TOOL_ID } from './KnowledgeSearchTool'
 export { COMPACT_TOOL_ID } from './CompactTool'
 export { MAP_SEARCH_ROUTE_TOOL_ID, OPEN_MAP_ROUTE_TOOL_ID } from './MapTool'
 export { SAVED_PLACES_TOOL_ID } from './SavedPlacesTool'
+export { PLAN_MODE_TOOL_ID } from './PlanTool'
 export {
   SUB_AGENT_TOOL_ID,
   SUB_AGENT_RESULT_TOOL_ID,
@@ -3068,6 +3075,18 @@ export function registerBuiltinTools(): void {
     registeredNow += 1
   }
 
+  const planModeWasRegistered = registry.isToolRegistered(PLAN_MODE_TOOL_ID)
+  const planModeTool = new RegisteredTool(
+    PLAN_MODE_TOOL_ID,
+    createPlanModeToolConfig(),
+    createPlanModeToolDefinition(),
+    new PlanModeExecutor()
+  )
+  registry.registerTool(planModeTool)
+  if (!planModeWasRegistered) {
+    registeredNow += 1
+  }
+
   if (!registry.isToolRegistered(MATH_CHART_TOOL_ID)) {
     const mathChartTool = new RegisteredTool(
       MATH_CHART_TOOL_ID,
@@ -3156,6 +3175,7 @@ export function getBuiltinToolIds(): string[] {
     XLSX_TO_TEXT_TOOL_ID,
     USE_SKILL_TOOL_ID,
     CANVAS_DOCUMENT_TOOL_ID,
+    PLAN_MODE_TOOL_ID,
     MATH_CHART_TOOL_ID,
     READ_SCHEDULE_TOOL_ID,
     WRITE_SCHEDULE_TOOL_ID,

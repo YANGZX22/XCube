@@ -23,6 +23,7 @@ import { getCalendarWriteService, CalendarWriteService } from './CalendarWriteSe
 import { getMapKitService, MapKitService } from './MapKitService'
 import { getSavedPlacesService, SavedPlacesService } from './SavedPlacesService'
 import { getCanvasDocumentService, CanvasDocumentService } from './CanvasDocumentService'
+import { getPlanService, PlanService } from './PlanService'
 import { getContextCompactionService, ContextCompactionService } from './ContextCompactionService'
 import { getModLensVisionService, ModLensVisionService } from './ModLensVisionService'
 import {
@@ -154,6 +155,10 @@ export class ServiceRegistry {
 
   static canvasDocument(): CanvasDocumentService {
     return getCanvasDocumentService()
+  }
+
+  static plan(): PlanService {
+    return getPlanService()
   }
 
   static documentAttachmentRegistry(): DocumentAttachmentRegistryService {
