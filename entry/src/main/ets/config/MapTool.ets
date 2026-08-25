@@ -60,7 +60,7 @@ export function createMapSearchRouteToolDefinition(): ToolDefinition {
       },
       "query": {
         "type": "string",
-        "description": "地点搜索关键词。action=search_places 时必填，例如‘安静的咖啡店’、‘博物馆’。"
+        "description": "地点搜索关键词，只用于 action=search_places，例如‘安静的咖啡店’、‘博物馆’。规划路线时不要用本字段传目的地——那属于 destination。本字段不解析常用地点标签。"
       },
       "nearby": {
         "type": "boolean",
@@ -68,7 +68,7 @@ export function createMapSearchRouteToolDefinition(): ToolDefinition {
       },
       "use_current_location": {
         "type": "boolean",
-        "description": "是否使用设备当前位置作为搜索中心或路线起点。只有用户意图涉及当前位置、附近或从这里出发时才设为 true。"
+        "description": "是否使用设备当前位置作为搜索中心或路线起点。只有用户意图涉及当前位置、附近或从这里出发时才设为 true。设为 true 时不要再传 origin 或 origin_location；需要从某个常用地点出发时，请传 origin 而不是本字段。"
       },
       "center": {
         "type": "object",
@@ -81,7 +81,7 @@ export function createMapSearchRouteToolDefinition(): ToolDefinition {
       },
       "origin": {
         "type": "string",
-        "description": "路线起点名称或用户保存的常用地点标签，例如‘公司’。省略时应设置 use_current_location=true。"
+        "description": "路线起点：常用地点标签、地点名称或地址，三选一直接传字符串。传标签时必须与用户保存的标签逐字一致（如‘公司’），本工具会自己解析，不需要你先查坐标。字符串对不上任何已保存标签时会被当成公开地点名去搜索，可能得到毫不相干的地点，所以不确定标签原文时先调用 saved_places 的 list 拿到确切写法，不要自行改写、翻译或加字（‘我公司’‘公司地址’都匹配不上‘公司’）。省略时应设置 use_current_location=true。"
       },
       "origin_location": {
         "type": "object",
@@ -90,11 +90,11 @@ export function createMapSearchRouteToolDefinition(): ToolDefinition {
           "longitude": { "type": "number" }
         },
         "required": ["latitude", "longitude"],
-        "description": "路线起点坐标，优先于 origin。"
+        "description": "路线起点坐标，优先于 origin。已经用标签或名称表达了起点时不要再传本字段，两者同时给出会忽略 origin。"
       },
       "destination": {
         "type": "string",
-        "description": "路线目的地的完整名称、地址或用户保存的常用地点标签，例如‘家’。action=plan_route 且未提供 destination_location 时必填。"
+        "description": "路线目的地：常用地点标签、完整地点名称或地址，三选一直接传字符串。传标签时必须与用户保存的标签逐字一致（如‘家’），本工具会自己解析成坐标，不需要你先调 saved_places 再传坐标。字符串对不上任何已保存标签时会退化成公开地点搜索，可能命中同名的陌生地点，所以不确定标签原文时先用 saved_places 的 list 确认，不要改写、翻译或加字（‘我家’‘家里’都匹配不上‘家’）。action=plan_route 且未提供 destination_location 时必填。"
       },
       "destination_location": {
         "type": "object",
@@ -103,7 +103,7 @@ export function createMapSearchRouteToolDefinition(): ToolDefinition {
           "longitude": { "type": "number" }
         },
         "required": ["latitude", "longitude"],
-        "description": "路线目的地坐标，优先于 destination。"
+        "description": "路线目的地坐标，优先于 destination。只有当你手上已经有明确坐标（例如上一次 search_places 返回的候选）时才用；用标签或名称表达目的地时不要再传本字段。"
       },
       "coordinate_type": {
         "type": "string",
@@ -137,7 +137,19 @@ export function createMapSearchRouteToolDefinition(): ToolDefinition {
   parameters.setRawSchema(JSON.parse(rawSchemaJson) as object)
   return new ToolDefinition(new ToolFunction(
     MAP_SEARCH_ROUTE_TOOL_ID,
-    '使用华为 Map Kit 搜索公共地点、查找附近兴趣点，或规划驾车、步行、骑行路线。适合回答“附近有什么”“推荐一个目的地”“怎么去”等问题。路线起终点可直接使用用户保存的常用地点标签，例如“家”“公司”；工具会优先匹配精确标签。推荐地点时先搜索候选并根据返回的距离、评分、营业信息做比较；不要虚构未返回的信息。仅在用户明确涉及当前位置、附近或从这里出发时设置 use_current_location=true。工具只返回规划结果，不会自动打开地图应用。',
+    '使用华为 Map Kit 搜索公共地点、查找附近兴趣点，或规划驾车、步行、骑行路线。' +
+      '适合回答“附近有什么”“推荐一个目的地”“怎么去”等问题。\n' +
+      '选择 action：找地方用 search_places（关键词放 query）；算路线用 plan_route（目的地放 destination，起点放 origin 或 use_current_location=true）。' +
+      '不要用 query 传路线目的地，也不要用 destination 传搜索关键词。\n' +
+      '关于常用地点（用户在设置里保存的“家”“公司”这类标签）：\n' +
+      '1. 直接把标签原文作为字符串传给 origin / destination，本工具会自行解析成坐标。不要先调 saved_places 取坐标再填进 *_location，多这一步只会增加填错字段的机会。\n' +
+      '2. 标签是逐字精确匹配的，大小写不敏感但不做模糊匹配。“我家”“家里”“家的地址”都匹配不上“家”。\n' +
+      '3. 匹配不上时不会报错，而是把这串文字当成公开地点名去搜索，于是返回一个同名但毫不相干的地点。' +
+      '所以只要你不确定用户保存的标签原文是什么，先调用 saved_places 的 list 看一眼，再用返回的确切标签。\n' +
+      '4. 用户嘴上说的词不一定等于保存的标签；以 saved_places 返回的 label 为准，不要翻译或改写。\n' +
+      '同一个端点只用一种表达：给了 destination 就不要再给 destination_location，给了 origin 就不要再设 use_current_location=true。\n' +
+      '推荐地点时先搜索候选并根据返回的距离、评分、营业信息做比较；不要虚构未返回的信息。' +
+      '仅在用户明确涉及当前位置、附近或从这里出发时设置 use_current_location=true。工具只返回规划结果，不会自动打开地图应用。',
     parameters
   ))
 }
@@ -170,7 +182,7 @@ export function createOpenMapRouteToolDefinition(): ToolDefinition {
       },
       "destination": {
         "type": "string",
-        "description": "目的地的完整名称、地址或用户保存的常用地点标签，例如‘家’。未提供 destination_location 时必填。"
+        "description": "目的地：常用地点标签、完整地点名称或地址，直接传字符串即可，工具会自行解析。传标签时必须与用户保存的标签逐字一致（如‘家’）；对不上就会退化成公开地点搜索并可能命中同名的陌生地点，所以不确定标签原文时先用 saved_places 的 list 确认，不要改写或加字。未提供 destination_location 时必填。"
       },
       "destination_site_id": {
         "type": "string",
@@ -183,11 +195,11 @@ export function createOpenMapRouteToolDefinition(): ToolDefinition {
           "longitude": { "type": "number" }
         },
         "required": ["latitude", "longitude"],
-        "description": "目的地坐标，优先于 destination。"
+        "description": "目的地坐标，优先于 destination。仅在已有 map_search_route 返回的确切坐标时使用；用标签或名称表达目的地时不要再传本字段。"
       },
       "origin": {
         "type": "string",
-        "description": "可选起点名称、地址或用户保存的常用地点标签；省略时由花瓣地图使用用户当前位置。"
+        "description": "可选起点：常用地点标签、名称或地址，规则同 destination（标签逐字精确匹配）。要从当前位置出发就直接省略本字段，不要传‘当前位置’‘我的位置’这类文字——它们会被当成地点名去搜索。"
       },
       "origin_location": {
         "type": "object",
@@ -196,7 +208,7 @@ export function createOpenMapRouteToolDefinition(): ToolDefinition {
           "longitude": { "type": "number" }
         },
         "required": ["latitude", "longitude"],
-        "description": "可选起点坐标，优先于 origin。"
+        "description": "可选起点坐标，优先于 origin。用标签或名称表达起点时不要再传本字段。"
       },
       "coordinate_type": {
         "type": "string",
@@ -218,7 +230,14 @@ export function createOpenMapRouteToolDefinition(): ToolDefinition {
   parameters.setRawSchema(JSON.parse(rawSchemaJson) as object)
   return new ToolDefinition(new ToolFunction(
     OPEN_MAP_ROUTE_TOOL_ID,
-    '在花瓣地图中打开路线规划或发起导航。只有当用户明确要求“打开地图/带我去/开始导航/查看路线”时才调用；不要仅因用户询问路线或请求推荐而调用。起终点可直接使用用户保存的常用地点标签，例如“家”“公司”，工具会优先匹配精确标签。此操作会切换到地图应用，执行前应用会要求用户审批。若公共地点可能重名，先调用 map_search_route 确认准确地点，再传入其名称、siteId 和坐标。',
+    '在花瓣地图中打开路线规划或发起导航。只有当用户明确要求“打开地图/带我去/开始导航/查看路线”时才调用；' +
+      '不要仅因用户询问路线或请求推荐而调用。\n' +
+      '起终点可直接使用用户保存的常用地点标签（如“家”“公司”）：把标签原文传给 destination / origin 即可，' +
+      '工具会自行解析成坐标，不需要先调 saved_places 取坐标再填 *_location。\n' +
+      '标签是逐字精确匹配的：“我家”“家里”匹配不上“家”，且匹配失败不会报错，而是把这串文字当公开地点名去搜索，' +
+      '很容易把用户导航到一个同名的陌生地点。不确定标签原文时，先调用 saved_places 的 list 拿到确切写法。\n' +
+      '同一个端点只用一种表达，不要同时传字符串和坐标。此操作会切换到地图应用，执行前应用会要求用户审批。' +
+      '若公共地点可能重名，先调用 map_search_route 确认准确地点，再传入其名称、siteId 和坐标。',
     parameters
   ))
 }

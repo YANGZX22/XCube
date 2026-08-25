@@ -63,17 +63,23 @@ export function createSavedPlacesToolDefinition(): ToolDefinition {
       "action": {
         "type": "string",
         "enum": ["list", "resolve"],
-        "description": "list 返回全部用户保存的地点标签；resolve 按标签精确查找。默认 list。"
+        "description": "list 返回全部用户保存的地点标签；resolve 按标签精确查找单个地点。默认 list。不知道用户保存了哪些标签、或不确定标签的确切写法时，先用 list——它没有参数，也不会失败。"
       },
       "label": {
         "type": "string",
-        "description": "action=resolve 时必填，例如‘家’、‘公司’。"
+        "description": "action=resolve 时必填，例如‘家’、‘公司’。必须是用户保存的标签原文，逐字匹配（大小写不敏感，但不做模糊匹配、不去掉修饰词）：‘我家’‘家里’都匹配不上‘家’。请使用 list 返回的 label 字段原文，不要翻译、改写或从用户口语里猜。"
       }
     }
   }`) as object)
   return new ToolDefinition(new ToolFunction(
     SAVED_PLACES_TOOL_ID,
-    '读取用户在设置中主动保存的常用地点标签、地址和坐标。用户询问“我保存了哪些地点”时使用 list；用户提到“家”“公司”等自定义标签但需要确认其精确位置时使用 resolve。此工具只读，不能新增、修改或删除地点。路线规划或导航时，可将返回坐标传给地图或花瓣导航工具。',
+    '读取用户在设置中主动保存的常用地点标签、地址和坐标。此工具只读，不能新增、修改或删除地点。\n' +
+      '用户询问“我保存了哪些地点”时用 list；只想确认某个标签指向哪里时用 resolve。\n' +
+      '标签由用户自定义，按原文逐字匹配，不做模糊匹配，也不一定等于用户口语里的说法' +
+      '（用户说“回我家”，保存的标签可能就叫“家”）。因此在使用任何标签之前，若不确定它的确切写法，先调用一次 list。\n' +
+      '重要：如果目的只是规划路线或导航，不必先调用本工具取坐标——' +
+      'map_search_route 和 open_map_route 的 origin / destination 直接接受标签原文并会自行解析。' +
+      '多绕一步反而容易把坐标填进错误的字段。只有在需要向用户展示或核对具体地址时，才用 resolve 取详情。',
     parameters
   ))
 }
