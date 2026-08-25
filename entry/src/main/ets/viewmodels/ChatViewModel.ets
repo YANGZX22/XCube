@@ -42,6 +42,7 @@ import {
   collectSubtreeIds,
   getVersionInfo,
   MessageVersionInfo,
+  resolveDisplayLeafId,
   shouldBuildLegacyChain
 } from '../pages/chat/ChatMessageTreeHelper'
 import { createThrottle, ThrottleUtil } from '../utils/ThrottleUtil'
@@ -569,15 +570,30 @@ export class ChatViewModel {
     if (session === null) {
       return null
     }
+    // 旧数据惰性建链：仅未初始化 activeLeafId 的会话按时间串成单链并回写。
+    // 必须在合并待持久化消息之前完成，否则会把未落库的流式消息写进链表。
+    this.migrateLegacyChainIfNeeded(session)
+    const pendingMessageIds = this.collectPendingAIMessageIds(sessionId)
     session.messages = this.mergePendingAIMessagesIntoMessages(sessionId, session.messages)
     if (session.messageCount < session.messages.length) {
       session.messageCount = session.messages.length
     }
-    // 旧数据惰性建链：仅未初始化 activeLeafId 的会话按时间串成单链并回写
-    this.migrateLegacyChainIfNeeded(session)
+    // 生成中的回答还没落库，activeLeafId 仍停在用户消息上。只在内存里把叶子前移到这条消息，
+    // 保证"生成途中离开页面再返回"时它仍在活跃路径上；落库由流式结束/停止时的推进负责。
+    session.activeLeafId = resolveDisplayLeafId(session.messages, session.activeLeafId, pendingMessageIds)
     this.currentSession = session
     this.sessionStore.setCurrentSession(session)
     return session
+  }
+
+  private collectPendingAIMessageIds(sessionId: string): string[] {
+    const ids: string[] = []
+    this.pendingAIMessages.forEach((info: PendingAIMessageInfo) => {
+      if (info.sessionId === sessionId) {
+        ids.push(info.message.id)
+      }
+    })
+    return ids
   }
 
   // 旧数据迁移：

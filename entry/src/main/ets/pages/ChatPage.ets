@@ -3016,12 +3016,24 @@ export struct ChatPage {
         return
       }
       if (this.chatViewModel.hasActiveRequestForSession(this.sessionId)) {
+        this.followExternalGeneration()
         return
       }
       this.syncSendingStateFromRuntime()
       this.fixInconsistentState()
+      // 生成结束后重算版本信息：本页不是发起方时，发送链路的 onSetSending 回调落在旧页面上
+      this.refreshActivePathVersions()
       this.clearRuntimeStateWatchdog()
     }, 220)
+  }
+
+  // 本页只是旁观其他页面发起的生成（生成途中离开又返回）：
+  // 发送链路的滚动回调仍绑在旧页面实例上，这里代为跟随流式增长。
+  private followExternalGeneration(): void {
+    if (this.currentTaskId !== '') {
+      return
+    }
+    this.getScrollUiFlow().alignToBottomIfPinned()
   }
 
   private clearRuntimeStateWatchdog(): void {

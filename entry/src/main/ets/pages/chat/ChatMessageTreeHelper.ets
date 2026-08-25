@@ -188,3 +188,68 @@ export function buildLegacyChain(allMessages: ChatMessage[]): LegacyChainResult 
   }
   return { fixes, leafId: ordered.length > 0 ? ordered[ordered.length - 1].id : '' }
 }
+
+/**
+ * 解析用于展示的叶子消息 id。
+ *
+ * 生成中的 AI 回答要等流式结束才落库，此时会话的 activeLeafId 仍停在用户消息上。
+ * 直接按 activeLeafId 回溯会把这条消息排除在活跃路径之外——表现为"生成途中离开页面，
+ * 再回来时这条回答不见了"。这里在候选消息里挑出仍挂在当前叶子之下的最新一条作为展示叶子。
+ *
+ * candidateIds 为尚未落库的消息 id（顺序不限）。没有可用候选时返回原 activeLeafId。
+ */
+export function resolveDisplayLeafId(
+  allMessages: ChatMessage[],
+  activeLeafId: string,
+  candidateIds: string[]
+): string {
+  if (activeLeafId === '' || candidateIds.length === 0) {
+    return activeLeafId
+  }
+  const map = buildMessageMap(allMessages)
+  if (!map.has(activeLeafId)) {
+    return activeLeafId
+  }
+  let best: ChatMessage | null = null
+  for (let i = 0; i < candidateIds.length; i++) {
+    const candidate = map.get(candidateIds[i])
+    if (candidate === undefined || candidate.id === activeLeafId) {
+      continue
+    }
+    // 只接受挂在当前活跃路径末端之下的候选，避免把其他分支的生成结果拉进来
+    if (!isDescendantOf(map, candidate, activeLeafId)) {
+      continue
+    }
+    if (best === null || isNewerMessage(candidate, best)) {
+      best = candidate
+    }
+  }
+  return best !== null ? best.id : activeLeafId
+}
+
+// 沿 parentId 上溯，判断 node 是否为 ancestorId 的后代
+function isDescendantOf(map: Map<string, ChatMessage>, node: ChatMessage, ancestorId: string): boolean {
+  const visited = new Set<string>()
+  visited.add(node.id)
+  let parentId = node.parentId
+  while (parentId !== '' && !visited.has(parentId)) {
+    if (parentId === ancestorId) {
+      return true
+    }
+    visited.add(parentId)
+    const parent = map.get(parentId)
+    if (parent === undefined) {
+      return false
+    }
+    parentId = parent.parentId
+  }
+  return false
+}
+
+// 与 sortByTimestampAsc 同序：timestamp 优先，同毫秒用 id 兜底
+function isNewerMessage(candidate: ChatMessage, current: ChatMessage): boolean {
+  if (candidate.timestamp !== current.timestamp) {
+    return candidate.timestamp > current.timestamp
+  }
+  return candidate.id > current.id
+}
