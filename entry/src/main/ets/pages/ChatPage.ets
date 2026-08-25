@@ -124,8 +124,6 @@ import { pickLocalizedText } from '../utils/LocalizedTextUtils'
 import { normalizeAssistantAvatarValue } from '../components/AssistantAvatar'
 import { CanvasDocumentService } from '../services/CanvasDocumentService'
 import {
-  PLAN_STEP_DONE,
-  PLAN_STEP_PENDING,
   PlanService,
   PlanState,
   PlanStep
@@ -164,7 +162,8 @@ import {
   MANUSCRIPT_COMPACT_BAR_HEIGHT,
   MANUSCRIPT_END_MARK_ROW_HEIGHT,
   MANUSCRIPT_PANEL_HEIGHT_RATIO,
-  MANUSCRIPT_PANEL_MIN_HEIGHT_VP
+  MANUSCRIPT_PANEL_MIN_HEIGHT_VP,
+  MANUSCRIPT_PANEL_TOP_OFFSET_VP
 } from '../utils/ManuscriptVisualUtils'
 import { ManuscriptWorkingMark } from '../components/chat/ManuscriptWorkingIndicator'
 import { ImmersiveSheetHeader } from '../components/ImmersiveSheetHeader'
@@ -1163,10 +1162,15 @@ export struct ChatPage {
     const available = this.windowHeightVp - top - bottom
     if (this.isManuscriptMode) {
       // 手稿模式下面板更像压在稿纸上的一张便笺：占满整页会盖掉正文的版面感，
-      // 收到六成高度露出下方的纸面。仍保留最小高度，窄屏上不至于没法用。
+      // 按手稿专用比例保留少量纸面。仍设最小高度，窄屏上不至于没法用。
       return Math.max(MANUSCRIPT_PANEL_MIN_HEIGHT_VP, available * MANUSCRIPT_PANEL_HEIGHT_RATIO)
     }
     return Math.max(260, available)
+  }
+
+  private getWorkspacePanelTopVp(): number {
+    const offset = this.isManuscriptMode ? MANUSCRIPT_PANEL_TOP_OFFSET_VP : 8
+    return this.getMessageListTopSpacerHeight() + offset
   }
 
   private getCanvasButtonTranslateY(): number {
@@ -1287,34 +1291,6 @@ export struct ChatPage {
       })
   }
 
-  // 用户也能勾选：模型漏勾时不至于只能干看着
-  private handlePlanStepToggle(index: number): void {
-    if (index < 0 || index >= this.planSteps.length) {
-      return
-    }
-    const nextStatus = this.planSteps[index].status === PLAN_STEP_DONE ? PLAN_STEP_PENDING : PLAN_STEP_DONE
-    this.planService.setStepStatusAtIndex(index, nextStatus, 'user', this.sessionId)
-      .then((plan: PlanState): void => {
-        this.applyPlanState(plan)
-      })
-      .catch((error: Error): void => {
-        console.error('ChatPage', `Failed to toggle plan step: ${JSON.stringify(error)}`)
-      })
-  }
-
-  private handlePlanClear(): void {
-    this.planService.clearPlan('user', this.sessionId)
-      .then((plan: PlanState): void => {
-        this.applyPlanState(plan)
-        this.setPlanPanelOpen(false)
-        this.showChatSnack(pickLocalizedText('计划已清空', 'Plan cleared'), 2000)
-      })
-      .catch((error: Error): void => {
-        console.error('ChatPage', `Failed to clear plan: ${JSON.stringify(error)}`)
-        this.showError(pickLocalizedText('计划清空失败', 'Failed to clear the plan'))
-      })
-  }
-
   // /plan：激活计划面板。步骤由模型通过 plan_mode 写入，这里只负责让面板可见。
   private async activatePlanFromCommand(): Promise<void> {
     const plan = await this.planService.activatePlan('user', this.sessionId)
@@ -1352,12 +1328,6 @@ export struct ChatPage {
             PlanPanel({
               planTitle: this.planTitle,
               steps: this.planSteps,
-              onToggleStep: (index: number): void => {
-                this.handlePlanStepToggle(index)
-              },
-              onClearPlan: (): void => {
-                this.handlePlanClear()
-              },
               onClosePanel: (): void => {
                 this.setPlanPanelOpen(false)
               }
@@ -1388,7 +1358,7 @@ export struct ChatPage {
         .height(this.getCanvasPanelHeightVp())
         .padding({ left: 12, right: 16 })
         .justifyContent(FlexAlign.End)
-        .position({ x: 0, y: this.getMessageListTopSpacerHeight() + 8 })
+        .position({ x: 0, y: this.getWorkspacePanelTopVp() })
         .zIndex(17)
       } else if (!this.isManuscriptMode) {
         Row() {
@@ -1731,7 +1701,7 @@ export struct ChatPage {
         .height(this.getCanvasPanelHeightVp())
         .padding({ left: 12, right: 16 })
         .justifyContent(FlexAlign.End)
-        .position({ x: 0, y: this.getMessageListTopSpacerHeight() + 8 })
+        .position({ x: 0, y: this.getWorkspacePanelTopVp() })
         .zIndex(16)
       } else if (!this.isManuscriptMode) {
         Row() {
@@ -3378,6 +3348,11 @@ export struct ChatPage {
       onCanvasDocumentUpdated: (): void => {
         this.loadCanvasDocumentState(false).catch((error: Error): void => {
           console.error('ChatPage', `Failed to refresh canvas document after tool call: ${JSON.stringify(error)}`)
+        })
+      },
+      onPlanUpdated: (): void => {
+        this.loadPlanState(false).catch((error: Error): void => {
+          console.error('ChatPage', `Failed to refresh plan after tool call: ${JSON.stringify(error)}`)
         })
       }
     }

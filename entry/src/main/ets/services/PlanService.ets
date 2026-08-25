@@ -284,30 +284,7 @@ export class PlanService {
     return new PlanMutationResult(true, `已更新步骤 ${index + 1}：${nextSteps[index].title}`, next)
   }
 
-  async setStepStatusAtIndex(
-    index: number,
-    status: string,
-    updatedBy: string = 'user',
-    planId: string = ''
-  ): Promise<PlanState> {
-    const resolvedPlanId = this.resolvePlanId(planId)
-    const current = await this.loadPlan(resolvedPlanId)
-    if (index < 0 || index >= current.steps.length) {
-      return current
-    }
-    const nextSteps: PlanStep[] = []
-    for (let i = 0; i < current.steps.length; i++) {
-      const step = current.steps[i]
-      nextSteps.push(i === index
-        ? new PlanStep(step.id, step.title, normalizePlanStepStatus(status), step.note)
-        : new PlanStep(step.id, step.title, step.status, step.note))
-    }
-    const next = new PlanState(current.title, nextSteps, Date.now(), updatedBy, current.revision + 1, true)
-    await this.persist(next, resolvedPlanId)
-    return next
-  }
-
-  async clearPlan(updatedBy: string = 'user', planId: string = ''): Promise<PlanState> {
+  async clearPlan(updatedBy: string = 'assistant', planId: string = ''): Promise<PlanState> {
     const resolvedPlanId = this.resolvePlanId(planId)
     const current = await this.loadPlan(resolvedPlanId)
     const next = new PlanState('Plan', [], Date.now(), updatedBy, current.revision + 1, false)

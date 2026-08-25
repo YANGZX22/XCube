@@ -14,7 +14,7 @@ import { ToolRegistry } from '../../services/ToolRegistry'
 import { appendUniqueToolId } from './ChatToolIdHelper'
 import { syncChatMessageFromSource } from './ChatMessageActionHelper'
 import { validateProviderConfig } from '../../utils/ProviderValidationUtils'
-import { ASK_USER_TOOL_ID, CANVAS_DOCUMENT_TOOL_ID } from '../../config/BuiltinTools'
+import { ASK_USER_TOOL_ID, CANVAS_DOCUMENT_TOOL_ID, PLAN_MODE_TOOL_ID } from '../../config/BuiltinTools'
 import {
   applyEstimatedBilling,
   ModelBillingSnapshot
@@ -72,6 +72,7 @@ export interface ChatSendFlowDependencies {
   onShowError: (message: string | Resource) => void
   onShowToast: (message: string | Resource) => void
   onCanvasDocumentUpdated?: () => void
+  onPlanUpdated?: () => void
 }
 
 export class ChatSendFlow {
@@ -269,6 +270,13 @@ export class ChatSendFlow {
       return true
     }
     return toolCall.functionName.trim().toLowerCase().replace(/[\s\-]+/g, '_') === CANVAS_DOCUMENT_TOOL_ID
+  }
+
+  private isPlanModeToolCall(toolCall: ToolCall): boolean {
+    if (toolCall.toolId.trim() === PLAN_MODE_TOOL_ID) {
+      return true
+    }
+    return toolCall.functionName.trim().toLowerCase().replace(/[\s\-]+/g, '_') === PLAN_MODE_TOOL_ID
   }
 
   private buildExecutionPlan(
@@ -499,6 +507,7 @@ export class ChatSendFlow {
 
     console.info('ChatSendFlow', `[Function Calling] 启用工具: ${enabledToolIds.join(', ')}`)
     let shouldRefreshCanvasDocument = false
+    let shouldRefreshPlan = false
 
     const toolCallbacks: ToolCallCallbacks = {
       onToolCallStarted: (toolCalls: ToolCall[]): void => {
@@ -508,6 +517,9 @@ export class ChatSendFlow {
           if (this.isCanvasDocumentToolCall(toolCalls[i])) {
             shouldRefreshCanvasDocument = true
           }
+          if (this.isPlanModeToolCall(toolCalls[i])) {
+            shouldRefreshPlan = true
+          }
         }
       },
       onToolCallCompleted: (results: ToolResult[]): void => {
@@ -515,6 +527,10 @@ export class ChatSendFlow {
         if (shouldRefreshCanvasDocument && this.deps.onCanvasDocumentUpdated !== undefined) {
           shouldRefreshCanvasDocument = false
           this.deps.onCanvasDocumentUpdated()
+        }
+        if (shouldRefreshPlan && this.deps.onPlanUpdated !== undefined) {
+          shouldRefreshPlan = false
+          this.deps.onPlanUpdated()
         }
       },
       onSearching: (query: string): void => {

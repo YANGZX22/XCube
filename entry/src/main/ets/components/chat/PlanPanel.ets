@@ -8,8 +8,6 @@ import { PLAN_STEP_ACTIVE, PLAN_STEP_DONE, PlanStep } from '../../services/PlanS
 export struct PlanPanel {
   @Param planTitle: string = 'Plan'
   @Param steps: PlanStep[] = []
-  @Event onToggleStep: (index: number) => void = (_index: number): void => {}
-  @Event onClearPlan: () => void = (): void => {}
   @Event onClosePanel: () => void = (): void => {}
 
   private get isManuscriptMode(): boolean {
@@ -69,7 +67,7 @@ export struct PlanPanel {
   }
 
   @Builder
-  private StepRowBuilder(step: PlanStep, index: number) {
+  private StepRowBuilder(step: PlanStep) {
     Row({ space: 10 }) {
       SymbolGlyph(this.getStepIcon(step.status))
         .fontSize(16)
@@ -93,9 +91,6 @@ export struct PlanPanel {
     .width('100%')
     .alignItems(VerticalAlign.Top)
     .padding({ top: 7, bottom: 7 })
-    .onClick((): void => {
-      this.onToggleStep(index)
-    })
   }
 
   build() {
@@ -118,22 +113,6 @@ export struct PlanPanel {
         }
         .layoutWeight(1)
         .alignItems(HorizontalAlign.Start)
-
-        Button({ type: ButtonType.Circle }) {
-          SymbolGlyph($r('sys.symbol.trash'))
-            .fontSize(14)
-            .fontColor([$r('app.color.text_secondary')])
-        }
-        .width(32)
-        .height(32)
-        .padding(0)
-        .backgroundColor(Color.Transparent)
-        .stateEffect(true)
-        .enabled(this.steps.length > 0)
-        .opacity(this.steps.length > 0 ? 1 : 0.4)
-        .onClick((): void => {
-          this.onClearPlan()
-        })
 
         Button({ type: ButtonType.Circle }) {
           SymbolGlyph($r('sys.symbol.xmark'))
@@ -177,7 +156,7 @@ export struct PlanPanel {
         List({ space: 0 }) {
           ForEach(this.steps, (step: PlanStep, index: number) => {
             ListItem({ style: ListItemStyle.NONE }) {
-              this.StepRowBuilder(step, index)
+              this.StepRowBuilder(step)
             }
           }, (step: PlanStep, index: number): string => `${step.id}_${index}_${step.status}`)
         }
