@@ -13,6 +13,11 @@ export const MANUSCRIPT_BOTTOM_TOOLBAR_HEIGHT: number = 48
 // 交接时列表内容不会因为高度差而位移。
 export const MANUSCRIPT_END_MARK_ROW_HEIGHT: number = 38
 
+// 手稿模式下 Canvas / 计划面板的高度：按可用高度取六成，并保留一个可用下限。
+// 常规模式仍占满可用高度，只有手稿模式收窄，以保留稿纸的版面感。
+export const MANUSCRIPT_PANEL_HEIGHT_RATIO: number = 0.62
+export const MANUSCRIPT_PANEL_MIN_HEIGHT_VP: number = 220
+
 let manuscriptFontsRegistered: boolean = false
 
 export function ensureManuscriptFonts(): void {

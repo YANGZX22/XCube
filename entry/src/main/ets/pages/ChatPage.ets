@@ -162,7 +162,9 @@ import { VisualEffectsMode } from '../models/ThemeColors'
 import {
   ensureManuscriptFonts,
   MANUSCRIPT_COMPACT_BAR_HEIGHT,
-  MANUSCRIPT_END_MARK_ROW_HEIGHT
+  MANUSCRIPT_END_MARK_ROW_HEIGHT,
+  MANUSCRIPT_PANEL_HEIGHT_RATIO,
+  MANUSCRIPT_PANEL_MIN_HEIGHT_VP
 } from '../utils/ManuscriptVisualUtils'
 import { ManuscriptWorkingMark } from '../components/chat/ManuscriptWorkingIndicator'
 import { ImmersiveSheetHeader } from '../components/ImmersiveSheetHeader'
@@ -1154,10 +1156,17 @@ export struct ChatPage {
     return 330
   }
 
+  // Canvas 与计划面板共用这个高度，交接和布局才一致。
   private getCanvasPanelHeightVp(): number {
     const top = this.getMessageListTopSpacerHeight()
     const bottom = this.getFloatingOverlayBottomAvoidHeightVp() + 24
-    return Math.max(260, this.windowHeightVp - top - bottom)
+    const available = this.windowHeightVp - top - bottom
+    if (this.isManuscriptMode) {
+      // 手稿模式下面板更像压在稿纸上的一张便笺：占满整页会盖掉正文的版面感，
+      // 收到六成高度露出下方的纸面。仍保留最小高度，窄屏上不至于没法用。
+      return Math.max(MANUSCRIPT_PANEL_MIN_HEIGHT_VP, available * MANUSCRIPT_PANEL_HEIGHT_RATIO)
+    }
+    return Math.max(260, available)
   }
 
   private getCanvasButtonTranslateY(): number {
