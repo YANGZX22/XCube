@@ -22,6 +22,7 @@ class SavedPlacesToolResult {
   count: number = 0
   places: SavedPlace[] = []
   message: string = ''
+  mapUsageHint: string = ''
 }
 
 export class SavedPlacesExecutor implements ToolExecutor {
@@ -37,6 +38,9 @@ export class SavedPlacesExecutor implements ToolExecutor {
     const action = (request.action || 'list').trim().toLowerCase()
     const result = new SavedPlacesToolResult()
     result.action = action === 'resolve' ? 'resolve' : 'list'
+    result.mapUsageHint = '后续调用地图/导航工具时，不要把 label（如“家”“公司”）直接传给 query、origin 或 ' +
+      'destination。路线/导航请把本结果中的 latitude/longitude 复制到对应的 origin_location 或 ' +
+      'destination_location；围绕该地点搜索请复制到 center，并把 coordinateType 复制到 coordinate_type。'
     if (result.action === 'resolve') {
       const label = (request.label || '').trim()
       if (label === '') {
@@ -63,7 +67,7 @@ export function createSavedPlacesToolDefinition(): ToolDefinition {
       "action": {
         "type": "string",
         "enum": ["list", "resolve"],
-        "description": "list 返回全部用户保存的地点标签；resolve 按标签精确查找单个地点。默认 list。不知道用户保存了哪些标签、或不确定标签的确切写法时，先用 list——它没有参数，也不会失败。"
+        "description": "list 返回全部已保存地点的完整结构（label、name、address、latitude、longitude、coordinateType、siteId）；resolve 按标签精确返回单个地点。默认 list。不知道标签原文时先用 list。"
       },
       "label": {
         "type": "string",
@@ -77,9 +81,11 @@ export function createSavedPlacesToolDefinition(): ToolDefinition {
       '用户询问“我保存了哪些地点”时用 list；只想确认某个标签指向哪里时用 resolve。\n' +
       '标签由用户自定义，按原文逐字匹配，不做模糊匹配，也不一定等于用户口语里的说法' +
       '（用户说“回我家”，保存的标签可能就叫“家”）。因此在使用任何标签之前，若不确定它的确切写法，先调用一次 list。\n' +
-      '重要：如果目的只是规划路线或导航，不必先调用本工具取坐标——' +
-      'map_search_route 和 open_map_route 的 origin / destination 直接接受标签原文并会自行解析。' +
-      '多绕一步反而容易把坐标填进错误的字段。只有在需要向用户展示或核对具体地址时，才用 resolve 取详情。',
+      '【地图调用硬规则】用户提到常用地点时，先从本工具结果找到对应 place，然后使用结构化坐标：' +
+      '路线/导航时把 latitude/longitude 填入地图工具的 origin_location 或 destination_location，' +
+      '围绕该地点搜索时填入 center，' +
+      '把 coordinateType 填入 coordinate_type。不要丢弃这些字段后只把 label（如“家”“公司”）传给地图工具；' +
+      'label 不是公开地点搜索词，禁止放入 query、origin 或 destination。',
     parameters
   ))
 }
