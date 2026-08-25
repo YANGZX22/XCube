@@ -6,7 +6,7 @@
 import { ReasoningLevel } from '../models/ChatModels'
 import { ReasoningControlMode } from '../services/ProviderCompatibilityRegistry'
 import { getAppUiState } from '../state/AppUiState'
-import { LengthMetrics, uiMaterial } from '@kit.ArkUI'
+import { LengthMetrics, RectShape, uiMaterial } from '@kit.ArkUI'
 import { ImmersiveSheetHeader } from './ImmersiveSheetHeader'
 import { VisualEffectsMode } from '../models/ThemeColors'
 import { MANUSCRIPT_BODY_FONT, MANUSCRIPT_COMPOSER_TOOLBAR_HEIGHT } from '../utils/ManuscriptVisualUtils'
@@ -31,6 +31,17 @@ export struct ChatToolbar {
   @Param knowledgeAvailable: boolean = false
   @Event onKnowledgeToggle: (enabled: boolean) => void =
     (_enabled: boolean): void => {}
+  @Param showScrollTopAction: boolean = false
+  @Param showScrollBottomAction: boolean = false
+  @Param scrollBottomActionLoading: boolean = false
+  @Param showHistoryAction: boolean = false
+  @Param showCanvasAction: boolean = false
+  @Param showPlanAction: boolean = false
+  @Event onScrollTopAction: () => void = (): void => {}
+  @Event onScrollBottomAction: () => void = (): void => {}
+  @Event onHistoryAction: () => void = (): void => {}
+  @Event onCanvasAction: () => void = (): void => {}
+  @Event onPlanAction: () => void = (): void => {}
   // 推理强度滑块面板是否展开
   @Local showReasoningPanel: boolean = false
   private handledReasoningPanelOpenRequestTick: number = 0
@@ -129,31 +140,8 @@ export struct ChatToolbar {
   }
 
   build() {
-    if (this.isManuscriptMode) {
-      Scroll() {
-        Row({ space: 8 }) {
-          if (this.toolSelectionAvailable) {
-            this.ToolImmersiveChip()
-          }
-
-          if (this.reasoningAvailable) {
-            this.ReasoningImmersiveChip()
-          }
-
-          this.KnowledgeImmersiveChip()
-        }
-        .padding(0)
-      }
-      .width('100%')
-      .height(MANUSCRIPT_COMPOSER_TOOLBAR_HEIGHT)
-      .scrollable(ScrollDirection.Horizontal)
-      .scrollBar(BarState.Off)
-      .margin({ bottom: 6 })
-    } else {
-      Flex({
-        wrap: FlexWrap.Wrap,
-        space: { main: LengthMetrics.vp(6), cross: LengthMetrics.vp(6) }
-      }) {
+    Scroll() {
+      Row({ space: this.isManuscriptMode ? 8 : 6 }) {
         if (this.toolSelectionAvailable) {
           this.ToolImmersiveChip()
         }
@@ -163,11 +151,84 @@ export struct ChatToolbar {
         }
 
         this.KnowledgeImmersiveChip()
+
+        if (!this.isManuscriptMode) {
+          if (this.showScrollTopAction) {
+            this.QuickActionImmersiveButton($r('sys.symbol.arrow_up_to_line'), false,
+              (): void => this.onScrollTopAction())
+          }
+          if (this.showScrollBottomAction) {
+            this.QuickActionImmersiveButton($r('sys.symbol.chevron_down'), this.scrollBottomActionLoading,
+              (): void => this.onScrollBottomAction())
+          }
+          if (this.showHistoryAction) {
+            this.QuickActionImmersiveButton($r('sys.symbol.ellipsis_message'), false,
+              (): void => this.onHistoryAction())
+          }
+          if (this.showCanvasAction) {
+            this.QuickActionImmersiveButton($r('sys.symbol.paintbrush_pointed_waveform'), false,
+              (): void => this.onCanvasAction())
+          }
+          if (this.showPlanAction) {
+            this.QuickActionImmersiveButton($r('sys.symbol.list_checkmark'), false,
+              (): void => this.onPlanAction())
+          }
+        }
       }
-      .width('100%')
-      .padding({ left: 2, right: 2, top: 2, bottom: 6 })
-      .margin({ bottom: 4 })
+      .height(this.isManuscriptMode ? MANUSCRIPT_COMPOSER_TOOLBAR_HEIGHT : 44)
+      .padding(this.isManuscriptMode ? 0 : { left: 18, right: 18, top: 4, bottom: 4 })
+      .clip(false)
     }
+    .width('100%')
+    .height(this.isManuscriptMode ? MANUSCRIPT_COMPOSER_TOOLBAR_HEIGHT : 44)
+    .scrollable(ScrollDirection.Horizontal)
+    .scrollBar(BarState.Off)
+    .fadingEdge(!this.isManuscriptMode, { fadingEdgeLength: LengthMetrics.vp(18) })
+    .clipContent(new RectShape({
+      width: '100%',
+      height: this.isManuscriptMode ? MANUSCRIPT_COMPOSER_TOOLBAR_HEIGHT : 68
+    }).offset({ x: 0, y: this.isManuscriptMode ? 0 : -12 }))
+    .clip(false)
+    .margin({ bottom: this.isManuscriptMode ? 6 : 4 })
+  }
+
+  @Builder
+  private QuickActionImmersiveButton(icon: Resource, isLoading: boolean, onClick: () => void) {
+    Button({ type: ButtonType.Circle, stateEffect: false }) {
+      Stack({ alignContent: Alignment.Center }) {
+        if (isLoading) {
+          Progress({ value: 25, total: 100, type: ProgressType.Ring })
+            .width(30)
+            .height(30)
+            .color(this.themePrimary)
+            .backgroundColor(Color.Transparent)
+            .style({ strokeWidth: 2, shadow: false, enableScanEffect: false })
+            .hitTestBehavior(HitTestMode.None)
+        }
+
+        SymbolGlyph(icon)
+          .fontSize(isLoading ? 14 : 17)
+          .fontColor([this.themePrimary])
+      }
+      .width(36)
+      .height(36)
+    }
+    .width(36)
+    .height(36)
+    .padding(0)
+    .backgroundColor(Color.Transparent)
+    .systemMaterial(new uiMaterial.ImmersiveMaterial({
+      style: uiMaterial.ImmersiveStyle.REGULAR,
+      applyShadow: false,
+      interactive: true,
+      lightEffect: { color: undefined }
+    }))
+    .onClick(onClick)
+    .transition(
+      TransitionEffect.OPACITY.combine(
+        TransitionEffect.scale({ x: 0.8, y: 0.8 })
+      ).animation({ duration: 200, curve: Curve.EaseOut })
+    )
   }
 
   @Builder
@@ -209,6 +270,7 @@ export struct ChatToolbar {
       })
       .systemMaterial(new uiMaterial.ImmersiveMaterial({
         style: uiMaterial.ImmersiveStyle.REGULAR,
+        applyShadow: false,
         interactive: true,
         lightEffect: { color: undefined }
       }))
@@ -304,6 +366,7 @@ export struct ChatToolbar {
       })
       .systemMaterial(new uiMaterial.ImmersiveMaterial({
         style: uiMaterial.ImmersiveStyle.REGULAR,
+        applyShadow: false,
         interactive: true,
         lightEffect: { color: undefined }
       }))
@@ -399,6 +462,7 @@ export struct ChatToolbar {
       })
       .systemMaterial(new uiMaterial.ImmersiveMaterial({
         style: uiMaterial.ImmersiveStyle.REGULAR,
+        applyShadow: false,
         interactive: this.knowledgeAvailable,
         lightEffect: { color: undefined }
       }))

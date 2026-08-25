@@ -22,9 +22,6 @@ import {
 } from '../models/ChatModels'
 import { Assistant, DEFAULT_ASSISTANT_ID } from '../models/AssistantModels'
 import { ImagePreview } from '../components/ImagePreview'
-import { ScrollToBottomButton } from '../components/ScrollToBottomButton'
-import { ScrollToBottomLoadingButton } from '../components/ScrollToBottomLoadingButton'
-import { ChatFloatingImmersiveButton } from '../components/ChatFloatingImmersiveButton'
 import { SharePreviewSheet } from '../components/SharePreviewSheet'
 import { ChatViewModel, TitleGenerationCallbacks } from '../viewmodels/ChatViewModel'
 import { ProviderViewModel } from '../viewmodels/ProviderViewModel'
@@ -1173,11 +1170,6 @@ export struct ChatPage {
     return this.getMessageListTopSpacerHeight() + offset
   }
 
-  private getCanvasButtonTranslateY(): number {
-    return -this.getFloatingRightButtonBottomOffsetVp() +
-      this.getHistoryPreviewButtonExtraOffsetY() - 48
-  }
-
   // 点击标题栏上下文按钮后弹出的用量对话框
   @Builder
   private ContextUsageDialogBuilder() {
@@ -1304,22 +1296,6 @@ export struct ChatPage {
   }
 
   @Builder
-  private PlanFloatingButtonContentBuilder() {
-    Stack({ alignContent: Alignment.Center }) {
-      SymbolGlyph($r('sys.symbol.list_checkmark'))
-        .fontSize(18)
-        .fontColor([this.themePrimary])
-    }
-    .width('100%')
-    .height('100%')
-  }
-
-  // Canvas 按钮也在右下角时，计划按钮往左让开一个按钮位，两者不重叠
-  private getPlanButtonRightPadding(): number {
-    return this.shouldShowCanvasWorkspace() && !this.isCanvasPanelOpen ? 64 : 16
-  }
-
-  @Builder
   private PlanWorkspaceBuilder() {
     if (this.shouldShowPlanWorkspace()) {
       if (this.isPlanPanelOpen) {
@@ -1360,52 +1336,8 @@ export struct ChatPage {
         .justifyContent(FlexAlign.End)
         .position({ x: 0, y: this.getWorkspacePanelTopVp() })
         .zIndex(17)
-      } else if (!this.isManuscriptMode) {
-        Row() {
-          ChatFloatingImmersiveButton({
-            barWidth: 40,
-            barHeight: 40,
-            iconResource: $r('sys.symbol.list_checkmark'),
-            iconSize: 18,
-            iconColor: [this.themePrimary],
-            onButtonClick: (): void => {
-              this.setPlanPanelOpen(true)
-            }
-          }) {
-            this.PlanFloatingButtonContentBuilder()
-          }
-        }
-        .width('100%')
-        .padding({ right: this.getPlanButtonRightPadding() })
-        .justifyContent(FlexAlign.End)
-        // 同上：计划按钮行叠在 Canvas 按钮行之上，必须放行触摸，否则 Canvas 按钮点不动
-        .hitTestBehavior(HitTestMode.Transparent)
-        .position({ x: 0, y: '100%' })
-        .translate({
-          x: 0,
-          y: this.getCanvasButtonTranslateY()
-        })
-        .animation({ duration: 200, curve: Curve.EaseOut })
-        .zIndex(12)
-        // 计划从无到有时按钮才挂载，这一下缩放弹出就是"计划出现了"的提示
-        .transition(
-          TransitionEffect.OPACITY
-            .combine(TransitionEffect.scale({ x: 0.4, y: 0.4 }))
-            .animation({ duration: 320, curve: Curve.ExtremeDeceleration })
-        )
       }
     }
-  }
-
-  @Builder
-  private CanvasFloatingButtonContentBuilder() {
-    Stack({ alignContent: Alignment.Center }) {
-      SymbolGlyph($r('sys.symbol.paintbrush_pointed_waveform'))
-        .fontSize(18)
-        .fontColor([this.themePrimary])
-    }
-    .width('100%')
-    .height('100%')
   }
 
   private copyCanvasMarkdownToClipboard(text: string): void {
@@ -1703,38 +1635,6 @@ export struct ChatPage {
         .justifyContent(FlexAlign.End)
         .position({ x: 0, y: this.getWorkspacePanelTopVp() })
         .zIndex(16)
-      } else if (!this.isManuscriptMode) {
-        Row() {
-          ChatFloatingImmersiveButton({
-            barWidth: 40,
-            barHeight: 40,
-            iconResource: $r('sys.symbol.paintbrush_pointed_waveform'),
-            iconSize: 18,
-            iconColor: [this.themePrimary],
-            onButtonClick: (): void => {
-              this.setCanvasPanelOpen(true)
-            }
-          }) {
-            this.CanvasFloatingButtonContentBuilder()
-          }
-        }
-        .width('100%')
-        .padding({ right: 16 })
-        .justifyContent(FlexAlign.End)
-        // 整行铺满宽度只为把按钮推到右侧；不放行触摸的话，它会挡住同样铺满的计划按钮行
-        .hitTestBehavior(HitTestMode.Transparent)
-        .position({ x: 0, y: '100%' })
-        .translate({
-          x: 0,
-          y: this.getCanvasButtonTranslateY()
-        })
-        .animation({ duration: 200, curve: Curve.EaseOut })
-        .zIndex(12)
-        .transition(
-          TransitionEffect.OPACITY.combine(
-            TransitionEffect.translate({ x: 12 })
-          ).animation({ duration: 180, curve: Curve.EaseOut })
-        )
       }
     }
   }
@@ -2330,38 +2230,6 @@ export struct ChatPage {
     const name = attachment.name.toLowerCase()
     return mimeType.startsWith('image/') || name.endsWith('.jpg') || name.endsWith('.jpeg') ||
       name.endsWith('.png') || name.endsWith('.webp') || name.endsWith('.bmp') || name.endsWith('.gif')
-  }
-
-  // 上下文用量超过阈值时把 compact 加入本次请求的强制工具。
-  // 只有 OpenAI 风格且声明支持 tools 的模型才可能真正调用工具，其余模型只在指示器上显示用量。
-  private async appendCompactToolIfContextOverThreshold(
-    currentProvider: ModelProvider,
-    modelSupportsTools: boolean,
-    forcedToolIds: string[],
-    selectedToolIds: string[],
-    pendingContent: string,
-    pendingAttachments: MessageAttachment[]
-  ): Promise<void> {
-    if (!modelSupportsTools || !this.toolRegistry.isToolRegistered(COMPACT_TOOL_ID)) {
-      return
-    }
-    await ServiceRegistry.contextCompaction().ensurePreferencesLoaded()
-    const enabledToolIds = this.getSendFlow().buildEnabledToolIds(selectedToolIds, forcedToolIds)
-    const requestTools = this.toolRegistry.getEnabledToolDefinitions(enabledToolIds)
-    const shouldSuggest = await this.chatViewModel.shouldSuggestCompaction(
-      currentProvider.id,
-      this.currentModelId,
-      this.messages,
-      pendingContent,
-      pendingAttachments,
-      requestTools
-    )
-    if (!shouldSuggest) {
-      return
-    }
-    if (!forcedToolIds.includes(COMPACT_TOOL_ID)) {
-      forcedToolIds.push(COMPACT_TOOL_ID)
-    }
   }
 
   // 重新估算当前会话的上下文长度窗口用量（消息列表、模型或压缩状态变化后调用）
@@ -4153,40 +4021,6 @@ export struct ChatPage {
             })
         }
 
-        // 快速到顶部按钮
-        ScrollToBottomButton({
-          isVisible: !this.isManuscriptMode && this.shouldShowScrollToTopButton(),
-          bottomAvoidHeight: 0,
-          fixedBottomOffset: this.getFloatingRightButtonBottomOffsetVp(),
-          buttonDirection: 1,
-          progress: this.scrollProgress,
-          extraOffsetY: this.shouldShowStandardScrollToBottomButton() ? -48 : 0,
-          onScrollToTop: () => {
-            this.handleScrollToTopRequest()
-          }
-        })
-
-        // 回到底部按钮（非 AI 生成状态时显示）
-        ScrollToBottomButton({
-          isVisible: !this.isManuscriptMode && this.shouldShowStandardScrollToBottomButton(),
-          bottomAvoidHeight: 0,
-          fixedBottomOffset: this.getFloatingRightButtonBottomOffsetVp(),
-          buttonDirection: 0,
-          onScrollToBottom: () => {
-            this.scrollToBottomWithAnimation()
-          }
-        })
-
-        // AI 生成中的底部中间 loading 回到底部按钮
-        ScrollToBottomLoadingButton({
-          isVisible: !this.isManuscriptMode && this.shouldShowScrollToBottomLoadingButton(),
-          isInputBarVisible: true,
-          bottomAvoidHeight: this.getFloatingOverlayBottomAvoidHeightVp(),
-          onScrollToBottom: () => {
-            this.scrollToBottomWithAnimation()
-          }
-        })
-
         this.HistoryPreviewFloatingBarBuilder()
 
         this.CanvasWorkspaceBuilder()
@@ -5267,17 +5101,6 @@ export struct ChatPage {
   }
 
   @Builder
-  private HistoryPreviewCollapsedContentBuilder() {
-    Stack({ alignContent: Alignment.Center }) {
-      SymbolGlyph($r('sys.symbol.ellipsis_message'))
-        .fontSize(18)
-        .fontColor([this.themePrimary])
-    }
-    .width('100%')
-    .height('100%')
-  }
-
-  @Builder
   private HistoryPreviewExpandedContentBuilder() {
     Column({ space: 8 }) {
       Row() {
@@ -5399,19 +5222,6 @@ export struct ChatPage {
             style: uiMaterial.ImmersiveStyle.REGULAR
           }))
           .animation({ duration: 260, curve: Curve.FastOutSlowIn })
-        } else if (!this.isManuscriptMode) {
-          ChatFloatingImmersiveButton({
-            barWidth: 40,
-            barHeight: 40,
-            iconResource: $r('sys.symbol.ellipsis_message'),
-            iconSize: 18,
-            iconColor: [this.themePrimary],
-            onButtonClick: (): void => {
-              this.setHistoryPreviewExpanded(true)
-            }
-          }) {
-            this.HistoryPreviewCollapsedContentBuilder()
-          }
         }
       }
       .width('100%')
@@ -6219,15 +6029,6 @@ export struct ChatPage {
         }
       }
       userDocumentToolHint = fallbackHintTexts.join('\n')
-      // 文档/图片 fallback 可能扩展正文或追加工具，必须在它们完成后再判断本次请求。
-      await this.appendCompactToolIfContextOverThreshold(
-        currentProvider,
-        modelSupportsTools,
-        forcedToolIds,
-        selectedToolIds,
-        requestMessageContent,
-        attachmentsToSend
-      )
       const searchEnabled = this.webSearchAvailable &&
         (selectedToolIds.includes('web_search') || forcedToolIds.includes('web_search'))
       this.syncActiveSessionBinding()

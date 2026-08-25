@@ -18,6 +18,9 @@ export default function responseTimelineTest() {
         'tools-1', AssistantResponseSegmentType.TOOL_CALLS, '', ['call-1', 'call-2']
       ))
       message.responseSegments.push(new AssistantResponseSegment(
+        'compaction-1', AssistantResponseSegmentType.CONTEXT_COMPACTION, 'completed'
+      ))
+      message.responseSegments.push(new AssistantResponseSegment(
         'content-1', AssistantResponseSegmentType.CONTENT, '最终输出'
       ))
 
@@ -30,11 +33,13 @@ export default function responseTimelineTest() {
         restored.push(AssistantResponseSegment.fromJson(serialized[i]))
       }
 
-      expect(restored.length).assertEqual(3)
+      expect(restored.length).assertEqual(4)
       expect(restored[0].type).assertEqual(AssistantResponseSegmentType.REASONING)
       expect(restored[1].type).assertEqual(AssistantResponseSegmentType.TOOL_CALLS)
       expect(restored[1].toolCallIds.join(',')).assertEqual('call-1,call-2')
-      expect(restored[2].content).assertEqual('最终输出')
+      expect(restored[2].type).assertEqual(AssistantResponseSegmentType.CONTEXT_COMPACTION)
+      expect(restored[2].content).assertEqual('completed')
+      expect(restored[3].content).assertEqual('最终输出')
     })
   })
 }

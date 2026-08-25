@@ -141,6 +141,27 @@ export struct ChatInputAreaSection {
           knowledgeAvailable: this.knowledgeAvailable,
           onKnowledgeToggle: (enabled: boolean): void => {
             this.onKnowledgeToggle(enabled)
+          },
+          showScrollTopAction: this.showManuscriptScrollTop,
+          showScrollBottomAction: this.showManuscriptScrollBottom,
+          scrollBottomActionLoading: this.manuscriptScrollBottomLoading,
+          showHistoryAction: this.showManuscriptHistory,
+          showCanvasAction: this.showManuscriptCanvas,
+          showPlanAction: this.showManuscriptPlan,
+          onScrollTopAction: (): void => {
+            this.onManuscriptScrollTop()
+          },
+          onScrollBottomAction: (): void => {
+            this.onManuscriptScrollBottom()
+          },
+          onHistoryAction: (): void => {
+            this.onManuscriptHistory()
+          },
+          onCanvasAction: (): void => {
+            this.onManuscriptCanvas()
+          },
+          onPlanAction: (): void => {
+            this.onManuscriptPlan()
           }
         })
 

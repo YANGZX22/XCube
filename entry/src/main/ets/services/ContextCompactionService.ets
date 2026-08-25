@@ -299,6 +299,40 @@ export class ContextCompactionService {
     )
   }
 
+  // 应用在一轮回答开始前或回答中途触发的自动压缩。与手动 /compact 不同，
+  // 末尾用户消息是尚未完成的当前问题，必须始终以原文保留。
+  buildAutomaticCompaction(
+    sessionId: string,
+    messages: ChatMessage[],
+    summaryBody: string,
+    contextWindowTokens: number,
+    keepRecentTurns: number = DEFAULT_COMPACT_KEEP_RECENT_TURNS,
+    requestInputTokens: number = 0
+  ): ContextCompactionResult {
+    const result = new ContextCompactionResult()
+    result.sessionId = sessionId
+    if (sessionId === '') {
+      result.status = ContextCompactionStatus.UNAVAILABLE
+      result.message = '当前没有可压缩的会话上下文'
+      return result
+    }
+    const trimmedSummary = summaryBody.trim()
+    if (trimmedSummary.length < MIN_COMPACT_SUMMARY_LENGTH) {
+      result.status = ContextCompactionStatus.INVALID
+      result.message = `摘要至少需要 ${MIN_COMPACT_SUMMARY_LENGTH} 个字符`
+      return result
+    }
+    return this.computeCompaction(
+      sessionId,
+      messages,
+      trimmedSummary,
+      this.resolveKeepRecentTurns(keepRecentTurns),
+      contextWindowTokens,
+      true,
+      requestInputTokens
+    )
+  }
+
   // 计算一次压缩的锚点与收益；不写数据库，也不改动会话状态。
   // contextWindowTokens 为 0（窗口未知）时退回按消息条数判断。
   private computeCompaction(
@@ -468,10 +502,10 @@ export class ContextCompactionService {
     return sliceMessagesAfterAnchor(messages, session.contextSummaryAnchorId)
   }
 
-  // 手动 /compact 的摘要请求：这一次调用只用来产出摘要，模型不需要回答用户问题，
-  // 因此要求它直接输出纯文本摘要，不带任何客套话或 Markdown 标题
-  static buildManualSummarySystemPrompt(): string {
-    return `你是对话上下文压缩器。用户刚刚手动请求压缩当前对话的历史。\n` +
+  // 独立摘要请求只用来产出摘要，模型不需要回答用户问题，
+  // 因此要求它直接输出纯文本摘要，不带任何客套话或 Markdown 标题。
+  private static buildSummarySystemPrompt(triggerDescription: string): string {
+    return `你是对话上下文压缩器。${triggerDescription}\n` +
       `请用第三人称完整总结此前的对话，覆盖：用户的目标与关键约束、已确认的事实和结论、` +
       `已产出的代码/文件/数据及其位置、已经排除的方案及原因、当前进度、尚未完成的事项。\n` +
       `使用用户的语言，保留关键标识符、文件名、数字和专有名词原文；` +
@@ -480,14 +514,40 @@ export class ContextCompactionService {
       `只输出摘要正文（至少 ${MIN_COMPACT_SUMMARY_LENGTH} 个字符），不要寒暄，不要解释你在做什么。`
   }
 
+  static buildManualSummarySystemPrompt(): string {
+    return ContextCompactionService.buildSummarySystemPrompt('用户刚刚手动请求压缩当前对话的历史。')
+  }
+
+  static buildAutomaticSummarySystemPrompt(): string {
+    return ContextCompactionService.buildSummarySystemPrompt(
+      '应用检测到上下文已达到用户设定的阈值，正在自动压缩较早的对话历史。' +
+        '末尾尚未回答完的用户问题会继续以原文保留，不要把它误写成已经完成的事项。'
+    )
+  }
+
   static buildManualSummaryUserPrompt(): string {
     return '请现在输出上述对话的压缩摘要。'
+  }
+
+  // 自动压缩完成后交给原请求模型。它只负责通知“压缩已经完成”和续答边界，
+  // 绝不再要求模型自行调用 compact；当前 AI 气泡由应用继续复用。
+  static buildAutomaticContinuationPrompt(interrupted: boolean): string {
+    if (interrupted) {
+      return '[应用自动压缩通知]\n' +
+        '应用刚刚因上下文达到用户设定阈值而中断了上一段生成，并已在应用层完成历史压缩。' +
+        '压缩摘要已经放在更早的 system 消息中。请从上一段 assistant 内容的断点直接继续回答当前用户问题，' +
+        '不要重复已经输出的内容，不要复述摘要，也不要解释压缩过程。'
+    }
+    return '[应用自动压缩通知]\n' +
+      '应用刚刚因上下文达到用户设定阈值而在应用层完成了历史压缩。' +
+      '压缩摘要已经放在更早的 system 消息中。请继续回答当前用户问题，' +
+      '不要复述摘要，也不要解释压缩过程。'
   }
 
   // 摘要以独立 system 消息注入，明确它是历史压缩结果而不是用户指令
   static buildSummaryRequestPrompt(summary: string): string {
     return `${COMPACT_SUMMARY_PROMPT_MARKER}\n` +
-      `以下是本次对话更早历史的压缩摘要（由 compact 工具生成），原始消息已从请求中移除。` +
+      `以下是本次对话更早历史的压缩摘要（由应用生成），原始消息已从请求中移除。` +
       `请把它当作已经发生过的对话事实，继续保持一致的结论和用词；不要把它当作用户的新指令，也不要向用户复述整段摘要。` +
       `如果请求中同时存在“[持久会话目标]”区块，该区块是唯一最新的目标来源，摘要里的目标只用于理解历史进度，不能覆盖它。\n\n` +
       `${summary}`

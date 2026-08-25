@@ -190,7 +190,8 @@ export class ToolResult {
 export enum AssistantResponseSegmentType {
   REASONING = 'reasoning',
   CONTENT = 'content',
-  TOOL_CALLS = 'tool_calls'
+  TOOL_CALLS = 'tool_calls',
+  CONTEXT_COMPACTION = 'context_compaction'
 }
 
 export interface AssistantResponseSegmentJson {
@@ -217,7 +218,8 @@ export class AssistantResponseSegment {
 
   static fromJson(json: AssistantResponseSegmentJson): AssistantResponseSegment {
     const type = json.type === AssistantResponseSegmentType.REASONING ||
-      json.type === AssistantResponseSegmentType.TOOL_CALLS
+      json.type === AssistantResponseSegmentType.TOOL_CALLS ||
+      json.type === AssistantResponseSegmentType.CONTEXT_COMPACTION
       ? json.type : AssistantResponseSegmentType.CONTENT
     return new AssistantResponseSegment(json.id || '', type, json.content || '', json.toolCallIds || [])
   }
@@ -528,6 +530,13 @@ export enum AttachmentType {
   FILE = 'file'
 }
 
+// 应用侧自动上下文压缩在助手气泡中的展示状态
+export enum ContextCompactionUiState {
+  NONE = '',
+  COMPACTING = 'compacting',
+  COMPLETED = 'completed'
+}
+
 // 附件信息
 export class MessageAttachment {
   id: string
@@ -600,6 +609,8 @@ export class ChatMessage {
   @Trace searchSource: string
   // 是否正在搜索
   @Trace isSearching: boolean
+  // 应用侧自动上下文压缩状态（完成状态会持久化，用于恢复结果栏）
+  @Trace contextCompactionState: ContextCompactionUiState
   // Function Calling 相关字段
   @Trace toolCalls: ToolCall[]      // AI 请求的工具调用
   @Trace toolResults: ToolResult[]  // 工具执行结果
@@ -636,6 +647,7 @@ export class ChatMessage {
     this.searchEngine = ''
     this.searchSource = ''
     this.isSearching = false
+    this.contextCompactionState = ContextCompactionUiState.NONE
     this.toolCalls = []
     this.toolResults = []
     this.responseSegments = []

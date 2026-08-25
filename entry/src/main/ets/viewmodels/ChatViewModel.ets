@@ -24,7 +24,7 @@ import { appendSubAgentResultTool } from '../config/BuiltinTools'
 import { getProviderViewModel, ProviderViewModel } from './ProviderViewModel'
 import { getAssistantService, AssistantService, AssistantRuntimeConfig } from '../services/AssistantService'
 import { getSkillService, SkillConfig } from '../services/SkillService'
-import { ChatMessage, ChatSession, MessageRole, ProviderType, ApiStyle, OpenAITransport, MessageAttachment, AttachmentType, ReasoningLevel, ToolDefinition, ToolCall, ToolResult, SearchReference, ModelParameters, ModelProvider, AssistantResponseSegment, AssistantResponseSegmentType } from '../models/ChatModels'
+import { ChatMessage, ChatSession, MessageRole, ProviderType, ApiStyle, OpenAITransport, MessageAttachment, AttachmentType, ContextCompactionUiState, ReasoningLevel, ToolDefinition, ToolCall, ToolResult, SearchReference, ModelParameters, ModelProvider, AssistantResponseSegment, AssistantResponseSegmentType } from '../models/ChatModels'
 import { WebSearchResult, SearchResult, getWebSearchService } from '../services/WebSearchService'
 import { http } from '@kit.NetworkKit'
 import { HttpRequestController } from '../services/HttpService'
@@ -60,7 +60,7 @@ import {
   KNOWLEDGE_SEARCH_MAX_CALLS_PER_USER_TURN,
   KNOWLEDGE_SEARCH_TOOL_ID
 } from '../config/KnowledgeSearchTool'
-import { COMPACT_TOOL_ID, createCompactToolDefinition } from '../config/CompactTool'
+import { COMPACT_TOOL_ID } from '../config/CompactTool'
 import {
   COMPACT_SUMMARY_PROMPT_MARKER,
   ContextCompactionResult,
@@ -74,7 +74,6 @@ import { ReasoningRequestStrategy } from '../services/ProviderCompatibilityRegis
 import {
   buildContextUsageFromRequestTokens,
   ContextUsage,
-  formatTokenCount,
   resolveContextWindowTokens,
   resolveRequestMaxOutputTokens
 } from '../utils/ContextWindowUtils'
@@ -235,6 +234,14 @@ class CompactedHistoryPlan {
   }
 }
 
+// 每次用户提问最多自动压缩一次。发送前、工具续轮和流式生成中途共享这份状态，
+// 避免压缩后因摘要本身仍接近阈值而进入重复中断循环。
+class AutomaticCompactionState {
+  attempted: boolean = false
+  applied: boolean = false
+  mergeNextContentSegment: boolean = false
+}
+
 // 聊天状态管理
 export class ChatViewModel {
   private databaseService: DatabaseService
@@ -284,6 +291,60 @@ export class ChatViewModel {
       () => this.generateId(),
       () => this.notifySessionListChanged()
     )
+  }
+
+  // 压缩状态既保留聚合字段（“仅展示最后回复”模式固定显示在顶部），也写入响应时间线，
+  // 让“按生成顺序展示”模式能够把状态栏放在真正发生中断的位置。
+  private beginAutomaticCompactionUi(message: ChatMessage): void {
+    message.contextCompactionState = ContextCompactionUiState.COMPACTING
+    for (let i = 0; i < message.responseSegments.length; i++) {
+      if (message.responseSegments[i].type === AssistantResponseSegmentType.CONTEXT_COMPACTION &&
+        message.responseSegments[i].content === ContextCompactionUiState.COMPACTING) {
+        return
+      }
+    }
+    message.responseSegments.push(new AssistantResponseSegment(
+      `${message.id}_${message.responseSegments.length}_${AssistantResponseSegmentType.CONTEXT_COMPACTION}`,
+      AssistantResponseSegmentType.CONTEXT_COMPACTION,
+      ContextCompactionUiState.COMPACTING
+    ))
+  }
+
+  private finishAutomaticCompactionUi(message: ChatMessage, applied: boolean): void {
+    message.contextCompactionState = applied ?
+      ContextCompactionUiState.COMPLETED : ContextCompactionUiState.NONE
+    for (let i = message.responseSegments.length - 1; i >= 0; i--) {
+      const segment = message.responseSegments[i]
+      if (segment.type !== AssistantResponseSegmentType.CONTEXT_COMPACTION ||
+        segment.content !== ContextCompactionUiState.COMPACTING) {
+        continue
+      }
+      if (applied) {
+        segment.content = ContextCompactionUiState.COMPLETED
+      } else {
+        message.responseSegments.splice(i, 1)
+      }
+      return
+    }
+    if (applied) {
+      message.responseSegments.push(new AssistantResponseSegment(
+        `${message.id}_${message.responseSegments.length}_${AssistantResponseSegmentType.CONTEXT_COMPACTION}`,
+        AssistantResponseSegmentType.CONTEXT_COMPACTION,
+        ContextCompactionUiState.COMPLETED
+      ))
+    }
+  }
+
+  private clearAutomaticCompactionUi(message: ChatMessage): void {
+    if (message.contextCompactionState === ContextCompactionUiState.COMPACTING) {
+      message.contextCompactionState = ContextCompactionUiState.NONE
+    }
+    for (let i = message.responseSegments.length - 1; i >= 0; i--) {
+      if (message.responseSegments[i].type === AssistantResponseSegmentType.CONTEXT_COMPACTION &&
+        message.responseSegments[i].content === ContextCompactionUiState.COMPACTING) {
+        message.responseSegments.splice(i, 1)
+      }
+    }
   }
 
 	  private async getRenderedSystemPrompt(): Promise<string> {
@@ -834,15 +895,6 @@ export class ChatViewModel {
     )
   }
 
-  private buildCompactReminderPrompt(usage: ContextUsage): string {
-    return `
-上下文压缩强制指令(最高优先级，必须执行):
-- 当前对话上下文约占用 ${formatTokenCount(usage.usedTokens)} / ${formatTokenCount(usage.limitTokens)} tokens（约 ${usage.percent}%），已超过 ${usage.thresholdPercent}% 阈值，继续直接回答将导致上下文溢出。
-- 你**必须**在生成任何面向用户的回答之前，先调用一次 compact 工具，把更早的对话历史压缩成结构化摘要。这不是建议，而是强制要求：在 compact 成功返回之前，禁止输出任何解释、回答或闲聊内容。
-- compact 的 summary 必须自包含：写清用户目标与约束、已确认的结论、已产出的代码/文件/数据及其位置、已排除的方案与原因、当前进度和待办；被压缩掉的原文之后不再可见。
-- compact 返回后立即基于摘要继续回答用户当前的问题，不要向用户复述摘要，也不要重复调用 compact。`
-  }
-
   private isCompactFunction(functionName: string): boolean {
     return functionName.trim() === COMPACT_TOOL_ID
   }
@@ -1039,7 +1091,14 @@ export class ChatViewModel {
 
     const currentUsage = await this.getContextUsage(providerId, modelId, messages)
 
-    const summary = await this.requestManualCompactionSummary(provider, effectiveApiKey, modelId, session, messages)
+    const summary = await this.requestCompactionSummary(
+      provider,
+      effectiveApiKey,
+      modelId,
+      session,
+      messages,
+      false
+    )
     if (summary === '') {
       return this.buildManualCompactionFailure(ContextCompactionStatus.INVALID, '模型未返回有效摘要')
     }
@@ -1088,15 +1147,20 @@ export class ChatViewModel {
   }
 
   // 用当前对话模型跑一次非流式请求，只为拿到压缩摘要（不写入聊天记录）
-  private async requestManualCompactionSummary(
+  private async requestCompactionSummary(
     provider: ModelProvider,
     apiKey: string,
     modelId: string,
     session: ChatSession,
-    messages: ChatMessage[]
+    messages: ChatMessage[],
+    automatic: boolean
   ): Promise<string> {
     const requestMessages: RequestMessage[] = [
-      new RequestMessage('system', ContextCompactionService.buildManualSummarySystemPrompt())
+      new RequestMessage(
+        'system',
+        automatic ? ContextCompactionService.buildAutomaticSummarySystemPrompt() :
+          ContextCompactionService.buildManualSummarySystemPrompt()
+      )
     ]
     const goalSummaryPrompt = buildConversationGoalSummaryPrompt(session.conversationGoal)
     if (goalSummaryPrompt !== '') {
@@ -1187,6 +1251,67 @@ export class ChatViewModel {
     }
   }
 
+  // 阈值触发后由应用直接完成摘要、锚点计算、请求历史替换和持久化。
+  // 摘要请求使用隔离的 API service，不会出现在聊天记录或当前 AI 气泡中。
+  private async compactContextAutomaticallyForRequest(
+    apiConfig: AIApiConfig,
+    modelId: string,
+    snapshotSession: ChatSession | null,
+    sourceMessages: ChatMessage[],
+    requestMessages: RequestMessage[],
+    usage: ContextUsage,
+    isCancelledFn: () => boolean
+  ): Promise<ContextCompactionResult> {
+    if (snapshotSession === null || snapshotSession.id === '') {
+      return this.buildManualCompactionFailure(
+        ContextCompactionStatus.UNAVAILABLE,
+        '当前没有可自动压缩的会话上下文'
+      )
+    }
+    const provider = this.providerViewModel.getProviderById(apiConfig.providerId)
+    if (provider === null) {
+      return this.buildManualCompactionFailure(
+        ContextCompactionStatus.UNAVAILABLE,
+        `未找到供应商 ${apiConfig.providerId}`
+      )
+    }
+
+    const summary = await this.requestCompactionSummary(
+      provider,
+      apiConfig.apiKey,
+      modelId,
+      snapshotSession,
+      sourceMessages,
+      true
+    )
+    if (isCancelledFn()) {
+      return this.buildManualCompactionFailure(ContextCompactionStatus.UNAVAILABLE, '自动压缩已取消')
+    }
+    if (summary === '') {
+      return this.buildManualCompactionFailure(ContextCompactionStatus.INVALID, '模型未返回有效摘要')
+    }
+
+    const result = getContextCompactionService().buildAutomaticCompaction(
+      snapshotSession.id,
+      ContextCompactionService.getEffectiveMessages(snapshotSession, sourceMessages),
+      summary,
+      usage.limitTokens,
+      DEFAULT_COMPACT_KEEP_RECENT_TURNS,
+      usage.usedTokens
+    )
+    if (!result.applied) {
+      console.warn('ChatViewModel', `Automatic compaction not applied: ${result.status} ${result.message}`)
+      return result
+    }
+    this.applyCompactionToRequestMessages(
+      requestMessages,
+      result,
+      snapshotSession,
+      snapshotSession.id
+    )
+    return result
+  }
+
   // 手动摘要必须看到工具真正读取到的内容。ChatMessage 会把多轮工具过程折叠到一条
   // 气泡里，因此这里把调用参数与配对结果展开成可供摘要模型读取的文本记录。
   private buildManualCompactionHistoryText(message: ChatMessage): string {
@@ -1218,29 +1343,6 @@ export class ChatViewModel {
   // 部分模型会把思考过程以 <think> 标签内联在正文里，摘要不需要这部分
   private stripReasoningTags(content: string): string {
     return content.replace(/<think>[\s\S]*?<\/think>/g, '').trim()
-  }
-
-  // 是否需要在本次请求中曝光 compact 工具并注入压缩提醒
-  async shouldSuggestCompaction(
-    providerId: string,
-    modelId: string,
-    messages: ChatMessage[],
-    pendingContent: string = '',
-    pendingAttachments: MessageAttachment[] = [],
-    tools: ToolDefinition[] = []
-  ): Promise<boolean> {
-    const compactionService = getContextCompactionService()
-    if (!compactionService.isEnabled()) {
-      return false
-    }
-    return (await this.getContextUsage(
-      providerId,
-      modelId,
-      messages,
-      pendingContent,
-      pendingAttachments,
-      tools
-    )).overThreshold
   }
 
   // 判断待持久化消息是否包含有效内容（空占位消息不应跨会话残留）
@@ -1285,6 +1387,7 @@ export class ChatViewModel {
       // stop 后持久化的消息应结束生成/搜索状态
       info.message.isGenerating = false
       info.message.isSearching = false
+      this.clearAutomaticCompactionUi(info.message)
       entries.push(info)
     })
 
@@ -2642,11 +2745,7 @@ ${limitedSearchContext}
     let hasSkillTool = false
     let hasSubAgentTool = false
     let hasKnowledgeSearchTool = false
-    let hasCompactTool = false
     for (let i = 0; i < tools.length; i++) {
-      if (tools[i].function.name === COMPACT_TOOL_ID) {
-        hasCompactTool = true
-      }
       if (tools[i].function.name === 'web_search') {
         hasWebSearchTool = true
       }
@@ -2775,7 +2874,7 @@ ${limitedSearchContext}
       modelSupportsDocuments,
       modelSupportsVision
     )
-    let contextUsage = this.computeRequestContextUsage(
+    const contextUsage = this.computeRequestContextUsage(
       apiConfig,
       previewRequestMessages,
       providerId,
@@ -2784,25 +2883,11 @@ ${limitedSearchContext}
       requestTools,
       true
     )
-    if (!hasCompactTool && compactionService.isEnabled() && contextUsage.overThreshold) {
-      requestTools = [...requestTools, createCompactToolDefinition()]
-      hasCompactTool = true
-      contextUsage = this.computeRequestContextUsage(
-        apiConfig,
-        previewRequestMessages,
-        providerId,
-        modelId,
-        reasoningLevel,
-        requestTools,
-        true
-      )
-    }
-    if (hasCompactTool && compactionService.isEnabled() && contextUsage.overThreshold) {
-      toolUsageSystemPrompt += this.buildCompactReminderPrompt(contextUsage)
+    if (compactionService.isEnabled() && contextUsage.overThreshold) {
       console.info(
         'ChatViewModel',
         `Context over threshold: ${contextUsage.usedTokens}/${contextUsage.limitTokens} ` +
-          `(${contextUsage.percent}% >= ${contextUsage.thresholdPercent}%), compact reminder injected`
+          `(${contextUsage.percent}% >= ${contextUsage.thresholdPercent}%), scheduling app-side compaction`
       )
     }
 
@@ -2838,7 +2923,7 @@ ${limitedSearchContext}
     }
 
     const usageTracker = new RequestTokenUsageTracker()
-    const initialContextUsage = this.computeRequestContextUsage(
+    let initialContextUsage = this.computeRequestContextUsage(
       apiConfig,
       requestMessages,
       providerId,
@@ -2869,6 +2954,10 @@ ${limitedSearchContext}
       cancelled = true
       userCancelled = true
       toolExecutionCancelled = true
+      if (aiMessage.contextCompactionState === ContextCompactionUiState.COMPACTING) {
+        this.clearAutomaticCompactionUi(aiMessage)
+        onAIMessageUpdated(aiMessage)
+      }
       localFirstChunkThrottle.reset()
       localContentThrottle.reset()
       localReasoningThrottle.reset()
@@ -2885,6 +2974,47 @@ ${limitedSearchContext}
           compactionSourceMessages.push(messages[i])
           break
         }
+      }
+    }
+
+    const automaticCompactionState = new AutomaticCompactionState()
+    if (compactionService.isEnabled() && initialContextUsage.overThreshold) {
+      automaticCompactionState.attempted = true
+      this.beginAutomaticCompactionUi(aiMessage)
+      onAIMessageUpdated(aiMessage)
+      const automaticResult = await this.compactContextAutomaticallyForRequest(
+        apiConfig,
+        modelId,
+        snapshotSession,
+        compactionSourceMessages,
+        requestMessages,
+        initialContextUsage,
+        (): boolean => cancelled || this.isCancelled(cancelSnapshot)
+      )
+      if (cancelled || this.isCancelled(cancelSnapshot)) {
+        return
+      }
+      this.finishAutomaticCompactionUi(aiMessage, automaticResult.applied)
+      onAIMessageUpdated(aiMessage)
+      if (automaticResult.applied) {
+        automaticCompactionState.applied = true
+        requestMessages.push(new RequestMessage(
+          'system',
+          ContextCompactionService.buildAutomaticContinuationPrompt(false)
+        ))
+        initialContextUsage = this.computeRequestContextUsage(
+          apiConfig,
+          requestMessages,
+          providerId,
+          modelId,
+          reasoningLevel,
+          requestTools
+        )
+        console.info(
+          'ChatViewModel',
+          `App-side compaction completed before streaming: ` +
+            `${automaticResult.beforeTokens}->${automaticResult.afterTokens}`
+        )
       }
     }
     compactionService.beginRequest(new ContextCompactionRuntime(
@@ -3001,7 +3131,9 @@ ${limitedSearchContext}
       localFirstChunkThrottle,
       localContentThrottle,
       localReasoningThrottle,
-      usageTracker
+      usageTracker,
+      automaticCompactionState,
+      compactionSourceMessages
     )
   }
 
@@ -3123,6 +3255,7 @@ ${preview}`
     this.fillEmptyAIContentPlaceholder(aiMessage)
     aiMessage.isGenerating = false
     aiMessage.isSearching = false
+    this.clearAutomaticCompactionUi(aiMessage)
     onAIMessageUpdated(aiMessage)
 
     if (snapshotSession !== null) {
@@ -3591,10 +3724,53 @@ ${preview}`
     localFirstChunkThrottle: ThrottleUtil,
     localContentThrottle: ThrottleUtil,
     localReasoningThrottle: ThrottleUtil,
-    usageTracker: RequestTokenUsageTracker
+    usageTracker: RequestTokenUsageTracker,
+    automaticCompactionState: AutomaticCompactionState,
+    compactionSourceMessages: ChatMessage[]
   ): Promise<void> {
     if (isCancelledFn()) {
       return
+    }
+
+    // 工具结果可能让同一气泡的下一轮请求突然越过阈值。此时不再让模型调用 compact，
+    // 而是在发起下一轮流式请求前由应用直接压缩，并继续复用当前 aiMessage。
+    const compactionService = getContextCompactionService()
+    if (!automaticCompactionState.attempted && compactionService.isEnabled()) {
+      const roundContextUsage = this.computeRequestContextUsage(
+        apiConfig,
+        requestMessages,
+        apiConfig.providerId,
+        modelId,
+        reasoningLevel,
+        tools.length > 0 ? tools : undefined
+      )
+      if (roundContextUsage.overThreshold) {
+        automaticCompactionState.attempted = true
+        this.beginAutomaticCompactionUi(aiMessage)
+        onAIMessageUpdated(aiMessage)
+        const automaticResult = await this.compactContextAutomaticallyForRequest(
+          apiConfig,
+          modelId,
+          snapshotSession,
+          compactionSourceMessages,
+          requestMessages,
+          roundContextUsage,
+          isCancelledFn
+        )
+        if (isCancelledFn()) {
+          return
+        }
+        this.finishAutomaticCompactionUi(aiMessage, automaticResult.applied)
+        onAIMessageUpdated(aiMessage)
+        if (automaticResult.applied) {
+          automaticCompactionState.applied = true
+          requestMessages.push(new RequestMessage(
+            'system',
+            ContextCompactionService.buildAutomaticContinuationPrompt(false)
+          ))
+          console.info('ChatViewModel', `App-side compaction completed before tool loop ${iteration + 1}`)
+        }
+      }
     }
 
     const completedKnowledgeQueryCount = this.countCompletedKnowledgeSearchCalls(aiMessage)
@@ -3620,7 +3796,8 @@ ${preview}`
       toolChoiceForThisRound = toolsForThisRound.length > 0 ? 'auto' : 'none'
     }
     // 每次用户提问最多压缩一次：已压缩成功后从后续回合移除 compact，避免反复压缩摘要
-    if (this.hasCompactTool(toolsForThisRound) && this.hasCompletedCompactCall(aiMessage)) {
+    if (this.hasCompactTool(toolsForThisRound) &&
+      (automaticCompactionState.applied || this.hasCompletedCompactCall(aiMessage))) {
       toolsForThisRound = this.getToolsWithoutCompact(toolsForThisRound)
       toolChoiceForThisRound = toolsForThisRound.length > 0 ? toolChoiceForThisRound : 'none'
     }
@@ -3643,9 +3820,27 @@ ${preview}`
     let streamedReasoningLength = 0
     let roundGeneratedContent = ''
     let roundGeneratedReasoning = ''
+    let roundGeneratedToolCallTokens = 0
+    let observedPromptTokens = 0
+    let observedCompletionTokens = 0
     const roundResponseSegmentStartIndex = aiMessage.responseSegments.length
     let roundReasoningSegmentIndex = -1
     let roundContentSegmentIndex = -1
+    let reusedContentSegmentOriginalLength = -1
+    if (automaticCompactionState.mergeNextContentSegment && reasoningLevel === ReasoningLevel.OFF &&
+      aiMessage.responseSegments.length > 0) {
+      const lastSegmentIndex = aiMessage.responseSegments.length - 1
+      if (aiMessage.responseSegments[lastSegmentIndex].type === AssistantResponseSegmentType.CONTENT) {
+        roundContentSegmentIndex = lastSegmentIndex
+        reusedContentSegmentOriginalLength = aiMessage.responseSegments[lastSegmentIndex].content.length
+      }
+    }
+    automaticCompactionState.mergeNextContentSegment = false
+    let roundInterruptedForCompaction = false
+    let roundCompactionResumeStarted = false
+    let roundHttpRequest: http.HttpRequest | null = null
+    let maybeInterruptForAutomaticCompaction = (): void => {}
+    const isRoundInactive = (): boolean => isCancelledFn() || roundInterruptedForCompaction
 
     const appendResponseTextSegment = (type: AssistantResponseSegmentType, content: string): void => {
       if (content === '') {
@@ -3690,6 +3885,12 @@ ${preview}`
     }
 
     const discardCurrentRoundResponseSegments = (): void => {
+      if (reusedContentSegmentOriginalLength >= 0 && roundContentSegmentIndex >= 0 &&
+        roundContentSegmentIndex < aiMessage.responseSegments.length) {
+        aiMessage.responseSegments[roundContentSegmentIndex].content =
+          aiMessage.responseSegments[roundContentSegmentIndex].content.substring(0, reusedContentSegmentOriginalLength)
+        reusedContentSegmentOriginalLength = -1
+      }
       if (aiMessage.responseSegments.length > roundResponseSegmentStartIndex) {
         aiMessage.responseSegments = aiMessage.responseSegments.slice(0, roundResponseSegmentStartIndex)
       }
@@ -3708,6 +3909,12 @@ ${preview}`
           aiMessage.reasoningContent.length - streamedReasoningLength
         )
         streamedReasoningLength = 0
+      }
+      if (reusedContentSegmentOriginalLength >= 0 && roundContentSegmentIndex >= 0 &&
+        roundContentSegmentIndex < aiMessage.responseSegments.length) {
+        aiMessage.responseSegments[roundContentSegmentIndex].content =
+          aiMessage.responseSegments[roundContentSegmentIndex].content.substring(0, reusedContentSegmentOriginalLength)
+        reusedContentSegmentOriginalLength = -1
       }
     }
 
@@ -3738,6 +3945,7 @@ ${preview}`
       aiMessage.content += content
       streamedContentLength += content.length
       onAIMessageUpdated(aiMessage)
+      maybeInterruptForAutomaticCompaction()
     }
 
     const appendRoundReasoning = (content: string): void => {
@@ -3753,6 +3961,7 @@ ${preview}`
       aiMessage.reasoningContent += content
       streamedReasoningLength += content.length
       onAIMessageUpdated(aiMessage)
+      maybeInterruptForAutomaticCompaction()
     }
 
     const flushBufferedRoundOutput = (): void => {
@@ -3795,26 +4004,171 @@ ${preview}`
       estimatedRoundInput
     )
 
+    maybeInterruptForAutomaticCompaction = (): void => {
+      if (roundCompactionResumeStarted || roundInterruptedForCompaction || isCancelledFn() ||
+        automaticCompactionState.attempted || !compactionService.isEnabled() ||
+        compactionSourceMessages.length < 2) {
+        return
+      }
+      const locallyGeneratedTokens = estimateTextTokens(roundGeneratedContent) +
+        estimateTextTokens(roundGeneratedReasoning) + roundGeneratedToolCallTokens
+      // 部分供应商会在流中持续返回 usage。可用时取真实值，否则使用本地增量估算；
+      // 每次正文、思考、工具参数和 usage 更新都会重新检查，而不是等下一次用户发送。
+      const generatedTokens = Math.max(locallyGeneratedTokens, observedCompletionTokens)
+      const promptTokens = Math.max(estimatedRoundInput, observedPromptTokens)
+      const liveUsage = buildContextUsageFromRequestTokens(
+        promptTokens + generatedTokens,
+        this.getCurrentModelContextWindow(apiConfig.providerId, modelId),
+        this.getConfiguredMaxOutputTokens(apiConfig.providerId, modelId),
+        compactionService.getThresholdPercent()
+      )
+      if (!liveUsage.overThreshold) {
+        return
+      }
+
+      // 当前流已经把部分内容写进 aiMessage。先冻结本轮回调并销毁连接，再用隔离请求
+      // 生成摘要；续轮仍向同一个 aiMessage 追加内容，因此 UI 不会拆成第二个气泡。
+      const interruptedStructuredToolCall = roundHasToolCallDelta
+      let partialContent = streamedContentLength > 0 && aiMessage.content.length >= streamedContentLength ?
+        aiMessage.content.substring(aiMessage.content.length - streamedContentLength) : ''
+      if (interruptedStructuredToolCall) {
+        // 不完整的 function call 不能作为 assistant 历史回灌。丢弃这一轮尚未闭合的结构化调用，
+        // 压缩完成后从相同 requestMessages 重新启动本轮，仍复用同一个 UI 气泡。
+        rollbackStreamedRoundOutput()
+        discardCurrentRoundResponseSegments()
+        roundContentBuffer = ''
+        roundReasoningBuffer = ''
+        partialContent = ''
+      }
+
+      automaticCompactionState.attempted = true
+      roundCompactionResumeStarted = true
+      roundInterruptedForCompaction = true
+      this.beginAutomaticCompactionUi(aiMessage)
+      localFirstChunkThrottle.reset()
+      localContentThrottle.reset()
+      localReasoningThrottle.reset()
+      setHasReceivedFirstChunk(false)
+      usageTracker.finishRound(generatedTokens)
+      usageTracker.applyToMessage(aiMessage)
+      onAIMessageUpdated(aiMessage)
+      if (roundHttpRequest !== null) {
+        try {
+          roundHttpRequest.destroy()
+        } catch (_error) {}
+      }
+
+      const resumeAfterCompaction = async (): Promise<void> => {
+        const automaticResult = await this.compactContextAutomaticallyForRequest(
+          apiConfig,
+          modelId,
+          snapshotSession,
+          compactionSourceMessages,
+          requestMessages,
+          liveUsage,
+          isCancelledFn
+        )
+        if (isCancelledFn()) {
+          return
+        }
+        if (automaticResult.applied) {
+          automaticCompactionState.applied = true
+        }
+        this.finishAutomaticCompactionUi(aiMessage, automaticResult.applied)
+        onAIMessageUpdated(aiMessage)
+        if (partialContent !== '') {
+          requestMessages.push(new RequestMessage('assistant', partialContent))
+        }
+        requestMessages.push(new RequestMessage(
+          'system',
+          automaticResult.applied ? ContextCompactionService.buildAutomaticContinuationPrompt(partialContent !== '') :
+            (partialContent !== '' ?
+              '[应用续答通知]\n上一段生成刚刚被中断。请从上一段 assistant 内容的断点直接继续回答当前用户问题，' +
+                '不要重复已经输出的内容，也不要解释中断过程。' :
+              '[应用续答通知]\n上一轮尚未完成的生成刚刚被中断。请重新继续处理当前用户问题，' +
+                '不要解释中断过程。')
+        ))
+        console.info(
+          'ChatViewModel',
+          automaticResult.applied ? 'Streaming interrupted; app-side compaction completed, resuming same bubble' :
+            `Streaming interrupted; compaction unavailable (${automaticResult.status}), resuming same bubble`
+        )
+        automaticCompactionState.mergeNextContentSegment = partialContent !== ''
+        // 流被主动销毁时部分供应商解析器可能还留有 thinking/增量缓冲；续答前清空，
+        // 防止旧流的尾包污染同一气泡里的下一段内容。
+        this.aiApiService.resetThinkingState()
+        await this.executeToolCallLoop(
+          apiConfig,
+          requestMessages,
+          modelId,
+          aiMessage,
+          onAIMessageUpdated,
+          onComplete,
+          onError,
+          tools,
+          toolCallbacks,
+          reasoningLevel,
+          requestTemperature,
+          iteration + 1,
+          snapshotSessionId,
+          snapshotSession,
+          shouldAutoGenerateTitle,
+          requestId,
+          isCancelledFn,
+          isUserCancelledFn,
+          isToolCancelledFn,
+          setUserCancelled,
+          getHasReceivedFirstChunk,
+          setHasReceivedFirstChunk,
+          localFirstChunkThrottle,
+          localContentThrottle,
+          localReasoningThrottle,
+          usageTracker,
+          automaticCompactionState,
+          compactionSourceMessages
+        )
+      }
+      resumeAfterCompaction().catch((error: Object): void => {
+        if (isCancelledFn()) {
+          return
+        }
+        const message = error instanceof Error ? error.message : JSON.stringify(error)
+        console.error('ChatViewModel', `Failed to resume after automatic compaction: ${message}`)
+        this.clearAutomaticCompactionUi(aiMessage)
+        this.fillEmptyAIContentPlaceholder(aiMessage, message)
+        aiMessage.isGenerating = false
+        aiMessage.isSearching = false
+        onAIMessageUpdated(aiMessage)
+        this.clearPendingAIMessageIfMatches(aiMessage.id)
+        this.unregisterActiveRequest(requestId)
+        getContextCompactionService().endRequest(requestId)
+        getSubAgentService().clearRuntime()
+        onError(message)
+      })
+    }
+
     // 发送流式请求（带工具）
     const httpRequest = this.aiApiService.streamChatRequestWithTools(
       apiConfig,
       requestMessagesForRound,
       modelId,
       (contentChunk: string) => {
-        if (isCancelledFn()) {
+        if (isRoundInactive()) {
           return
         }
         if (!getHasReceivedFirstChunk()) {
           localFirstChunkThrottle.throttle(contentChunk, (throttledContent: string) => {
-            if (isCancelledFn()) {
+            if (isRoundInactive()) {
               return
             }
             appendRoundContent(throttledContent)
-            setHasReceivedFirstChunk(true)
+            if (!isRoundInactive()) {
+              setHasReceivedFirstChunk(true)
+            }
           })
         } else {
           localContentThrottle.throttle(contentChunk, (throttledContent: string) => {
-            if (isCancelledFn()) {
+            if (isRoundInactive()) {
               return
             }
             appendRoundContent(throttledContent)
@@ -3822,28 +4176,31 @@ ${preview}`
         }
       },
       async (toolCalls: ToolCall[]) => {
-        if (isCancelledFn()) {
+        if (isRoundInactive()) {
           return
         }
         // 刷新节流器
         localContentThrottle.flush((throttledContent: string) => {
-          if (isCancelledFn()) {
+          if (isRoundInactive()) {
             return
           }
           appendRoundContent(throttledContent)
         })
         localReasoningThrottle.flush((throttledReasoning: string) => {
-          if (isCancelledFn()) {
+          if (isRoundInactive()) {
             return
           }
           appendRoundReasoning(throttledReasoning)
         })
         localFirstChunkThrottle.flush((throttledContent: string) => {
-          if (isCancelledFn()) {
+          if (isRoundInactive()) {
             return
           }
           appendRoundContent(throttledContent)
         })
+        if (roundInterruptedForCompaction) {
+          return
+        }
         setHasReceivedFirstChunk(false)
 
         let estimatedToolCallOutput = 0
@@ -3894,7 +4251,9 @@ ${preview}`
               localFirstChunkThrottle,
               localContentThrottle,
               localReasoningThrottle,
-              usageTracker
+              usageTracker,
+              automaticCompactionState,
+              compactionSourceMessages
             )
             return
           }
@@ -4118,7 +4477,9 @@ ${preview}`
             localFirstChunkThrottle,
             localContentThrottle,
             localReasoningThrottle,
-            usageTracker
+            usageTracker,
+            automaticCompactionState,
+            compactionSourceMessages
           )
         } else {
           if (toolCalls.length > 0) {
@@ -4175,7 +4536,9 @@ ${preview}`
               localFirstChunkThrottle,
               localContentThrottle,
               localReasoningThrottle,
-              usageTracker
+              usageTracker,
+              automaticCompactionState,
+              compactionSourceMessages
             )
             return
           }
@@ -4193,27 +4556,30 @@ ${preview}`
         }
       },
       (error: string) => {
-        if (isCancelledFn()) {
+        if (isRoundInactive()) {
           return
         }
         localContentThrottle.flush((throttledContent: string) => {
-          if (isCancelledFn()) {
+          if (isRoundInactive()) {
             return
           }
           appendRoundContent(throttledContent)
         })
         localReasoningThrottle.flush((throttledReasoning: string) => {
-          if (isCancelledFn()) {
+          if (isRoundInactive()) {
             return
           }
           appendRoundReasoning(throttledReasoning)
         })
         localFirstChunkThrottle.flush((throttledContent: string) => {
-          if (isCancelledFn()) {
+          if (isRoundInactive()) {
             return
           }
           appendRoundContent(throttledContent)
         })
+        if (roundInterruptedForCompaction) {
+          return
+        }
         flushBufferedRoundOutput()
         usageTracker.finishRound(
           estimateTextTokens(roundGeneratedContent) + estimateTextTokens(roundGeneratedReasoning)
@@ -4239,18 +4605,18 @@ ${preview}`
 	      requestTemperature,
       roundMaxOutputTokens,
       (reasoningContent: string) => {
-        if (isCancelledFn()) {
+        if (isRoundInactive()) {
           return
         }
         localReasoningThrottle.throttle(reasoningContent, (throttledContent: string) => {
-          if (isCancelledFn()) {
+          if (isRoundInactive()) {
             return
           }
           appendRoundReasoning(throttledContent)
         })
       },
       async (base64Data: string, mimeType: string) => {
-        if (isCancelledFn()) {
+        if (isRoundInactive()) {
           return
         }
         try {
@@ -4263,17 +4629,35 @@ ${preview}`
       toolsEnabledInThisRound ? toolsForThisRound : undefined,
       toolChoiceForThisRound,
       (toolCallDeltas: ToolCallDelta[]) => {
-        if (isCancelledFn() || !toolsEnabledInThisRound || toolCallDeltas.length <= 0) {
+        if (isRoundInactive() || !toolsEnabledInThisRound || toolCallDeltas.length <= 0) {
           return
         }
         markCurrentRoundAsToolCall()
+        for (let i = 0; i < toolCallDeltas.length; i++) {
+          roundGeneratedToolCallTokens += estimateTextTokens(toolCallDeltas[i].id || '')
+          roundGeneratedToolCallTokens += estimateTextTokens(toolCallDeltas[i].functionName || '')
+          roundGeneratedToolCallTokens += estimateTextTokens(toolCallDeltas[i].arguments || '')
+        }
+        maybeInterruptForAutomaticCompaction()
       },
       (usage: UsageInfo): void => {
+        if (isRoundInactive()) {
+          return
+        }
+        observedPromptTokens = Math.max(observedPromptTokens, usage.prompt_tokens)
+        observedCompletionTokens = Math.max(observedCompletionTokens, usage.completion_tokens)
         usageTracker.updateCurrentRoundUsage(usage.prompt_tokens, usage.completion_tokens)
         usageTracker.applyToMessage(aiMessage)
         onAIMessageUpdated(aiMessage)
+        maybeInterruptForAutomaticCompaction()
       }
     )
+    roundHttpRequest = httpRequest
+    if (roundInterruptedForCompaction) {
+      try {
+        httpRequest.destroy()
+      } catch (_error) {}
+    }
 
     // 更新活跃请求中的 httpRequest 引用（每轮循环可能创建新的 httpRequest）
     const existingInfo = this.activeRequests.get(requestId)

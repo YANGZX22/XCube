@@ -164,6 +164,7 @@ export function buildChatMessageContentRenderSignature(
     encodeBoolean(isEditing),
     encodeBoolean(message.isGenerating),
     encodeBoolean(message.isSearching),
+    encodeValue(message.contextCompactionState),
     encodeValue(currentModelId),
     encodeNumber(chatFontSize),
     encodeValue(themeRenderKey),

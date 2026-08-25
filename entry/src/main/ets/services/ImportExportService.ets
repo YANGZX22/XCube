@@ -20,6 +20,7 @@ import {
   ProviderIconType,
   MessageAttachment,
   AttachmentType,
+  ContextCompactionUiState,
   MessageRole,
   SearchReference,
   ToolCall,
@@ -218,6 +219,7 @@ interface MessageData {
   modelId?: string
   reasoningContent: string
   responseTimeline?: AssistantResponseSegmentJson[]
+  contextCompactionState?: string
   billingEnabled?: boolean
   billingCurrency?: string
   inputPricePerMillion?: number
@@ -700,6 +702,7 @@ export class ImportExportService {
             reasoningContent: m.reasoningContent,
             responseTimeline: m.responseSegments.map((segment: AssistantResponseSegment): AssistantResponseSegmentJson =>
               segment.toJson()),
+            contextCompactionState: m.contextCompactionState,
             billingEnabled: m.billingEnabled,
             billingCurrency: m.billingCurrency,
             inputPricePerMillion: m.inputPricePerMillion,
@@ -1038,6 +1041,9 @@ export class ImportExportService {
             for (const segmentData of msgData.responseTimeline) {
               message.responseSegments.push(AssistantResponseSegment.fromJson(segmentData))
             }
+          }
+          if (msgData.contextCompactionState === 'completed') {
+            message.contextCompactionState = ContextCompactionUiState.COMPLETED
           }
           message.billingEnabled = msgData.billingEnabled || false
           message.billingCurrency = msgData.billingCurrency || ''

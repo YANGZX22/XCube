@@ -1,4 +1,4 @@
-import { AssistantResponseSegment, AssistantResponseSegmentType, ChatMessage, MessageRole, MessageAttachment, AttachmentType, ToolCall, ToolResult } from '../models/ChatModels'
+import { AssistantResponseSegment, AssistantResponseSegmentType, ChatMessage, MessageRole, MessageAttachment, AttachmentType, ContextCompactionUiState, ToolCall, ToolResult } from '../models/ChatModels'
 import { VisualEffectsMode } from '../models/ThemeColors'
 import { pasteboard } from '@kit.BasicServicesKit'
 import { image } from '@kit.ImageKit'
@@ -477,6 +477,7 @@ export struct MessageBubble {
       this.message.reasoningContent,
       this.message.isGenerating ? '1' : '0',
       this.message.isSearching ? '1' : '0',
+      this.message.contextCompactionState,
       this.currentModelId,
       this.isEditing ? '1' : '0',
       this.previewContent,
@@ -859,7 +860,14 @@ export struct MessageBubble {
           this.AssistantAttachments()
         }
 
-        if (this.message.content.length === 0 && (this.message.isGenerating || this.message.isSearching)) {
+        if (!getAppUiState().chatOrderedResponseHistory &&
+          this.message.contextCompactionState !== ContextCompactionUiState.NONE) {
+          this.ContextCompactionStatusBar(this.message.contextCompactionState)
+        }
+
+        if (this.message.content.length === 0 &&
+          this.message.contextCompactionState === ContextCompactionUiState.NONE &&
+          (this.message.isGenerating || this.message.isSearching)) {
           Text('…')
             .fontFamily(MANUSCRIPT_BODY_FONT)
             .fontSize(15)
@@ -2242,11 +2250,33 @@ export struct MessageBubble {
 
   private getOrderedResponseSegments(): AssistantResponseSegment[] {
     if (this.message.responseSegments.length > 0) {
+      let hasCompactionSegment = false
+      for (let i = 0; i < this.message.responseSegments.length; i++) {
+        if (this.message.responseSegments[i].type === AssistantResponseSegmentType.CONTEXT_COMPACTION) {
+          hasCompactionSegment = true
+          break
+        }
+      }
+      // 兼容升级前已经持久化完成状态、但时间线里尚无压缩节点的消息。
+      if (!hasCompactionSegment && this.message.contextCompactionState !== ContextCompactionUiState.NONE) {
+        return [new AssistantResponseSegment(
+          `${this.message.id}_legacy_context_compaction`,
+          AssistantResponseSegmentType.CONTEXT_COMPACTION,
+          this.message.contextCompactionState
+        ), ...this.message.responseSegments]
+      }
       return this.message.responseSegments
     }
 
     // 旧消息没有时间线字段，只能按现有可恢复信息生成稳定的兼容顺序。
     const segments: AssistantResponseSegment[] = []
+    if (this.message.contextCompactionState !== ContextCompactionUiState.NONE) {
+      segments.push(new AssistantResponseSegment(
+        `${this.message.id}_legacy_context_compaction`,
+        AssistantResponseSegmentType.CONTEXT_COMPACTION,
+        this.message.contextCompactionState
+      ))
+    }
     if (this.message.reasoningContent.trim() !== '') {
       segments.push(new AssistantResponseSegment(
         `${this.message.id}_legacy_reasoning`,
@@ -2523,6 +2553,8 @@ export struct MessageBubble {
           this.TimelineReasoningSection(segment)
         } else if (segment.type === AssistantResponseSegmentType.TOOL_CALLS) {
           this.TimelineToolSection(segment)
+        } else if (segment.type === AssistantResponseSegmentType.CONTEXT_COMPACTION) {
+          this.ContextCompactionStatusBar(segment.content)
         } else if (segment.type === AssistantResponseSegmentType.CONTENT && segment.content.trim().length > 0) {
           this.TimelineContentSection(segment)
         }
@@ -2667,6 +2699,12 @@ export struct MessageBubble {
               this.AssistantAttachments()
             }
 
+            // ========== 应用侧上下文压缩状态/结果栏 ==========
+            if (!getAppUiState().chatOrderedResponseHistory &&
+              this.message.contextCompactionState !== ContextCompactionUiState.NONE) {
+              this.ContextCompactionStatusBar(this.message.contextCompactionState)
+            }
+
             // ========== 推理内容区域（可折叠） ==========
             if (!getAppUiState().chatOrderedResponseHistory && this.message.hasReasoningContent()) {
               this.ReasoningSection()
@@ -2781,6 +2819,41 @@ export struct MessageBubble {
     .onTouch((event: TouchEvent) => {
       this.handleMultiSelectTouch(event)
     })
+  }
+
+  @Builder
+  ContextCompactionStatusBar(state: string) {
+    Row({ space: 8 }) {
+      SymbolGlyph(state === ContextCompactionUiState.COMPACTING ?
+        $r('sys.symbol.doc_zipper') : $r('sys.symbol.checkmark_circle_fill'))
+        .fontSize(14)
+        .fontColor([this.isManuscriptMode ? this.manuscriptAccentDeep : this.themePrimary])
+
+      Text(state === ContextCompactionUiState.COMPACTING ?
+        pickLocalizedText('正在压缩上下文', 'Compacting context') :
+        pickLocalizedText('已经压缩上下文', 'Context compacted'))
+        .fontSize(13)
+        .fontWeight(FontWeight.Medium)
+        .fontColor(this.isManuscriptMode ? this.manuscriptAccentDeep : $r('app.color.text_secondary'))
+        .maxLines(1)
+
+      Blank()
+
+      if (state === ContextCompactionUiState.COMPACTING) {
+        TypingDots({ dotSize: 4, spacing: 2 })
+      }
+    }
+    .width('100%')
+    .height(34)
+    .padding({ left: 11, right: 11 })
+    .margin({ bottom: 8 })
+    .backgroundColor(this.isManuscriptMode ? Color.Transparent : withColorAlpha(this.themePrimary, '12'))
+    .borderRadius(this.isManuscriptMode ? 0 : 10)
+    .border({
+      width: this.isManuscriptMode ? { top: 1, bottom: 1 } : 0.5,
+      color: this.isManuscriptMode ? getAppUiState().themeDivider : withColorAlpha(this.themePrimary, '30')
+    })
+    .transition(TransitionEffect.OPACITY.animation({ duration: 160 }))
   }
 
   // 搜索状态指示器（AI 消息区域内联显示）

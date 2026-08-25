@@ -4,6 +4,7 @@ import {
   ApiStyle,
   ChatMessage,
   ChatSession,
+  ContextCompactionUiState,
   MessageAttachment,
   MessageRole,
   ModelInfo,
@@ -740,6 +741,20 @@ export default function refactorGuardTest() {
       expect(previousSignature === nextSignature).assertEqual(false)
     })
 
+    it('chatMessageRowRenderSignature_should_track_context_compaction_ui_state', 0, () => {
+      const message = createTestMessage('m1', '')
+      const idleSignature = buildTestChatMessageSignature(message)
+
+      message.contextCompactionState = ContextCompactionUiState.COMPACTING
+      const compactingSignature = buildTestChatMessageSignature(message)
+
+      message.contextCompactionState = ContextCompactionUiState.COMPLETED
+      const completedSignature = buildTestChatMessageSignature(message)
+
+      expect(idleSignature === compactingSignature).assertEqual(false)
+      expect(compactingSignature === completedSignature).assertEqual(false)
+    })
+
     it('chatMessageListDataSource_should_notify_row_change_when_tool_result_state_changes', 0, () => {
       const previousMessage = createTestMessage('m1', '工具结果')
       previousMessage.toolCalls = [new ToolCall('call-1', 'web_search', '{"q":"abc"}', 'web_search', '网页搜索', 'builtin',
@@ -1239,6 +1254,32 @@ export default function refactorGuardTest() {
       expect(applied.anchorMessageId).assertEqual('a1')
       expect(applied.keptRecentTurns).assertEqual(2)
       expect(applied.keptMessageCount).assertEqual(4)
+    })
+
+    it('automatic_context_compaction_should_keep_the_active_user_question', 0, () => {
+      const messages: ChatMessage[] = []
+      for (let i = 0; i < 4; i++) {
+        messages.push(new ChatMessage(`u${i}`, MessageRole.USER, `问题 ${i}`.repeat(200), 'AI', 'model'))
+        messages.push(new ChatMessage(`a${i}`, MessageRole.ASSISTANT, `回答 ${i}`.repeat(200), 'AI', 'model'))
+      }
+      messages.push(new ChatMessage('u-active', MessageRole.USER, '这是正在回答、必须保留原文的当前问题', 'AI', 'model'))
+      const summary = '用户此前连续提出多个问题，助手已经逐项处理；较早结论、关键约束与后续待办均已完整保留。'
+
+      const applied = getContextCompactionService().buildAutomaticCompaction(
+        'session-auto',
+        messages,
+        summary,
+        4000
+      )
+      expect(applied.status).assertEqual(ContextCompactionStatus.APPLIED)
+      expect(applied.anchorMessageId).assertEqual('a1')
+      expect(applied.keptMessageCount).assertEqual(5)
+      expect(messages[messages.length - 1].id).assertEqual('u-active')
+
+      const continuationPrompt = ContextCompactionService.buildAutomaticContinuationPrompt(true)
+      expect(continuationPrompt.includes('应用层完成历史压缩')).assertTrue()
+      expect(continuationPrompt.includes('断点直接继续')).assertTrue()
+      expect(continuationPrompt.includes('调用 compact')).assertFalse()
     })
 
     it('slashCommands_should_resolve_exact_command_on_send', 0, () => {

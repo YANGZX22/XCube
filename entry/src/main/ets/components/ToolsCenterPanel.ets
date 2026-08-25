@@ -2893,7 +2893,7 @@ struct SearchServiceCardItem {
   }
 }
 
-// 上下文压缩（compact）设置卡片：控制是否在超过阈值时提醒模型压缩，以及触发阈值
+// 上下文压缩设置卡片：超过阈值后由应用直接压缩，并在同一气泡中继续当前回答。
 @ComponentV2
 struct ContextCompactCardItem {
   @Param compactEnabled: boolean = true
@@ -2924,8 +2924,8 @@ struct ContextCompactCardItem {
       return pickLocalizedText('未启用', 'Disabled')
     }
     return pickLocalizedText(
-      `上限 ${formatTokenCount(this.getDisplayMaxContextTokens())} · 超过 ${this.getDisplayThresholdPercent()}% 时提醒压缩`,
-      `Cap ${formatTokenCount(this.getDisplayMaxContextTokens())} · remind above ${this.getDisplayThresholdPercent()}%`
+      `上限 ${formatTokenCount(this.getDisplayMaxContextTokens())} · 超过 ${this.getDisplayThresholdPercent()}% 时自动压缩`,
+      `Cap ${formatTokenCount(this.getDisplayMaxContextTokens())} · auto-compact above ${this.getDisplayThresholdPercent()}%`
     )
   }
 
@@ -2982,11 +2982,12 @@ struct ContextCompactCardItem {
       .width('100%')
 
       Text(pickLocalizedText(
-        '对话上下文超过所选比例时，应用会在下一次请求中提醒模型先调用 compact 工具，把更早的历史压缩成摘要。' +
-          '只影响发送给模型的内容，不会删除聊天记录。仅支持工具调用的模型可用。',
-        'When the conversation exceeds the selected share of the model context window, the next request reminds ' +
-          'the model to call the compact tool first. Only the request is shortened; your chat history is kept. ' +
-          'Requires a model that supports tools.'
+        '对话上下文超过所选比例时，应用会直接把更早的历史压缩成摘要，不再要求模型调用 compact 工具。' +
+          '若模型正在回答，应用会中断当前流并在压缩后从断点续答，仍显示在同一个气泡中。' +
+          '只影响发送给模型的内容，不会删除聊天记录，也不要求模型支持工具调用。',
+        'When the conversation exceeds the selected share of the context window, the app compacts older history ' +
+          'directly instead of asking the model to call a tool. If a reply is streaming, it is interrupted and ' +
+          'resumed from the breakpoint in the same bubble. Chat history is kept and tool support is not required.'
       ))
         .fontSize(12)
         .lineHeight(18)

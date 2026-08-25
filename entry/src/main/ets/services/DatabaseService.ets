@@ -11,6 +11,7 @@ import {
   BillingTimePeriodJson,
   MessageAttachment,
   AttachmentType,
+  ContextCompactionUiState,
   SearchReference,
   AssistantResponseSegment,
   AssistantResponseSegmentJson
@@ -247,6 +248,7 @@ export class DatabaseService {
         timestamp INTEGER,
         reasoning_content TEXT,
         response_timeline_json TEXT DEFAULT '',
+        context_compaction_state TEXT DEFAULT '',
         translated_text TEXT DEFAULT '',
         translated_lang TEXT DEFAULT '',
         billing_enabled INTEGER DEFAULT 0,
@@ -330,6 +332,7 @@ export class DatabaseService {
       // 尝试添加 reasoning_content 字段（用于推理模型）
       await this.addReasoningContentColumnIfNeeded()
       await this.addMessageResponseTimelineColumnIfNeeded()
+      await this.addMessageContextCompactionStateColumnIfNeeded()
       // 尝试添加 is_preset 和 icon_path 字段（用于供应商图标管理）
       await this.addProviderIconColumnsIfNeeded()
       await this.addApiPathColumnIfNeeded()
@@ -413,6 +416,20 @@ export class DatabaseService {
       )
     } catch (error) {
       console.info('DatabaseService', 'response_timeline_json column may already exist')
+    }
+  }
+
+  // 保存应用侧自动上下文压缩的完成状态，使结果栏在重新进入会话后仍可见。
+  private async addMessageContextCompactionStateColumnIfNeeded(): Promise<void> {
+    if (this.rdbStore === null) {
+      return
+    }
+    try {
+      await this.rdbStore.executeSql(
+        `ALTER TABLE ${TableNames.MESSAGES} ADD COLUMN context_compaction_state TEXT DEFAULT ''`
+      )
+    } catch (error) {
+      console.info('DatabaseService', 'context_compaction_state column may already exist')
     }
   }
 
@@ -1880,6 +1897,7 @@ export class DatabaseService {
       timestamp: message.timestamp,
       reasoning_content: message.reasoningContent,
       response_timeline_json: this.serializeResponseTimeline(message),
+      context_compaction_state: message.contextCompactionState,
       translated_text: message.translatedText || '',
       translated_lang: message.translatedLang || '',
       billing_enabled: message.billingEnabled ? 1 : 0,
@@ -2062,6 +2080,10 @@ export class DatabaseService {
     message.timestamp = resultSet.getLong(resultSet.getColumnIndex('timestamp'))
     message.reasoningContent = this.safeGetString(resultSet, 'reasoning_content')
     message.responseSegments = this.parseResponseTimeline(this.safeGetString(resultSet, 'response_timeline_json'))
+    const contextCompactionState = this.safeGetString(resultSet, 'context_compaction_state')
+    if (contextCompactionState === 'completed') {
+      message.contextCompactionState = ContextCompactionUiState.COMPLETED
+    }
     message.translatedText = this.safeGetString(resultSet, 'translated_text')
     message.translatedLang = this.safeGetString(resultSet, 'translated_lang')
     message.billingEnabled = this.safeGetLong(resultSet, 'billing_enabled') === 1
