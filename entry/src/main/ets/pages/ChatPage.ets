@@ -1266,18 +1266,13 @@ export struct ChatPage {
     }
   }
 
-  // 模型通过 plan_mode 改了计划：刷新面板，并在计划刚建立时自动弹出一次
+  // 模型通过 plan_mode 改了计划就刷新状态。计划从无到有时，PlanWorkspaceBuilder
+  // 会挂载浮动按钮并播放弹出动画；这里不主动展开面板，免得生成途中抢占屏幕。
   onPlanRefreshChanged(): void {
     if (!this.isPageVisible) {
       return
     }
-    const hadPlan = this.shouldPlanExistForCurrentChat()
     this.loadPlanState(false)
-      .then((): void => {
-        if (!hadPlan && this.shouldPlanExistForCurrentChat()) {
-          this.setPlanPanelOpen(true)
-        }
-      })
       .catch((error: Error): void => {
         console.error('ChatPage', `Failed to refresh plan: ${JSON.stringify(error)}`)
       })
@@ -1315,7 +1310,12 @@ export struct ChatPage {
   private async activatePlanFromCommand(): Promise<void> {
     const plan = await this.planService.activatePlan('user', this.sessionId)
     this.applyPlanState(plan)
-    this.setPlanPanelOpen(true)
+    // 只让按钮弹出来，不直接展开面板：此刻还没有任何步骤，展开只会给用户一个空面板。
+    // 步骤由模型通过 plan_mode 写入，用户想看时点按钮即可。
+    this.showChatSnack(pickLocalizedText(
+      '计划模式已开启，模型会在多步任务中列出并勾选步骤',
+      'Plan mode is on; the model will lay out steps and tick them off'
+    ), 2600)
   }
 
   @Builder
@@ -1408,10 +1408,11 @@ export struct ChatPage {
         })
         .animation({ duration: 200, curve: Curve.EaseOut })
         .zIndex(12)
+        // 计划从无到有时按钮才挂载，这一下缩放弹出就是"计划出现了"的提示
         .transition(
-          TransitionEffect.OPACITY.combine(
-            TransitionEffect.translate({ x: 12 })
-          ).animation({ duration: 180, curve: Curve.EaseOut })
+          TransitionEffect.OPACITY
+            .combine(TransitionEffect.scale({ x: 0.4, y: 0.4 }))
+            .animation({ duration: 320, curve: Curve.ExtremeDeceleration })
         )
       }
     }
@@ -1902,6 +1903,10 @@ export struct ChatPage {
       return
     }
     this.refreshToolAvailabilityOnShown()
+    // 离开期间模型可能写过计划，回来时重新读一次，按钮才会出现
+    this.loadPlanState(false).catch((error: Error): void => {
+      console.error('ChatPage', `Failed to refresh plan on page show: ${JSON.stringify(error)}`)
+    })
     this.syncSendingStateFromRuntime()
     this.fixInconsistentState()
     this.refreshProviders()
