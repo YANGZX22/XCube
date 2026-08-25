@@ -136,8 +136,11 @@ import {
 } from '../utils/ContextWindowUtils'
 import { ContextCompactionStatus } from '../services/ContextCompactionService'
 import {
+  GOAL_COMMAND_ACTION_CLEAR,
+  GOAL_COMMAND_ACTION_PROMPT,
   isGoalSlashCommandInput,
   resolveSlashCommandId,
+  resolveGoalSlashCommandAction,
   resolveGoalSlashCommandText,
   SLASH_COMMAND_CANVAS,
   SLASH_COMMAND_COMPACT,
@@ -5612,11 +5615,22 @@ export struct ChatPage {
   // 同步包装方法，用于 onSend 回调
   handleSend(): void {
     if (!this.isEditingMessage && isGoalSlashCommandInput(this.inputText)) {
-      const goalText = resolveGoalSlashCommandText(this.inputText)
-      if (goalText === '') {
+      const goalAction = resolveGoalSlashCommandAction(
+        this.inputText,
+        this.chatViewModel.getCurrentSessionConversationGoal()
+      )
+      // 已有目标时发送空的 /goal 表示取消目标；没有目标可取消才回到"填充命令等待输入正文"。
+      if (goalAction === GOAL_COMMAND_ACTION_CLEAR) {
+        this.clearConversationGoalFromCommand().catch((error: Object): void => {
+          console.error('ChatPage', `Failed to clear conversation goal: ${JSON.stringify(error)}`)
+        })
+        return
+      }
+      if (goalAction === GOAL_COMMAND_ACTION_PROMPT) {
         this.handleSlashCommand(SLASH_COMMAND_GOAL)
         return
       }
+      const goalText = resolveGoalSlashCommandText(this.inputText)
       if (this.pendingAttachments.length > 0) {
         this.showChatSnack(pickLocalizedText(
           '设置会话目标时不能附带文件',
@@ -5694,6 +5708,36 @@ export struct ChatPage {
       this.compactContextFromCommand().catch((error: Object): void => {
         console.error('ChatPage', `Manual compaction failed: ${JSON.stringify(error)}`)
       })
+    }
+  }
+
+  // 已有目标时发送空的 /goal：取消目标。与设置目标不同，这里不追加消息、不触发模型请求，
+  // 只把目标清空并把输入框恢复成空白草稿。
+  private async clearConversationGoalFromCommand(): Promise<void> {
+    if (this.isGoalCommandSaving) {
+      return
+    }
+
+    this.isGoalCommandSaving = true
+    try {
+      this.clearDraftAutosaveTimer()
+      const updated = await this.chatViewModel.updateCurrentSessionConversationGoal('')
+      if (!updated) {
+        this.showChatSnack(pickLocalizedText(
+          '当前会话尚未就绪，请重试',
+          'The current conversation is not ready'
+        ), 2500, SnackBarTone.ERROR)
+        return
+      }
+
+      this.inputText = ''
+      await this.persistCurrentDraftState('', [])
+      this.showChatSnack(pickLocalizedText(
+        '会话目标已取消，后续请求不再注入目标',
+        'Conversation goal cleared; it is no longer sent with your turns'
+      ), 2500, SnackBarTone.SUCCESS)
+    } finally {
+      this.isGoalCommandSaving = false
     }
   }
 

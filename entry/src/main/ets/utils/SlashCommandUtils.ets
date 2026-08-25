@@ -77,3 +77,20 @@ export function resolveGoalSlashCommandText(input: string): string {
   }
   return input.trim().substring(5).trim()
 }
+
+// 空的 /goal 有两种含义，取决于当前会话有没有目标：
+// 已有目标时是"取消目标"，没有目标时只是把命令填回输入框等待用户写正文。
+export const GOAL_COMMAND_ACTION_NONE: string = ''
+export const GOAL_COMMAND_ACTION_SET: string = 'set'
+export const GOAL_COMMAND_ACTION_CLEAR: string = 'clear'
+export const GOAL_COMMAND_ACTION_PROMPT: string = 'prompt'
+
+export function resolveGoalSlashCommandAction(input: string, currentGoal: string): string {
+  if (!isGoalSlashCommandInput(input)) {
+    return GOAL_COMMAND_ACTION_NONE
+  }
+  if (resolveGoalSlashCommandText(input) !== '') {
+    return GOAL_COMMAND_ACTION_SET
+  }
+  return currentGoal.trim() !== '' ? GOAL_COMMAND_ACTION_CLEAR : GOAL_COMMAND_ACTION_PROMPT
+}

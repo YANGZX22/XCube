@@ -20,6 +20,7 @@ import responseTimelineTest from './ResponseTimeline.test';
 import modLensVisionServiceTest from './ModLensVisionService.test';
 import mapToolTest from './MapTool.test';
 import savedPlacesServiceTest from './SavedPlacesService.test';
+import slashCommandUtilsTest from './SlashCommandUtils.test';
 
 export default function testsuite() {
   localUnitTest();
@@ -44,4 +45,5 @@ export default function testsuite() {
   modLensVisionServiceTest();
   mapToolTest();
   savedPlacesServiceTest();
+  slashCommandUtilsTest();
 }

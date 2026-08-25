@@ -105,9 +105,10 @@ export struct SlashCommandPanel {
     if (commandId === SLASH_COMMAND_GOAL) {
       const currentGoal = this.getCurrentGoalPreview()
       if (currentGoal !== '') {
+        // 取消目标只有"发送空的 /goal"一个入口，这里是它唯一的可发现位置。
         return pickLocalizedText(
-          `当前目标：${currentGoal}（点击修改）`,
-          `Current goal: ${currentGoal} (tap to edit)`
+          `当前目标：${currentGoal}（点击修改；清空正文后发送即取消）`,
+          `Current goal: ${currentGoal} (tap to edit; send a bare /goal to cancel)`
         )
       }
       return pickLocalizedText(
