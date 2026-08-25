@@ -9,6 +9,7 @@ import {
   COMPACT_TOOL_ID,
   KNOWLEDGE_SEARCH_TOOL_ID,
   MODLENS_READ_IMAGE_TOOL_ID,
+  PLAN_MODE_TOOL_ID,
   registerBuiltinTools,
   SAVED_PLACES_TOOL_ID,
   SUB_AGENT_MESSAGE_TOOL_ID,
@@ -3487,7 +3488,10 @@ struct BuiltinToolCardItem {
     if (toolId === 'open_map_route') {
       return $r('sys.symbol.navigation')
     }
-    if (toolId === 'compact') {
+    if (toolId === PLAN_MODE_TOOL_ID) {
+      return $r('sys.symbol.list_checkmark')
+    }
+    if (toolId === COMPACT_TOOL_ID) {
       return $r('sys.symbol.doc_zipper')
     }
     return $r('sys.symbol.wrench_and_screwdriver')

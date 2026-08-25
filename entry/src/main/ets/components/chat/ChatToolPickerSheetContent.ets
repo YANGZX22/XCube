@@ -1,4 +1,5 @@
 import { uiMaterial } from '@kit.ArkUI'
+import { COMPACT_TOOL_ID, PLAN_MODE_TOOL_ID } from '../../config/BuiltinTools'
 import { ToolConfig, ToolPermissionLevel, ToolSourceType } from '../../models/ChatModels'
 import { getAppUiState } from '../../state/AppUiState'
 import { withColorAlpha } from '../../utils/ColorAlphaUtils'
@@ -235,7 +236,10 @@ export struct ChatToolPickerSheetContent {
     if (toolId === 'open_map_route') {
       return $r('sys.symbol.navigation')
     }
-    if (toolId === 'compact') {
+    if (toolId === PLAN_MODE_TOOL_ID) {
+      return $r('sys.symbol.list_checkmark')
+    }
+    if (toolId === COMPACT_TOOL_ID) {
       return $r('sys.symbol.doc_zipper')
     }
     return $r('sys.symbol.wrench_and_screwdriver')

@@ -39,13 +39,16 @@ export struct SlashCommandPanel {
 
   private getCommandSymbol(commandId: string): Resource {
     if (commandId === SLASH_COMMAND_COMPACT) {
-      return $r('sys.symbol.arrow_down_right_and_arrow_up_left')
+      return $r('sys.symbol.doc_zipper')
     }
     if (commandId === SLASH_COMMAND_REASONING) {
       return $r('sys.symbol.lightbulb')
     }
     if (commandId === SLASH_COMMAND_CANVAS) {
       return $r('sys.symbol.paintbrush_pointed_waveform')
+    }
+    if (commandId === SLASH_COMMAND_PLAN) {
+      return $r('sys.symbol.list_checkmark')
     }
     if (commandId === SLASH_COMMAND_GOAL) {
       return $r('sys.symbol.checkmark_circle')
