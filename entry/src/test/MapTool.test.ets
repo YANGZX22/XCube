@@ -3,6 +3,7 @@ import {
   getMapKitService,
   MAP_ACTION_ROUTE,
   MAP_ACTION_SEARCH,
+  MapRouteAlternative,
   MapVisualizationData,
   normalizeMapAction,
   normalizeMapTravelMode
@@ -13,6 +14,24 @@ import {
   OPEN_MAP_ROUTE_TOOL_ID,
   SAVED_PLACES_TOOL_ID
 } from '../main/ets/config/BuiltinTools'
+
+// 旧版工具结果的载荷形状：只有当时存在的字段，没有 visualToken / destination 等后加的字段。
+// ArkTS 不允许无类型的对象字面量，这里显式声明以保持 JSON 与线上旧数据一致。
+class LegacyMapPlacePayload {
+  name: string = ''
+  address: string = ''
+  latitude: number = 0
+  longitude: number = 0
+}
+
+class LegacyMapToolResultPayload {
+  ok: boolean = true
+  action: string = ''
+  query: string = ''
+  usedCurrentLocation: boolean = false
+  places: LegacyMapPlacePayload[] = []
+  routes: MapRouteAlternative[] = []
+}
 
 export default function mapToolTest() {
   describe('mapToolTest', () => {
@@ -37,19 +56,20 @@ export default function mapToolTest() {
     })
 
     it('builds_map_visualization_for_legacy_tool_results', 0, () => {
-      const content = JSON.stringify({
-        ok: true,
-        action: MAP_ACTION_SEARCH,
-        query: '咖啡店',
-        usedCurrentLocation: false,
-        places: [{
-          name: '测试咖啡店',
-          address: '测试地址',
-          latitude: 31.2304,
-          longitude: 121.4737
-        }],
-        routes: []
-      })
+      const place = new LegacyMapPlacePayload()
+      place.name = '测试咖啡店'
+      place.address = '测试地址'
+      place.latitude = 31.2304
+      place.longitude = 121.4737
+
+      const payload = new LegacyMapToolResultPayload()
+      payload.ok = true
+      payload.action = MAP_ACTION_SEARCH
+      payload.query = '咖啡店'
+      payload.usedCurrentLocation = false
+      payload.places = [place]
+
+      const content = JSON.stringify(payload)
       const visualization = JSON.parse(getMapKitService().getVisualizationJson(content)) as MapVisualizationData
       expect(visualization.destination?.name).assertEqual('测试咖啡店')
       expect(visualization.places.length).assertEqual(1)
