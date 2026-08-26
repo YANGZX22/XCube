@@ -2026,6 +2026,47 @@ export class KnowledgeDocumentService implements
     )
   }
 
+  /** Extracts indexable text from a temporary source without creating a knowledge document. */
+  async extractFileTextPreview(
+    filePath: string,
+    originalName: string,
+    maxCharacters: number
+  ): Promise<KnowledgeTextPreview> {
+    if (this.context === null) {
+      throw new Error('知识库尚未初始化')
+    }
+    const normalizedName = this.normalizeFileName(originalName)
+    const extension = this.getSupportedExtension(normalizedName)
+    if (extension === '') {
+      throw new Error('文件格式不受支持')
+    }
+    if (!fileIo.accessSync(filePath)) {
+      throw new Error('临时文件不存在或无法访问')
+    }
+    const stat = fileIo.statSync(filePath)
+    if (stat.size <= 0) {
+      throw new Error('文件为空')
+    }
+    if (stat.size > MAX_FILE_BYTES) {
+      throw new Error('文件超过 20 MB 限制')
+    }
+    const document = new KnowledgeDocument(
+      'knowledge_preview',
+      this.titleFromFileName(normalizedName),
+      normalizedName,
+      filePath,
+      this.mimeTypeForExtension(extension),
+      stat.size
+    )
+    const normalizedLimit = Math.max(1000, Math.min(MAX_DOCUMENT_TEXT_CHARACTERS, maxCharacters))
+    const text = this.normalizeText(await this.extractDocumentText(document, extension))
+    const truncated = text.length > normalizedLimit
+    return new KnowledgeTextPreview(
+      truncated ? text.substring(0, normalizedLimit) : text,
+      truncated
+    )
+  }
+
   async importDocument(uri: string, originalName: string): Promise<KnowledgeImportResult> {
     const releaseLock = await this.acquireMutationLock()
     try {

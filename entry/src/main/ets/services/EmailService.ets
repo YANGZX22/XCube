@@ -1133,63 +1133,45 @@ export class EmailService {
               extension
             )
             const attachmentPath = this.tempPath(`${Date.now()}_${i}_${j}_${attachmentName}`)
-            let attachmentImported = false
+            let attachmentParsed = false
             try {
               this.writeBytes(attachmentPath, attachment.bytes)
-              const attachmentResult = await knowledgeService.importDocument(
-                attachmentPath,
-                attachmentName
-              )
-              attachmentImported = attachmentResult.ok
-              if (!attachmentResult.ok) {
+              const remainingCharacters = EMAIL_MAX_COMBINED_ATTACHMENT_KNOWLEDGE_CHARACTERS -
+                combinedAttachmentCharacters
+              if (remainingCharacters <= 0) {
+                const message = '已达到单封邮件的附件解析内容合并上限，当前附件未写入知识条目'
                 attachmentKnowledge.push(new EmailAttachmentKnowledgeContent(
-                  attachment.name, attachment.mimeType, '', false, attachmentResult.message))
-                this.appendImportFailure(failureDetails,
-                  `${attachment.name}：${attachmentResult.message}`)
-              } else if (attachmentResult.document !== null) {
-                const remainingCharacters = EMAIL_MAX_COMBINED_ATTACHMENT_KNOWLEDGE_CHARACTERS -
-                  combinedAttachmentCharacters
-                if (remainingCharacters <= 0) {
+                  attachment.name, attachment.mimeType, '', true, message))
+                this.appendImportFailure(failureDetails, `${attachment.name}：${message}`)
+              } else {
+                const previewLimit = Math.min(EMAIL_MAX_ATTACHMENT_KNOWLEDGE_CHARACTERS,
+                  remainingCharacters)
+                try {
+                  const preview = await knowledgeService.extractFileTextPreview(
+                    attachmentPath,
+                    attachmentName,
+                    previewLimit
+                  )
                   attachmentKnowledge.push(new EmailAttachmentKnowledgeContent(
                     attachment.name,
                     attachment.mimeType,
-                    '',
-                    true,
-                    '附件内容已作为独立知识文件完整建立索引'
+                    preview.text,
+                    preview.truncated,
+                    preview.truncated ? '附件内容过长，以下为合并到邮件知识条目的节选' : ''
                   ))
-                } else {
-                  const previewLimit = Math.min(EMAIL_MAX_ATTACHMENT_KNOWLEDGE_CHARACTERS,
-                    remainingCharacters)
-                  try {
-                    const preview = await knowledgeService.loadExtractedTextPreview(
-                      attachmentResult.document.id,
-                      previewLimit
-                    )
-                    attachmentKnowledge.push(new EmailAttachmentKnowledgeContent(
-                      attachment.name,
-                      attachment.mimeType,
-                      preview.text,
-                      preview.truncated,
-                      preview.truncated ? '以下为节选，完整内容已在独立附件知识文件中建立索引' : ''
-                    ))
-                    combinedAttachmentCharacters += preview.text.length
-                  } catch (previewError) {
-                    attachmentKnowledge.push(new EmailAttachmentKnowledgeContent(
-                      attachment.name,
-                      attachment.mimeType,
-                      '',
-                      false,
-                      `附件已建立独立索引，但无法合并到邮件正文：${this.safeErrorMessage(previewError)}`
-                    ))
-                  }
+                  combinedAttachmentCharacters += preview.text.length
+                  attachmentParsed = true
+                } catch (previewError) {
+                  const message = `附件解析失败：${this.safeErrorMessage(previewError)}`
+                  attachmentKnowledge.push(new EmailAttachmentKnowledgeContent(
+                    attachment.name, attachment.mimeType, '', false, message))
+                  this.appendImportFailure(failureDetails, `${attachment.name}：${message}`)
                 }
               }
             } finally {
               this.removeFileQuietly(attachmentPath)
             }
-            if (attachmentImported) {
-              importedDocuments += 1
-            } else {
+            if (!attachmentParsed) {
               failedParts += 1
             }
           }
