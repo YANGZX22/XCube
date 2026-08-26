@@ -2604,14 +2604,26 @@ struct Index {
 
     const querySeq = ++this.balanceQuerySeq
     this.balanceSheetState.loading = true
+    this.balanceSheetState.results = []
+    this.balanceSheetState.revision += 1
     try {
       const providers = await this.providerViewModel.loadAllProviders()
-      const results = await this.providerBalanceService.queryAllEnabled(providers)
-      if (querySeq !== this.balanceQuerySeq) {
-        return
-      }
-      this.balanceSheetState.results = results
+      this.balanceSheetState.results = this.providerBalanceService.createLoadingResults(providers)
       this.balanceSheetState.revision += 1
+      await this.providerBalanceService.queryEnabledConcurrently(providers, (result: BalanceResult): void => {
+        if (querySeq !== this.balanceQuerySeq) {
+          return
+        }
+        const nextResults = this.balanceSheetState.results.slice()
+        for (let i = 0; i < nextResults.length; i++) {
+          if (nextResults[i].providerId === result.providerId) {
+            nextResults[i] = result
+            break
+          }
+        }
+        this.balanceSheetState.results = nextResults
+        this.balanceSheetState.revision += 1
+      })
     } catch (error) {
       if (querySeq !== this.balanceQuerySeq) {
         return

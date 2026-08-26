@@ -31,6 +31,7 @@ export interface BalanceResult {
   providerTextIconBgColor: string
   providerCustomImagePath: string
   providerBrandColor: Resource
+  loading: boolean
   success: boolean
   balance: string
   currency: string
@@ -104,9 +105,8 @@ export class ProviderBalanceService {
     return `${base}/${path}`
   }
 
-  // 查询单个服务商余额
-  async queryBalance(provider: ModelProvider): Promise<BalanceResult> {
-    const result: BalanceResult = {
+  private createResult(provider: ModelProvider, loading: boolean = false): BalanceResult {
+    return {
       providerId: provider.id,
       providerName: provider.name,
       providerIconType: provider.iconType,
@@ -115,11 +115,17 @@ export class ProviderBalanceService {
       providerTextIconBgColor: provider.textIconBgColor,
       providerCustomImagePath: provider.customImagePath,
       providerBrandColor: provider.brandColor,
+      loading: loading,
       success: false,
       balance: '',
       currency: '',
       error: ''
     }
+  }
+
+  // 查询单个服务商余额
+  async queryBalance(provider: ModelProvider): Promise<BalanceResult> {
+    const result = this.createResult(provider)
 
     const config = this.parseConfig(provider.balanceConfigJson)
     if (config === null || !config.enabled) {
@@ -179,8 +185,35 @@ export class ProviderBalanceService {
     }
   }
 
-  // 并发查询所有已开启余额查询的服务商
+  // 查询所有已开启余额查询的服务商，并保持逐项失败隔离。
   async queryAllEnabled(providers: ModelProvider[]): Promise<BalanceResult[]> {
+    const results = this.createLoadingResults(providers)
+    await this.queryEnabledConcurrently(providers, (result: BalanceResult): void => {
+      for (let i = 0; i < results.length; i++) {
+        if (results[i].providerId === result.providerId) {
+          results[i] = result
+          break
+        }
+      }
+    })
+    return results
+  }
+
+  // 按服务商页面顺序生成固定的加载占位行。
+  createLoadingResults(providers: ModelProvider[]): BalanceResult[] {
+    const results: BalanceResult[] = []
+    for (let i = 0; i < providers.length; i++) {
+      const config = this.parseConfig(providers[i].balanceConfigJson)
+      if (config !== null && config.enabled) {
+        results.push(this.createResult(providers[i], true))
+      }
+    }
+    return results
+  }
+
+  // 并行查询并按完成顺序立即回传结果；单个服务商失败不会影响其他请求。
+  async queryEnabledConcurrently(providers: ModelProvider[],
+    onResult: (result: BalanceResult) => void): Promise<void> {
     const enabled: ModelProvider[] = []
     for (let i = 0; i < providers.length; i++) {
       const config = this.parseConfig(providers[i].balanceConfigJson)
@@ -189,10 +222,22 @@ export class ProviderBalanceService {
       }
     }
 
-    const tasks: Promise<BalanceResult>[] = enabled.map((p: ModelProvider): Promise<BalanceResult> => {
-      return this.queryBalance(p)
-    })
-    return await Promise.all(tasks)
+    const tasks: Promise<void>[] = []
+    for (let i = 0; i < enabled.length; i++) {
+      tasks.push(this.queryBalanceAndReport(enabled[i], onResult))
+    }
+    await Promise.all(tasks)
+  }
+
+  private async queryBalanceAndReport(provider: ModelProvider,
+    onResult: (result: BalanceResult) => void): Promise<void> {
+    let result = this.createResult(provider)
+    try {
+      result = await this.queryBalance(provider)
+    } catch (error) {
+      result.error = `查询失败: ${JSON.stringify(error)}`
+    }
+    onResult(result)
   }
 
   // 是否存在已开启余额查询的服务商

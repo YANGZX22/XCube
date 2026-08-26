@@ -806,8 +806,8 @@ export struct SavedPlacesCard {
         .alignItems(VerticalAlign.Center)
 
         Text(pickLocalizedText(
-          '地点仅保存在本机。所有标签对模型开放；模型读取某个标签对应的地址和坐标前必须获得你的同意，且不会修改或删除地点。',
-          'Places stay on this device. All labels are available to the model; reading an address and coordinates behind a label requires your approval and cannot modify or delete places.'
+          '地点仅保存在本机。所有标签对模型开放；模型读取某个标签对应的地址和坐标前必须获得同意，且不会修改或删除地点。',
+          'Places stay on this device. All labels are available to the model; reading an address and coordinates behind a label requires approval and cannot modify or delete places.'
         ))
           .fontSize(12)
           .lineHeight(18)

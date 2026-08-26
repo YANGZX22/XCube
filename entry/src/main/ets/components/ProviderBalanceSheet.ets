@@ -4,9 +4,7 @@
  */
 import { getAppUiState } from '../state/AppUiState'
 import { BalanceResult } from '../services/ProviderBalanceService'
-import { withColorAlpha } from '../utils/ColorAlphaUtils'
 import { ProviderIcon } from './ProviderIcon'
-import { uiMaterial } from '@kit.ArkUI'
 import { ImmersiveSheetHeader } from './ImmersiveSheetHeader'
 
 @ObservedV2
@@ -24,6 +22,10 @@ export struct ProviderBalanceSheet {
 
   private get themePrimary(): string {
     return getAppUiState().themePrimary
+  }
+
+  private get themeDivider(): string {
+    return getAppUiState().themeDivider
   }
 
   build() {
@@ -76,13 +78,21 @@ export struct ProviderBalanceSheet {
         .justifyContent(FlexAlign.Center)
         .alignItems(HorizontalAlign.Center)
       } else {
-        Column({ space: 8 }) {
-          ForEach(this.state.results, (item: BalanceResult) => {
-            this.BalanceRow(item)
-          }, (item: BalanceResult) => `${this.state.revision}:${item.providerId}`)
+        Column() {
+          ForEach(this.state.results, (item: BalanceResult, index: number) => {
+            Column() {
+              this.BalanceRow(item)
+
+              if (index < this.state.results.length - 1) {
+                Divider()
+                  .color(this.themeDivider)
+              }
+            }
+            .width('100%')
+          }, (item: BalanceResult) => `${item.providerId}:${item.loading}`)
         }
         .width('100%')
-        .padding({ left: 14, right: 14, bottom: 14 })
+        .padding({ left: 16, right: 16, bottom: 32 })
       }
     }
     .width('100%')
@@ -114,7 +124,7 @@ export struct ProviderBalanceSheet {
           .maxLines(1)
           .textOverflow({ overflow: TextOverflow.Ellipsis })
 
-        if (!item.success) {
+        if (!item.loading && !item.success) {
           Row({ space: 4 }) {
             SymbolGlyph($r('sys.symbol.exclamationmark_circle'))
               .fontSize(11)
@@ -133,7 +143,12 @@ export struct ProviderBalanceSheet {
       .alignItems(HorizontalAlign.Start)
       .layoutWeight(1)
 
-      if (item.success) {
+      if (item.loading) {
+        LoadingProgress()
+          .width(20)
+          .height(20)
+          .color(this.themePrimary)
+      } else if (item.success) {
         Row({ space: 5 }) {
           Text(item.balance)
             .fontSize(18)
@@ -152,19 +167,7 @@ export struct ProviderBalanceSheet {
       }
     }
     .width('100%')
-    .padding({ left: 12, right: 12, top: 10, bottom: 10 })
-    .borderRadius(16)
-    .border({
-      width: 1,
-      color: withColorAlpha(this.themePrimary, '38')
-    })
-    .systemMaterial(new uiMaterial.ImmersiveMaterial({
-      style: uiMaterial.ImmersiveStyle.ULTRA_THIN,
-      materialColor: Color.Transparent,
-      applyShadow: false,
-      interactive: false,
-      lightEffect: { color: undefined }
-    }))
+    .padding({ left: 8, right: 8, top: 10, bottom: 10 })
     .alignItems(VerticalAlign.Center)
   }
 }
