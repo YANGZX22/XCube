@@ -11,7 +11,10 @@ import {
   normalizeMapTravelMode,
   shouldRetryMapOperation
 } from '../main/ets/services/MapKitService'
-import { formatToolExecutionError } from '../main/ets/services/ToolExecutionService'
+import { formatToolExecutionError, requiresToolApproval } from '../main/ets/services/ToolExecutionService'
+import { ToolConfig, ToolPermissionLevel } from '../main/ets/models/ChatModels'
+import { collectSavedPlaceLabels, createSavedPlacesToolConfig } from '../main/ets/config/SavedPlacesTool'
+import { SavedPlace } from '../main/ets/services/SavedPlacesService'
 import {
   getBuiltinToolIds,
   MAP_SEARCH_ROUTE_TOOL_ID,
@@ -87,6 +90,29 @@ export default function mapToolTest() {
       expect(ids.includes(MAP_SEARCH_ROUTE_TOOL_ID)).assertTrue()
       expect(ids.includes(OPEN_MAP_ROUTE_TOOL_ID)).assertTrue()
       expect(ids.includes(SAVED_PLACES_TOOL_ID)).assertTrue()
+    })
+
+    it('requires_approval_only_when_resolving_saved_place_coordinates', 0, () => {
+      const config = createSavedPlacesToolConfig()
+      expect(config.permissionLevel).assertEqual(ToolPermissionLevel.READ)
+      expect(config.requiresUserApproval).assertFalse()
+      expect(requiresToolApproval(config, '{}')).assertFalse()
+      expect(requiresToolApproval(config, '{"action":"list"}')).assertFalse()
+      expect(requiresToolApproval(config, '{"action":"resolve","label":"家"}')).assertTrue()
+      expect(requiresToolApproval(new ToolConfig())).assertFalse()
+    })
+
+    it('exposes_saved_place_labels_without_coordinates', 0, () => {
+      const place = new SavedPlace()
+      place.label = '家'
+      place.address = '隐私地址'
+      place.latitude = 30.623852
+      place.longitude = 104.071626
+      const labels = collectSavedPlaceLabels([place])
+      expect(labels.length).assertEqual(1)
+      expect(labels[0]).assertEqual('家')
+      expect(JSON.stringify(labels).includes('隐私地址')).assertFalse()
+      expect(JSON.stringify(labels).includes('30.623852')).assertFalse()
     })
 
     it('retries_only_transient_map_and_location_failures', 0, () => {

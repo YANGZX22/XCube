@@ -4,7 +4,6 @@ import { BusinessError } from '@kit.BasicServicesKit'
 import { geoLocationManager } from '@kit.LocationKit'
 import { map, mapCommon, navi, petalMaps, site } from '@kit.MapKit'
 import { fileIo } from '@kit.CoreFileKit'
-import { getSavedPlacesService } from './SavedPlacesService'
 
 export const MAP_ACTION_SEARCH: string = 'search_places'
 export const MAP_ACTION_ROUTE: string = 'plan_route'
@@ -221,19 +220,10 @@ class ResolvedCoordinate {
 class ResolvedPlace {
   site: site.Site | null = null
   coordinate: ResolvedCoordinate
-  savedLabel: string = ''
-  savedName: string = ''
-  savedAddress: string = ''
-  savedSiteId: string = ''
 
-  constructor(coordinate: ResolvedCoordinate, resolvedSite: site.Site | null = null,
-    savedLabel: string = '', savedName: string = '', savedAddress: string = '', savedSiteId: string = '') {
+  constructor(coordinate: ResolvedCoordinate, resolvedSite: site.Site | null = null) {
     this.coordinate = coordinate
     this.site = resolvedSite
-    this.savedLabel = savedLabel
-    this.savedName = savedName
-    this.savedAddress = savedAddress
-    this.savedSiteId = savedSiteId
   }
 }
 
@@ -416,7 +406,7 @@ export class MapKitService {
       )
       const destinationName = this.resolvePlaceName(destination, request.destination || '目的地')
       const destinationPoiId = (request.destinationSiteId || request.destination_site_id ||
-        destination.savedSiteId || destination.site?.siteId || '').trim()
+        destination.site?.siteId || '').trim()
       const action = this.normalizeOpenAction(request.action)
       const vehicleType = this.toVehicleType(request.travelMode || request.travel_mode)
 
@@ -443,7 +433,7 @@ export class MapKitService {
         if (origin !== null) {
           params.originPosition = origin.coordinate.location
           params.originName = this.resolvePlaceName(origin, request.origin || '')
-          const originPoiId = (request.originSiteId || request.origin_site_id || origin.savedSiteId ||
+          const originPoiId = (request.originSiteId || request.origin_site_id ||
             origin.site?.siteId || '').trim()
           params.originPoiId = originPoiId !== '' ? originPoiId : undefined
         }
@@ -459,7 +449,7 @@ export class MapKitService {
         if (origin !== null) {
           params.originPosition = origin.coordinate.location
           params.originName = this.resolvePlaceName(origin, request.origin || '')
-          const originPoiId = (request.originSiteId || request.origin_site_id || origin.savedSiteId ||
+          const originPoiId = (request.originSiteId || request.origin_site_id ||
             origin.site?.siteId || '').trim()
           params.originPoiId = originPoiId !== '' ? originPoiId : undefined
         }
@@ -662,7 +652,7 @@ export class MapKitService {
     const destinationResult = destination.site !== null
       ? this.toPlaceResult(destination.site)
       : this.toCoordinatePlaceResult(destination.coordinate.location,
-        this.resolvePlaceName(destination, destinationText), destination.savedAddress)
+        this.resolvePlaceName(destination, destinationText))
     const result = new MapSearchRouteResult()
     result.action = MAP_ACTION_ROUTE
     result.usedCurrentLocation = didUseCurrentLocation
@@ -692,7 +682,7 @@ export class MapKitService {
     visualization.origin = this.toVisualPlace(
       origin.coordinate.location,
       didUseCurrentLocation ? '当前位置' : this.resolvePlaceName(origin, originText || '起点'),
-      origin.savedAddress || origin.site?.formatAddress || ''
+      origin.site?.formatAddress || ''
     )
     visualization.destination = this.toVisualPlaceFromResult(destinationResult)
     if (routeResult.routes.length > 0) {
@@ -718,16 +708,6 @@ export class MapKitService {
     const keyword = (query || '').trim()
     if (keyword === '') {
       throw new NonRetryableMapError('缺少目的地名称或坐标')
-    }
-    const savedPlace = await getSavedPlacesService().resolveLabel(keyword)
-    if (savedPlace !== null) {
-      const savedCoordinateType = this.normalizeCoordinateType(savedPlace.coordinateType)
-      const savedCoordinate = await this.rectifyCoordinate({
-        latitude: savedPlace.latitude,
-        longitude: savedPlace.longitude
-      }, savedCoordinateType)
-      return new ResolvedPlace(savedCoordinate, null, savedPlace.label, savedPlace.name,
-        savedPlace.address, savedPlace.siteId)
     }
     const params: site.SearchByTextParams = {
       query: keyword,
@@ -831,12 +811,6 @@ export class MapKitService {
   }
 
   private resolvePlaceName(value: ResolvedPlace, fallback: string): string {
-    if (value.savedLabel.trim() !== '') {
-      return value.savedLabel
-    }
-    if (value.savedName.trim() !== '') {
-      return value.savedName
-    }
     return this.resolveSiteName(value.site, fallback)
   }
 

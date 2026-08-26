@@ -1,10 +1,14 @@
-import { ToolCall, ToolResult } from '../models/ChatModels'
+import { ToolCall, ToolConfig, ToolPermissionLevel, ToolResult } from '../models/ChatModels'
 import { ASK_USER_TOOL_ID } from '../config/BuiltinTools'
 import { getToolRegistry, RegisteredTool, ToolRegistry } from './ToolRegistry'
 
 interface ToolExecutionErrorLike {
   code?: number | string
   message?: string
+}
+
+interface ToolActionArgs {
+  action?: string
 }
 
 /** Error.message/code are commonly non-enumerable, so JSON.stringify(Error) alone usually produces `{}`. */
@@ -28,6 +32,25 @@ export function formatToolExecutionError(error: Object): string {
     }
   } catch (_error) {}
   return '未知错误（工具未提供错误码或错误信息）'
+}
+
+export function requiresToolApproval(config: ToolConfig, argumentsJson: string = ''): boolean {
+  if (config.permissionLevel === ToolPermissionLevel.WRITE || config.requiresUserApproval) {
+    return true
+  }
+  if (config.approvalRequiredActions.length === 0) {
+    return false
+  }
+  try {
+    const args = JSON.parse(argumentsJson) as ToolActionArgs
+    const action = (args.action || '').trim().toLowerCase()
+    for (let i = 0; i < config.approvalRequiredActions.length; i++) {
+      if (config.approvalRequiredActions[i].trim().toLowerCase() === action) {
+        return true
+      }
+    }
+  } catch (_error) {}
+  return false
 }
 
 // 取消检查回调类型
@@ -339,7 +362,7 @@ export class ToolExecutionService {
   }
 
   private async requestApprovalIfNeeded(toolCall: ToolCall, tool: RegisteredTool): Promise<ToolApprovalResult> {
-    if (tool.config.permissionLevel !== 'write') {
+    if (!requiresToolApproval(tool.config, toolCall.arguments)) {
       return ToolApprovalResult.approve()
     }
     if (this.approvalCallback === null) {

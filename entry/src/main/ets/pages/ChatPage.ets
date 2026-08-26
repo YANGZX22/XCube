@@ -6257,8 +6257,8 @@ export struct ChatPage {
       this.toolExecutionApprovalArgumentsTruncated = preview.rawTruncated
       this.showRawToolExecutionApprovalArguments = false
       this.showToolExecutionApprovalSafetyUi = toolId !== WRITE_SCHEDULE_TOOL_ID &&
-        toolId !== READ_SCHEDULE_TOOL_ID && toolId !== EMAIL_READ_TOOL_ID
-      this.showToolExecutionApprovalRiskNotice = toolId !== OPEN_MAP_ROUTE_TOOL_ID
+        toolId !== READ_SCHEDULE_TOOL_ID && toolId !== EMAIL_READ_TOOL_ID && toolId !== SAVED_PLACES_TOOL_ID
+      this.showToolExecutionApprovalRiskNotice = toolId !== OPEN_MAP_ROUTE_TOOL_ID && toolId !== EMAIL_SEND_TOOL_ID
       this.showReadScheduleRangeUi = toolId === READ_SCHEDULE_TOOL_ID
       if (this.showReadScheduleRangeUi) {
         this.configureReadScheduleRangeState(argumentsJson)
@@ -6356,6 +6356,9 @@ export struct ChatPage {
     }
     if (toolId === EMAIL_SEND_TOOL_ID) {
       return pickLocalizedText('确认发送邮件？', 'Approve Email Send')
+    }
+    if (toolId === SAVED_PLACES_TOOL_ID) {
+      return pickLocalizedText('确认读取常用地点？', 'Approve Saved Places Read')
     }
     return pickLocalizedText('确认工具调用', 'Approve Tool Call')
   }

@@ -785,7 +785,7 @@ export struct SavedPlacesCard {
               .fontColor($r('app.color.text_primary'))
               .width('100%')
             Text(pickLocalizedText(
-              this.places.length > 0 ? `已保存 ${this.places.length} 个地点，模型可按标签使用` : '保存“家”“公司”等地点标签',
+              this.places.length > 0 ? `已保存 ${this.places.length} 个地点，标签对模型开放` : '保存“家”“公司”等地点标签',
               this.places.length > 0 ? `${this.places.length} places available to the model by label` :
                 'Save labels such as Home and Work'
             ))
@@ -806,8 +806,8 @@ export struct SavedPlacesCard {
         .alignItems(VerticalAlign.Center)
 
         Text(pickLocalizedText(
-          '地点仅保存在本机。开启后，模型可读取标签、地址和坐标，并将标签直接用于地图路线或花瓣导航。',
-          'Places stay on this device. When enabled, the model can read their labels, addresses, and coordinates and use labels directly in map routes or Petal Navigation.'
+          '地点仅保存在本机。所有标签对模型开放；模型读取某个标签对应的地址和坐标前必须获得你的同意，且不会修改或删除地点。',
+          'Places stay on this device. All labels are available to the model; reading an address and coordinates behind a label requires your approval and cannot modify or delete places.'
         ))
           .fontSize(12)
           .lineHeight(18)

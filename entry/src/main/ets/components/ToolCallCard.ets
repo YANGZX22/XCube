@@ -498,6 +498,27 @@ export struct ToolCallCard {
     }
   }
 
+  private entryWasRejectedByUser(entry: ToolCallCardEntry): boolean {
+    if (entry.toolResult === null) {
+      return false
+    }
+    try {
+      const parsed = JSON.parse(entry.toolResult.content) as Record<string, Object>
+      return parsed.rejected === true
+    } catch (_error) {
+      return false
+    }
+  }
+
+  private hasUserRejectedResult(): boolean {
+    for (let i = 0; i < this.entries.length; i++) {
+      if (this.entryWasRejectedByUser(this.entries[i])) {
+        return true
+      }
+    }
+    return false
+  }
+
   private getResolvedResultCount(): number {
     let count = 0
     for (let i = 0; i < this.entries.length; i++) {
@@ -544,6 +565,9 @@ export struct ToolCallCard {
   }
 
   private getResultStatusSymbol(): Resource {
+    if (this.hasUserRejectedResult()) {
+      return $r('sys.symbol.hand_raised_filled_hexagon')
+    }
     if (this.hasMixedResultStatus()) {
       return $r('sys.symbol.exclamationmark_circle')
     }

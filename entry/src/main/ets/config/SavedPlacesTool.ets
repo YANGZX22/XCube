@@ -20,9 +20,18 @@ class SavedPlacesToolResult {
   ok: boolean = true
   action: string = ''
   count: number = 0
+  labels: string[] = []
   places: SavedPlace[] = []
   message: string = ''
   mapUsageHint: string = ''
+}
+
+export function collectSavedPlaceLabels(places: SavedPlace[]): string[] {
+  const labels: string[] = []
+  for (let i = 0; i < places.length; i++) {
+    labels.push(places[i].label)
+  }
+  return labels
 }
 
 export class SavedPlacesExecutor implements ToolExecutor {
@@ -38,9 +47,6 @@ export class SavedPlacesExecutor implements ToolExecutor {
     const action = (request.action || 'list').trim().toLowerCase()
     const result = new SavedPlacesToolResult()
     result.action = action === 'resolve' ? 'resolve' : 'list'
-    result.mapUsageHint = '后续调用地图/导航工具时，不要把 label（如“家”“公司”）直接传给 query、origin 或 ' +
-      'destination。路线/导航请把本结果中的 latitude/longitude 复制到对应的 origin_location 或 ' +
-      'destination_location；围绕该地点搜索请复制到 center，并把 coordinateType 复制到 coordinate_type。'
     if (result.action === 'resolve') {
       const label = (request.label || '').trim()
       if (label === '') {
@@ -50,11 +56,17 @@ export class SavedPlacesExecutor implements ToolExecutor {
       result.places = place !== null ? [place] : []
       result.count = result.places.length
       result.message = place !== null ? `已找到常用地点“${place.label}”` : `未找到常用地点“${label}”`
+      result.mapUsageHint = '后续调用地图/导航工具时，不要把 label 直接传给 query、origin 或 destination。' +
+        '路线/导航请把本结果中的 latitude/longitude 复制到对应的 origin_location 或 ' +
+        'destination_location；围绕该地点搜索请复制到 center，并把 coordinateType 复制到 coordinate_type。'
       return JSON.stringify(result)
     }
-    result.places = await getSavedPlacesService().loadPlaces()
-    result.count = result.places.length
-    result.message = result.count > 0 ? `已读取 ${result.count} 个常用地点` : '尚未设置常用地点'
+    const savedPlaces = await getSavedPlacesService().loadPlaces()
+    result.labels = collectSavedPlaceLabels(savedPlaces)
+    result.count = result.labels.length
+    result.message = result.count > 0 ? `已读取 ${result.count} 个常用地点标签` : '尚未设置常用地点'
+    result.mapUsageHint = 'list 只公开标签，不包含地址或坐标。需要使用某个地点时，以标签原文调用 resolve；' +
+      '客户端会在读取该地点的地址和坐标前请求用户确认。'
     return JSON.stringify(result)
   }
 }
@@ -67,7 +79,7 @@ export function createSavedPlacesToolDefinition(): ToolDefinition {
       "action": {
         "type": "string",
         "enum": ["list", "resolve"],
-        "description": "list 返回全部已保存地点的完整结构（label、name、address、latitude、longitude、coordinateType、siteId）；resolve 按标签精确返回单个地点。默认 list。不知道标签原文时先用 list。"
+        "description": "list 只返回全部已保存地点的标签，不返回名称、地址、坐标或 siteId，且无需确认；resolve 按标签精确读取单个地点的完整结构，客户端会在执行前请求用户确认。默认 list。不知道标签原文时先用 list。"
       },
       "label": {
         "type": "string",
@@ -77,11 +89,13 @@ export function createSavedPlacesToolDefinition(): ToolDefinition {
   }`) as object)
   return new ToolDefinition(new ToolFunction(
     SAVED_PLACES_TOOL_ID,
-    '读取用户在设置中主动保存的常用地点标签、地址和坐标。此工具只读，不能新增、修改或删除地点。\n' +
-      '用户询问“我保存了哪些地点”时用 list；只想确认某个标签指向哪里时用 resolve。\n' +
+    '只读访问用户在设置中主动保存的常用地点，不能新增、修改或删除地点。' +
+      'list 只向模型公开全部标签，无需用户确认，也绝不返回名称、地址、坐标或 siteId；' +
+      'resolve 才会读取指定标签的完整地点信息，执行前客户端会要求用户明确同意，用户拒绝后不要重试。\n' +
+      '用户询问“我保存了哪些地点”时用 list；需要知道某个标签对应的位置或用于地图时用 resolve。\n' +
       '标签由用户自定义，按原文逐字匹配，不做模糊匹配，也不一定等于用户口语里的说法' +
       '（用户说“回我家”，保存的标签可能就叫“家”）。因此在使用任何标签之前，若不确定它的确切写法，先调用一次 list。\n' +
-      '【地图调用硬规则】用户提到常用地点时，先从本工具结果找到对应 place，然后使用结构化坐标：' +
+      '【地图调用硬规则】用户提到常用地点时，先用 list 确认标签原文，再用 resolve 经用户授权取得 place，然后使用结构化坐标：' +
       '路线/导航时把 latitude/longitude 填入地图工具的 origin_location 或 destination_location，' +
       '围绕该地点搜索时填入 center，' +
       '把 coordinateType 填入 coordinate_type。不要丢弃这些字段后只把 label（如“家”“公司”）传给地图工具；' +
@@ -94,7 +108,7 @@ export function createSavedPlacesToolConfig(): ToolConfig {
   return new ToolConfig(
     SAVED_PLACES_TOOL_ID,
     '常用地点',
-    '读取用户保存的地点标签，用于路线规划和导航',
+    '标签对模型开放；读取标签对应的地址和坐标前需用户确认',
     null,
     true,
     false,
@@ -102,6 +116,8 @@ export function createSavedPlacesToolConfig(): ToolConfig {
     'builtin',
     SAVED_PLACES_TOOL_ID,
     '内置工具',
-    ToolPermissionLevel.READ
+    ToolPermissionLevel.READ,
+    false,
+    ['resolve']
   )
 }

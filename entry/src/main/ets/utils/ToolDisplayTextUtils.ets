@@ -133,8 +133,8 @@ export function getLocalizedBuiltinToolDescription(toolId: string, fallback: str
       return pickLocalizedText('推荐地点并规划驾车、步行或骑行路线',
         'Find places and plan driving, walking, or cycling routes.')
     case 'saved_places':
-      return pickLocalizedText('读取用户保存的地点标签、地址和坐标',
-        'Read user-saved place labels, addresses, and coordinates.')
+      return pickLocalizedText('标签对模型开放；读取对应地址和坐标前需用户确认',
+        'Labels are available to the model; reading their addresses and coordinates requires approval.')
     case 'open_map_route':
       return pickLocalizedText('经用户确认后在花瓣地图中查看路线或发起导航',
         'Open a route or start navigation in Petal Maps after approval.')

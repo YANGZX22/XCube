@@ -248,6 +248,8 @@ export class ToolConfig {
   @Trace functionName: string = ''
   @Trace sourceLabel: string = ''
   @Trace permissionLevel: string = ToolPermissionLevel.READ
+  @Trace requiresUserApproval: boolean = false
+  @Trace approvalRequiredActions: string[] = []
 
   constructor(
     id: string = '',
@@ -260,7 +262,9 @@ export class ToolConfig {
     sourceId: string = '',
     functionName: string = '',
     sourceLabel: string = '',
-    permissionLevel: string = ToolPermissionLevel.READ
+    permissionLevel: string = ToolPermissionLevel.READ,
+    requiresUserApproval: boolean = false,
+    approvalRequiredActions: string[] = []
   ) {
     this.id = id
     this.name = name
@@ -273,6 +277,8 @@ export class ToolConfig {
     this.functionName = functionName !== '' ? functionName : id
     this.sourceLabel = sourceLabel
     this.permissionLevel = permissionLevel !== '' ? permissionLevel : ToolPermissionLevel.READ
+    this.requiresUserApproval = requiresUserApproval
+    this.approvalRequiredActions = approvalRequiredActions.slice()
   }
 }
 
