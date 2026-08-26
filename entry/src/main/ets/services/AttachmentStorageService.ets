@@ -13,6 +13,30 @@ const ATTACHMENTS_DIR = 'attachments'
 const IMAGES_DIR = 'images'
 const FILES_DIR = 'files'
 
+export function isAttachmentFilePathManaged(filePath: string, attachmentsDir: string): boolean {
+  const normalizedFilePath = filePath.trim()
+  let normalizedAttachmentsDir = attachmentsDir.trim()
+  while (normalizedAttachmentsDir.endsWith('/')) {
+    normalizedAttachmentsDir = normalizedAttachmentsDir.substring(0, normalizedAttachmentsDir.length - 1)
+  }
+  if (normalizedFilePath === '' || normalizedAttachmentsDir === '' ||
+    !normalizedFilePath.startsWith(`${normalizedAttachmentsDir}/`)) {
+    return false
+  }
+
+  const relativePath = normalizedFilePath.substring(normalizedAttachmentsDir.length + 1)
+  if (relativePath === '') {
+    return false
+  }
+  const segments = relativePath.split('/')
+  for (let i = 0; i < segments.length; i++) {
+    if (segments[i] === '..') {
+      return false
+    }
+  }
+  return true
+}
+
 export class AttachmentStorageService {
   private static instance: AttachmentStorageService | null = null
   private context: Context | null = null
@@ -135,14 +159,24 @@ export class AttachmentStorageService {
     }
   }
 
-  // 删除附件文件
-  async deleteAttachment(filePath: string): Promise<void> {
+  isManagedAttachmentPath(filePath: string): boolean {
+    return this.isReady() && isAttachmentFilePathManaged(filePath, this.getAttachmentsDir())
+  }
+
+  // 只删除由本服务管理的应用沙箱附件，避免误删外部导入源文件
+  async deleteAttachment(filePath: string): Promise<boolean> {
+    if (!this.isManagedAttachmentPath(filePath)) {
+      console.warn('AttachmentStorageService', `Skip unmanaged attachment path: ${filePath}`)
+      return false
+    }
     try {
       if (filePath !== '' && fileIo.accessSync(filePath)) {
         fileIo.unlinkSync(filePath)
       }
+      return true
     } catch (error) {
       console.error('AttachmentStorageService', `Failed to delete attachment: ${JSON.stringify(error)}`)
+      return false
     }
   }
 
@@ -153,6 +187,33 @@ export class AttachmentStorageService {
     } catch (e) {
       return false
     }
+  }
+
+  listManagedAttachmentFiles(): string[] {
+    const filePaths: string[] = []
+    if (!this.isReady()) {
+      return filePaths
+    }
+    const directories = [
+      `${this.getAttachmentsDir()}/${IMAGES_DIR}`,
+      `${this.getAttachmentsDir()}/${FILES_DIR}`
+    ]
+    for (let i = 0; i < directories.length; i++) {
+      try {
+        const fileNames = fileIo.listFileSync(directories[i])
+        for (let j = 0; j < fileNames.length; j++) {
+          const filePath = `${directories[i]}/${fileNames[j]}`
+          const stat = fileIo.statSync(filePath)
+          if (!stat.isDirectory()) {
+            filePaths.push(filePath)
+          }
+        }
+      } catch (error) {
+        console.error('AttachmentStorageService', `Failed to list attachment cache: ${JSON.stringify(error)}`)
+        throw new Error('无法扫描附件缓存目录')
+      }
+    }
+    return filePaths
   }
 
   // 获取附件目录路径（用于 WebDAV 同步）

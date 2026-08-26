@@ -1833,6 +1833,38 @@
       "value": "无法打开 GitHub Releases"
     },
     {
+      "name": "about_storage_section",
+      "value": "存储空间"
+    },
+    {
+      "name": "about_clear_cache",
+      "value": "清理缓存"
+    },
+    {
+      "name": "about_clearing_cache",
+      "value": "正在清理无引用文件…"
+    },
+    {
+      "name": "about_clear_cache_desc",
+      "value": "删除已不再使用的聊天图片和文件"
+    },
+    {
+      "name": "about_clear_cache_warning_title",
+      "value": "确认清理缓存？"
+    },
+    {
+      "name": "about_clear_cache_warning_message",
+      "value": "XCube 将永久删除未被现有会话或草稿引用的聊天图片与文件。如果旧版本或受损数据库中的附件元数据不完整，仍需使用的文件也可能被删除且无法恢复，可能造成数据丢失。建议先备份重要会话再继续。"
+    },
+    {
+      "name": "about_clear_cache_confirm",
+      "value": "仍要清理"
+    },
+    {
+      "name": "about_clear_cache_failed",
+      "value": "缓存清理失败，请稍后重试"
+    },
+    {
       "name": "about_contact_section",
       "value": "联系我们"
     },

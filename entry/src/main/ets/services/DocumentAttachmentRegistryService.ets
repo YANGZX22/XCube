@@ -88,6 +88,26 @@ export class DocumentAttachmentRegistryService {
     return documents
   }
 
+  clearSession(sessionId: string): void {
+    const normalizedSessionId = sessionId.trim()
+    if (normalizedSessionId !== '') {
+      this.documentsBySession.delete(normalizedSessionId)
+    }
+  }
+
+  listAllFilePaths(): string[] {
+    const filePaths: string[] = []
+    this.documentsBySession.forEach((sessionDocuments: Map<string, RegisteredDocumentAttachment>): void => {
+      sessionDocuments.forEach((attachment: RegisteredDocumentAttachment): void => {
+        const filePath = attachment.filePath.trim()
+        if (filePath !== '' && filePaths.indexOf(filePath) < 0) {
+          filePaths.push(filePath)
+        }
+      })
+    })
+    return filePaths
+  }
+
   private isPdfAttachment(attachment: MessageAttachment): boolean {
     const mimeType = attachment.mimeType.toLowerCase()
     const name = attachment.name.toLowerCase()

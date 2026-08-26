@@ -16,6 +16,7 @@ import { getSettingsPageContentMaxWidth } from '../utils/SettingsPageLayoutHelpe
 import { getAppUiState } from '../state/AppUiState'
 import { AppUpdateInfo, getAppUpdateService, XCUBE_RELEASES_URL } from '../services/AppUpdateService'
 import { pickLocalizedText } from '../utils/LocalizedTextUtils'
+import { ServiceRegistry } from '../services/ServiceRegistry'
 import {
   buildHdsTopNavigationTitleBarOptionsForPage,
   getHdsTopNavigationContentTopPadding,
@@ -61,6 +62,7 @@ let aboutPagePathStack: NavPathStack | null = null
 struct AboutPage {
   @Local versionName: string = '1.3.5'
   @Local isCheckingUpdate: boolean = false
+  @Local isCleaningCache: boolean = false
   @Local showLicensesSheet: boolean = false
   @Local isLogoAnimating: boolean = false
   @Local logoCanvasOpacity: number = 1
@@ -413,6 +415,69 @@ struct AboutPage {
           .borderRadius(16)
           .border({ width: 0.5, color: this.themePrimaryLight })
           .systemMaterial(this.getAboutMaterial(!this.isCheckingUpdate, true))
+          .margin({ bottom: 24 })
+
+          Text($r('app.string.about_storage_section'))
+            .fontSize(12)
+            .fontWeight(FontWeight.Medium)
+            .fontColor($r('app.color.text_secondary'))
+            .padding({ left: 16, bottom: 6 })
+            .width('100%')
+
+          Column() {
+            Row() {
+              Column() {
+                SymbolGlyph($r('sys.symbol.trash'))
+                  .fontSize(20)
+                  .fontColor([this.themePrimary])
+              }
+              .width(36)
+              .height(36)
+              .borderRadius(9)
+              .backgroundColor(Color.Transparent)
+              .justifyContent(FlexAlign.Center)
+              .alignItems(HorizontalAlign.Center)
+              .systemMaterial(this.getAboutAccentMaterial())
+
+              Column({ space: 2 }) {
+                Text($r('app.string.about_clear_cache'))
+                  .fontSize(14)
+                  .fontWeight(FontWeight.Medium)
+                  .fontColor($r('app.color.text_primary'))
+                Text(this.isCleaningCache ? $r('app.string.about_clearing_cache') :
+                  $r('app.string.about_clear_cache_desc'))
+                  .fontSize(12)
+                  .fontColor($r('app.color.text_secondary'))
+              }
+              .alignItems(HorizontalAlign.Start)
+              .margin({ left: 12 })
+              .layoutWeight(1)
+
+              if (this.isCleaningCache) {
+                LoadingProgress()
+                  .width(20)
+                  .height(20)
+                  .color(this.themePrimary)
+              } else {
+                SymbolGlyph($r('sys.symbol.chevron_right'))
+                  .fontSize(18)
+                  .fontColor([$r('app.color.text_tertiary')])
+              }
+            }
+            .width('100%')
+            .height(64)
+            .padding({ left: 16, right: 16 })
+            .alignItems(VerticalAlign.Center)
+            .enabled(!this.isCleaningCache)
+            .onClick((): void => {
+              this.showCacheCleanupWarning()
+            })
+          }
+          .width('100%')
+          .backgroundColor(Color.Transparent)
+          .borderRadius(16)
+          .border({ width: 0.5, color: this.themePrimaryLight })
+          .systemMaterial(this.getAboutMaterial(!this.isCleaningCache, true))
           .margin({ bottom: 24 })
 
           Text($r('app.string.about_contact_section'))
@@ -784,6 +849,60 @@ struct AboutPage {
       hilog.error(0x0000, TAG, 'Check for updates failed: %{public}s', `${error}`)
       this.pageToast($r('app.string.about_update_check_failed'))
     })
+  }
+
+  private showCacheCleanupWarning(): void {
+    if (this.isCleaningCache) {
+      return
+    }
+    this.getUIContext().showAlertDialog({
+      title: $r('app.string.about_clear_cache_warning_title'),
+      message: $r('app.string.about_clear_cache_warning_message'),
+      primaryButton: {
+        value: $r('app.string.cancel'),
+        action: () => {
+        }
+      },
+      secondaryButton: {
+        value: $r('app.string.about_clear_cache_confirm'),
+        fontColor: $r('app.color.status_error'),
+        action: () => {
+          this.startCacheCleanup()
+        }
+      }
+    })
+  }
+
+  private startCacheCleanup(): void {
+    if (this.isCleaningCache) {
+      return
+    }
+    this.isCleaningCache = true
+    this.performCacheCleanup().catch((error: Object): void => {
+      hilog.error(0x0000, TAG, 'Cache cleanup failed: %{public}s', `${error}`)
+      this.pageToast($r('app.string.about_clear_cache_failed'))
+    })
+  }
+
+  private async performCacheCleanup(): Promise<void> {
+    try {
+      const result = await ServiceRegistry.database().cleanupOrphanedAttachmentCache()
+      if (result.deletedFiles === 0 && result.failedFiles === 0) {
+        this.pageToast(pickLocalizedText('没有发现可清理的残留文件', 'No unreferenced cache files were found'))
+      } else if (result.failedFiles === 0) {
+        this.pageToast(pickLocalizedText(
+          `已清理 ${result.deletedFiles} 个残留文件`,
+          `Removed ${result.deletedFiles} unreferenced cache files`
+        ))
+      } else {
+        this.pageToast(pickLocalizedText(
+          `清理完成：删除 ${result.deletedFiles} 个，失败 ${result.failedFiles} 个`,
+          `Cleanup finished: ${result.deletedFiles} removed, ${result.failedFiles} failed`
+        ))
+      }
+    } finally {
+      this.isCleaningCache = false
+    }
   }
 
   private async performCheckForUpdates(): Promise<void> {

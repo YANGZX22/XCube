@@ -23,6 +23,8 @@ import { isPresetProvider, getPresetProviderById } from '../config/PresetProvide
 import { AppError, AppErrorCode, toErrorDetail } from '../models/AppError'
 import { AppStorageKeys } from '../config/AppStorageKeys'
 import { setAppUiStateValue } from '../state/AppUiState'
+import { getAttachmentStorageService } from './AttachmentStorageService'
+import { getDocumentAttachmentRegistryService } from './DocumentAttachmentRegistryService'
 
 // 数据库配置
 const DB_CONFIG: relationalStore.StoreConfig = {
@@ -102,6 +104,12 @@ interface DraftAttachmentJsonData {
   filePath: string
   mimeType: string
   size: number
+}
+
+export class AttachmentCacheCleanupResult {
+  scannedFiles: number = 0
+  deletedFiles: number = 0
+  failedFiles: number = 0
 }
 
 // 数据库服务 - 单例模式
@@ -1666,25 +1674,257 @@ export class DatabaseService {
     }
   }
 
-  // 删除会话及其消息
-  async deleteSession(sessionId: string): Promise<void> {
-    await this.waitForInitialization()
-    if (this.rdbStore === null) {
+  private appendUniqueAttachmentFilePath(filePaths: string[], filePath: string): void {
+    const normalizedPath = filePath.trim()
+    if (normalizedPath !== '' && filePaths.indexOf(normalizedPath) < 0) {
+      filePaths.push(normalizedPath)
+    }
+  }
+
+  private async collectSessionAttachmentFilePaths(
+    store: relationalStore.RdbStore,
+    sessionId: string
+  ): Promise<string[]> {
+    const filePaths: string[] = []
+    const attachmentResultSet = await store.querySql(
+      `SELECT a.file_path AS file_path
+       FROM ${TableNames.ATTACHMENTS} a
+       INNER JOIN ${TableNames.MESSAGES} m ON m.id = a.message_id
+       WHERE m.session_id = ?`,
+      [sessionId]
+    )
+    try {
+      while (attachmentResultSet.goToNextRow()) {
+        this.appendUniqueAttachmentFilePath(
+          filePaths,
+          attachmentResultSet.getString(attachmentResultSet.getColumnIndex('file_path'))
+        )
+      }
+    } finally {
+      attachmentResultSet.close()
+    }
+
+    const sessionResultSet = await store.querySql(
+      `SELECT draft_attachments_json FROM ${TableNames.SESSIONS} WHERE id = ?`,
+      [sessionId]
+    )
+    try {
+      if (sessionResultSet.goToNextRow()) {
+        const draftAttachments = this.parseDraftAttachments(
+          sessionResultSet.getString(sessionResultSet.getColumnIndex('draft_attachments_json')) || ''
+        )
+        for (let i = 0; i < draftAttachments.length; i++) {
+          this.appendUniqueAttachmentFilePath(filePaths, draftAttachments[i].filePath)
+        }
+      }
+    } finally {
+      sessionResultSet.close()
+    }
+
+    // 运行中的工具产物可能已写入沙箱并注册，但消息还没来得及落库；也纳入本次清理。
+    const registeredAttachments = getDocumentAttachmentRegistryService().listAttachments(sessionId)
+    for (let i = 0; i < registeredAttachments.length; i++) {
+      this.appendUniqueAttachmentFilePath(filePaths, registeredAttachments[i].filePath)
+    }
+    return filePaths
+  }
+
+  private async collectPersistedAttachmentFilePaths(store: relationalStore.RdbStore): Promise<string[]> {
+    const filePaths: string[] = []
+    const attachmentResultSet = await store.querySql(
+      `SELECT a.file_path AS file_path
+       FROM ${TableNames.ATTACHMENTS} a
+       INNER JOIN ${TableNames.MESSAGES} m ON m.id = a.message_id
+       INNER JOIN ${TableNames.SESSIONS} s ON s.id = m.session_id`
+    )
+    try {
+      while (attachmentResultSet.goToNextRow()) {
+        this.appendUniqueAttachmentFilePath(
+          filePaths,
+          attachmentResultSet.getString(attachmentResultSet.getColumnIndex('file_path'))
+        )
+      }
+    } finally {
+      attachmentResultSet.close()
+    }
+
+    const sessionResultSet = await store.querySql(
+      `SELECT draft_attachments_json FROM ${TableNames.SESSIONS} WHERE draft_attachments_json <> ''`
+    )
+    try {
+      while (sessionResultSet.goToNextRow()) {
+        const draftAttachments = this.parseDraftAttachments(
+          sessionResultSet.getString(sessionResultSet.getColumnIndex('draft_attachments_json')) || ''
+        )
+        for (let i = 0; i < draftAttachments.length; i++) {
+          this.appendUniqueAttachmentFilePath(filePaths, draftAttachments[i].filePath)
+        }
+      }
+    } finally {
+      sessionResultSet.close()
+    }
+    return filePaths
+  }
+
+  private async deleteLegacyOrphanedConversationRecords(store: relationalStore.RdbStore): Promise<void> {
+    let transactionStarted = false
+    try {
+      store.beginTransaction()
+      transactionStarted = true
+      await store.executeSql(
+        `DELETE FROM ${TableNames.ATTACHMENTS}
+         WHERE NOT EXISTS (
+           SELECT 1
+           FROM ${TableNames.MESSAGES} m
+           INNER JOIN ${TableNames.SESSIONS} s ON s.id = m.session_id
+           WHERE m.id = ${TableNames.ATTACHMENTS}.message_id
+         )`
+      )
+      await store.executeSql(
+        `DELETE FROM ${TableNames.TOOL_EVENTS}
+         WHERE NOT EXISTS (
+           SELECT 1 FROM ${TableNames.SESSIONS} s
+           WHERE s.id = ${TableNames.TOOL_EVENTS}.session_id
+         )
+         OR (
+           COALESCE(${TableNames.TOOL_EVENTS}.message_id, '') <> ''
+           AND NOT EXISTS (
+             SELECT 1 FROM ${TableNames.MESSAGES} m
+             WHERE m.id = ${TableNames.TOOL_EVENTS}.message_id
+           )
+         )`
+      )
+      store.commit()
+      transactionStarted = false
+    } catch (error) {
+      if (transactionStarted) {
+        try {
+          store.rollBack()
+        } catch (rollbackError) {
+          console.error('DatabaseService', `Failed to roll back orphan cleanup: ${JSON.stringify(rollbackError)}`)
+        }
+      }
+      throw new Error(toErrorDetail(error as Object))
+    }
+  }
+
+  private async deleteUnreferencedAttachmentFiles(
+    store: relationalStore.RdbStore,
+    candidateFilePaths: string[]
+  ): Promise<void> {
+    if (candidateFilePaths.length === 0) {
       return
     }
+    const referencedFilePaths = await this.collectPersistedAttachmentFilePaths(store)
+    const registeredFilePaths = getDocumentAttachmentRegistryService().listAllFilePaths()
+    for (let i = 0; i < registeredFilePaths.length; i++) {
+      this.appendUniqueAttachmentFilePath(referencedFilePaths, registeredFilePaths[i])
+    }
+    const attachmentStorage = getAttachmentStorageService()
+    for (let i = 0; i < candidateFilePaths.length; i++) {
+      const filePath = candidateFilePaths[i]
+      if (referencedFilePaths.indexOf(filePath) >= 0) {
+        continue
+      }
+      const deleted = await attachmentStorage.deleteAttachment(filePath)
+      if (!deleted) {
+        console.warn('DatabaseService', `Session attachment file was not deleted: ${filePath}`)
+      }
+    }
+  }
+
+  // 原子删除会话的附件记录、工具事件、消息和会话；提交后清理无剩余引用的沙箱文件
+  async deleteSession(sessionId: string): Promise<boolean> {
+    await this.waitForInitialization()
+    const store = this.rdbStore
+    if (store === null || sessionId.trim() === '') {
+      return false
+    }
+    let candidateFilePaths: string[] = []
+    let transactionStarted = false
     try {
-      // 删除消息
+      store.beginTransaction()
+      transactionStarted = true
+      candidateFilePaths = await this.collectSessionAttachmentFilePaths(store, sessionId)
+
+      await store.executeSql(
+        `DELETE FROM ${TableNames.ATTACHMENTS}
+         WHERE message_id IN (SELECT id FROM ${TableNames.MESSAGES} WHERE session_id = ?)`,
+        [sessionId]
+      )
+      await store.executeSql(
+        `DELETE FROM ${TableNames.TOOL_EVENTS}
+         WHERE session_id = ?
+            OR message_id IN (SELECT id FROM ${TableNames.MESSAGES} WHERE session_id = ?)`,
+        [sessionId, sessionId]
+      )
+
       const messagePredicates = new relationalStore.RdbPredicates(TableNames.MESSAGES)
       messagePredicates.equalTo('session_id', sessionId)
-      await this.rdbStore.delete(messagePredicates)
+      await store.delete(messagePredicates)
 
-      // 删除会话
       const sessionPredicates = new relationalStore.RdbPredicates(TableNames.SESSIONS)
       sessionPredicates.equalTo('id', sessionId)
-      await this.rdbStore.delete(sessionPredicates)
+      await store.delete(sessionPredicates)
+      store.commit()
+      transactionStarted = false
     } catch (error) {
+      if (transactionStarted) {
+        try {
+          store.rollBack()
+        } catch (rollbackError) {
+          console.error('DatabaseService', `Failed to roll back session deletion: ${JSON.stringify(rollbackError)}`)
+        }
+      }
       console.error('DatabaseService', `Failed to delete session: ${JSON.stringify(error)}`)
+      return false
     }
+
+    getDocumentAttachmentRegistryService().clearSession(sessionId)
+    try {
+      await this.deleteUnreferencedAttachmentFiles(store, candidateFilePaths)
+    } catch (error) {
+      // 数据库记录已经成功提交。文件清理失败时保留孤儿文件，不能回滚成损坏的数据库引用。
+      console.error('DatabaseService', `Failed to clean session attachment files: ${JSON.stringify(error)}`)
+    }
+    return true
+  }
+
+  async cleanupOrphanedAttachmentCache(): Promise<AttachmentCacheCleanupResult> {
+    await this.waitForInitialization()
+    const store = this.rdbStore
+    if (store === null) {
+      throw new Error('数据库尚未就绪')
+    }
+
+    const attachmentStorage = getAttachmentStorageService()
+    if (!attachmentStorage.isReady()) {
+      throw new Error('附件存储尚未就绪')
+    }
+
+    // 先固定扫描范围；扫描之后新创建的文件不会被本轮清理选中。
+    const storedFilePaths = attachmentStorage.listManagedAttachmentFiles()
+    await this.deleteLegacyOrphanedConversationRecords(store)
+    const referencedFilePaths = await this.collectPersistedAttachmentFilePaths(store)
+    const registeredFilePaths = getDocumentAttachmentRegistryService().listAllFilePaths()
+    for (let i = 0; i < registeredFilePaths.length; i++) {
+      this.appendUniqueAttachmentFilePath(referencedFilePaths, registeredFilePaths[i])
+    }
+
+    const result = new AttachmentCacheCleanupResult()
+    result.scannedFiles = storedFilePaths.length
+    for (let i = 0; i < storedFilePaths.length; i++) {
+      const filePath = storedFilePaths[i]
+      if (referencedFilePaths.indexOf(filePath) >= 0) {
+        continue
+      }
+      if (await attachmentStorage.deleteAttachment(filePath)) {
+        result.deletedFiles++
+      } else {
+        result.failedFiles++
+      }
+    }
+    return result
   }
 
   // 获取所有会话

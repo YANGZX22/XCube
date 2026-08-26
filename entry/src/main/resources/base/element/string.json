@@ -1833,6 +1833,38 @@
       "value": "Unable to open GitHub Releases"
     },
     {
+      "name": "about_storage_section",
+      "value": "Storage"
+    },
+    {
+      "name": "about_clear_cache",
+      "value": "Clean Up Cache"
+    },
+    {
+      "name": "about_clearing_cache",
+      "value": "Cleaning up unreferenced files…"
+    },
+    {
+      "name": "about_clear_cache_desc",
+      "value": "Remove chat images and files no longer in use"
+    },
+    {
+      "name": "about_clear_cache_warning_title",
+      "value": "Clean Up Cache?"
+    },
+    {
+      "name": "about_clear_cache_warning_message",
+      "value": "XCube will permanently delete cached chat images and files that are not referenced by any existing conversation or draft. If metadata from an older or damaged database is incomplete, files you still need may be removed and cannot be recovered. Back up important conversations before continuing."
+    },
+    {
+      "name": "about_clear_cache_confirm",
+      "value": "Clean Up"
+    },
+    {
+      "name": "about_clear_cache_failed",
+      "value": "Cache cleanup failed. Please try again."
+    },
+    {
       "name": "about_contact_section",
       "value": "Contact Us"
     },

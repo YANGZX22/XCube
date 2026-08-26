@@ -997,7 +997,10 @@ export class ImportExportService {
           finalSessionId = `${sessionData.id}_imported_${Date.now()}`
           finalTitle = `${sessionData.title} (导入)`
         } else if (options.conflictStrategy === 'overwrite') {
-          await this.dbService.deleteSession(existingSession.id)
+          const deleted = await this.dbService.deleteSession(existingSession.id)
+          if (!deleted) {
+            throw new Error(`覆盖导入前删除会话失败: ${existingSession.id}`)
+          }
           overwritten++
         }
       }

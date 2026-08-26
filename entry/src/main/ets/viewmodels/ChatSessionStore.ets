@@ -156,7 +156,10 @@ export class ChatSessionStore {
   }
 
   async deleteSession(sessionId: string): Promise<void> {
-    await this.databaseService.deleteSession(sessionId)
+    const deleted = await this.databaseService.deleteSession(sessionId)
+    if (!deleted) {
+      return
+    }
     if (this.currentSession !== null && this.currentSession.id === sessionId) {
       this.currentSession = null
     }

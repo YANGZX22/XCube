@@ -93,6 +93,16 @@ export struct ImagePreview {
     return 'rgba(255, 255, 255, 0.16)'
   }
 
+  private getOverlayControlMaterial(interactive: boolean): uiMaterial.Material {
+    return new uiMaterial.ImmersiveMaterial({
+      style: uiMaterial.ImmersiveStyle.REGULAR,
+      materialColor: this.themePrimary,
+      applyShadow: true,
+      interactive: interactive,
+      lightEffect: { color: undefined }
+    })
+  }
+
   private getSaveButtonTranslateX(): number {
     return -(this.saveButtonWidthVp + this.overlayHorizontalMarginVp)
   }
@@ -113,12 +123,12 @@ export struct ImagePreview {
           LoadingProgress()
             .width(18)
             .height(18)
-            .color(this.themePrimary)
+            .color(Color.White)
         } else {
           Stack({ alignContent: Alignment.Center }) {
             SymbolGlyph($r('sys.symbol.square_and_arrow_down'))
               .fontSize(16)
-              .fontColor([this.themePrimary])
+              .fontColor([Color.White])
           }
           .width(28)
           .height(28)
@@ -126,7 +136,7 @@ export struct ImagePreview {
 
         Text($r('app.string.save'))
           .fontSize(14)
-          .fontColor(this.themePrimary)
+          .fontColor(Color.White)
           .fontWeight(FontWeight.Medium)
       }
       .width(this.saveButtonWidthVp)
@@ -138,15 +148,10 @@ export struct ImagePreview {
     .width(this.saveButtonWidthVp)
     .height(this.saveButtonHeightVp)
     .padding(0)
-    .backgroundColor(Color.Transparent)
+    .backgroundColor(this.themePrimary)
     .borderRadius(this.saveButtonHeightVp / 2)
-    .systemMaterial(new uiMaterial.ImmersiveMaterial({
-      style: uiMaterial.ImmersiveStyle.REGULAR,
-      materialColor: Color.Transparent,
-      applyShadow: false,
-      interactive: true,
-      lightEffect: { color: undefined }
-    }))
+    .clip(false)
+    .systemMaterial(this.getOverlayControlMaterial(true))
     .onClick(() => {
       if (!this.isSaving) {
         this.saveCurrentImage()
@@ -159,19 +164,14 @@ export struct ImagePreview {
     Button({ type: ButtonType.Circle, stateEffect: false }) {
       SymbolGlyph($r('sys.symbol.xmark'))
         .fontSize(20)
-        .fontColor([this.themePrimary])
+        .fontColor([Color.White])
     }
     .width(40)
     .height(40)
     .padding(0)
-    .backgroundColor(Color.Transparent)
-    .systemMaterial(new uiMaterial.ImmersiveMaterial({
-      style: uiMaterial.ImmersiveStyle.REGULAR,
-      materialColor: Color.Transparent,
-      applyShadow: false,
-      interactive: true,
-      lightEffect: { color: undefined }
-    }))
+    .backgroundColor(this.themePrimary)
+    .clip(false)
+    .systemMaterial(this.getOverlayControlMaterial(true))
     .onClick(() => {
       this.dismiss()
     })
@@ -248,10 +248,11 @@ export struct ImagePreview {
             .fontColor(Color.White)
             .fontWeight(FontWeight.Medium)
             .padding({ left: 12, right: 12, top: 8, bottom: 8 })
-            .backgroundColor('rgba(12, 16, 24, 0.58)')
-            .backgroundBlurStyle(BlurStyle.COMPONENT_REGULAR)
+            .backgroundColor(this.themePrimary)
             .borderRadius(999)
             .border({ width: 0.8, color: this.getOverlayControlBorderColor() })
+            .clip(false)
+            .systemMaterial(this.getOverlayControlMaterial(false))
         }
       }
       .width('100%')

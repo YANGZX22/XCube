@@ -23,6 +23,7 @@ import savedPlacesServiceTest from './SavedPlacesService.test';
 import slashCommandUtilsTest from './SlashCommandUtils.test';
 import planServiceTest from './PlanService.test';
 import pythonSandboxRuntimeTest from './PythonSandboxRuntime.test';
+import attachmentCleanupTest from './AttachmentCleanup.test';
 
 export default function testsuite() {
   localUnitTest();
@@ -50,4 +51,5 @@ export default function testsuite() {
   slashCommandUtilsTest();
   planServiceTest();
   pythonSandboxRuntimeTest();
+  attachmentCleanupTest();
 }
