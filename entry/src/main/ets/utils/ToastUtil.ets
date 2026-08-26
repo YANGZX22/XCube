@@ -1,14 +1,19 @@
-import { PromptAction } from '@kit.ArkUI'
+import { ColorMetrics, PromptAction } from '@kit.ArkUI'
 import {
-  BlurStrategy,
+  hdsMaterial,
   HdsSnackBar,
   SnackBarIconOptions,
   SnackBarIconType,
   SnackBarMessageOptions,
   SnackBarOperationOptions,
   SnackBarOperationType,
-  SnackBarStyleOptions
+  SnackBarStyleOptions,
+  SystemMaterialParams
 } from '@kit.UIDesignKit'
+
+interface ImmersiveSnackBarStyleOptions extends SnackBarStyleOptions {
+  systemMaterialEffect?: SystemMaterialParams
+}
 
 export enum SnackBarTone {
   DEFAULT = 0,
@@ -139,14 +144,16 @@ export function showSnackBar(context: UIContext, options: SnackBarDisplayOptions
       dismissCurrentSnackBar()
       options.onAction()
     }
-    const style: SnackBarStyleOptions = {
+    const style: ImmersiveSnackBarStyleOptions = {
       duration: options.duration,
       pressBackCallback: dismissCurrentSnackBar,
       isHeightAdaptive: true,
-      // API 23 高级材质效果 - 自适应沉浸式毛玻璃
-      backgroundBlurStyle: BlurStyle.COMPONENT_REGULAR,
-      blurStrategy: BlurStrategy.ADAPTIVE,
-      themeColorMode: ThemeColorMode.SYSTEM
+      backgroundColor: ColorMetrics.rgba(0, 0, 0, 0),
+      themeColorMode: ThemeColorMode.SYSTEM,
+      systemMaterialEffect: {
+        materialType: hdsMaterial.MaterialType.IMMERSIVE,
+        materialLevel: hdsMaterial.MaterialLevel.ADAPTIVE
+      }
     }
     snackBar.show(icon, messageOptions, operation, style)
     scheduleActiveSnackBarClear(token, options.duration)

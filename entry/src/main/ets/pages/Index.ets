@@ -61,6 +61,7 @@ import { ManuscriptPageTitle } from '../components/index/ManuscriptPageTitle'
 import { ManuscriptTopArcButton } from '../components/index/ManuscriptTopArcButton'
 import { ChatMultiSelectToolbar } from '../components/chat/ChatMultiSelectToolbar'
 import { ChatFloatingImmersiveButton } from '../components/ChatFloatingImmersiveButton'
+import { ImmersiveTaskAlertBanner } from '../components/ImmersiveTaskAlertBanner'
 import { KnowledgeBasePanel } from '../components/KnowledgeBasePanel'
 import { KnowledgeEmbeddingSelectSheetContent } from '../components/KnowledgeEmbeddingSelectSheetContent'
 import { ModelSelectorContent } from '../components/ModelSelector'
@@ -159,6 +160,11 @@ struct Index {
   private static readonly TAB_KNOWLEDGE: number = INDEX_TAB_KNOWLEDGE
   private static readonly TAB_SETTINGS: number = INDEX_TAB_SETTINGS
   @Local currentTabIndex: number = Index.TAB_CHAT
+  @Local taskAlertVisible: boolean = false
+  @Local taskAlertMessage: string = ''
+  @Local taskAlertFailed: boolean = false
+  private taskAlertSessionId: string = ''
+  private taskAlertTimerId: number = -1
   @Local knowledgeUploadRequestTick: number = 0
   @Local knowledgeRefreshRequestTick: number = 0
   @Local showKnowledgeEmbeddingSheet: boolean = false
@@ -735,6 +741,8 @@ struct Index {
   }
 
   aboutToDisappear(): void {
+    this.clearTaskAlertTimer()
+    this.taskAlertVisible = false
     this.unregisterAppUiStateObservers()
     this.unsubscribeHoldingHand()
     if (this.settingsCallback !== null) {
@@ -745,6 +753,10 @@ struct Index {
 
   // 处理返回键/返回手势
   onBackPress(): boolean {
+    if (this.taskAlertVisible) {
+      this.dismissTaskAlert()
+      return true
+    }
     // 如果分享预览弹窗打开，关闭弹窗
     if (this.showSharePreview) {
       this.showSharePreview = false
@@ -1324,16 +1336,54 @@ struct Index {
       console.error('Index', 'Failed to parse in-app alert payload')
       return
     }
-    const opts = new SnackBarDisplayOptions()
-    opts.message = payload.message
-    opts.duration = 5000
-    opts.tone = payload.status === ChatTaskStatus.FAILED ? SnackBarTone.ERROR : SnackBarTone.SUCCESS
-    opts.actionText = $r('app.string.task_alert_view')
-    opts.onAction = (): void => {
-      this.openChatRoute({ sessionId: payload.sessionId } as ChatPageRouteParams)
-    }
-    showSnackBar(this.getUIContext(), opts)
+    this.showTaskAlert(
+      payload.message,
+      payload.status === ChatTaskStatus.FAILED,
+      payload.sessionId
+    )
     setAppUiStateValue(AppStorageKeys.IN_APP_TASK_ALERT_PAYLOAD, '')
+  }
+
+  private showTaskAlert(message: string, failed: boolean, sessionId: string): void {
+    this.clearTaskAlertTimer()
+    this.taskAlertMessage = message
+    this.taskAlertFailed = failed
+    this.taskAlertSessionId = sessionId
+    if (!this.taskAlertVisible) {
+      this.getUIContext().animateTo({ duration: 260, curve: Curve.EaseOut }, (): void => {
+        this.taskAlertVisible = true
+      })
+    }
+    this.taskAlertTimerId = setTimeout((): void => {
+      this.taskAlertTimerId = -1
+      this.dismissTaskAlert()
+    }, 5000)
+  }
+
+  private clearTaskAlertTimer(): void {
+    if (this.taskAlertTimerId < 0) {
+      return
+    }
+    clearTimeout(this.taskAlertTimerId)
+    this.taskAlertTimerId = -1
+  }
+
+  private dismissTaskAlert(): void {
+    this.clearTaskAlertTimer()
+    if (!this.taskAlertVisible) {
+      return
+    }
+    this.getUIContext().animateTo({ duration: 200, curve: Curve.EaseIn }, (): void => {
+      this.taskAlertVisible = false
+    })
+  }
+
+  private viewTaskAlertSession(): void {
+    const sessionId = this.taskAlertSessionId
+    this.dismissTaskAlert()
+    if (sessionId !== '') {
+      this.openChatRoute({ sessionId: sessionId } as ChatPageRouteParams)
+    }
   }
 
   private shouldHandleInAppTaskAlert(): boolean {
@@ -1535,6 +1585,24 @@ struct Index {
         this.ExpandedRoot()
       } else {
         this.CompactRoot()
+      }
+
+      if (this.taskAlertVisible) {
+        ImmersiveTaskAlertBanner({
+          message: this.taskAlertMessage,
+          failed: this.taskAlertFailed,
+          actionText: $r('app.string.task_alert_view'),
+          bottomInset: this.px2vp(this.bottomAvoidHeight),
+          accentColor: this.themePrimary,
+          cardStrokeColor: this.themeDivider,
+          darkMode: this.isDarkMode,
+          onView: (): void => {
+            this.viewTaskAlertSession()
+          },
+          onDismiss: (): void => {
+            this.dismissTaskAlert()
+          }
+        })
       }
 
       // bindSheet 宿主：每个 bindSheet 必须挂在独立组件上，避免多 bindSheet 冲突

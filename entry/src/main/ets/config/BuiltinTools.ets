@@ -64,12 +64,23 @@ import {
   SAVED_PLACES_TOOL_ID,
   SavedPlacesExecutor
 } from './SavedPlacesTool'
+import {
+  createEmailReadToolConfig,
+  createEmailReadToolDefinition,
+  createEmailSendToolConfig,
+  createEmailSendToolDefinition,
+  EMAIL_READ_TOOL_ID,
+  EmailReadExecutor,
+  EMAIL_SEND_TOOL_ID,
+  EmailSendExecutor
+} from './EmailTools'
 
 export { KNOWLEDGE_SEARCH_TOOL_ID } from './KnowledgeSearchTool'
 export { COMPACT_TOOL_ID } from './CompactTool'
 export { MAP_SEARCH_ROUTE_TOOL_ID, OPEN_MAP_ROUTE_TOOL_ID } from './MapTool'
 export { SAVED_PLACES_TOOL_ID } from './SavedPlacesTool'
 export { PLAN_MODE_TOOL_ID } from './PlanTool'
+export { EMAIL_READ_TOOL_ID, EMAIL_SEND_TOOL_ID } from './EmailTools'
 export {
   SUB_AGENT_TOOL_ID,
   SUB_AGENT_RESULT_TOOL_ID,
@@ -3120,6 +3131,26 @@ export function registerBuiltinTools(): void {
     registeredNow += 1
   }
 
+  if (!registry.isToolRegistered(EMAIL_READ_TOOL_ID)) {
+    registry.registerTool(new RegisteredTool(
+      EMAIL_READ_TOOL_ID,
+      createEmailReadToolConfig(),
+      createEmailReadToolDefinition(),
+      new EmailReadExecutor()
+    ))
+    registeredNow += 1
+  }
+
+  if (!registry.isToolRegistered(EMAIL_SEND_TOOL_ID)) {
+    registry.registerTool(new RegisteredTool(
+      EMAIL_SEND_TOOL_ID,
+      createEmailSendToolConfig(),
+      createEmailSendToolDefinition(),
+      new EmailSendExecutor()
+    ))
+    registeredNow += 1
+  }
+
   if (!registry.isToolRegistered(MAP_SEARCH_ROUTE_TOOL_ID)) {
     const mapSearchRouteTool = new RegisteredTool(
       MAP_SEARCH_ROUTE_TOOL_ID,
@@ -3179,6 +3210,8 @@ export function getBuiltinToolIds(): string[] {
     MATH_CHART_TOOL_ID,
     READ_SCHEDULE_TOOL_ID,
     WRITE_SCHEDULE_TOOL_ID,
+    EMAIL_READ_TOOL_ID,
+    EMAIL_SEND_TOOL_ID,
     SAVED_PLACES_TOOL_ID,
     MAP_SEARCH_ROUTE_TOOL_ID,
     OPEN_MAP_ROUTE_TOOL_ID

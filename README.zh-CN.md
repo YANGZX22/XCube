@@ -80,6 +80,9 @@ OpenAI · Claude · Gemini · DeepSeek · Grok · Ollama · OpenRouter · Silico
 - **结构感知分块** —— 保留页边界、标题、列表、表格、工作表与 FAQ 问答对等文档结构
 - **两种向量方案** —— PC／2-in-1 设备可使用本地 ArkData Embedding，也可接入任意 OpenAI 兼容的 Embedding API
 - **本地数据存储** —— 文件、OCR 结果、索引和向量均存放在应用沙箱内
+- **邮件一键导入** —— 知识库内设与 PDF、Word、表格、图片并列的“邮件”栏；选中 IMAP 邮件后，正文、受支持的附件和内嵌图片会进入同一套解析／OCR 流程。邮箱授权统一在 **设置 → 工具 → 邮件** 中配置
+- **Outlook OAuth2** —— Outlook.com／Microsoft 365 使用设备代码授权与 IMAP/SMTP XOAUTH2；需填写已启用公共客户端设备代码流，并授予 `IMAP.AccessAsUser.All`、`SMTP.Send` 与 `offline_access` 的 Microsoft Entra Client ID。refresh token 保存在系统安全资产存储中
+- **网易 IMAP ID** —— 163、126 与 yeah.net 邮箱在认证后会自动发送 RFC 2971 客户端身份信息，避免网易的 `Unsafe Login` 限制，且不会暴露邮箱凭据
 
 > [!NOTE]
 > 本地 ArkData Embedding 目前仅支持 2-in-1 设备。手机和平板可以使用 API Embedding；未配置 Embedding API 时，关键词检索仍可正常使用。
@@ -103,6 +106,7 @@ OpenAI · Claude · Gemini · DeepSeek · Grok · Ollama · OpenRouter · Silico
 | **DOCX 转文本**                 | 在本地提取 DOCX 的标题、段落、列表和表格，不把原始文件交给不支持文档输入的模型 |
 | **XLSX 转文本**                 | 在本地提取 XLSX 的工作表、单元格、日期及公式结果，不把原始文件交给不支持文档输入的模型 |
 | **日历**                       | 在隐私控制下读取用户确认的日期范围，或创建新的日程事件 |
+| **邮件**                       | 通过 IMAP 查看已授权邮箱，或通过 SMTP 向指定邮箱发信。AI 发起的每次读取与发送都需用户明确批准；授权码保存在系统安全资产存储中，且不会提供给模型 |
 | **地图**                       | 使用 HarmonyOS Map Kit 搜索地点，并在聊天中展示当前位置、目的地、路线折线、精确位置与地图跟随 |
 | **常用地点**<sup>#</sup>         | 在 **设置 → 工具 → 常用地点** 中通过地点搜索、地图选点或当前精确位置保存任意数量的标签（如“家”“公司”），供模型按标签读取和使用 |
 | **花瓣导航**                     | 将搜索地点、坐标或已保存的常用地点标签交给花瓣地图进行路线导航 |

@@ -7,6 +7,8 @@ import { SkillConfig, SkillService } from '../services/SkillService'
 import { ServiceRegistry } from '../services/ServiceRegistry'
 import {
   COMPACT_TOOL_ID,
+  EMAIL_READ_TOOL_ID,
+  EMAIL_SEND_TOOL_ID,
   KNOWLEDGE_SEARCH_TOOL_ID,
   MODLENS_READ_IMAGE_TOOL_ID,
   PLAN_MODE_TOOL_ID,
@@ -37,6 +39,7 @@ import { withColorAlpha } from '../utils/ColorAlphaUtils'
 import { ChatFloatingImmersiveButton } from './ChatFloatingImmersiveButton'
 import { ImmersiveSheetHeader } from './ImmersiveSheetHeader'
 import { SavedPlacesCard } from './SavedPlacesCard'
+import { EmailAccountSettingsCard } from './EmailAccountSettingsCard'
 import { getLocalizedBuiltinToolDescription, getLocalizedBuiltinToolName } from '../utils/ToolDisplayTextUtils'
 import {
   buildCustomHeadersJson,
@@ -183,6 +186,7 @@ export struct ToolsCenterPanel {
 
   private syncBuiltinToolsFromRegistry(): void {
     const allTools = this.toolRegistry.getAllToolConfigs()
+    const emailTools: ToolConfig[] = []
     const builtin: ToolConfig[] = []
     for (let i = 0; i < allTools.length; i++) {
       // 联网搜索、Skill、上下文压缩各有独立卡片；知识库只在知识库页管理；
@@ -191,10 +195,14 @@ export struct ToolsCenterPanel {
         allTools[i].id !== USE_SKILL_TOOL_ID && allTools[i].id !== KNOWLEDGE_SEARCH_TOOL_ID &&
         allTools[i].id !== COMPACT_TOOL_ID && allTools[i].id !== SUB_AGENT_RESULT_TOOL_ID &&
         allTools[i].id !== SUB_AGENT_MESSAGE_TOOL_ID && allTools[i].id !== SAVED_PLACES_TOOL_ID) {
-        builtin.push(allTools[i])
+        if (allTools[i].id === EMAIL_READ_TOOL_ID || allTools[i].id === EMAIL_SEND_TOOL_ID) {
+          emailTools.push(allTools[i])
+        } else {
+          builtin.push(allTools[i])
+        }
       }
     }
-    this.builtinTools = builtin
+    this.builtinTools = emailTools.concat(builtin)
   }
 
   private async loadSelectedToolIds(): Promise<void> {
@@ -2574,6 +2582,8 @@ export struct ToolsCenterPanel {
                 }
               })
 
+              EmailAccountSettingsCard()
+
               if (this.builtinTools.length > 0) {
                 ForEach(this.builtinTools, (tool: ToolConfig) => {
                   BuiltinToolCardItem({
@@ -3488,6 +3498,12 @@ struct BuiltinToolCardItem {
     }
     if (toolId === 'open_map_route') {
       return $r('sys.symbol.navigation')
+    }
+    if (toolId === 'email_send') {
+      return $r('sys.symbol.envelope_badge_arrowshape_turn_up_right')
+    }
+    if (toolId === 'email_read') {
+      return $r('sys.symbol.envelope_on_envelope_badge_arrow_left')
     }
     if (toolId === PLAN_MODE_TOOL_ID) {
       return $r('sys.symbol.list_checkmark')

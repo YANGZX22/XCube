@@ -1971,8 +1971,7 @@ export class KnowledgeDocumentService implements
       throw new Error('未找到知识库文件')
     }
     const extension = this.getSupportedExtension(document.originalName)
-    if (extension !== '.txt' && extension !== '.md' && extension !== '.markdown' &&
-      extension !== '.docx' && extension !== '.xlsx') {
+    if (!this.isTextExtension(extension) && extension !== '.docx' && extension !== '.xlsx') {
       throw new Error('该文件不支持文本预览')
     }
     if (!fileIo.accessSync(document.filePath)) {
@@ -2000,6 +1999,29 @@ export class KnowledgeDocumentService implements
     const truncated = text.length > MAX_DOCUMENT_TEXT_CHARACTERS
     return new KnowledgeTextPreview(
       truncated ? text.substring(0, MAX_DOCUMENT_TEXT_CHARACTERS) : text,
+      truncated
+    )
+  }
+
+  /** Returns the same locally extracted text that is fed into knowledge indexing. */
+  async loadExtractedTextPreview(documentId: string, maxCharacters: number): Promise<KnowledgeTextPreview> {
+    const store = this.store
+    if (store === null) {
+      throw new Error('知识库尚未初始化')
+    }
+    const document = await this.findDocumentById(store, documentId)
+    if (document === null) {
+      throw new Error('未找到知识库文件')
+    }
+    const extension = this.getSupportedExtension(document.originalName)
+    if (extension === '' || !fileIo.accessSync(document.filePath)) {
+      throw new Error('原文件不存在或格式不受支持')
+    }
+    const normalizedLimit = Math.max(1000, Math.min(MAX_DOCUMENT_TEXT_CHARACTERS, maxCharacters))
+    const text = this.normalizeText(await this.extractDocumentText(document, extension))
+    const truncated = text.length > normalizedLimit
+    return new KnowledgeTextPreview(
+      truncated ? text.substring(0, normalizedLimit) : text,
       truncated
     )
   }
@@ -2351,7 +2373,7 @@ export class KnowledgeDocumentService implements
   }
 
   private async extractDocumentText(document: KnowledgeDocument, extension: string): Promise<string> {
-    if (extension === '.txt' || extension === '.md' || extension === '.markdown') {
+    if (this.isTextExtension(extension)) {
       const bytes = this.readFilePathBytes(document.filePath)
       const decoder = util.TextDecoder.create('utf-8')
       return this.normalizeText(decoder.decodeToString(bytes, { stream: false }))
@@ -2826,7 +2848,16 @@ export class KnowledgeDocumentService implements
       '.webp',
       '.docx',
       '.xlsx',
+      '.html',
+      '.json',
+      '.yaml',
       '.pdf',
+      '.csv',
+      '.tsv',
+      '.xml',
+      '.yml',
+      '.htm',
+      '.log',
       '.txt',
       '.jpg',
       '.png',
@@ -2839,6 +2870,13 @@ export class KnowledgeDocumentService implements
       }
     }
     return ''
+  }
+
+  private isTextExtension(extension: string): boolean {
+    return extension === '.txt' || extension === '.md' || extension === '.markdown' ||
+      extension === '.csv' || extension === '.tsv' || extension === '.json' ||
+      extension === '.xml' || extension === '.yaml' || extension === '.yml' ||
+      extension === '.html' || extension === '.htm' || extension === '.log'
   }
 
   private isImageExtension(extension: string): boolean {
@@ -2866,6 +2904,24 @@ export class KnowledgeDocumentService implements
     }
     if (extension === '.md' || extension === '.markdown') {
       return 'text/markdown'
+    }
+    if (extension === '.csv') {
+      return 'text/csv'
+    }
+    if (extension === '.tsv') {
+      return 'text/tab-separated-values'
+    }
+    if (extension === '.json') {
+      return 'application/json'
+    }
+    if (extension === '.xml') {
+      return 'application/xml'
+    }
+    if (extension === '.yaml' || extension === '.yml') {
+      return 'application/yaml'
+    }
+    if (extension === '.html' || extension === '.htm') {
+      return 'text/html'
     }
     if (extension === '.jpg' || extension === '.jpeg') {
       return 'image/jpeg'

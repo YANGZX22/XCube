@@ -236,6 +236,12 @@ export struct ChatToolPickerSheetContent {
     if (toolId === 'open_map_route') {
       return $r('sys.symbol.navigation')
     }
+    if (toolId === 'email_send') {
+      return $r('sys.symbol.envelope_badge_arrowshape_turn_up_right')
+    }
+    if (toolId === 'email_read') {
+      return $r('sys.symbol.envelope_on_envelope_badge_arrow_left')
+    }
     if (toolId === PLAN_MODE_TOOL_ID) {
       return $r('sys.symbol.list_checkmark')
     }

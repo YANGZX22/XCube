@@ -20,6 +20,7 @@ import {
   toRomanNumeral
 } from '../utils/ManuscriptVisualUtils'
 import { ImmersiveSheetHeader } from './ImmersiveSheetHeader'
+import { EmailKnowledgeCategory } from './EmailKnowledgeCategory'
 import { ManuscriptPageTitle } from './index/ManuscriptPageTitle'
 
 const KNOWLEDGE_CATEGORY_PREVIEW_LIMIT: number = 3
@@ -28,6 +29,7 @@ const KNOWLEDGE_CATEGORY_WORD: string = 'word'
 const KNOWLEDGE_CATEGORY_SPREADSHEET: string = 'spreadsheet'
 const KNOWLEDGE_CATEGORY_TEXT: string = 'text'
 const KNOWLEDGE_CATEGORY_IMAGE: string = 'image'
+const KNOWLEDGE_CATEGORY_EMAIL: string = 'email'
 const KNOWLEDGE_CATEGORY_OTHER: string = 'other'
 const KNOWLEDGE_CATEGORY_KEYS: string[] = [
   KNOWLEDGE_CATEGORY_PDF,
@@ -558,6 +560,9 @@ export struct KnowledgeBasePanel {
   private getDocumentCategoryKey(document: KnowledgeDocument): string {
     const name = document.originalName.toLowerCase()
     const mimeType = document.mimeType.toLowerCase()
+    if (document.originalName.startsWith('邮件-')) {
+      return KNOWLEDGE_CATEGORY_EMAIL
+    }
     if (this.isPdfDocument(document)) {
       return KNOWLEDGE_CATEGORY_PDF
     }
@@ -1340,6 +1345,25 @@ export struct KnowledgeBasePanel {
           .focusable(false)
           .selectable(false)
         }
+
+        EmailKnowledgeCategory({
+          importedDocuments: this.getDocumentsForCategory(KNOWLEDGE_CATEGORY_EMAIL),
+          processingDocumentId: this.processingDocumentId,
+          knowledgeWorking: this.isWorking,
+          listScroller: this.listScroller,
+          onImported: (): void => {
+            this.loadKnowledgeBase()
+          },
+          onOpenDocument: (document: KnowledgeDocument): void => {
+            this.handleDocumentTap(document)
+          },
+          onRebuildDocument: (document: KnowledgeDocument): void => {
+            this.rebuildDocument(document)
+          },
+          onDeleteDocument: (document: KnowledgeDocument): void => {
+            this.requestDeleteDocument(document)
+          }
+        })
 
         if (this.isLoading) {
           ListItem() {

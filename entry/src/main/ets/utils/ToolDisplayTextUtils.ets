@@ -48,6 +48,10 @@ export function getLocalizedBuiltinToolName(toolId: string, fallback: string = '
       return pickLocalizedText('读取日程', 'Read Calendar')
     case 'write_schedule':
       return pickLocalizedText('写入日程', 'Write Calendar')
+    case 'email_read':
+      return pickLocalizedText('读取邮件', 'Read Email')
+    case 'email_send':
+      return pickLocalizedText('发送邮件', 'Send Email')
     case 'map_search_route':
       return pickLocalizedText('地图', 'Map')
     case 'saved_places':
@@ -119,6 +123,12 @@ export function getLocalizedBuiltinToolDescription(toolId: string, fallback: str
     case 'write_schedule':
       return pickLocalizedText('经用户确认后写入系统日历事件',
         'Create calendar events after user approval.')
+    case 'email_read':
+      return pickLocalizedText('经逐次确认后查看已授权邮箱中的邮件',
+        'Read messages from the authorized mailbox after per-call approval.')
+    case 'email_send':
+      return pickLocalizedText('经逐次确认后向指定邮箱发送邮件',
+        'Send email to specified recipients after per-call approval.')
     case 'map_search_route':
       return pickLocalizedText('推荐地点并规划驾车、步行或骑行路线',
         'Find places and plan driving, walking, or cycling routes.')

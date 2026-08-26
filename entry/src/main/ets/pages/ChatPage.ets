@@ -41,6 +41,8 @@ import {
   CANVAS_DOCUMENT_TOOL_ID,
   COMPACT_TOOL_ID,
   DOCX_TO_TEXT_TOOL_ID,
+  EMAIL_READ_TOOL_ID,
+  EMAIL_SEND_TOOL_ID,
   IMAGE_TO_TEXT_TOOL_ID,
   MODLENS_READ_IMAGE_TOOL_ID,
   KNOWLEDGE_SEARCH_TOOL_ID,
@@ -69,6 +71,7 @@ import { ChatModelSelectorSheetContent } from '../components/chat/ChatModelSelec
 import { ChatInputAreaSection } from '../components/chat/ChatInputAreaSection'
 import { ChatMultiSelectToolbar } from '../components/chat/ChatMultiSelectToolbar'
 import { ChatMessageListSection } from '../components/chat/ChatMessageListSection'
+import { ImmersiveTaskAlertBanner } from '../components/ImmersiveTaskAlertBanner'
 import { ChatToolPickerSheetContent } from '../components/chat/ChatToolPickerSheetContent'
 import { ChatToolExecutionApprovalSheetContent } from '../components/chat/ChatToolExecutionApprovalSheetContent'
 import { VoiceInputSheet } from '../components/VoiceInputSheet'
@@ -216,6 +219,11 @@ export struct ChatPage {
   private navPathStack: NavPathStack = new NavPathStack()
   @Param routeParamsSeed: ChatPageRouteParams | null = null
   private routeParams: ChatPageRouteParams | null = null
+  @Local taskAlertVisible: boolean = false
+  @Local taskAlertMessage: string = ''
+  @Local taskAlertFailed: boolean = false
+  private taskAlertSessionId: string = ''
+  private taskAlertTimerId: number = -1
   @Local messages: ChatMessage[] = []
   @Local inputText: string = ''
   @Local currentModel: string = ''
@@ -725,6 +733,8 @@ export struct ChatPage {
 
   aboutToDisappear(): void {
     this.isPageVisible = false
+    this.clearTaskAlertTimer()
+    this.taskAlertVisible = false
     this.cancelPendingToolExecutionApproval('页面已关闭，工具调用未执行。')
     ServiceRegistry.toolExecution().setApprovalCallback(null)
     ServiceRegistry.toolExecution().setPendingAskUserChangedCallback(null)
@@ -2709,7 +2719,9 @@ export struct ChatPage {
       !this.toolRegistry.isToolRegistered(MAP_SEARCH_ROUTE_TOOL_ID) ||
       !this.toolRegistry.isToolRegistered(OPEN_MAP_ROUTE_TOOL_ID) ||
       !this.toolRegistry.isToolRegistered(READ_SCHEDULE_TOOL_ID) ||
-      !this.toolRegistry.isToolRegistered(WRITE_SCHEDULE_TOOL_ID)) {
+      !this.toolRegistry.isToolRegistered(WRITE_SCHEDULE_TOOL_ID) ||
+      !this.toolRegistry.isToolRegistered(EMAIL_READ_TOOL_ID) ||
+      !this.toolRegistry.isToolRegistered(EMAIL_SEND_TOOL_ID)) {
       registerBuiltinTools()
     }
     const askUserTool = this.toolRegistry.getTool(ASK_USER_TOOL_ID)
@@ -3493,12 +3505,54 @@ export struct ChatPage {
       onClearInAppTaskAlertPayloadStorage: (): void => {
         setAppUiStateValue(AppStorageKeys.IN_APP_TASK_ALERT_PAYLOAD, '')
       },
-      getUIContext: (): UIContext => {
-        return this.getUIContext()
+      onShowTaskAlert: (message: string, failed: boolean, sessionId: string): void => {
+        this.showTaskAlert(message, failed, sessionId)
       }
     }
     this.taskAlertFlow = new ChatTaskAlertFlow(deps)
     return this.taskAlertFlow
+  }
+
+  private showTaskAlert(message: string, failed: boolean, sessionId: string): void {
+    this.clearTaskAlertTimer()
+    this.taskAlertMessage = message
+    this.taskAlertFailed = failed
+    this.taskAlertSessionId = sessionId
+    if (!this.taskAlertVisible) {
+      this.getUIContext().animateTo({ duration: 260, curve: Curve.EaseOut }, (): void => {
+        this.taskAlertVisible = true
+      })
+    }
+    this.taskAlertTimerId = setTimeout((): void => {
+      this.taskAlertTimerId = -1
+      this.dismissTaskAlert()
+    }, 5000)
+  }
+
+  private clearTaskAlertTimer(): void {
+    if (this.taskAlertTimerId < 0) {
+      return
+    }
+    clearTimeout(this.taskAlertTimerId)
+    this.taskAlertTimerId = -1
+  }
+
+  private dismissTaskAlert(): void {
+    this.clearTaskAlertTimer()
+    if (!this.taskAlertVisible) {
+      return
+    }
+    this.getUIContext().animateTo({ duration: 200, curve: Curve.EaseIn }, (): void => {
+      this.taskAlertVisible = false
+    })
+  }
+
+  private viewTaskAlertSession(): void {
+    const sessionId = this.taskAlertSessionId
+    this.dismissTaskAlert()
+    if (sessionId !== '') {
+      this.navPathStack.replacePath({ name: 'ChatPage', param: { sessionId: sessionId } as ChatPageRouteParams })
+    }
   }
 
   private getScrollUiFlow(): ChatScrollUiFlow {
@@ -4364,6 +4418,24 @@ export struct ChatPage {
           .transition(TransitionEffect.OPACITY.animation({ duration: 200 }))
         }
 
+        if (this.taskAlertVisible && !this.showImagePreview) {
+          ImmersiveTaskAlertBanner({
+            message: this.taskAlertMessage,
+            failed: this.taskAlertFailed,
+            actionText: $r('app.string.task_alert_view'),
+            bottomInset: this.px2vp(this.bottomAvoidHeight),
+            accentColor: this.themePrimary,
+            cardStrokeColor: this.themePrimaryLight,
+            darkMode: this.isDarkMode,
+            onView: (): void => {
+              this.viewTaskAlertSession()
+            },
+            onDismiss: (): void => {
+              this.dismissTaskAlert()
+            }
+          })
+        }
+
         // 图片预览（全屏覆盖层，不使用 bindContentCover 以避免模态层拦截手势）
         if (this.showImagePreview) {
           ImagePreview({
@@ -4414,6 +4486,10 @@ export struct ChatPage {
       this.schedulePageVisibilityUpdate(false)
     })
     .onBackPressed((): boolean => {
+      if (this.taskAlertVisible) {
+        this.dismissTaskAlert()
+        return true
+      }
       if (this.pendingAskUserCalls.length > 0) {
         return true
       }
@@ -6180,7 +6256,8 @@ export struct ChatPage {
       this.toolExecutionApprovalArgumentsPreview = preview.rawPreview
       this.toolExecutionApprovalArgumentsTruncated = preview.rawTruncated
       this.showRawToolExecutionApprovalArguments = false
-      this.showToolExecutionApprovalSafetyUi = toolId !== WRITE_SCHEDULE_TOOL_ID && toolId !== READ_SCHEDULE_TOOL_ID
+      this.showToolExecutionApprovalSafetyUi = toolId !== WRITE_SCHEDULE_TOOL_ID &&
+        toolId !== READ_SCHEDULE_TOOL_ID && toolId !== EMAIL_READ_TOOL_ID
       this.showToolExecutionApprovalRiskNotice = toolId !== OPEN_MAP_ROUTE_TOOL_ID
       this.showReadScheduleRangeUi = toolId === READ_SCHEDULE_TOOL_ID
       if (this.showReadScheduleRangeUi) {
@@ -6273,6 +6350,12 @@ export struct ChatPage {
     }
     if (toolId === READ_SCHEDULE_TOOL_ID) {
       return pickLocalizedText('确认读取日程？', 'Approve Schedule Read')
+    }
+    if (toolId === EMAIL_READ_TOOL_ID) {
+      return pickLocalizedText('确认读取邮件？', 'Approve Email Read')
+    }
+    if (toolId === EMAIL_SEND_TOOL_ID) {
+      return pickLocalizedText('确认发送邮件？', 'Approve Email Send')
     }
     return pickLocalizedText('确认工具调用', 'Approve Tool Call')
   }

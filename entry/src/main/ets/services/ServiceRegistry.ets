@@ -26,6 +26,7 @@ import { getCanvasDocumentService, CanvasDocumentService } from './CanvasDocumen
 import { getPlanService, PlanService } from './PlanService'
 import { getContextCompactionService, ContextCompactionService } from './ContextCompactionService'
 import { getModLensVisionService, ModLensVisionService } from './ModLensVisionService'
+import { EmailService, getEmailService } from './EmailService'
 import {
   getDocumentAttachmentRegistryService,
   DocumentAttachmentRegistryService
@@ -179,6 +180,10 @@ export class ServiceRegistry {
 
   static modLensVision(): ModLensVisionService {
     return getModLensVisionService()
+  }
+
+  static email(): EmailService {
+    return getEmailService()
   }
 
   static chat(): ChatViewModel {

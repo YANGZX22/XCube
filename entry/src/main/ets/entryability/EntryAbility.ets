@@ -118,6 +118,9 @@ export default class EntryAbility extends UIAbility {
         );
       }
 
+      await ServiceRegistry.email().initialize(this.context);
+      hilog.info(DOMAIN, 'testTag', 'EmailService initialized successfully');
+
       // 初始化图标下载缓存服务
       await IconDownloadCache.getInstance().initialize(this.context);
       hilog.info(DOMAIN, 'testTag', 'IconDownloadCache initialized successfully');

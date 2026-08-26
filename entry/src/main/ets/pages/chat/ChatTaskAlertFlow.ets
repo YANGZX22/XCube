@@ -1,5 +1,4 @@
 import { ChatTaskStatus } from '../../models/ChatTaskModels'
-import { showSnackBar, SnackBarDisplayOptions, SnackBarTone } from '../../utils/ToastUtil'
 import {
   parseInAppTaskAlertPayload,
   parseOpenSessionPayload
@@ -12,7 +11,7 @@ export interface ChatTaskAlertFlowDependencies {
   onNavigateToSession: (sessionId: string) => void
   onClearOpenSessionPayloadStorage: () => void
   onClearInAppTaskAlertPayloadStorage: () => void
-  getUIContext: () => UIContext
+  onShowTaskAlert: (message: string, failed: boolean, sessionId: string) => void
 }
 
 export class ChatTaskAlertFlow {
@@ -66,15 +65,11 @@ export class ChatTaskAlertFlow {
 
     this.deps.onSetLastHandledAlertTimestamp(payload.timestamp)
 
-    const opts = new SnackBarDisplayOptions()
-    opts.message = payload.message
-    opts.duration = 5000
-    opts.tone = payload.status === ChatTaskStatus.FAILED ? SnackBarTone.ERROR : SnackBarTone.SUCCESS
-    opts.actionText = $r('app.string.task_alert_view')
-    opts.onAction = (): void => {
-      this.deps.onNavigateToSession(payload.sessionId)
-    }
-    showSnackBar(this.deps.getUIContext(), opts)
+    this.deps.onShowTaskAlert(
+      payload.message,
+      payload.status === ChatTaskStatus.FAILED,
+      payload.sessionId
+    )
     this.deps.onClearInAppTaskAlertPayloadStorage()
   }
 }
