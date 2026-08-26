@@ -12,6 +12,10 @@ class PyodideBridge {
     getPyodideRuntimeService().onReady()
   }
 
+  onExecutionStart(requestId: string): void {
+    getPyodideRuntimeService().onExecutionStart(requestId)
+  }
+
   onResult(requestId: string, json: string): void {
     getPyodideRuntimeService().onResult(requestId, json)
   }
@@ -33,18 +37,32 @@ class PyodideHostAdapter implements PyodideHost {
     this.controller = null
   }
 
-  runPython(requestId: string, codeB64: string, varsB64: string): void {
+  runPython(requestId: string, codeB64: string, varsB64: string, packagesB64: string): void {
     const controller = this.controller
     if (controller === null) {
       getPyodideRuntimeService().onError('WebView 控制器未就绪')
       return
     }
-    const script = `window.__runPythonB64("${requestId}","${codeB64}","${varsB64}")`
+    const script = `window.__runPythonB64("${requestId}","${codeB64}","${varsB64}","${packagesB64}")`
     try {
       controller.runJavaScript(script)
     } catch (e) {
       hilog.error(DOMAIN, TAG, `runJavaScript failed: ${JSON.stringify(e)}`)
       getPyodideRuntimeService().onError('触发网页执行失败')
+    }
+  }
+
+  resetPython(): boolean {
+    const controller = this.controller
+    if (controller === null) {
+      return false
+    }
+    try {
+      controller.runJavaScript('window.__resetPythonRuntime()')
+      return true
+    } catch (e) {
+      hilog.error(DOMAIN, TAG, `reset Python worker failed: ${JSON.stringify(e)}`)
+      return false
     }
   }
 }
@@ -67,6 +85,7 @@ export struct PyodideWebHost {
 
   aboutToDisappear(): void {
     getPyodideRuntimeService().detachHost(this.adapter)
+    this.adapter.clearController()
   }
 
   build() {
@@ -78,14 +97,13 @@ export struct PyodideWebHost {
       .opacity(0)
       .hitTestBehavior(HitTestMode.None)
       .javaScriptAccess(true)
-      .domStorageAccess(true)
-      .mixedMode(MixedMode.All)
+      .domStorageAccess(false)
       .onControllerAttached(() => {
         try {
           this.controller.registerJavaScriptProxy(
             this.bridge,
             'PyodideBridge',
-            ['onReady', 'onResult', 'onError']
+            ['onReady', 'onExecutionStart', 'onResult', 'onError']
           )
           this.adapter.setController(this.controller)
           hilog.info(DOMAIN, TAG, 'Pyodide web controller attached & proxy registered')

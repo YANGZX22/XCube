@@ -1,5 +1,10 @@
 import { util } from '@kit.ArkTS'
 import { hilog } from '@kit.PerformanceAnalysisKit'
+import {
+  PYTHON_EXECUTION_TIMEOUT_MS,
+  PYTHON_PACKAGE_LOAD_TIMEOUT_MS,
+  PYTHON_RUNTIME_READY_TIMEOUT_MS
+} from './PythonSandboxRuntimePolicy'
 
 const DOMAIN = 0x0002
 const TAG = 'PyodideRuntime'
@@ -29,12 +34,19 @@ export class PyodideRunResult {
 
 // UI 层隐藏 Web 宿主需实现的接口，供服务触发网页执行
 export interface PyodideHost {
-  runPython(requestId: string, codeB64: string, varsB64: string): void
+  runPython(requestId: string, codeB64: string, varsB64: string, packagesB64: string): void
+  resetPython(): boolean
+}
+
+enum PythonRunPhase {
+  PACKAGE_LOADING = 0,
+  EXECUTING = 1
 }
 
 class PendingRequest {
   resolve: (result: PyodideRunResult) => void
   timerId: number = -1
+  phase: PythonRunPhase = PythonRunPhase.PACKAGE_LOADING
 
   constructor(resolve: (result: PyodideRunResult) => void) {
     this.resolve = resolve
@@ -52,8 +64,7 @@ export class PyodideRuntimeService {
   private lastError: string = ''
   // 等待 onReady 的解析器（host 已挂载但 Pyodide 仍在加载时排队）
   private readyWaiters: ((ready: boolean) => void)[] = []
-  private readonly readyTimeoutMs: number = 30000
-  private readonly runTimeoutMs: number = 20000
+  private readonly readyTimeoutMs: number = PYTHON_RUNTIME_READY_TIMEOUT_MS
 
   static getInstance(): PyodideRuntimeService {
     if (PyodideRuntimeService.instance === null) {
@@ -66,9 +77,8 @@ export class PyodideRuntimeService {
 
   attachHost(host: PyodideHost): void {
     this.host = host
-    if (this.state === PyodideState.UNINITIALIZED || this.state === PyodideState.FAILED) {
-      this.state = PyodideState.LOADING
-    }
+    this.state = PyodideState.LOADING
+    this.lastError = ''
     hilog.info(DOMAIN, TAG, 'Pyodide host attached')
   }
 
@@ -98,14 +108,21 @@ export class PyodideRuntimeService {
   onError(message: string): void {
     hilog.error(DOMAIN, TAG, `Pyodide error: ${message}`)
     this.lastError = message
-    if (this.state !== PyodideState.READY) {
-      this.state = PyodideState.FAILED
-      const waiters = this.readyWaiters
-      this.readyWaiters = []
-      for (let i = 0; i < waiters.length; i++) {
-        waiters[i](false)
-      }
+    this.state = PyodideState.FAILED
+    const waiters = this.readyWaiters
+    this.readyWaiters = []
+    for (let i = 0; i < waiters.length; i++) {
+      waiters[i](false)
     }
+    this.failPendingRequests(`Python 运行时错误：${message}`)
+  }
+
+  onExecutionStart(requestId: string): void {
+    const entry = this.pending.get(requestId)
+    if (entry === undefined || entry.phase === PythonRunPhase.EXECUTING) {
+      return
+    }
+    this.armTimeout(requestId, entry, PythonRunPhase.EXECUTING, PYTHON_EXECUTION_TIMEOUT_MS)
   }
 
   onResult(requestId: string, json: string): void {
@@ -135,14 +152,16 @@ export class PyodideRuntimeService {
 
   // ---- 执行入口 ----
 
-  async run(code: string, variables: Record<string, Object> | undefined): Promise<PyodideRunResult> {
+  async run(code: string, variables: Record<string, Object> | undefined,
+    packages: string[] = []): Promise<PyodideRunResult> {
     if (this.host === null) {
       return this.fallbackResult('Python 运行时宿主未挂载')
     }
 
     const ready = await this.waitUntilReady()
     if (!ready) {
-      const detail = this.lastError !== '' ? this.lastError : '加载超时（可能无网络或 WebView 未初始化）'
+      const detail = this.lastError !== '' ? this.lastError :
+        `加载超时（运行时未在 ${this.readyTimeoutMs}ms 内完成初始化）`
       return this.fallbackResult(`Python 运行时未就绪：${detail}`)
     }
 
@@ -155,18 +174,14 @@ export class PyodideRuntimeService {
     const requestId = `py-${this.requestSeq}`
     const codeB64 = this.encodeUtf8ToBase64(code)
     const varsB64 = this.encodeUtf8ToBase64(variables === undefined ? '' : JSON.stringify(variables))
+    const packagesB64 = this.encodeUtf8ToBase64(JSON.stringify(packages))
 
     return new Promise<PyodideRunResult>((resolve) => {
       const entry = new PendingRequest(resolve)
-      entry.timerId = setTimeout(() => {
-        if (this.pending.has(requestId)) {
-          this.pending.delete(requestId)
-          resolve(this.fallbackResult(`Python 执行超时（${this.runTimeoutMs}ms）`))
-        }
-      }, this.runTimeoutMs)
       this.pending.set(requestId, entry)
+      this.armTimeout(requestId, entry, PythonRunPhase.PACKAGE_LOADING, PYTHON_PACKAGE_LOAD_TIMEOUT_MS)
       try {
-        host.runPython(requestId, codeB64, varsB64)
+        host.runPython(requestId, codeB64, varsB64, packagesB64)
       } catch (e) {
         this.pending.delete(requestId)
         if (entry.timerId !== -1) {
@@ -174,6 +189,66 @@ export class PyodideRuntimeService {
         }
         resolve(this.fallbackResult(`触发执行失败: ${e instanceof Error ? e.message : JSON.stringify(e)}`))
       }
+    })
+  }
+
+  private armTimeout(requestId: string, entry: PendingRequest, phase: PythonRunPhase,
+    timeoutMs: number): void {
+    if (entry.timerId !== -1) {
+      clearTimeout(entry.timerId)
+    }
+    entry.phase = phase
+    entry.timerId = setTimeout(() => {
+      this.handlePhaseTimeout(requestId, entry, timeoutMs)
+    }, timeoutMs)
+  }
+
+  private handlePhaseTimeout(requestId: string, entry: PendingRequest, timeoutMs: number): void {
+    if (this.pending.get(requestId) !== entry) {
+      return
+    }
+    this.pending.delete(requestId)
+    if (entry.timerId !== -1) {
+      clearTimeout(entry.timerId)
+      entry.timerId = -1
+    }
+
+    const wasPackageLoading = entry.phase === PythonRunPhase.PACKAGE_LOADING
+    const result = wasPackageLoading ?
+      this.fallbackResult(`Python 包加载超时（${timeoutMs}ms）`) :
+      this.failureResult(`Python 执行超时（${timeoutMs}ms），已强制终止并重建运行时`)
+    this.restartRuntime()
+    entry.resolve(result)
+  }
+
+  private restartRuntime(): void {
+    const host = this.host
+    if (host === null) {
+      this.state = PyodideState.UNINITIALIZED
+      return
+    }
+    this.state = PyodideState.LOADING
+    this.lastError = ''
+    try {
+      if (!host.resetPython()) {
+        this.onError('重建 Python 运行时失败：WebView 未接受重置请求')
+        return
+      }
+      hilog.info(DOMAIN, TAG, 'Pyodide worker reset requested')
+    } catch (e) {
+      this.onError(`重建 Python 运行时失败：${e instanceof Error ? e.message : JSON.stringify(e)}`)
+    }
+  }
+
+  private failPendingRequests(reason: string): void {
+    this.pending.forEach((entry: PendingRequest, requestId: string): void => {
+      this.pending.delete(requestId)
+      if (entry.timerId !== -1) {
+        clearTimeout(entry.timerId)
+      }
+      const result = entry.phase === PythonRunPhase.PACKAGE_LOADING ?
+        this.fallbackResult(reason) : this.failureResult(reason)
+      entry.resolve(result)
     })
   }
 
@@ -205,6 +280,12 @@ export class PyodideRuntimeService {
   private fallbackResult(reason: string): PyodideRunResult {
     const result = new PyodideRunResult(false)
     result.fallback = true
+    result.error = reason
+    return result
+  }
+
+  private failureResult(reason: string): PyodideRunResult {
+    const result = new PyodideRunResult(false)
     result.error = reason
     return result
   }

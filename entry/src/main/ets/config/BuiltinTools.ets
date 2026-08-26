@@ -14,6 +14,7 @@ import { cleanSearchQuery } from '../utils/SearchQueryUtils'
 import { getCalendarWriteService, ReadScheduleRequest, WriteScheduleRequest } from '../services/CalendarWriteService'
 import { getPythonSandboxService, PythonSandboxRequest } from '../services/PythonSandboxService'
 import { getPyodideRuntimeService } from '../services/PyodideRuntimeService'
+import { normalizePythonPackageSpecs } from '../services/PythonSandboxRuntimePolicy'
 import { CanvasDocumentMutationResult, CanvasDocumentState, getCanvasDocumentService } from '../services/CanvasDocumentService'
 import { getPdfTextExtractionService, PdfTextExtractionRequest } from '../services/PdfTextExtractionService'
 import { getImageTextRecognitionService, ImageTextRecognitionRequest } from '../services/ImageTextRecognitionService'
@@ -736,14 +737,16 @@ class PythonSandboxExecutor implements ToolExecutor {
     try {
       const params = JSON.parse(args) as PythonSandboxRequest
       const code = params.code ?? ''
+      const packages = normalizePythonPackageSpecs(params.packages)
       // 优先走 Pyodide（真正的 CPython 运行时）
-      const pyResult = await getPyodideRuntimeService().run(code, params.variables)
+      const pyResult = await getPyodideRuntimeService().run(code, params.variables, packages)
       if (!pyResult.fallback) {
         return JSON.stringify(pyResult)
       }
       // 运行时未就绪/加载失败/超时：降级到本地受限解释器
       const fallback = getPythonSandboxService().run(params)
-      fallback.warnings.unshift(`Python 运行时未就绪（${pyResult.error}），已用受限子集执行；完整能力请确保联网后重试。`)
+      fallback.warnings.unshift(`Python 运行时未就绪（${pyResult.error}），已用受限子集执行；` +
+        '请按括号内的具体错误处理，只有错误明确提到下载或 HTTP 时才需要检查网络。')
       return JSON.stringify(fallback)
     } catch (error) {
       return JSON.stringify(new ErrorOutput(`Python 执行失败: ${this.stringifyError(error)}`))
@@ -2591,11 +2594,17 @@ function createPythonSandboxToolDefinition(): ToolDefinition {
     "properties": {
       "code": {
         "type": "string",
-        "description": "要执行的 Python 3 代码。支持完整 Python 3 语法（if/while/for、函数 def、类、字典、元组、f-string、列表推导式、切片、字符串方法等）与标准库（math、statistics、json、re、datetime、itertools、collections 等），以及随附的 numpy 等科学计算包（基于 Pyodide/CPython）。可用 print 输出，最后一个表达式的值会作为 result 返回。不支持文件系统读写、网络请求和系统命令。"
+        "description": "要执行的 Python 3 代码。支持完整 Python 语法与标准库；import pandas、numpy、scipy、scikit-learn 等 Pyodide 官方包时会在执行前自动加载。可用 print 输出，最后一个表达式的值会作为 result 返回。代码只能访问隔离的临时内存文件系统，不能访问应用或系统文件、直接发起网络请求或运行系统命令。"
       },
       "variables": {
         "type": "object",
         "description": "可选。预置到全局命名空间的变量，只传 JSON 可序列化的数字、字符串、布尔值、数组和对象。"
+      },
+      "packages": {
+        "type": "array",
+        "items": { "type": "string" },
+        "maxItems": 8,
+        "description": "可选。代码需要但 Pyodide 未内置的 PyPI 包名或版本约束，例如 [\\"snowballstemmer==2.2.0\\"]。仅支持纯 Python wheel 或兼容当前 Pyodide 的 PyEmscripten wheel；不接受 URL、本地路径或普通桌面/ARM wheel。包加载需要联网。通常直接在 code 中 import 官方包即可，无需填写。"
       },
       "max_iterations": {
         "type": "number",
@@ -2608,7 +2617,7 @@ function createPythonSandboxToolDefinition(): ToolDefinition {
 
   const func = new ToolFunction(
     PYTHON_SANDBOX_TOOL_ID,
-    '模型可在本地运行真正的 Python 3（基于 Pyodide/CPython，在沙箱化的 WebAssembly 环境中执行），支持完整语法与标准库，用于数学计算、数据处理、统计分析、算法验证和中间推导。可使用 import 导入标准库与 numpy 等随附科学计算包，但不能访问文件系统、网络或系统命令。若需要画折线图/柱状图，优先使用 math_chart。',
+    '模型可在隔离的 Web Worker 中运行 Pyodide/CPython，用于数学计算、数据处理、统计分析、算法验证和中间推导。import pandas、numpy、scipy、scikit-learn 等官方包时会按需加载，也可通过 packages 安装纯 Python 或兼容的 PyEmscripten wheel。代码只能使用运行时内的临时内存文件系统，不能访问应用/系统文件、直接联网或运行系统命令；包加载器自身会访问受限的 Pyodide/PyPI 源。若需要画折线图/柱状图，优先使用 math_chart。',
     parameters
   )
 

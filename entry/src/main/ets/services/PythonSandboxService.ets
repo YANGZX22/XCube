@@ -1,6 +1,7 @@
 export class PythonSandboxRequest {
   code?: string
   variables?: Record<string, Object>
+  packages?: string[]
   max_iterations?: number | string
 }
 

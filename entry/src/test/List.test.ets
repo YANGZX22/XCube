@@ -22,6 +22,7 @@ import mapToolTest from './MapTool.test';
 import savedPlacesServiceTest from './SavedPlacesService.test';
 import slashCommandUtilsTest from './SlashCommandUtils.test';
 import planServiceTest from './PlanService.test';
+import pythonSandboxRuntimeTest from './PythonSandboxRuntime.test';
 
 export default function testsuite() {
   localUnitTest();
@@ -48,4 +49,5 @@ export default function testsuite() {
   savedPlacesServiceTest();
   slashCommandUtilsTest();
   planServiceTest();
+  pythonSandboxRuntimeTest();
 }
