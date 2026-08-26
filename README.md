@@ -10,7 +10,7 @@
 
 <p align="center">
   <img src="https://img.shields.io/badge/HarmonyOS-7_(API_26)-4285F4" alt="HarmonyOS 7" />
-  <a href="./CHANGELOG.md"><img src="https://img.shields.io/badge/version-1.3.5-2ea44f" alt="Version 1.3.5" /></a>
+  <a href="./CHANGELOG.md"><img src="https://img.shields.io/badge/version-1.3.6-2ea44f" alt="Version 1.3.6" /></a>
   <a href="./LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue" alt="MIT License" /></a>
 </p>
 
@@ -19,6 +19,9 @@
 </p>
 
 ## Basic Information
+
+> [!NOTE]
+> As the official release of HarmonyOS 7 approaches, updates to this repository will be put on hold. Once the official version is released, this app may be made available via the Huawei AppGallery’s invitation-only testing feature, at which point installation will be more convenient. Please note, however, that this app may NEVER be officially listed on the Huawei AppGallery.
 
 > [!IMPORTANT]
 > XCube requires **HarmonyOS 7 (API 26.0.0) or later**. Users on HarmonyOS 6 or earlier must first join the [Huawei Beta Test Program](https://cn.club.vmall.com/mhw/assets/file-html-app/3b2bca9630d0fcb2bb2dfac09ee415ea20230529103243/index.html?ts=1785306752202#/) before installing the app. Refer to the program website for current test dates.
@@ -31,7 +34,7 @@
 <table>
   <tr>
     <td align="center"><img src="docs/screenshots/conversation-list.png" width="220" /><br/><sub>Conversation List</sub></td>
-    <td align="center"><img src="docs/screenshots/knowledge-list.png" width="220" /><br/><sub>Knowledge Base</sub></td>
+    <td align="center"><img src="docs/screenshots/new-python.png" width="220" /><br/><sub>Work with Python Packages</sub></td>
     <td align="center"><img src="docs/screenshots/answer-using-knowledge-base.png" width="220" /><br/><sub>Work in RAG</sub></td>
   </tr>
   <tr>

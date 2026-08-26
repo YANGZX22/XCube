@@ -155,7 +155,7 @@ const MICROSOFT_TOKEN_URL: string = 'https://login.microsoftonline.com/common/oa
 const MICROSOFT_MAIL_SCOPES: string = 'offline_access https://outlook.office.com/IMAP.AccessAsUser.All ' +
   'https://outlook.office.com/SMTP.Send'
 const IMAP_CLIENT_ID_NAME: string = 'XCube'
-const IMAP_CLIENT_ID_VERSION: string = '1.3.5'
+const IMAP_CLIENT_ID_VERSION: string = '1.3.6'
 const IMAP_CLIENT_ID_VENDOR: string = 'YANGZX22'
 const IMAP_CLIENT_ID_SUPPORT_URL: string = 'https://github.com/YANGZX22/XCube'
 

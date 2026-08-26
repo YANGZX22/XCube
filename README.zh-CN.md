@@ -10,7 +10,7 @@
 
 <p align="center">
   <img src="https://img.shields.io/badge/HarmonyOS-7_(API_26)-4285F4" alt="HarmonyOS 7" />
-  <a href="./CHANGELOG.md"><img src="https://img.shields.io/badge/version-1.3.5-2ea44f" alt="版本 1.3.5" /></a>
+  <a href="./CHANGELOG.md"><img src="https://img.shields.io/badge/version-1.3.6-2ea44f" alt="版本 1.3.6" /></a>
   <a href="./LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue" alt="MIT License" /></a>
 </p>
 
@@ -19,6 +19,10 @@
 </p>
 
 ## 基本信息
+
+> [!NOTE]
+> 由于临近 HarmonyOS 7 正式发布，本仓库将暂缓更新。待正式版发布后，本应用可能会尝试华为应用市场邀请测试功能，届时安装将更便捷。但请注意，本应用可能永远不会正式上架华为应用市场。
+
 
 > [!IMPORTANT]
 > XCube 要求设备运行 **HarmonyOS 7（API 26.0.0）或更高版本**。HarmonyOS 6 及更早版本的用户需先加入[花粉 Beta 版测试计划](https://cn.club.vmall.com/mhw/assets/file-html-app/3b2bca9630d0fcb2bb2dfac09ee415ea20230529103243/index.html?ts=1785306752202#/)，再安装本应用。测试计划时间以网站为准。
@@ -31,7 +35,7 @@
 <table>
   <tr>
     <td align="center"><img src="docs/screenshots/conversation-list.png" width="220" /><br/><sub>对话列表</sub></td>
-    <td align="center"><img src="docs/screenshots/knowledge-list.png" width="220" /><br/><sub>知识库</sub></td>
+    <td align="center"><img src="docs/screenshots/new-python.png" width="220" /><br/><sub>使用各种 Python 包</sub></td>
     <td align="center"><img src="docs/screenshots/answer-using-knowledge-base.png" width="220" /><br/><sub>RAG 智能问答</sub></td>
   </tr>
   <tr>
