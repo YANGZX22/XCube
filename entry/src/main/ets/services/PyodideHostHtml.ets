@@ -1,3 +1,9 @@
+import {
+  PYTHON_MAX_OUTPUT_IMAGES,
+  PYTHON_MAX_OUTPUT_IMAGE_BYTES,
+  PYTHON_MAX_OUTPUT_IMAGE_TOTAL_BYTES
+} from './PythonSandboxRuntimePolicy'
+
 export const PYODIDE_VERSION: string = '314.0.6'
 export const PYODIDE_INDEX_URL: string = `https://cdn.jsdelivr.net/pyodide/v${PYODIDE_VERSION}/full/`
 // 314.x requires module workers. ArkWeb versions that cannot load a cross-origin
@@ -21,6 +27,12 @@ export const PYODIDE_HOST_HTML: string = `<!DOCTYPE html>
 
   const PYODIDE_INDEX_URL = '${PYODIDE_INDEX_URL}';
   const PACKAGE_NETWORK_HOSTS = new Set(['cdn.jsdelivr.net', 'pypi.org', 'files.pythonhosted.org']);
+  const PYTHON_OUTPUT_ROOT = '/tmp/xcube-python-output';
+  const MAX_OUTPUT_IMAGES = ${PYTHON_MAX_OUTPUT_IMAGES};
+  const MAX_OUTPUT_IMAGE_BYTES = ${PYTHON_MAX_OUTPUT_IMAGE_BYTES};
+  const MAX_OUTPUT_IMAGE_TOTAL_BYTES = ${PYTHON_MAX_OUTPUT_IMAGE_TOTAL_BYTES};
+  const MAX_OUTPUT_DIRECTORY_ENTRIES = 64;
+  const MAX_OUTPUT_DIRECTORY_DEPTH = 4;
 
   const hostPostMessage = self.postMessage.bind(self);
   const nativeFetch = typeof self.fetch === 'function' ? self.fetch.bind(self) : null;
@@ -167,6 +179,139 @@ export const PYODIDE_HOST_HTML: string = `<!DOCTYPE html>
     }
   }
 
+  function joinOutputPath(parent, child) {
+    return parent.endsWith('/') ? parent + child : parent + '/' + child;
+  }
+
+  function removeOutputDirectory(path) {
+    if (!pyodide || !pyodide.FS) return;
+    let entries = [];
+    try { entries = pyodide.FS.readdir(path); } catch (e) { return; }
+    for (const name of entries) {
+      if (name === '.' || name === '..') continue;
+      const childPath = joinOutputPath(path, name);
+      try {
+        const stat = pyodide.FS.lstat(childPath);
+        if (pyodide.FS.isDir(stat.mode) && !pyodide.FS.isLink(stat.mode)) {
+          removeOutputDirectory(childPath);
+        } else {
+          pyodide.FS.unlink(childPath);
+        }
+      } catch (e) {}
+    }
+    try { pyodide.FS.rmdir(path); } catch (e) {}
+  }
+
+  function prepareOutputDirectory(requestId) {
+    const safeRequestId = String(requestId || 'run').replace(/[^A-Za-z0-9_-]/g, '_');
+    const outputDir = joinOutputPath(PYTHON_OUTPUT_ROOT, safeRequestId);
+    const previousCwd = pyodide.FS.cwd();
+    removeOutputDirectory(outputDir);
+    pyodide.FS.mkdirTree(outputDir);
+    pyodide.FS.chdir(outputDir);
+    pyodide.globals.set('PYTHON_OUTPUT_DIR', outputDir);
+    return { outputDir: outputDir, previousCwd: previousCwd };
+  }
+
+  function detectImageMime(bytes) {
+    if (bytes.length >= 8 && bytes[0] === 0x89 && bytes[1] === 0x50 && bytes[2] === 0x4e &&
+      bytes[3] === 0x47 && bytes[4] === 0x0d && bytes[5] === 0x0a && bytes[6] === 0x1a &&
+      bytes[7] === 0x0a) {
+      return 'image/png';
+    }
+    if (bytes.length >= 3 && bytes[0] === 0xff && bytes[1] === 0xd8 && bytes[2] === 0xff) {
+      return 'image/jpeg';
+    }
+    if (bytes.length >= 6 && bytes[0] === 0x47 && bytes[1] === 0x49 && bytes[2] === 0x46 &&
+      bytes[3] === 0x38 && (bytes[4] === 0x37 || bytes[4] === 0x39) && bytes[5] === 0x61) {
+      return 'image/gif';
+    }
+    if (bytes.length >= 12 && bytes[0] === 0x52 && bytes[1] === 0x49 && bytes[2] === 0x46 &&
+      bytes[3] === 0x46 && bytes[8] === 0x57 && bytes[9] === 0x45 && bytes[10] === 0x42 &&
+      bytes[11] === 0x50) {
+      return 'image/webp';
+    }
+    return '';
+  }
+
+  function bytesToBase64(bytes) {
+    let binary = '';
+    const chunkSize = 0x8000;
+    for (let offset = 0; offset < bytes.length; offset += chunkSize) {
+      const end = Math.min(offset + chunkSize, bytes.length);
+      let chunk = '';
+      for (let index = offset; index < end; index++) {
+        chunk += String.fromCharCode(bytes[index]);
+      }
+      binary += chunk;
+    }
+    return btoa(binary);
+  }
+
+  function collectOutputImages(outputDir, warnings) {
+    const candidates = [];
+    let visitedEntries = 0;
+
+    function walk(path, relativePath, depth) {
+      if (depth > MAX_OUTPUT_DIRECTORY_DEPTH || visitedEntries >= MAX_OUTPUT_DIRECTORY_ENTRIES) return;
+      let entries = [];
+      try { entries = pyodide.FS.readdir(path).slice().sort(); } catch (e) { return; }
+      for (const name of entries) {
+        if (name === '.' || name === '..' || visitedEntries >= MAX_OUTPUT_DIRECTORY_ENTRIES) continue;
+        visitedEntries += 1;
+        const childPath = joinOutputPath(path, name);
+        const childRelativePath = relativePath === '' ? name : relativePath + '/' + name;
+        try {
+          const stat = pyodide.FS.lstat(childPath);
+          if (pyodide.FS.isLink(stat.mode)) continue;
+          if (pyodide.FS.isDir(stat.mode)) {
+            walk(childPath, childRelativePath, depth + 1);
+          } else if (pyodide.FS.isFile(stat.mode)) {
+            candidates.push({ path: childPath, name: childRelativePath, size: Number(stat.size) });
+          }
+        } catch (e) {}
+      }
+    }
+
+    walk(outputDir, '', 0);
+    if (visitedEntries >= MAX_OUTPUT_DIRECTORY_ENTRIES) {
+      warnings.push('Python 输出目录文件过多，仅检查前 ' + MAX_OUTPUT_DIRECTORY_ENTRIES + ' 项');
+    }
+
+    const artifacts = [];
+    let totalBytes = 0;
+    for (const candidate of candidates) {
+      if (artifacts.length >= MAX_OUTPUT_IMAGES) {
+        warnings.push('Python 最多保存 ' + MAX_OUTPUT_IMAGES + ' 张图片，其余图片已忽略');
+        break;
+      }
+      if (candidate.size <= 0) continue;
+      if (candidate.size > MAX_OUTPUT_IMAGE_BYTES) {
+        warnings.push('图片 ' + candidate.name + ' 超过单图 ' + MAX_OUTPUT_IMAGE_BYTES + ' 字节限制，已忽略');
+        continue;
+      }
+      if (totalBytes + candidate.size > MAX_OUTPUT_IMAGE_TOTAL_BYTES) {
+        warnings.push('Python 图片总大小超过 ' + MAX_OUTPUT_IMAGE_TOTAL_BYTES + ' 字节限制，其余图片已忽略');
+        break;
+      }
+      try {
+        const bytes = pyodide.FS.readFile(candidate.path, { encoding: 'binary' });
+        const mimeType = detectImageMime(bytes);
+        if (mimeType === '') continue;
+        artifacts.push({
+          name: candidate.name,
+          mimeType: mimeType,
+          size: bytes.byteLength,
+          data: bytesToBase64(bytes)
+        });
+        totalBytes += bytes.byteLength;
+      } catch (e) {
+        warnings.push('读取 Python 图片 ' + candidate.name + ' 失败');
+      }
+    }
+    return artifacts;
+  }
+
   function packageCallbacks(requestId, warnings) {
     return {
       messageCallback: (message) => postHostMessage({
@@ -194,7 +339,9 @@ export const PYODIDE_HOST_HTML: string = `<!DOCTYPE html>
   }
 
   async function runPython(request) {
-    const result = { ok: true, stdout: [], result: '', variables: {}, warnings: [], error: '' };
+    const result = {
+      ok: true, stdout: [], result: '', variables: {}, warnings: [], error: '', artifacts: []
+    };
     if (!pyodide) {
       result.ok = false;
       result.error = 'Pyodide 尚未就绪';
@@ -206,6 +353,7 @@ export const PYODIDE_HOST_HTML: string = `<!DOCTYPE html>
     pyodide.setStdout({ batched: (message) => stdout.push(message) });
     pyodide.setStderr({ batched: (message) => stdout.push(message) });
 
+    let outputContext = null;
     try {
       const code = b64ToUtf8(request.codeB64);
       const variablesJson = b64ToUtf8(request.varsB64);
@@ -220,6 +368,8 @@ export const PYODIDE_HOST_HTML: string = `<!DOCTYPE html>
       }
 
       postHostMessage({ type: 'executionStarted', requestId: request.requestId });
+
+      outputContext = prepareOutputDirectory(request.requestId);
 
       if (variablesJson) {
         let variables = {};
@@ -245,6 +395,16 @@ export const PYODIDE_HOST_HTML: string = `<!DOCTYPE html>
       result.ok = false;
       result.stdout = stdout;
       result.error = e && e.message ? e.message : String(e);
+    } finally {
+      if (outputContext !== null) {
+        try {
+          result.artifacts = collectOutputImages(outputContext.outputDir, result.warnings);
+        } catch (e) {
+          result.warnings.push('收集 Python 图片产物失败: ' + (e && e.message ? e.message : String(e)));
+        }
+        try { pyodide.FS.chdir(outputContext.previousCwd); } catch (e) {}
+        removeOutputDirectory(outputContext.outputDir);
+      }
     }
     postHostMessage({ type: 'result', requestId: request.requestId, result: result });
   }
@@ -262,6 +422,7 @@ export const PYODIDE_HOST_HTML: string = `<!DOCTYPE html>
       await pyodide.runPythonAsync('import math\\nassert math.sqrt(81) == 9');
       const keysProxy = pyodide.runPython('list(globals().keys())');
       initialGlobalKeys = new Set(keysProxy.toJs());
+      initialGlobalKeys.add('PYTHON_OUTPUT_DIR');
       keysProxy.destroy();
       postHostMessage({ type: 'ready' });
     } catch (e) {

@@ -20,7 +20,7 @@ import {
   SUB_AGENT_SOURCE_LABEL_PREFIX,
   SUB_AGENT_TOOL_ID
 } from '../services/SubAgentService'
-import { appendSubAgentResultTool } from '../config/BuiltinTools'
+import { appendSubAgentResultTool, PYTHON_SANDBOX_TOOL_ID } from '../config/BuiltinTools'
 import { getProviderViewModel, ProviderViewModel } from './ProviderViewModel'
 import { getAssistantService, AssistantService, AssistantRuntimeConfig } from '../services/AssistantService'
 import { getSkillService, SkillConfig } from '../services/SkillService'
@@ -78,7 +78,10 @@ import {
   resolveRequestMaxOutputTokens
 } from '../utils/ContextWindowUtils'
 import { estimateTextTokens, RequestTokenUsageTracker } from '../utils/ModelBillingUtils'
-import { isOfficeOpenXmlDocumentAttachment } from '../services/DocumentAttachmentRegistryService'
+import {
+  getDocumentAttachmentRegistryService,
+  isOfficeOpenXmlDocumentAttachment
+} from '../services/DocumentAttachmentRegistryService'
 import {
   buildConversationGoalSummaryPrompt,
   buildConversationGoalSystemPrompt,
@@ -120,6 +123,14 @@ interface SearchResultData {
   searchEngine: string
   results: SearchResultItem[]
   summary: string
+}
+
+interface PythonSandboxImageResultData {
+  attachmentId?: string
+}
+
+interface PythonSandboxToolResultData {
+  images?: PythonSandboxImageResultData[]
 }
 
 interface KnowledgeToolResultHitData {
@@ -3242,6 +3253,56 @@ ${preview}`
     }
   }
 
+  private attachPythonSandboxImagesToMessage(
+    aiMessage: ChatMessage,
+    toolCalls: ToolCall[],
+    toolResults: ToolResult[],
+    sessionId: string
+  ): void {
+    const registry = getDocumentAttachmentRegistryService()
+    for (let i = 0; i < toolCalls.length && i < toolResults.length; i++) {
+      if (toolCalls[i].functionName.trim() !== PYTHON_SANDBOX_TOOL_ID) {
+        continue
+      }
+      try {
+        const payload = JSON.parse(toolResults[i].content) as PythonSandboxToolResultData
+        const images = payload.images ?? []
+        for (let j = 0; j < images.length; j++) {
+          const rawAttachmentId = images[j].attachmentId
+          const attachmentId = rawAttachmentId === undefined ? '' : rawAttachmentId.trim()
+          if (attachmentId === '') {
+            continue
+          }
+          let alreadyAttached = false
+          for (let k = 0; k < aiMessage.attachments.length; k++) {
+            if (aiMessage.attachments[k].id === attachmentId) {
+              alreadyAttached = true
+              break
+            }
+          }
+          if (alreadyAttached) {
+            continue
+          }
+          const registered = registry.getAttachment(sessionId, attachmentId)
+          if (registered === null || registered.filePath === '') {
+            console.warn('ChatViewModel', `Python image attachment not found: ${attachmentId}`)
+            continue
+          }
+          aiMessage.addAttachment(new MessageAttachment(
+            registered.attachmentId,
+            AttachmentType.IMAGE,
+            registered.name,
+            registered.filePath,
+            registered.mimeType,
+            registered.size
+          ))
+        }
+      } catch (error) {
+        console.warn('ChatViewModel', `Failed to attach Python images: ${JSON.stringify(error)}`)
+      }
+    }
+  }
+
   private async finalizeAIMessage(
     aiMessage: ChatMessage,
     onAIMessageUpdated: (message: ChatMessage) => void,
@@ -4354,6 +4415,12 @@ ${preview}`
           for (let i = 0; i < toolResults.length; i++) {
             aiMessage.toolResults.push(toolResults[i])
           }
+          this.attachPythonSandboxImagesToMessage(
+            aiMessage,
+            toolCalls,
+            toolResults,
+            snapshotSessionId
+          )
           // 持久化工具事件到数据库（使用快照 sessionId）
           if (snapshotSession !== null) {
             for (let i = 0; i < toolCalls.length; i++) {

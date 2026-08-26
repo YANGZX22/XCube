@@ -1,6 +1,9 @@
 import { describe, expect, it } from '@ohos/hypium'
 import {
   PYTHON_EXECUTION_TIMEOUT_MS,
+  PYTHON_MAX_OUTPUT_IMAGES,
+  PYTHON_MAX_OUTPUT_IMAGE_BYTES,
+  PYTHON_MAX_OUTPUT_IMAGE_TOTAL_BYTES,
   PYTHON_MAX_REQUESTED_PACKAGES,
   PYTHON_PACKAGE_LOAD_TIMEOUT_MS,
   PYTHON_RUNTIME_READY_TIMEOUT_MS,
@@ -13,6 +16,10 @@ import {
   PYODIDE_INDEX_URL,
   PYODIDE_VERSION
 } from '../main/ets/services/PyodideHostHtml'
+import {
+  getPythonImageExtension,
+  sanitizePythonImageName
+} from '../main/ets/services/PythonSandboxArtifactService'
 
 export default function pythonSandboxRuntimeTest() {
   describe('pythonSandboxRuntimeTest', () => {
@@ -68,6 +75,28 @@ export default function pythonSandboxRuntimeTest() {
         manyPackages.push(`package-${i}`)
       }
       expect(normalizePythonPackageSpecs(manyPackages).length).assertEqual(PYTHON_MAX_REQUESTED_PACKAGES)
+    })
+
+    it('captures_bounded_image_files_from_each_isolated_python_run', 0, () => {
+      expect(PYTHON_MAX_OUTPUT_IMAGES).assertEqual(4)
+      expect(PYTHON_MAX_OUTPUT_IMAGE_BYTES).assertEqual(4 * 1024 * 1024)
+      expect(PYTHON_MAX_OUTPUT_IMAGE_TOTAL_BYTES).assertEqual(8 * 1024 * 1024)
+      expect(PYODIDE_HOST_HTML.includes("const PYTHON_OUTPUT_ROOT = '/tmp/xcube-python-output'"))
+        .assertTrue()
+      expect(PYODIDE_HOST_HTML.includes('prepareOutputDirectory(request.requestId)')).assertTrue()
+      expect(PYODIDE_HOST_HTML.includes('collectOutputImages(outputContext.outputDir')).assertTrue()
+      expect(PYODIDE_HOST_HTML.includes("pyodide.globals.set('PYTHON_OUTPUT_DIR'"))
+        .assertTrue()
+      expect(PYODIDE_HOST_HTML.includes('detectImageMime(bytes)')).assertTrue()
+      expect(PYODIDE_HOST_HTML.includes('removeOutputDirectory(outputContext.outputDir)')).assertTrue()
+    })
+
+    it('normalizes_python_image_names_and_mime_extensions_before_persisting', 0, () => {
+      expect(getPythonImageExtension('image/png')).assertEqual('.png')
+      expect(getPythonImageExtension('image/jpeg')).assertEqual('.jpg')
+      expect(getPythonImageExtension('image/svg+xml')).assertEqual('')
+      expect(sanitizePythonImageName('../bad chart.jpeg', 'image/png')).assertEqual('bad_chart.png')
+      expect(sanitizePythonImageName('', 'image/webp')).assertEqual('python_image.webp')
     })
   })
 }

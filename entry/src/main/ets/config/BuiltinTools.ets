@@ -15,6 +15,10 @@ import { getCalendarWriteService, ReadScheduleRequest, WriteScheduleRequest } fr
 import { getPythonSandboxService, PythonSandboxRequest } from '../services/PythonSandboxService'
 import { getPyodideRuntimeService } from '../services/PyodideRuntimeService'
 import { normalizePythonPackageSpecs } from '../services/PythonSandboxRuntimePolicy'
+import {
+  getPythonSandboxArtifactService,
+  PythonSandboxImageReference
+} from '../services/PythonSandboxArtifactService'
 import { CanvasDocumentMutationResult, CanvasDocumentState, getCanvasDocumentService } from '../services/CanvasDocumentService'
 import { getPdfTextExtractionService, PdfTextExtractionRequest } from '../services/PdfTextExtractionService'
 import { getImageTextRecognitionService, ImageTextRecognitionRequest } from '../services/ImageTextRecognitionService'
@@ -741,7 +745,23 @@ class PythonSandboxExecutor implements ToolExecutor {
       // 优先走 Pyodide（真正的 CPython 运行时）
       const pyResult = await getPyodideRuntimeService().run(code, params.variables, packages)
       if (!pyResult.fallback) {
-        return JSON.stringify(pyResult)
+        const savedArtifacts = await getPythonSandboxArtifactService().saveForCurrentSession(pyResult.artifacts)
+        for (let i = 0; i < savedArtifacts.warnings.length; i++) {
+          pyResult.warnings.push(savedArtifacts.warnings[i])
+        }
+        const output = new PythonSandboxToolOutput()
+        output.ok = pyResult.ok
+        output.stdout = pyResult.stdout
+        output.result = pyResult.result
+        output.variables = pyResult.variables
+        output.warnings = pyResult.warnings
+        output.error = pyResult.error
+        output.images = savedArtifacts.images
+        if (output.images.length > 0) {
+          output.imageAccess = '图片已保存到当前会话附件沙箱。使用 attachmentId 调用 vision_read_image ' +
+            '进行视觉理解，或调用 image_to_text 识别图片文字。'
+        }
+        return JSON.stringify(output)
       }
       // 运行时未就绪/加载失败/超时：降级到本地受限解释器
       const fallback = getPythonSandboxService().run(params)
@@ -759,6 +779,17 @@ class PythonSandboxExecutor implements ToolExecutor {
     }
     return JSON.stringify(error)
   }
+}
+
+class PythonSandboxToolOutput {
+  ok: boolean = true
+  stdout: string[] = []
+  result: string = ''
+  variables: Record<string, Object> = {}
+  warnings: string[] = []
+  error: string = ''
+  images: PythonSandboxImageReference[] = []
+  imageAccess: string = ''
 }
 
 class MathChartSeriesRuntime {
@@ -2594,7 +2625,7 @@ function createPythonSandboxToolDefinition(): ToolDefinition {
     "properties": {
       "code": {
         "type": "string",
-        "description": "要执行的 Python 3 代码。支持完整 Python 语法与标准库；import pandas、numpy、scipy、scikit-learn 等 Pyodide 官方包时会在执行前自动加载。可用 print 输出，最后一个表达式的值会作为 result 返回。代码只能访问隔离的临时内存文件系统，不能访问应用或系统文件、直接发起网络请求或运行系统命令。"
+        "description": "要执行的 Python 3 代码。支持完整 Python 语法与标准库；import pandas、numpy、scipy、scikit-learn、matplotlib、Pillow 等 Pyodide 官方包时会在执行前自动加载。可用 print 输出，最后一个表达式的值会作为 result 返回。可用 matplotlib 的 plt.savefig('chart.png') 或 Pillow 的 image.save('image.png') 将 PNG、JPEG、GIF、WebP 保存到本次运行的隔离目录；相对路径会自动落到该目录，也可使用 PYTHON_OUTPUT_DIR。返回结果的 images 含已持久化图片的 attachmentId，模型随后可用 vision_read_image 或 image_to_text 调取。最多保存 4 张，单张不超过 4 MiB、合计不超过 8 MiB。代码不能访问应用或系统文件、直接发起网络请求或运行系统命令。"
       },
       "variables": {
         "type": "object",
@@ -2617,7 +2648,7 @@ function createPythonSandboxToolDefinition(): ToolDefinition {
 
   const func = new ToolFunction(
     PYTHON_SANDBOX_TOOL_ID,
-    '模型可在隔离的 Web Worker 中运行 Pyodide/CPython，用于数学计算、数据处理、统计分析、算法验证和中间推导。import pandas、numpy、scipy、scikit-learn 等官方包时会按需加载，也可通过 packages 安装纯 Python 或兼容的 PyEmscripten wheel。代码只能使用运行时内的临时内存文件系统，不能访问应用/系统文件、直接联网或运行系统命令；包加载器自身会访问受限的 Pyodide/PyPI 源。若需要画折线图/柱状图，优先使用 math_chart。',
+    '模型可在隔离的 Web Worker 中运行 Pyodide/CPython，用于数学计算、数据处理、统计分析、算法验证和 Python 生图。import pandas、numpy、scipy、scikit-learn、matplotlib、Pillow 等官方包时会按需加载，也可通过 packages 安装纯 Python 或兼容的 PyEmscripten wheel。用 savefig/save 将 PNG、JPEG、GIF、WebP 写到相对路径后，工具会保存到当前会话附件沙箱，并在 images 返回 attachmentId；随后可用 vision_read_image 或 image_to_text 调取。代码不能访问应用/系统文件、直接联网或运行系统命令；包加载器自身会访问受限的 Pyodide/PyPI 源。',
     parameters
   )
 

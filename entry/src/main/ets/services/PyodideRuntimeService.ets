@@ -16,6 +16,14 @@ export enum PyodideState {
   FAILED = 3
 }
 
+// 仅在 WebView -> ArkTS bridge 内短暂存在；落盘后不会把 base64 返回给模型。
+export class PyodideImageArtifact {
+  name: string = ''
+  mimeType: string = ''
+  size: number = 0
+  data: string = ''
+}
+
 // 与旧 PythonSandboxResult 结构对齐，使上层 UI 卡片无需改动
 export class PyodideRunResult {
   ok: boolean = true
@@ -24,6 +32,7 @@ export class PyodideRunResult {
   variables: Record<string, Object> = {}
   warnings: string[] = []
   error: string = ''
+  artifacts: PyodideImageArtifact[] = []
   // 仅内部使用：标记运行时不可用，需由调用方降级
   fallback: boolean = false
 
@@ -143,6 +152,20 @@ export class PyodideRuntimeService {
       parsed.variables = raw.variables ?? {}
       parsed.warnings = raw.warnings ?? []
       parsed.error = raw.error ?? ''
+      const artifacts = raw.artifacts ?? []
+      for (let i = 0; i < artifacts.length; i++) {
+        const source = artifacts[i]
+        if (typeof source.name !== 'string' || typeof source.mimeType !== 'string' ||
+          typeof source.size !== 'number' || typeof source.data !== 'string') {
+          continue
+        }
+        const artifact = new PyodideImageArtifact()
+        artifact.name = source.name
+        artifact.mimeType = source.mimeType
+        artifact.size = source.size
+        artifact.data = source.data
+        parsed.artifacts.push(artifact)
+      }
     } catch (e) {
       parsed = new PyodideRunResult(false)
       parsed.error = `结果解析失败: ${json}`
