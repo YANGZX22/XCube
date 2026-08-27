@@ -283,6 +283,9 @@ export class DatabaseService {
         estimated_input_tokens INTEGER DEFAULT 0,
         estimated_output_tokens INTEGER DEFAULT 0,
         estimated_cost REAL DEFAULT 0,
+        uncached_input_tokens INTEGER DEFAULT 0,
+        cache_read_tokens INTEGER DEFAULT 0,
+        cache_write_tokens INTEGER DEFAULT 0,
         FOREIGN KEY (session_id) REFERENCES ${TableNames.SESSIONS}(id)
       )
     `
@@ -390,6 +393,7 @@ export class DatabaseService {
       // 尝试添加消息翻译字段（用于保存翻译结果）
       await this.addMessageTranslationColumnsIfNeeded()
       await this.addMessageBillingColumnsIfNeeded()
+      await this.addMessageCacheUsageColumnsIfNeeded()
 	      // 迁移现有供应商数据
 	      await this.migrateExistingProviders()
 	      await this.ensureDefaultAssistant()
@@ -494,6 +498,24 @@ export class DatabaseService {
         await this.rdbStore.executeSql(`ALTER TABLE ${TableNames.MESSAGES} ADD COLUMN ${columns[i]}`)
       } catch (error) {
         console.info('DatabaseService', `message billing column may already exist: ${columns[i]}`)
+      }
+    }
+  }
+
+  private async addMessageCacheUsageColumnsIfNeeded(): Promise<void> {
+    if (this.rdbStore === null) {
+      return
+    }
+    const columns: string[] = [
+      'uncached_input_tokens INTEGER DEFAULT 0',
+      'cache_read_tokens INTEGER DEFAULT 0',
+      'cache_write_tokens INTEGER DEFAULT 0'
+    ]
+    for (let i = 0; i < columns.length; i++) {
+      try {
+        await this.rdbStore.executeSql(`ALTER TABLE ${TableNames.MESSAGES} ADD COLUMN ${columns[i]}`)
+      } catch (error) {
+        console.info('DatabaseService', `message cache usage column may already exist: ${columns[i]}`)
       }
     }
   }
@@ -2276,6 +2298,9 @@ export class DatabaseService {
       estimated_input_tokens: message.estimatedInputTokens,
       estimated_output_tokens: message.estimatedOutputTokens,
       estimated_cost: message.estimatedCost,
+      uncached_input_tokens: message.uncachedInputTokens,
+      cache_read_tokens: message.cacheReadTokens,
+      cache_write_tokens: message.cacheWriteTokens,
       parent_id: message.parentId || '',
       // 保存搜索引用数据
       search_query: message.searchQuery || '',
@@ -2462,6 +2487,9 @@ export class DatabaseService {
     message.estimatedInputTokens = this.safeGetLong(resultSet, 'estimated_input_tokens')
     message.estimatedOutputTokens = this.safeGetLong(resultSet, 'estimated_output_tokens')
     message.estimatedCost = this.safeGetDouble(resultSet, 'estimated_cost')
+    message.uncachedInputTokens = this.safeGetLong(resultSet, 'uncached_input_tokens')
+    message.cacheReadTokens = this.safeGetLong(resultSet, 'cache_read_tokens')
+    message.cacheWriteTokens = this.safeGetLong(resultSet, 'cache_write_tokens')
     message.parentId = this.safeGetString(resultSet, 'parent_id')
     message.searchQuery = this.safeGetString(resultSet, 'search_query')
     message.searchEngine = this.safeGetString(resultSet, 'search_engine')

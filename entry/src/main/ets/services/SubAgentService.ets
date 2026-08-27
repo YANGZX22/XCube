@@ -54,7 +54,13 @@ export type SubAgentToolRunner = (
 // 让 ask_user 弹窗/结果栏、图表、Canvas、日程等交互式工具对用户可见
 export type SubAgentToolCallStarted = (toolCall: ToolCall) => void
 export type SubAgentToolCallCompleted = (toolCall: ToolCall, toolResult: ToolResult) => void
-export type SubAgentUsageCallback = (inputTokens: number, outputTokens: number, exact: boolean) => void
+export type SubAgentUsageCallback = (
+  inputTokens: number,
+  outputTokens: number,
+  exact: boolean,
+  cacheReadTokens: number,
+  cacheWriteTokens: number
+) => void
 
 // 子智能体运行时配置，由 ChatViewModel 在每次带工具的请求开始前注入
 export class SubAgentRuntimeConfig {
@@ -1029,6 +1035,8 @@ ${knowledgeSearchRule}
       let contentBuffer = ''
       let actualInputTokens = -1
       let actualOutputTokens = -1
+      let actualCacheReadTokens = 0
+      let actualCacheWriteTokens = 0
       let httpRequest: http.HttpRequest | null = null
       const estimatedInputTokens = apiService.estimateRequestInputTokens(
         runtime.apiConfig,
@@ -1057,7 +1065,9 @@ ${knowledgeSearchRule}
         runtime.onUsage(
           actualInputTokens >= 0 ? actualInputTokens : estimatedInputTokens,
           actualOutputTokens >= 0 ? actualOutputTokens : estimatedOutputTokens,
-          actualInputTokens >= 0 && actualOutputTokens >= 0
+          actualInputTokens >= 0 && actualOutputTokens >= 0,
+          actualCacheReadTokens,
+          actualCacheWriteTokens
         )
         resolve(outcome)
       }
@@ -1099,6 +1109,8 @@ ${knowledgeSearchRule}
         (usage: UsageInfo): void => {
           actualInputTokens = Math.max(actualInputTokens, usage.prompt_tokens)
           actualOutputTokens = Math.max(actualOutputTokens, usage.completion_tokens)
+          actualCacheReadTokens = Math.max(actualCacheReadTokens, usage.cache_read_tokens ?? 0)
+          actualCacheWriteTokens = Math.max(actualCacheWriteTokens, usage.cache_write_tokens ?? 0)
         }
       )
     })

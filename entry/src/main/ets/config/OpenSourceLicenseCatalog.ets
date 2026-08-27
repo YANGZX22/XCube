@@ -21,6 +21,11 @@ export const RUNTIME_LICENSES: LicenseCatalogItem[] = [
     'Copyright © 2026 longlivey and YANGZX22.'
   ),
   new LicenseCatalogItem(
+    'DeepSeek Harness', '', 'MIT',
+    '缓存命中率计算逻辑源自 DeepSeek Harness；Copyright © 2026 DeepSeek。',
+    'Cache-hit percentage calculation derived from DeepSeek Harness; Copyright © 2026 DeepSeek.'
+  ),
+  new LicenseCatalogItem(
     '@luvi/lv-markdown-in', '3.4.4', 'MIT',
     'Copyright © 2023-present LiuWei。',
     'Copyright © 2023-present LiuWei.'

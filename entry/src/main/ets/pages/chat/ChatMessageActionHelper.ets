@@ -82,6 +82,9 @@ export function syncChatMessageFromSource(target: ChatMessage, source: ChatMessa
   target.estimatedInputTokens = source.estimatedInputTokens
   target.estimatedOutputTokens = source.estimatedOutputTokens
   target.estimatedCost = source.estimatedCost
+  target.uncachedInputTokens = source.uncachedInputTokens
+  target.cacheReadTokens = source.cacheReadTokens
+  target.cacheWriteTokens = source.cacheWriteTokens
   target.tokenUsageTracked = source.tokenUsageTracked
   target.tokenUsageExact = source.tokenUsageExact
   target.reasoningContent = source.reasoningContent

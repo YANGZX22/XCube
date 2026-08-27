@@ -21,7 +21,7 @@ import { SymbolGlyphModifier, uiMaterial } from '@kit.ArkUI'
 import { getAppUiState } from '../state/AppUiState'
 import { withColorAlpha } from '../utils/ColorAlphaUtils'
 import { MAP_SEARCH_ROUTE_TOOL_ID, MATH_CHART_TOOL_ID } from '../config/BuiltinTools'
-import { formatBillingAmount } from '../utils/ModelBillingUtils'
+import { formatBillingAmount, formatCacheHitPercent } from '../utils/ModelBillingUtils'
 import { ImmersiveSheetHeader } from './ImmersiveSheetHeader'
 import { resolveChatSerifFontFamily } from '../utils/ChatSerifFontUtils'
 import {
@@ -147,6 +147,7 @@ export struct MessageBubble {
   @Local isTranslationExpanded: boolean = true  // 翻译结果是否展开
   @Local currentTranslateLang: string = ''  // 当前翻译的目标语言
   @Local showEstimatedCostPopup: boolean = false
+  @Local showCacheHitPopup: boolean = false
   @Local showLatexPreview: boolean = false
   // 子智能体实时预览面板（bindSheet 挂在工具区域 Column 上，避免卡片重建时被关闭）
   @Local showSubAgentPreviewSheet: boolean = false
@@ -438,6 +439,7 @@ export struct MessageBubble {
     this.showTranslation = this.message.translatedText !== ''
     this.isTranslationExpanded = true
     this.currentTranslateLang = this.message.translatedLang
+    this.showCacheHitPopup = false
     this.showLatexPreview = false
     this.latexPreviewText = ''
     this.latexPreviewPixelMap = undefined
@@ -477,6 +479,9 @@ export struct MessageBubble {
       this.message.estimatedInputTokens.toString(),
       this.message.estimatedOutputTokens.toString(),
       this.message.estimatedCost.toString(),
+      this.message.uncachedInputTokens.toString(),
+      this.message.cacheReadTokens.toString(),
+      this.message.cacheWriteTokens.toString(),
       this.message.content,
       this.message.reasoningContent,
       this.message.isGenerating ? '1' : '0',
@@ -1191,6 +1196,18 @@ export struct MessageBubble {
   private getEstimatedCostText(): string {
     return `${formatBillingAmount(this.message.billingCurrency, this.message.estimatedCost)} ` +
       this.message.billingCurrency
+  }
+
+  private getCacheHitText(): string {
+    const percent = formatCacheHitPercent(
+      this.message.uncachedInputTokens,
+      this.message.cacheReadTokens,
+      this.message.cacheWriteTokens
+    )
+    if (percent === null) {
+      return '--%'
+    }
+    return `${percent}%`
   }
 
   private hasAskUserToolCall(): boolean {
@@ -2208,13 +2225,36 @@ export struct MessageBubble {
         })
       }
 
-      if (this.shouldShowEstimatedCost()) {
-        Divider()
-          .vertical(true)
-          .height(14)
-          .color($r('app.color.divider'))
-          .margin(this.isManuscriptMode ? 0 : { left: 3, right: 3 })
+      Divider()
+        .vertical(true)
+        .height(14)
+        .color($r('app.color.divider'))
+        .margin(this.isManuscriptMode ? 0 : { left: 3, right: 3 })
 
+      Button({ type: ButtonType.Circle, stateEffect: this.isManuscriptMode }) {
+        SymbolGlyph($r('sys.symbol.dart_target'))
+          .fontSize(this.getMessageToolbarIconSize())
+          .fontColor([this.messageToolbarIconColor])
+      }
+      .width(this.getMessageToolbarButtonSize())
+      .height(this.getMessageToolbarButtonSize())
+      .padding(0)
+      .backgroundColor(Color.Transparent)
+      .onClick(() => {
+        this.showCacheHitPopup = !this.showCacheHitPopup
+      })
+      .bindPopup(this.showCacheHitPopup, {
+        message: this.getCacheHitText(),
+        placement: Placement.Top,
+        systemMaterial: new uiMaterial.ImmersiveMaterial({
+          style: uiMaterial.ImmersiveStyle.THIN
+        }),
+        onStateChange: (event) => {
+          this.showCacheHitPopup = event.isVisible
+        }
+      })
+
+      if (this.shouldShowEstimatedCost()) {
         Button({ type: ButtonType.Circle, stateEffect: this.isManuscriptMode }) {
           SymbolGlyph($r('sys.symbol.yuansign_coupon'))
             .fontSize(this.getMessageToolbarIconSize())

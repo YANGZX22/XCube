@@ -18,6 +18,7 @@ import {
   doBillingPeakPeriodsOverlap,
   estimateProviderManagedAttachmentTokens,
   estimateTextTokens,
+  formatCacheHitPercent,
   hasOverlappingBillingPeakPeriods,
   isBillingPeakMinute,
   isDeviceLocalRestDay,
@@ -111,6 +112,36 @@ export default function tokenAccountingTest() {
       expect(message.estimatedOutputTokens).assertEqual(30)
       expect(message.tokenUsageTracked).assertEqual(true)
       expect(message.tokenUsageExact).assertEqual(false)
+    })
+
+    it('tracks_disjoint_cache_usage_buckets_across_api_rounds', 0, () => {
+      const tracker = new RequestTokenUsageTracker()
+      const message = new ChatMessage('assistant-cache', MessageRole.ASSISTANT, '')
+
+      tracker.beginRound(100)
+      tracker.updateCurrentRoundUsage(100, 10, 90, 0)
+      tracker.finishRound(10)
+      tracker.beginRound(100)
+      tracker.updateCurrentRoundUsage(100, 5, 0, 100)
+      tracker.finishRound(5)
+      tracker.applyToMessage(message)
+
+      expect(message.uncachedInputTokens).assertEqual(10)
+      expect(message.cacheReadTokens).assertEqual(90)
+      expect(message.cacheWriteTokens).assertEqual(100)
+      expect(formatCacheHitPercent(
+        message.uncachedInputTokens,
+        message.cacheReadTokens,
+        message.cacheWriteTokens
+      )).assertEqual('45')
+    })
+
+    it('formats_cache_hit_rounding_like_deepseek_harness', 0, () => {
+      expect(formatCacheHitPercent(10, 90, 0)).assertEqual('90')
+      expect(formatCacheHitPercent(5, 995, 0)).assertEqual('99.5')
+      expect(formatCacheHitPercent(5, 9995, 0)).assertEqual('99.95')
+      expect(formatCacheHitPercent(1, 19999, 0)).assertEqual('99.995')
+      expect(formatCacheHitPercent(0, 10000, 0)).assertEqual('100')
     })
 
     it('resolves_peak_and_off_peak_prices_from_device_local_time', 0, () => {

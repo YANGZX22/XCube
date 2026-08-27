@@ -2074,7 +2074,12 @@ export class ChatViewModel {
         },
         reasoningLevel,
         (usage: UsageInfo): void => {
-          usageTracker.updateCurrentRoundUsage(usage.prompt_tokens, usage.completion_tokens)
+          usageTracker.updateCurrentRoundUsage(
+            usage.prompt_tokens,
+            usage.completion_tokens,
+            usage.cache_read_tokens ?? 0,
+            usage.cache_write_tokens ?? 0
+          )
           usageTracker.applyToMessage(aiMessage)
           onAIMessageUpdated(aiMessage)
         }
@@ -2407,7 +2412,12 @@ ${webContext.content}
       },
       ReasoningLevel.OFF,
       (usage: UsageInfo): void => {
-        usageTracker.updateCurrentRoundUsage(usage.prompt_tokens, usage.completion_tokens)
+        usageTracker.updateCurrentRoundUsage(
+          usage.prompt_tokens,
+          usage.completion_tokens,
+          usage.cache_read_tokens ?? 0,
+          usage.cache_write_tokens ?? 0
+        )
         usageTracker.applyToMessage(aiMessage)
         onAIMessageUpdated(aiMessage)
       }
@@ -2766,7 +2776,12 @@ ${limitedSearchContext}
       },
       reasoningLevel,
       (usage: UsageInfo): void => {
-        usageTracker.updateCurrentRoundUsage(usage.prompt_tokens, usage.completion_tokens)
+        usageTracker.updateCurrentRoundUsage(
+          usage.prompt_tokens,
+          usage.completion_tokens,
+          usage.cache_read_tokens ?? 0,
+          usage.cache_write_tokens ?? 0
+        )
         usageTracker.applyToMessage(aiMessage)
         onAIMessageUpdated(aiMessage)
       }
@@ -3263,8 +3278,9 @@ ${knowledgeSearchLimitRule}`
         }
       },
       () => toolExecutionCancelled,
-      (inputTokens: number, outputTokens: number, exact: boolean): void => {
-        usageTracker.addCompletedUsage(inputTokens, outputTokens, exact)
+      (inputTokens: number, outputTokens: number, exact: boolean,
+        cacheReadTokens: number, cacheWriteTokens: number): void => {
+        usageTracker.addCompletedUsage(inputTokens, outputTokens, exact, cacheReadTokens, cacheWriteTokens)
         usageTracker.applyToMessage(aiMessage)
         onAIMessageUpdated(aiMessage)
       },
@@ -4920,7 +4936,12 @@ ${preview}`
         }
         observedPromptTokens = Math.max(observedPromptTokens, usage.prompt_tokens)
         observedCompletionTokens = Math.max(observedCompletionTokens, usage.completion_tokens)
-        usageTracker.updateCurrentRoundUsage(usage.prompt_tokens, usage.completion_tokens)
+        usageTracker.updateCurrentRoundUsage(
+          usage.prompt_tokens,
+          usage.completion_tokens,
+          usage.cache_read_tokens ?? 0,
+          usage.cache_write_tokens ?? 0
+        )
         usageTracker.applyToMessage(aiMessage)
         onAIMessageUpdated(aiMessage)
         maybeInterruptForAutomaticCompaction()

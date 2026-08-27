@@ -178,14 +178,78 @@ export function estimateProviderManagedAttachmentTokens(attachment: MessageAttac
   return metadataTokens + 32
 }
 
+function roundedIntegerPercent(cacheReadTokens: number, denominator: number): number {
+  const denominatorQuotient = Math.floor(denominator / 200)
+  const denominatorRemainder = denominator % 200
+  let lower = 0
+  let upper = 100
+  while (lower < upper) {
+    const candidate = Math.floor((lower + upper + 1) / 2)
+    const factor = candidate * 2 - 1
+    const threshold = factor * denominatorQuotient + Math.ceil(factor * denominatorRemainder / 200)
+    if (cacheReadTokens >= threshold) {
+      lower = candidate
+    } else {
+      upper = candidate - 1
+    }
+  }
+  return lower
+}
+
+// 与 deepseek-harness 一致：三类输入分桶互斥，缓存读取除以三者总和。
+// 非满命中只有在当前精度会舍入成 100% 时才继续增加小数位。
+export function formatCacheHitPercent(
+  uncachedInputTokens: number,
+  cacheReadTokens: number,
+  cacheWriteTokens: number
+): string | null {
+  const denominator = uncachedInputTokens + cacheReadTokens + cacheWriteTokens
+  if (denominator === 0) {
+    return null
+  }
+  const missedInputTokens = uncachedInputTokens + cacheWriteTokens
+  if (missedInputTokens === 0) {
+    return '100'
+  }
+
+  const integerPercent = roundedIntegerPercent(cacheReadTokens, denominator)
+  if (integerPercent < 100) {
+    return integerPercent.toString()
+  }
+
+  let decimalPlaces = 1
+  let scaledDoubleGap = missedInputTokens * 200
+  const denominatorTens = Math.floor(denominator / 10)
+  while (scaledDoubleGap <= denominatorTens) {
+    scaledDoubleGap *= 10
+    decimalPlaces += 1
+  }
+  const denominatorOnes = denominator % 10
+  let roundedLoss = 5
+  for (let loss = 1; loss < 5; loss += 1) {
+    const factor = loss * 2 + 1
+    const threshold = factor * denominatorTens + Math.floor(factor * denominatorOnes / 10)
+    if (scaledDoubleGap <= threshold) {
+      roundedLoss = loss
+      break
+    }
+  }
+  return `99.${'9'.repeat(decimalPlaces - 1)}${10 - roundedLoss}`
+}
+
 // 一次模型请求的 Token 统计器。工具调用会产生多轮 API 请求，因此不能只把
 // 可见聊天历史估算一次；每轮优先采用服务端 usage，缺失时才保留本地估算。
 export class RequestTokenUsageTracker {
   private completedInputTokens: number = 0
   private completedOutputTokens: number = 0
+  private completedUncachedInputTokens: number = 0
+  private completedCacheReadTokens: number = 0
+  private completedCacheWriteTokens: number = 0
   private currentEstimatedInputTokens: number = 0
   private currentActualInputTokens: number = -1
   private currentActualOutputTokens: number = -1
+  private currentCacheReadTokens: number = 0
+  private currentCacheWriteTokens: number = 0
   private hasAnyActualUsage: boolean = false
   private allCompletedRoundsExact: boolean = true
   private currentRoundActive: boolean = false
@@ -194,10 +258,17 @@ export class RequestTokenUsageTracker {
     this.currentEstimatedInputTokens = Math.max(0, Math.round(estimatedInputTokens))
     this.currentActualInputTokens = -1
     this.currentActualOutputTokens = -1
+    this.currentCacheReadTokens = 0
+    this.currentCacheWriteTokens = 0
     this.currentRoundActive = true
   }
 
-  updateCurrentRoundUsage(inputTokens: number, outputTokens: number): void {
+  updateCurrentRoundUsage(
+    inputTokens: number,
+    outputTokens: number,
+    cacheReadTokens: number = 0,
+    cacheWriteTokens: number = 0
+  ): void {
     if (Number.isFinite(inputTokens) && inputTokens >= 0) {
       this.currentActualInputTokens = Math.max(this.currentActualInputTokens, Math.round(inputTokens))
       this.hasAnyActualUsage = true
@@ -206,11 +277,24 @@ export class RequestTokenUsageTracker {
       this.currentActualOutputTokens = Math.max(this.currentActualOutputTokens, Math.round(outputTokens))
       this.hasAnyActualUsage = true
     }
+    if (Number.isFinite(cacheReadTokens) && cacheReadTokens >= 0) {
+      this.currentCacheReadTokens = Math.max(this.currentCacheReadTokens, Math.round(cacheReadTokens))
+    }
+    if (Number.isFinite(cacheWriteTokens) && cacheWriteTokens >= 0) {
+      this.currentCacheWriteTokens = Math.max(this.currentCacheWriteTokens, Math.round(cacheWriteTokens))
+    }
   }
 
   finishRound(estimatedOutputTokens: number): void {
     if (this.currentActualInputTokens < 0 || this.currentActualOutputTokens < 0) {
       this.allCompletedRoundsExact = false
+    }
+    if (this.currentActualInputTokens >= 0) {
+      this.addCompletedInputBuckets(
+        this.currentActualInputTokens,
+        this.currentCacheReadTokens,
+        this.currentCacheWriteTokens
+      )
     }
     this.completedInputTokens += this.getCurrentInputTokens()
     this.completedOutputTokens += this.currentActualOutputTokens >= 0 ?
@@ -218,14 +302,24 @@ export class RequestTokenUsageTracker {
     this.currentEstimatedInputTokens = 0
     this.currentActualInputTokens = -1
     this.currentActualOutputTokens = -1
+    this.currentCacheReadTokens = 0
+    this.currentCacheWriteTokens = 0
     this.currentRoundActive = false
   }
 
-  addCompletedUsage(inputTokens: number, outputTokens: number, exact: boolean): void {
-    this.completedInputTokens += Math.max(0, Math.round(inputTokens))
+  addCompletedUsage(
+    inputTokens: number,
+    outputTokens: number,
+    exact: boolean,
+    cacheReadTokens: number = 0,
+    cacheWriteTokens: number = 0
+  ): void {
+    const normalizedInputTokens = Math.max(0, Math.round(inputTokens))
+    this.completedInputTokens += normalizedInputTokens
     this.completedOutputTokens += Math.max(0, Math.round(outputTokens))
     if (exact) {
       this.hasAnyActualUsage = true
+      this.addCompletedInputBuckets(normalizedInputTokens, cacheReadTokens, cacheWriteTokens)
     } else {
       this.allCompletedRoundsExact = false
     }
@@ -239,10 +333,35 @@ export class RequestTokenUsageTracker {
     message.estimatedInputTokens = this.completedInputTokens + this.getCurrentInputTokens()
     message.estimatedOutputTokens = this.completedOutputTokens +
       (this.currentActualOutputTokens >= 0 ? this.currentActualOutputTokens : 0)
+    const currentCacheReadTokens = this.currentActualInputTokens >= 0 ?
+      Math.min(this.currentActualInputTokens, this.currentCacheReadTokens) : 0
+    const currentCacheWriteTokens = this.currentActualInputTokens >= 0 ?
+      Math.min(this.currentActualInputTokens - currentCacheReadTokens, this.currentCacheWriteTokens) : 0
+    const currentUncachedInputTokens = this.currentActualInputTokens >= 0 ?
+      Math.max(0, this.currentActualInputTokens - currentCacheReadTokens - currentCacheWriteTokens) : 0
+    message.uncachedInputTokens = this.completedUncachedInputTokens + currentUncachedInputTokens
+    message.cacheReadTokens = this.completedCacheReadTokens + currentCacheReadTokens
+    message.cacheWriteTokens = this.completedCacheWriteTokens + currentCacheWriteTokens
   }
 
   private getCurrentInputTokens(): number {
     return this.currentActualInputTokens >= 0 ? this.currentActualInputTokens : this.currentEstimatedInputTokens
+  }
+
+  private addCompletedInputBuckets(inputTokens: number, cacheReadTokens: number, cacheWriteTokens: number): void {
+    const normalizedInputTokens = Math.max(0, Math.round(inputTokens))
+    const normalizedCacheReadTokens = Math.min(
+      normalizedInputTokens,
+      Math.max(0, Math.round(cacheReadTokens))
+    )
+    const normalizedCacheWriteTokens = Math.min(
+      normalizedInputTokens - normalizedCacheReadTokens,
+      Math.max(0, Math.round(cacheWriteTokens))
+    )
+    this.completedUncachedInputTokens +=
+      normalizedInputTokens - normalizedCacheReadTokens - normalizedCacheWriteTokens
+    this.completedCacheReadTokens += normalizedCacheReadTokens
+    this.completedCacheWriteTokens += normalizedCacheWriteTokens
   }
 }
 

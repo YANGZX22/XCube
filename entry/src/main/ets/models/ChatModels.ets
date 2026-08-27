@@ -591,6 +591,10 @@ export class ChatMessage {
   @Trace estimatedInputTokens: number
   @Trace estimatedOutputTokens: number
   @Trace estimatedCost: number
+  // 供应商真实 usage 的互斥输入分桶；没有 usage 的估算轮次不写入这些字段。
+  @Trace uncachedInputTokens: number
+  @Trace cacheReadTokens: number
+  @Trace cacheWriteTokens: number
   // 运行时字段：发送链路已按真实请求逐轮统计时，UI 计费回调不得再用可见历史覆盖。
   @Trace tokenUsageTracked: boolean
   // 仅当当前累计值全部来自供应商 usage 时为 true；不持久化，不影响历史统计。
@@ -642,6 +646,9 @@ export class ChatMessage {
     this.estimatedInputTokens = 0
     this.estimatedOutputTokens = 0
     this.estimatedCost = 0
+    this.uncachedInputTokens = 0
+    this.cacheReadTokens = 0
+    this.cacheWriteTokens = 0
     this.tokenUsageTracked = false
     this.tokenUsageExact = false
     this.reasoningContent = ''

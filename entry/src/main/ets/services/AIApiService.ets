@@ -355,10 +355,19 @@ export interface Choice {
 }
 
 // 使用量信息
+export interface PromptTokensDetails {
+  cached_tokens?: number
+}
+
 export interface UsageInfo {
   prompt_tokens: number
   completion_tokens: number
   total_tokens: number
+  cache_read_tokens?: number
+  cache_write_tokens?: number
+  prompt_cache_hit_tokens?: number
+  prompt_cache_miss_tokens?: number
+  prompt_tokens_details?: PromptTokensDetails
 }
 
 // 聊天完成响应
@@ -472,6 +481,8 @@ interface AnthropicContent {
 interface AnthropicUsageInfo {
   input_tokens?: number
   output_tokens?: number
+  cache_read_input_tokens?: number
+  cache_creation_input_tokens?: number
 }
 
 interface AnthropicResponse {
@@ -530,6 +541,7 @@ interface GoogleUsageMetadata {
   promptTokenCount?: number
   candidatesTokenCount?: number
   totalTokenCount?: number
+  cachedContentTokenCount?: number
 }
 
 interface GoogleResponse {
@@ -549,10 +561,15 @@ interface OpenAIResponsesOutputItem {
   content?: OpenAIResponsesOutputContentItem[]
 }
 
+interface OpenAIResponsesInputTokensDetails {
+  cached_tokens?: number
+}
+
 interface OpenAIResponsesUsageInfo {
   input_tokens?: number
   output_tokens?: number
   total_tokens?: number
+  input_tokens_details?: OpenAIResponsesInputTokensDetails
 }
 
 interface OpenAIResponsesResponse {
@@ -1358,10 +1375,31 @@ export class AIApiService {
     if (usage === undefined || usage === null) {
       return null
     }
+    const inputTokens = usage.input_tokens !== undefined ? usage.input_tokens : 0
+    const outputTokens = usage.output_tokens !== undefined ? usage.output_tokens : 0
+    const cacheReadTokens = usage.input_tokens_details?.cached_tokens !== undefined ?
+      usage.input_tokens_details.cached_tokens : 0
     return {
-      prompt_tokens: usage.input_tokens !== undefined ? usage.input_tokens : 0,
-      completion_tokens: usage.output_tokens !== undefined ? usage.output_tokens : 0,
-      total_tokens: usage.total_tokens !== undefined ? usage.total_tokens : 0
+      prompt_tokens: inputTokens,
+      completion_tokens: outputTokens,
+      total_tokens: usage.total_tokens !== undefined ? usage.total_tokens : inputTokens + outputTokens,
+      cache_read_tokens: cacheReadTokens,
+      cache_write_tokens: 0
+    }
+  }
+
+  private buildOpenAIUsageInfo(usage?: UsageInfo): UsageInfo | null {
+    if (usage === undefined || usage === null) {
+      return null
+    }
+    const cacheReadTokens = usage.prompt_tokens_details?.cached_tokens ??
+      usage.prompt_cache_hit_tokens ?? usage.cache_read_tokens ?? 0
+    return {
+      prompt_tokens: usage.prompt_tokens,
+      completion_tokens: usage.completion_tokens,
+      total_tokens: usage.total_tokens,
+      cache_read_tokens: cacheReadTokens,
+      cache_write_tokens: usage.cache_write_tokens !== undefined ? usage.cache_write_tokens : 0
     }
   }
 
@@ -1371,10 +1409,15 @@ export class AIApiService {
     }
     const inputTokens = usage.input_tokens !== undefined ? usage.input_tokens : 0
     const outputTokens = usage.output_tokens !== undefined ? usage.output_tokens : 0
+    const cacheReadTokens = usage.cache_read_input_tokens !== undefined ? usage.cache_read_input_tokens : 0
+    const cacheWriteTokens = usage.cache_creation_input_tokens !== undefined ? usage.cache_creation_input_tokens : 0
+    const promptTokens = inputTokens + cacheReadTokens + cacheWriteTokens
     return {
-      prompt_tokens: inputTokens,
+      prompt_tokens: promptTokens,
       completion_tokens: outputTokens,
-      total_tokens: inputTokens + outputTokens
+      total_tokens: promptTokens + outputTokens,
+      cache_read_tokens: cacheReadTokens,
+      cache_write_tokens: cacheWriteTokens
     }
   }
 
@@ -1384,10 +1427,13 @@ export class AIApiService {
     }
     const inputTokens = usage.promptTokenCount !== undefined ? usage.promptTokenCount : 0
     const outputTokens = usage.candidatesTokenCount !== undefined ? usage.candidatesTokenCount : 0
+    const cacheReadTokens = usage.cachedContentTokenCount !== undefined ? usage.cachedContentTokenCount : 0
     return {
       prompt_tokens: inputTokens,
       completion_tokens: outputTokens,
-      total_tokens: usage.totalTokenCount !== undefined ? usage.totalTokenCount : inputTokens + outputTokens
+      total_tokens: usage.totalTokenCount !== undefined ? usage.totalTokenCount : inputTokens + outputTokens,
+      cache_read_tokens: cacheReadTokens,
+      cache_write_tokens: 0
     }
   }
 
@@ -1402,7 +1448,7 @@ export class AIApiService {
         return event.response !== undefined ? this.buildResponsesUsageInfo(event.response.usage) : null
       }
       const chunk = json as OpenAIStreamChunk
-      return chunk.usage !== undefined ? chunk.usage : null
+      return this.buildOpenAIUsageInfo(chunk.usage)
     }
     if (apiStyle === ApiStyle.ANTHROPIC) {
       const chunk = json as AnthropicStreamChunk
@@ -2549,7 +2595,7 @@ export class AIApiService {
         success: true,
         content: choice.message.content || '',
         errorMessage: '',
-        usage: response.usage,
+        usage: this.buildOpenAIUsageInfo(response.usage),
         reasoningContent: choice.message.reasoning_content || choice.message.reasoning || '',
         finishReason: choice.finish_reason
       }

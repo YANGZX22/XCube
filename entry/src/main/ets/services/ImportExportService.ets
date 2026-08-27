@@ -227,6 +227,9 @@ interface MessageData {
   estimatedInputTokens?: number
   estimatedOutputTokens?: number
   estimatedCost?: number
+  uncachedInputTokens?: number
+  cacheReadTokens?: number
+  cacheWriteTokens?: number
   searchQuery: string
   searchEngine: string
   searchSource?: string
@@ -710,6 +713,9 @@ export class ImportExportService {
             estimatedInputTokens: m.estimatedInputTokens,
             estimatedOutputTokens: m.estimatedOutputTokens,
             estimatedCost: m.estimatedCost,
+            uncachedInputTokens: m.uncachedInputTokens,
+            cacheReadTokens: m.cacheReadTokens,
+            cacheWriteTokens: m.cacheWriteTokens,
             searchQuery: m.searchQuery,
             searchEngine: m.searchEngine,
             searchSource: m.searchSource,
@@ -1055,6 +1061,9 @@ export class ImportExportService {
           message.estimatedInputTokens = msgData.estimatedInputTokens || 0
           message.estimatedOutputTokens = msgData.estimatedOutputTokens || 0
           message.estimatedCost = msgData.estimatedCost || 0
+          message.uncachedInputTokens = msgData.uncachedInputTokens || 0
+          message.cacheReadTokens = msgData.cacheReadTokens || 0
+          message.cacheWriteTokens = msgData.cacheWriteTokens || 0
           message.searchQuery = msgData.searchQuery || ''
           message.searchEngine = msgData.searchEngine || ''
           message.searchSource = msgData.searchSource || ''
