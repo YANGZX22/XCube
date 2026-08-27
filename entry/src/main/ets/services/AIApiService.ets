@@ -23,16 +23,29 @@ import {
 import {
   AnthropicAuthStrategy,
   CompatibilityProviderInfo,
+  isKnownReasoningModelId,
   ModelDiscoveryStrategy,
   OpenAIStreamContentMode,
   ProviderCompatibilityProfile,
   ReasoningRequestStrategy,
   normalizeReasoningLevelForControl,
   resolveProviderCompatibilityProfile,
-  resolveReasoningRequestStrategyWithOverride
+  resolveReasoningRequestStrategyWithOverride,
+  supportsOpenAIUsageInStreaming
 } from './ProviderCompatibilityRegistry'
 import { normalizeCustomHeaderName, parseCustomHeadersMap } from '../utils/CustomHeaderUtils'
 import { estimateProviderManagedAttachmentTokens, estimateTextTokens } from '../utils/ModelBillingUtils'
+import {
+  extractSseDataPayload,
+  joinOpenAIStreamReasoningDetails,
+  normalizeOpenAIStreamText,
+  normalizeOpenAIResponsesStreamEvent,
+  normalizeSseLineEndings,
+  OpenAIResponsesFunctionCallItem,
+  OpenAIStreamReasoningDetail,
+  OpenAIStreamTextPart,
+  splitOpenAIStreamContent
+} from '../utils/OpenAIStreamCompatibilityUtils'
 
 // URL 解析工具类
 class ApiUrlResolver {
@@ -170,7 +183,7 @@ interface MessageContent {
   role: string
   content: string
   reasoning_content?: string
-  reasoning_details?: MiniMaxReasoningDetail[]
+  reasoning_details?: OpenAIStreamReasoningDetail[]
 }
 
 // 测试请求接口
@@ -269,8 +282,22 @@ interface OpenAIResponsesContentPart {
 }
 
 interface OpenAIResponsesInputItem {
-  role: string
-  content: OpenAIResponsesContentPart[]
+  type: string
+  role?: string
+  content?: OpenAIResponsesContentPart[]
+  id?: string
+  status?: string
+  call_id?: string
+  name?: string
+  arguments?: string
+  output?: string
+}
+
+interface OpenAIResponsesTool {
+  type: string
+  name: string
+  description: string
+  parameters: object
 }
 
 interface OpenAIResponsesReasoningConfig {
@@ -288,6 +315,9 @@ interface OpenAIResponsesRequestBody {
   enable_thinking?: boolean
   thinking_budget?: number
   stream?: boolean
+  top_p?: number
+  tools?: OpenAIResponsesTool[]
+  tool_choice?: string
 }
 
 // Anthropic 思考配置接口
@@ -557,8 +587,13 @@ interface OpenAIResponsesOutputContentItem {
 
 interface OpenAIResponsesOutputItem {
   type: string
+  id?: string
   role?: string
   content?: OpenAIResponsesOutputContentItem[]
+  summary?: OpenAIResponsesOutputContentItem[]
+  call_id?: string
+  name?: string
+  arguments?: string
 }
 
 interface OpenAIResponsesInputTokensDetails {
@@ -573,25 +608,25 @@ interface OpenAIResponsesUsageInfo {
 }
 
 interface OpenAIResponsesResponse {
+  status?: string
   output_text?: string
   output?: OpenAIResponsesOutputItem[]
   usage?: OpenAIResponsesUsageInfo
+  error?: ApiError
 }
 
 interface OpenAIResponsesStreamEvent {
   type?: string
   delta?: string
+  arguments?: string
+  output_index?: number
+  call_id?: string
+  item?: OpenAIResponsesFunctionCallItem
   error?: ApiError
   response?: OpenAIResponsesResponse
 }
 
 // OpenAI 流式响应块增量
-// MiniMax reasoning_details 项
-interface MiniMaxReasoningDetail {
-  text?: string
-  type?: string
-}
-
 // 流式响应中的工具调用增量
 interface OpenAIStreamToolCallFunction {
   name?: string
@@ -606,13 +641,19 @@ interface OpenAIStreamToolCall {
 }
 
 interface OpenAIStreamDelta {
-  content?: string
+  content?: string | OpenAIStreamTextPart | OpenAIStreamTextPart[] | null
+  text?: string
   // 推理内容（DeepSeek R1 等模型）
-  reasoning_content?: string
+  reasoning_content?: string | OpenAIStreamTextPart | OpenAIStreamTextPart[] | null
   // 推理内容（OpenAI-compat 一些供应商使用 reasoning 字段）
-  reasoning?: string
+  reasoning?: string | OpenAIStreamTextPart | OpenAIStreamTextPart[] | null
+  // 其他 OpenAI 兼容网关的常见推理字段别名
+  reasoning_text?: string | OpenAIStreamTextPart | OpenAIStreamTextPart[] | null
+  reasoningContent?: string | OpenAIStreamTextPart | OpenAIStreamTextPart[] | null
+  thinking?: string | OpenAIStreamTextPart | OpenAIStreamTextPart[] | null
+  analysis?: string | OpenAIStreamTextPart | OpenAIStreamTextPart[] | null
   // MiniMax 推理内容（数组格式，每个元素有 text 字段）
-  reasoning_details?: MiniMaxReasoningDetail[]
+  reasoning_details?: OpenAIStreamReasoningDetail[]
   // 图片数据（兼容 OpenAI DALL-E 或第三方服务的图片响应）
   image_url?: string  // 图片 URL
   image_base64?: string  // base64 编码的图片数据
@@ -623,7 +664,10 @@ interface OpenAIStreamDelta {
 
 // OpenAI 流式响应块选择项
 interface OpenAIStreamChoice {
-  delta: OpenAIStreamDelta
+  delta?: OpenAIStreamDelta
+  // 少数兼容端点在流中复用非流式 message/text 字段
+  message?: OpenAIStreamDelta
+  text?: string
   finish_reason?: string
 }
 
@@ -1070,27 +1114,28 @@ export class AIApiService {
       model,
       rawOverride
     )
+    const supportsReasoning = config.modelSupportsReasoning === true || isKnownReasoningModelId(model)
     if (!hasOverride && strategy === ReasoningRequestStrategy.OPENAI_COMPAT_REASONING_EFFORT &&
-      config.modelSupportsReasoning !== true) {
+      !supportsReasoning) {
       return ReasoningRequestStrategy.NONE
     }
     if (!hasOverride && strategy === ReasoningRequestStrategy.DEEPSEEK_THINKING &&
-      config.modelSupportsReasoning !== true) {
+      !supportsReasoning) {
       return ReasoningRequestStrategy.NONE
     }
     if (!hasOverride && strategy === ReasoningRequestStrategy.MIMO_THINKING &&
-      config.modelSupportsReasoning !== true) {
+      !supportsReasoning) {
       return ReasoningRequestStrategy.NONE
     }
     if (!hasOverride && strategy === ReasoningRequestStrategy.DASHSCOPE_THINKING &&
-      config.modelSupportsReasoning !== true) {
+      !supportsReasoning) {
       return ReasoningRequestStrategy.NONE
     }
     if (!hasOverride && strategy === ReasoningRequestStrategy.KIMI_THINKING &&
-      config.modelSupportsReasoning !== true) {
+      !supportsReasoning) {
       return ReasoningRequestStrategy.NONE
     }
-    if (!hasOverride && config.modelSupportsReasoning === false) {
+    if (!hasOverride && config.modelSupportsReasoning === false && !supportsReasoning) {
       return ReasoningRequestStrategy.NONE
     }
     return strategy
@@ -1112,6 +1157,24 @@ export class AIApiService {
     const incrementalContent = rawContent.substring(this.minimaxContentBuffer.length)
     this.minimaxContentBuffer = rawContent
     return incrementalContent
+  }
+
+  private getMiniMaxIncrementalReasoning(rawReasoning: string): string {
+    if (rawReasoning === '' || rawReasoning === this.minimaxReasoningBuffer) {
+      return ''
+    }
+    if (rawReasoning.startsWith(this.minimaxReasoningBuffer)) {
+      const incrementalReasoning = rawReasoning.substring(this.minimaxReasoningBuffer.length)
+      this.minimaxReasoningBuffer = rawReasoning
+      return incrementalReasoning
+    }
+    // If a compatible endpoint unexpectedly switches from cumulative to
+    // incremental reasoning chunks, emit the new fragment instead of hiding it.
+    if (this.minimaxReasoningBuffer.startsWith(rawReasoning)) {
+      return ''
+    }
+    this.minimaxReasoningBuffer = rawReasoning
+    return rawReasoning
   }
 
 
@@ -1512,6 +1575,41 @@ export class AIApiService {
     }
 
     return content
+  }
+
+  private extractOpenAIResponsesReasoning(response: OpenAIResponsesResponse): string {
+    let reasoning = ''
+    if (response.output === undefined || response.output === null) {
+      return reasoning
+    }
+    for (let i = 0; i < response.output.length; i++) {
+      const item = response.output[i]
+      if (item.type !== 'reasoning' || item.summary === undefined || item.summary === null) {
+        continue
+      }
+      for (let j = 0; j < item.summary.length; j++) {
+        if (item.summary[j].text !== undefined) {
+          reasoning += item.summary[j].text
+        }
+      }
+    }
+    return reasoning
+  }
+
+  private extractOpenAIResponsesToolCalls(response: OpenAIResponsesResponse): ToolCall[] {
+    const toolCalls: ToolCall[] = []
+    if (response.output === undefined || response.output === null) {
+      return toolCalls
+    }
+    for (let i = 0; i < response.output.length; i++) {
+      const item = response.output[i]
+      if (item.type !== 'function_call') {
+        continue
+      }
+      const callId = item.call_id || item.id || `tool_call_${Date.now()}_${i}`
+      toolCalls.push(new ToolCall(callId, item.name || '', item.arguments || '{}'))
+    }
+    return toolCalls
   }
 
   private normalizeToolCallId(rawId: string, index: number): string {
@@ -1986,8 +2084,7 @@ export class AIApiService {
     includeUnloadedAttachments: boolean = false
   ): number {
     let tokens = 3 + estimateTextTokens(model)
-    const useOpenAIResponses = this.shouldUseOpenAIResponses(config, forceChatCompletions) &&
-      (tools === undefined || tools.length === 0)
+    const useOpenAIResponses = this.shouldUseOpenAIResponses(config, forceChatCompletions)
     const reasoningStrategy = this.getReasoningRequestStrategy(config, model)
     const preserveReasoning = config.apiStyle === ApiStyle.OPENAI && !useOpenAIResponses &&
       (this.shouldPreserveReasoningContentForToolMessages(reasoningStrategy) ||
@@ -2222,8 +2319,7 @@ export class AIApiService {
       return body
     }
 
-    const useOpenAIResponses = this.shouldUseOpenAIResponses(config, forceChatCompletions) &&
-      (tools === undefined || tools.length === 0)
+    const useOpenAIResponses = this.shouldUseOpenAIResponses(config, forceChatCompletions)
 
     if (useOpenAIResponses) {
       const responseInputs: OpenAIResponsesInputItem[] = []
@@ -2234,6 +2330,39 @@ export class AIApiService {
         if (msg.role === 'system') {
           if (msg.content.trim() !== '') {
             instructionParts.push(msg.content.trim())
+          }
+          continue
+        }
+
+        if (msg.isToolResultMessage()) {
+          responseInputs.push({
+            type: 'function_call_output',
+            id: `fco_chatcube_${i}`,
+            call_id: msg.toolCallId,
+            output: msg.content
+          })
+          continue
+        }
+
+        if (msg.hasToolCalls()) {
+          if (msg.content !== '') {
+            responseInputs.push({
+              type: 'message',
+              role: 'assistant',
+              id: `msg_chatcube_${i}`,
+              status: 'completed',
+              content: [{ type: 'output_text', text: msg.content }]
+            })
+          }
+          for (let j = 0; j < msg.toolCalls.length; j++) {
+            const toolCall = msg.toolCalls[j]
+            responseInputs.push({
+              type: 'function_call',
+              id: `fc_chatcube_${i}_${j}`,
+              call_id: toolCall.id,
+              name: toolCall.functionName,
+              arguments: toolCall.arguments
+            })
           }
           continue
         }
@@ -2271,7 +2400,7 @@ export class AIApiService {
 
         if (textBlocks.length > 0) {
           contentParts.unshift({
-            type: 'input_text',
+            type: msg.role === 'assistant' ? 'output_text' : 'input_text',
             text: textBlocks.join('\n\n')
           })
         }
@@ -2280,10 +2409,16 @@ export class AIApiService {
           continue
         }
 
-        responseInputs.push({
+        const inputItem: OpenAIResponsesInputItem = {
+          type: 'message',
           role: msg.role === 'assistant' ? 'assistant' : 'user',
           content: contentParts
-        })
+        }
+        if (msg.role === 'assistant') {
+          inputItem.id = `msg_chatcube_${i}`
+          inputItem.status = 'completed'
+        }
+        responseInputs.push(inputItem)
       }
 
       const responsesBody: OpenAIResponsesRequestBody = {
@@ -2295,6 +2430,9 @@ export class AIApiService {
       if (instructionParts.length > 0) {
         responsesBody.instructions = instructionParts.join('\n\n')
       }
+      if (config.topP !== undefined && config.topP !== 1.0) {
+        responsesBody.top_p = config.topP
+      }
       if (reasoningRequestStrategy === ReasoningRequestStrategy.OPENAI_REASONING_EFFORT ||
         reasoningRequestStrategy === ReasoningRequestStrategy.OPENAI_COMPAT_REASONING_EFFORT) {
         const effort = this.getOpenAIReasoningEffortForStrategy(
@@ -2303,12 +2441,27 @@ export class AIApiService {
           normalizedReasoningLevel
         )
         if (effort !== undefined) {
-          responsesBody.reasoning = { effort: effort }
+          responsesBody.reasoning = { effort: effort, summary: 'auto' }
         } else if (normalizedReasoningLevel === ReasoningLevel.AUTO) {
           responsesBody.reasoning = { summary: 'auto' }
         }
       } else if (reasoningRequestStrategy === ReasoningRequestStrategy.DASHSCOPE_THINKING) {
         this.applyDashScopeReasoningConfig(responsesBody, normalizedReasoningLevel, reasoningTokenLimit)
+      }
+      if (tools !== undefined && tools.length > 0) {
+        const responsesTools: OpenAIResponsesTool[] = []
+        for (let i = 0; i < tools.length; i++) {
+          responsesTools.push({
+            type: 'function',
+            name: tools[i].function.name,
+            description: tools[i].function.description,
+            parameters: tools[i].function.parameters.toJsonObject()
+          })
+        }
+        responsesBody.tools = responsesTools
+        if (toolChoice !== undefined && toolChoice !== '') {
+          responsesBody.tool_choice = toolChoice
+        }
       }
       return responsesBody
     }
@@ -2431,7 +2584,7 @@ export class AIApiService {
           }
           if (msg.reasoningContent.trim() !== '' &&
             this.getCompatibilityProfile(config).preserveAssistantReasoningDetails) {
-            const reasoningDetail: MiniMaxReasoningDetail = {
+            const reasoningDetail: OpenAIStreamReasoningDetail = {
               text: msg.reasoningContent,
               type: 'text'
             }
@@ -2575,12 +2728,17 @@ export class AIApiService {
   private parseOpenAIResponsesResponse(responseData: string): AIApiResult {
     const response = JSON.parse(responseData) as OpenAIResponsesResponse
     const content = this.extractOpenAIResponsesContent(response)
+    const reasoningContent = this.extractOpenAIResponsesReasoning(response)
+    const toolCalls = this.extractOpenAIResponsesToolCalls(response)
+    const hasOutput = content !== '' || reasoningContent !== '' || toolCalls.length > 0
     return {
-      success: content !== '',
+      success: hasOutput,
       content: content,
-      errorMessage: content !== '' ? '' : 'No output in response',
+      errorMessage: hasOutput ? '' : (response.error?.message || 'No output in response'),
       usage: this.buildResponsesUsageInfo(response.usage),
-      reasoningContent: ''
+      reasoningContent: reasoningContent,
+      toolCalls: toolCalls.length > 0 ? toolCalls : undefined,
+      finishReason: toolCalls.length > 0 ? 'tool_calls' : 'stop'
     }
   }
 
@@ -2771,7 +2929,9 @@ export class AIApiService {
   }
 
   private normalizeModelId(model: string): string {
-    return model.trim().toLowerCase()
+    const normalized = model.trim().toLowerCase()
+    const slashIndex = normalized.lastIndexOf('/')
+    return slashIndex >= 0 ? normalized.substring(slashIndex + 1) : normalized
   }
 
   private supportsAnthropicAdaptiveThinking(model: string): boolean {
@@ -3121,7 +3281,9 @@ export class AIApiService {
       } else {
         const openAIRequestBody = requestBody as OpenAIRequestBody
         openAIRequestBody.stream = true
-        openAIRequestBody.stream_options = { include_usage: true }
+        if (supportsOpenAIUsageInStreaming(this.toCompatibilityInfo(config))) {
+          openAIRequestBody.stream_options = { include_usage: true }
+        }
       }
     } else if (config.apiStyle === ApiStyle.ANTHROPIC) {
       (requestBody as AnthropicRequestBody).stream = true
@@ -3146,7 +3308,7 @@ export class AIApiService {
       (chunk: ArrayBuffer) => {
         try {
           const text = textDecoder.decodeToString(new Uint8Array(chunk), { stream: true })
-          buffer += text
+          buffer += normalizeSseLineEndings(text)
 
           const lines = buffer.split('\n')
           buffer = lines.pop() || ''
@@ -3221,18 +3383,34 @@ export class AIApiService {
       tools !== undefined && tools.length > 0 && toolChoice !== 'none'
     )
 
-    let url = this.buildChatUrl(config, model, true)
+    const useOpenAIResponses = this.shouldUseOpenAIResponses(config)
+    let url = this.buildChatUrl(config, model)
     const headers = this.buildHeaders(config)
     if (config.apiStyle !== ApiStyle.GOOGLE) {
       headers['Accept'] = 'text/event-stream'
     }
-    const requestBody = this.buildRequestBody(config, messages, model, temperature, maxTokens, reasoningLevel, tools, toolChoice, true)
+    const requestBody = this.buildRequestBody(
+      config,
+      messages,
+      model,
+      temperature,
+      maxTokens,
+      reasoningLevel,
+      tools,
+      toolChoice
+    )
     this.configureStreamState(config, model)
 
     if (config.apiStyle === ApiStyle.OPENAI) {
-      const openAIRequestBody = requestBody as OpenAIRequestBody
-      openAIRequestBody.stream = true
-      openAIRequestBody.stream_options = { include_usage: true }
+      if (useOpenAIResponses) {
+        (requestBody as OpenAIResponsesRequestBody).stream = true
+      } else {
+        const openAIRequestBody = requestBody as OpenAIRequestBody
+        openAIRequestBody.stream = true
+        if (supportsOpenAIUsageInStreaming(this.toCompatibilityInfo(config))) {
+          openAIRequestBody.stream_options = { include_usage: true }
+        }
+      }
     } else if (config.apiStyle === ApiStyle.ANTHROPIC) {
       (requestBody as AnthropicRequestBody).stream = true
     }
@@ -3255,7 +3433,7 @@ export class AIApiService {
       (chunk: ArrayBuffer) => {
         try {
           const text = textDecoder.decodeToString(new Uint8Array(chunk), { stream: true })
-          buffer += text
+          buffer += normalizeSseLineEndings(text)
 
           const lines = buffer.split('\n')
           buffer = lines.pop() || ''
@@ -3263,7 +3441,7 @@ export class AIApiService {
           for (let i = 0; i < lines.length; i++) {
             this.handleStreamLineWithTools(
               config.apiStyle,
-              false,
+              useOpenAIResponses,
               lines[i],
               toolStreamState,
               onData,
@@ -3282,7 +3460,7 @@ export class AIApiService {
         if (buffer.trim() !== '') {
           this.handleStreamLineWithTools(
             config.apiStyle,
-            false,
+            useOpenAIResponses,
             buffer,
             toolStreamState,
             onData,
@@ -3323,24 +3501,8 @@ export class AIApiService {
     onToolCallDelta?: (toolCallDeltas: ToolCallDelta[]) => void,
     onUsage?: (usage: UsageInfo) => void
   ): void {
-    const trimmedLine = line.trim()
-    if (trimmedLine === '') {
-      return
-    }
-    if (trimmedLine === 'data: [DONE]' || trimmedLine === 'data:[DONE]' || trimmedLine === '[DONE]') {
-      return
-    }
-
-    let jsonStr: string = ''
-    if (trimmedLine.startsWith('data:')) {
-      jsonStr = trimmedLine.substring(5).trim()
-    } else if (trimmedLine.startsWith('{') || trimmedLine.startsWith('[')) {
-      jsonStr = trimmedLine
-    } else {
-      return
-    }
-
-    if (jsonStr === '[DONE]') {
+    const jsonStr = extractSseDataPayload(line)
+    if (jsonStr === '') {
       return
     }
 
@@ -3515,35 +3677,60 @@ export class AIApiService {
     if (apiStyle === ApiStyle.OPENAI) {
       if (useOpenAIResponses) {
         const event = json as OpenAIResponsesStreamEvent
-        if (event.type === 'response.output_text.delta' && event.delta !== undefined) {
-          result.content = event.delta
-        } else if (event.type === 'response.completed') {
-          result.finishReason = 'stop'
-        } else if (event.type === 'error' && event.error !== undefined) {
-          result.errorMessage = event.error.message
+        const normalizedEvent = normalizeOpenAIResponsesStreamEvent(event)
+        result.content = normalizedEvent.content
+        result.reasoningContent = normalizedEvent.reasoningContent
+        if (result.reasoningContent !== '') {
+          result.reasoningIsStructured = true
         }
+        result.finishReason = normalizedEvent.finishReason
+        result.errorMessage = normalizedEvent.errorMessage
+        if (normalizedEvent.toolCallDeltas.length > 0) {
+          const toolCallDeltas: ToolCallDelta[] = []
+          for (let i = 0; i < normalizedEvent.toolCallDeltas.length; i++) {
+            const normalizedDelta = normalizedEvent.toolCallDeltas[i]
+            const toolCallDelta: ToolCallDelta = {
+              index: normalizedDelta.index,
+              id: normalizedDelta.id,
+              functionName: normalizedDelta.functionName,
+              arguments: normalizedDelta.arguments,
+              argumentsAreSnapshot: normalizedDelta.argumentsAreSnapshot
+            }
+            toolCallDeltas.push(toolStreamState.appendToolCallDelta(toolCallDelta))
+          }
+          result.toolCallDeltas = toolCallDeltas
+        }
+        return result
+      }
+
+      const apiError = (json as ApiErrorResponse).error
+      if (apiError !== undefined && apiError !== null && apiError.message !== '') {
+        result.errorMessage = apiError.message
         return result
       }
 
       const chunk = json as OpenAIStreamChunk
       if (chunk.choices && chunk.choices.length > 0) {
-        const delta = chunk.choices[0].delta
-        let rawContent = delta?.content || ''
-        if (delta?.reasoning_details && delta.reasoning_details.length > 0) {
+        const choice = chunk.choices[0]
+        const delta = choice.delta !== undefined ? choice.delta : choice.message
+        const normalizedContent = splitOpenAIStreamContent(delta?.content)
+        let rawContent = normalizedContent.content
+        if (rawContent === '' && delta?.text !== undefined) {
+          rawContent = delta.text
+        }
+        if (rawContent === '' && choice.text !== undefined) {
+          rawContent = choice.text
+        }
+        const reasoningDetailsText = joinOpenAIStreamReasoningDetails(delta?.reasoning_details)
+        if (reasoningDetailsText !== '') {
           hasReasoningDetails = true
           result.reasoningIsStructured = true
-          const details: MiniMaxReasoningDetail[] = delta.reasoning_details
-          for (let i = 0; i < details.length; i++) {
-            const detail = details[i]
-            if (detail.text && detail.text.length > 0) {
-              const fullText = detail.text
-              if (fullText.length > this.minimaxReasoningBuffer.length) {
-                result.reasoningContent = fullText.substring(this.minimaxReasoningBuffer.length)
-                this.minimaxReasoningBuffer = fullText
-              }
-            }
-          }
-          const incrementalContent = this.getMiniMaxIncrementalContent(rawContent)
+          result.reasoningContent = this.currentOpenAIStreamUsesCumulativeContent
+            ? this.getMiniMaxIncrementalReasoning(reasoningDetailsText)
+            : reasoningDetailsText
+          const incrementalContent = this.currentOpenAIStreamUsesCumulativeContent
+            ? this.getMiniMaxIncrementalContent(rawContent)
+            : rawContent
           if (incrementalContent !== '') {
             const parsed = this.parseThinkingTags(incrementalContent)
             result.content = parsed.content
@@ -3553,24 +3740,32 @@ export class AIApiService {
           } else {
             result.content = ''
           }
-        } else if (delta?.reasoning_content && delta.reasoning_content.length > 0) {
-          result.reasoningContent = delta.reasoning_content
-          result.reasoningIsStructured = true
-          result.content = rawContent || ''
-        } else if (delta?.reasoning && delta.reasoning.length > 0) {
-          result.reasoningContent = delta.reasoning
-          result.reasoningIsStructured = true
-          result.content = rawContent || ''
-        } else if (this.currentOpenAIStreamUsesCumulativeContent && rawContent !== '') {
-          const incrementalContent = this.getMiniMaxIncrementalContent(rawContent)
-          if (incrementalContent !== '') {
-            const parsed = this.parseThinkingTags(incrementalContent)
-            result.content = parsed.content
-            if (parsed.reasoningContent !== '') {
-              result.reasoningContent = parsed.reasoningContent
+        } else if (delta !== undefined) {
+          const structuredReasoning = normalizeOpenAIStreamText(delta.reasoning_content) ||
+            normalizeOpenAIStreamText(delta.reasoning) || normalizeOpenAIStreamText(delta.reasoning_text) ||
+            normalizeOpenAIStreamText(delta.reasoningContent) || normalizeOpenAIStreamText(delta.thinking) ||
+            normalizeOpenAIStreamText(delta.analysis) || normalizedContent.reasoningContent
+          if (structuredReasoning !== '') {
+            result.reasoningContent = structuredReasoning
+            result.reasoningIsStructured = true
+            result.content = rawContent
+          } else if (this.currentOpenAIStreamUsesCumulativeContent && rawContent !== '') {
+            const incrementalContent = this.getMiniMaxIncrementalContent(rawContent)
+            if (incrementalContent !== '') {
+              const parsed = this.parseThinkingTags(incrementalContent)
+              result.content = parsed.content
+              if (parsed.reasoningContent !== '') {
+                result.reasoningContent = parsed.reasoningContent
+              }
+            } else {
+              result.content = ''
             }
+          } else if (rawContent !== '') {
+            const parsed = this.parseThinkingTags(rawContent)
+            result.content = parsed.content
+            result.reasoningContent = parsed.reasoningContent
           } else {
-            result.content = ''
+            result.content = rawContent
           }
         } else if (rawContent !== '') {
           const parsed = this.parseThinkingTags(rawContent)
@@ -3578,6 +3773,10 @@ export class AIApiService {
           result.reasoningContent = parsed.reasoningContent
         } else {
           result.content = rawContent
+        }
+
+        if (delta?.reasoning_details && delta.reasoning_details.length > 0 && reasoningDetailsText === '') {
+          result.reasoningIsStructured = true
         }
 
         if (delta?.image_base64 && delta?.image_mime_type) {
@@ -3610,7 +3809,7 @@ export class AIApiService {
           result.toolCallDeltas = toolCallDeltas
         }
 
-        const finishReason = chunk.choices[0].finish_reason
+        const finishReason = choice.finish_reason
         if (finishReason !== undefined && finishReason !== null) {
           result.finishReason = finishReason
         }
@@ -3726,24 +3925,8 @@ export class AIApiService {
     onImageData?: (base64Data: string, mimeType: string) => void,
     onUsage?: (usage: UsageInfo) => void
   ): void {
-    const trimmedLine = line.trim()
-    if (trimmedLine === '') {
-      return
-    }
-    if (trimmedLine === 'data: [DONE]' || trimmedLine === 'data:[DONE]' || trimmedLine === '[DONE]') {
-      return
-    }
-
-    let jsonStr: string = ''
-    if (trimmedLine.startsWith('data:')) {
-      jsonStr = trimmedLine.substring(5).trim()
-    } else if (trimmedLine.startsWith('{') || trimmedLine.startsWith('[')) {
-      jsonStr = trimmedLine
-    } else {
-      return
-    }
-
-    if (jsonStr === '[DONE]') {
+    const jsonStr = extractSseDataPayload(line)
+    if (jsonStr === '') {
       return
     }
 

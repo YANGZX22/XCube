@@ -27,6 +27,7 @@ import attachmentCleanupTest from './AttachmentCleanup.test';
 import chatInFlightMessageTest from './ChatInFlightMessage.test';
 import deepSeekWebSearchUtilsTest from './DeepSeekWebSearchUtils.test';
 import subAgentArgumentParserTest from './SubAgentArgumentParser.test';
+import openAIStreamCompatibilityTest from './OpenAIStreamCompatibility.test';
 
 export default function testsuite() {
   localUnitTest();
@@ -58,4 +59,5 @@ export default function testsuite() {
   chatInFlightMessageTest();
   deepSeekWebSearchUtilsTest();
   subAgentArgumentParserTest();
+  openAIStreamCompatibilityTest();
 }

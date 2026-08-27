@@ -292,7 +292,17 @@ export class ModelCapabilityMatcher {
 
   private applyKnownCapabilityFallback(model: ModelInfo): boolean {
     const id = model.id.trim().toLowerCase()
+    const slashIndex = id.lastIndexOf('/')
+    const routedId = slashIndex >= 0 ? id.substring(slashIndex + 1) : id
     let changed = false
+
+    if (routedId.startsWith('gpt-5') || routedId.startsWith('o1') ||
+      routedId.startsWith('o3') || routedId.startsWith('o4')) {
+      if (!model.capabilities.supportsReasoning) {
+        model.capabilities.supportsReasoning = true
+        changed = true
+      }
+    }
 
     if (id.startsWith('qwen3') ||
       id.startsWith('qwq') ||

@@ -84,6 +84,54 @@ export function normalizeCompatibilityBaseUrl(baseUrl: string): string {
   return normalized
 }
 
+export function normalizeRoutedModelId(modelId: string): string {
+  const normalized = modelId.trim().toLowerCase()
+  const slashIndex = normalized.lastIndexOf('/')
+  return slashIndex >= 0 ? normalized.substring(slashIndex + 1) : normalized
+}
+
+export function isKnownReasoningModelId(modelId: string): boolean {
+  const normalized = normalizeRoutedModelId(modelId)
+  return normalized.startsWith('gpt-5') || normalized.startsWith('o1') ||
+    normalized.startsWith('o3') || normalized.startsWith('o4')
+}
+
+// stream_options.include_usage is optional in the OpenAI protocol and a number
+// of compatible gateways reject it. Keep it for built-in/recognized routes
+// whose existing integration already relies on streamed usage, and prefer the
+// minimal `stream: true` request for an unknown private endpoint.
+const STREAM_USAGE_PROVIDER_IDS: string[] = [
+  'openai', 'deepseek', 'openrouter', 'groq', 'together', 'nvidia',
+  'siliconflow', 'qwen', 'kimi', 'zhipu', 'doubao', 'minimax',
+  'aihubmix', 'grok', 'mimo'
+]
+
+const STREAM_USAGE_HOST_MARKERS: string[] = [
+  'api.openai.com', 'api.deepseek.com', 'openrouter.ai', 'api.groq.com',
+  'api.together.ai', 'integrate.api.nvidia.com', 'api.siliconflow.cn',
+  'dashscope.aliyuncs.com', 'dashscope-intl.aliyuncs.com', 'api.moonshot.cn',
+  'api.moonshot.ai', 'open.bigmodel.cn', 'ark.cn-beijing.volces.com',
+  'api.minimaxi.com', 'api.minimax.chat', 'api.minimax.io', 'aihubmix.com',
+  'api.x.ai', 'api.xiaomimimo.com', 'token-plan-cn.xiaomimimo.com'
+]
+
+export function supportsOpenAIUsageInStreaming(info: CompatibilityProviderInfo): boolean {
+  if (info.apiStyle !== ApiStyle.OPENAI) {
+    return false
+  }
+  const providerId = info.providerId.trim().toLowerCase()
+  if (STREAM_USAGE_PROVIDER_IDS.includes(providerId)) {
+    return true
+  }
+  const normalizedBaseUrl = normalizeCompatibilityBaseUrl(info.baseUrl)
+  for (let i = 0; i < STREAM_USAGE_HOST_MARKERS.length; i++) {
+    if (normalizedBaseUrl.includes(STREAM_USAGE_HOST_MARKERS[i])) {
+      return true
+    }
+  }
+  return false
+}
+
 export function isMiniMaxCompatibleProvider(info: CompatibilityProviderInfo): boolean {
   const normalizedBaseUrl = normalizeCompatibilityBaseUrl(info.baseUrl)
   return normalizedBaseUrl.includes('api.minimaxi.com') ||
@@ -176,7 +224,7 @@ function isKimiThinkingModelId(modelId: string): boolean {
 }
 
 function supportsOpenAIReasoningEffortModel(modelId: string): boolean {
-  const modelLower = modelId.trim().toLowerCase()
+  const modelLower = normalizeRoutedModelId(modelId)
   return modelLower.startsWith('o1') ||
     modelLower.startsWith('o3') ||
     modelLower.startsWith('o4') ||
@@ -184,7 +232,7 @@ function supportsOpenAIReasoningEffortModel(modelId: string): boolean {
 }
 
 function supportsOpenAIXhighReasoningModel(modelId: string): boolean {
-  const modelLower = modelId.trim().toLowerCase()
+  const modelLower = normalizeRoutedModelId(modelId)
   return modelLower.startsWith('gpt-5.4') ||
     modelLower.startsWith('gpt-5.3-codex') ||
     modelLower.startsWith('gpt-5.3-chat-latest') ||
@@ -533,7 +581,7 @@ export function resolveReasoningControlMode(
   modelSupportsReasoning: boolean,
   rawOverride?: string
 ): ReasoningControlMode {
-  if (!modelSupportsReasoning) {
+  if (!modelSupportsReasoning && !isKnownReasoningModelId(modelId)) {
     return ReasoningControlMode.NONE
   }
 
