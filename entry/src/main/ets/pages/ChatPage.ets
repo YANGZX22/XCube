@@ -169,6 +169,10 @@ import { ManuscriptWorkingMark } from '../components/chat/ManuscriptWorkingIndic
 import { ImmersiveSheetHeader } from '../components/ImmersiveSheetHeader'
 import { AskUserCard } from '../components/AskUserCard'
 import { MapRoutePageParams } from './MapRoutePage'
+import {
+  ChatInFlightMessage,
+  InFlightMessageDelivery
+} from './chat/ChatInFlightMessage'
 
 const DOMAIN = 0x0003
 const TAG = 'ChatPage'
@@ -240,6 +244,7 @@ export struct ChatPage {
   @Local isModelEditAdvancedExpanded: boolean = false
   @Local isLoading: boolean = false
   @Local isSending: boolean = false
+  @Local queuedMessageCount: number = 0
   // 应用是否退到后台（用于处理生成中返回桌面/关闭应用）
   private get appInBackground(): boolean {
     return getAppUiState().appInBackground
@@ -496,6 +501,9 @@ export struct ChatPage {
   private forcedToolIdsOnce: string[] = []
   private currentTaskId: string = ''
   @Local isSendDispatching: boolean = false
+  private queuedInFlightMessages: ChatInFlightMessage[] = []
+  private queuedDispatchScheduled: boolean = false
+  private queuedDispatchRunning: boolean = false
   private isGoalCommandSaving: boolean = false
   private lastHandledAlertTimestamp: number = 0
   private isPageVisible: boolean = false
@@ -4104,6 +4112,7 @@ export struct ChatPage {
               },
               isSending: this.isSending,
               isSendDispatching: this.isSendDispatching,
+              queuedMessageCount: this.queuedMessageCount,
               isAwaitingResponse: this.calcIsAwaitingAiOutput(),
               currentModelId: this.currentModelId,
               currentProviderId: this.currentProvider?.id ?? '',
@@ -4169,6 +4178,12 @@ export struct ChatPage {
               },
               onStop: (): void => {
                 this.handleStop()
+              },
+              onQueueSend: (): void => {
+                this.handleInFlightSend(InFlightMessageDelivery.QUEUE)
+              },
+              onSteerSend: (): void => {
+                this.handleInFlightSend(InFlightMessageDelivery.STEER)
               },
               onModelIconClick: (): void => {
                 this.isModelSelectorVisible = true
@@ -5616,6 +5631,11 @@ export struct ChatPage {
     this.refreshContextUsage()
   }
 
+  @Monitor('isSending', 'isSendDispatching')
+  onQueuedDispatchStateChanged(): void {
+    this.scheduleQueuedMessageDispatch()
+  }
+
   private handleComposerContentChanged(): void {
     this.scheduleDraftAutosave()
   }
@@ -5993,7 +6013,96 @@ export struct ChatPage {
 
   // 处理停止生成
   handleStop(): void {
+    this.clearPendingInFlightMessages()
     this.getStopFlow().stopCurrentTask()
+  }
+
+  private handleInFlightSend(delivery: InFlightMessageDelivery): void {
+    if (!this.isSending || this.isSendDispatching) {
+      return
+    }
+    const message = new ChatInFlightMessage(
+      this.inputText,
+      this.pendingAttachments,
+      delivery,
+      this.sessionId
+    )
+    if (message.content === '' && message.attachments.length === 0) {
+      return
+    }
+
+    if (delivery === InFlightMessageDelivery.STEER &&
+      this.chatViewModel.submitSteeringMessage(this.sessionId, message.content, message.attachments)) {
+      this.clearComposerAfterInFlightSend()
+      this.markMessageListChanged()
+      this.showChatSnack($r('app.string.chat_inflight_steer_accepted'), 2200, SnackBarTone.SUCCESS)
+      return
+    }
+
+    // 搜索准备阶段等尚无可引导 AI 气泡的短暂窗口，安全降级为排队发送。
+    message.delivery = InFlightMessageDelivery.QUEUE
+    this.queuedInFlightMessages.push(message)
+    this.queuedMessageCount = this.queuedInFlightMessages.length
+    this.clearComposerAfterInFlightSend()
+    this.showChatSnack($r('app.string.chat_inflight_queue_accepted'), 2200, SnackBarTone.SUCCESS)
+  }
+
+  private clearComposerAfterInFlightSend(): void {
+    this.clearDraftAutosaveTimer()
+    this.inputText = ''
+    this.pendingAttachments = []
+    this.persistCurrentDraftState('', []).catch((error: Error): void => {
+      console.error('ChatPage', `Failed to clear draft after in-flight send: ${JSON.stringify(error)}`)
+    })
+  }
+
+  private clearPendingInFlightMessages(): void {
+    this.queuedInFlightMessages = []
+    this.queuedMessageCount = 0
+    this.queuedDispatchScheduled = false
+    this.chatViewModel.clearPendingSteeringMessages(this.sessionId)
+  }
+
+  private scheduleQueuedMessageDispatch(): void {
+    if (this.queuedDispatchScheduled || this.queuedDispatchRunning || this.isSending ||
+      this.isSendDispatching || this.queuedInFlightMessages.length === 0) {
+      return
+    }
+    this.queuedDispatchScheduled = true
+    setTimeout((): void => {
+      this.queuedDispatchScheduled = false
+      this.dispatchNextQueuedMessage().catch((error: Object): void => {
+        console.error('ChatPage', `Failed to dispatch queued message: ${JSON.stringify(error)}`)
+      })
+    }, 0)
+  }
+
+  private async dispatchNextQueuedMessage(): Promise<void> {
+    if (this.queuedDispatchRunning || this.isSending || this.isSendDispatching ||
+      this.queuedInFlightMessages.length === 0) {
+      return
+    }
+    const next = this.queuedInFlightMessages[0]
+    if (next.sessionId !== '' && next.sessionId !== this.sessionId) {
+      return
+    }
+
+    this.queuedDispatchRunning = true
+    this.queuedInFlightMessages.splice(0, 1)
+    this.queuedMessageCount = this.queuedInFlightMessages.length
+    const preservedDraftText = this.inputText
+    const preservedDraftAttachments = this.pendingAttachments.slice()
+    try {
+      await this.sendMessage(next.content, next.attachments)
+    } finally {
+      // 排队期间用户可能已经开始输入下一条草稿；自动续发不能把它一起清空。
+      if (preservedDraftText !== '' || preservedDraftAttachments.length > 0) {
+        this.inputText = preservedDraftText
+        this.pendingAttachments = preservedDraftAttachments
+        this.scheduleDraftAutosave()
+      }
+      this.queuedDispatchRunning = false
+    }
   }
 
   // 处理模型选择

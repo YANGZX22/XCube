@@ -41,6 +41,7 @@ export struct ChatInputBar {
   @Event onAttachmentsChange: (value: MessageAttachment[]) => void = (_value: MessageAttachment[]): void => {}
   @Param isSending: boolean = false
   @Param isSendDispatching: boolean = false
+  @Param queuedMessageCount: number = 0
   // isSending 为 true 时，pause 在整个发送期都保留轻微呼吸感
   @Param isAwaitingResponse: boolean = false
   @Param currentModelId: string = ''
@@ -95,6 +96,10 @@ export struct ChatInputBar {
   @Event onSend: () => void = () => {
   }
   @Event onStop: () => void = () => {
+  }
+  @Event onQueueSend: () => void = () => {
+  }
+  @Event onSteerSend: () => void = () => {
   }
   @Event onModelIconClick: () => void = () => {
   }
@@ -318,7 +323,12 @@ export struct ChatInputBar {
             this.onInputTextChange(value)
           })
           .onSubmit(() => {
-            if (this.chatInputEnterKeySend && !this.isSendBusy() && this.computeHasContent()) {
+            if (!this.chatInputEnterKeySend || !this.computeHasContent()) {
+              return
+            }
+            if (this.isSending) {
+              this.onQueueSend()
+            } else if (!this.isSendDispatching) {
               this.onSend()
             }
           })
@@ -348,8 +358,27 @@ export struct ChatInputBar {
           this.onAttachmentClick()
         })
 
+        if (this.isSending && this.computeHasContent()) {
+          Button({ type: ButtonType.Normal, stateEffect: false }) {
+            Text($r('app.string.manuscript_stop'))
+              .fontFamily(MANUSCRIPT_HEADING_FONT)
+              .fontSize(12)
+              .fontColor(this.manuscriptAccentDeep)
+              .letterSpacing(1)
+          }
+          .width(48)
+          .height(44)
+          .padding(0)
+          .backgroundColor(Color.Transparent)
+          .borderRadius(0)
+          .onClick(() => {
+            this.onStop()
+          })
+        }
+
         Button({ type: ButtonType.Normal, stateEffect: false }) {
-          Text(this.isSending ? $r('app.string.manuscript_stop') : $r('app.string.manuscript_send'))
+          Text(this.isSending && this.computeHasContent() ? $r('app.string.manuscript_send') :
+            (this.isSending ? $r('app.string.manuscript_stop') : $r('app.string.manuscript_send')))
             .fontFamily(MANUSCRIPT_HEADING_FONT)
             .fontSize(13)
             .fontWeight(FontWeight.Medium)
@@ -368,10 +397,17 @@ export struct ChatInputBar {
         })
         .onClick(() => {
           if (this.isSending) {
-            this.onStop()
+            if (!this.computeHasContent()) {
+              this.onStop()
+            }
           } else if (!this.isSendDispatching && this.computeHasContent()) {
             this.onSend()
           }
+        })
+        .bindMenu(this.isSending && this.computeHasContent() ? this.InFlightSendMenu() : undefined, {
+          systemMaterial: new uiMaterial.ImmersiveMaterial({
+            style: uiMaterial.ImmersiveStyle.THICK
+          })
         })
       }
       .width('100%')
@@ -560,7 +596,9 @@ export struct ChatInputBar {
             if (!this.chatInputEnterKeySend) {
               return
             }
-            if (!this.isSendBusy() && this.computeHasContent()) {
+            if (this.isSending && this.computeHasContent()) {
+              this.onQueueSend()
+            } else if (!this.isSendDispatching && this.computeHasContent()) {
               this.onSend()
             }
           })
@@ -588,15 +626,49 @@ export struct ChatInputBar {
           this.onAttachmentClick()
         })
 
+        if (this.isSending && this.computeHasContent()) {
+          // 生成期间仍保留独立停止入口，发送按钮用于选择“引导”或“排队”。
+          Button({ type: ButtonType.Circle, stateEffect: false }) {
+            SymbolGlyph($r('sys.symbol.pause_round_triangle'))
+              .fontSize(18)
+              .fontColor([$r('app.color.text_secondary')])
+          }
+          .width(36)
+          .height(36)
+          .padding(0)
+          .backgroundColor(Color.Transparent)
+          .accessibilityText($r('app.string.manuscript_stop'))
+          .onClick(() => {
+            this.onStop()
+          })
+        }
+
         // 发送/停止按钮（编辑模式下为"保存并发送"）
         Button({ type: ButtonType.Circle, stateEffect: false }) {
-          SymbolGlyph(this.getSendButtonSymbol())
-            .fontSize(this.isSending ? 20 : 22)
-            .fontColor([this.themePrimary])
-            .symbolEffect(
-              new ScaleSymbolEffect(EffectScope.WHOLE),
-              this.iconTrigger
-            )
+          Stack({ alignContent: Alignment.Center }) {
+            SymbolGlyph(this.getSendButtonSymbol())
+              .fontSize(this.isSending ? 20 : 22)
+              .fontColor([this.themePrimary])
+              .symbolEffect(
+                new ScaleSymbolEffect(EffectScope.WHOLE),
+                this.iconTrigger
+              )
+
+            if (this.queuedMessageCount > 0) {
+              Text(this.queuedMessageCount > 9 ? '9+' : this.queuedMessageCount.toString())
+                .fontSize(8)
+                .fontWeight(FontWeight.Bold)
+                .fontColor(Color.White)
+                .textAlign(TextAlign.Center)
+                .width(16)
+                .height(16)
+                .backgroundColor(this.themePrimary)
+                .borderRadius(8)
+                .position({ x: 23, y: -3 })
+            }
+          }
+          .width(40)
+          .height(40)
         }
         .width(40)
         .height(40)
@@ -625,7 +697,9 @@ export struct ChatInputBar {
         })
         .onClick(() => {
           if (this.isSending) {
-            this.onStop()
+            if (!this.computeHasContent()) {
+              this.onStop()
+            }
           } else if (this.isSendDispatching) {
             return
           } else {
@@ -635,6 +709,11 @@ export struct ChatInputBar {
             this.onSend()
           }
         })
+        .bindMenu(this.isSending && this.computeHasContent() ? this.InFlightSendMenu() : undefined, {
+          systemMaterial: new uiMaterial.ImmersiveMaterial({
+            style: uiMaterial.ImmersiveStyle.THICK
+          })
+        })
       }
       .width('100%')
       .padding({
@@ -643,6 +722,31 @@ export struct ChatInputBar {
         top: 6,
         bottom: 6
       })
+  }
+
+  @Builder
+  InFlightSendMenu() {
+    Menu() {
+      MenuItem({
+        startIcon: $r('sys.symbol.start_to_end_distance_fill'),
+        content: $r('app.string.chat_inflight_steer')
+      })
+        .contentFont({ size: 14 })
+        .onClick(() => {
+          this.onSteerSend()
+        })
+
+      MenuItem({
+        startIcon: $r('sys.symbol.paperplan_right_2'),
+        content: $r('app.string.chat_inflight_queue')
+      })
+        .contentFont({ size: 14 })
+        .onClick(() => {
+          this.onQueueSend()
+        })
+    }
+    .backgroundColor(Color.Transparent)
+    .borderRadius(12)
   }
 
   @Builder
@@ -778,7 +882,7 @@ export struct ChatInputBar {
   }
 
   private getSendButtonSymbol(): Resource {
-    if (this.isSending) {
+    if (this.isSending && !this.computeHasContent()) {
       return $r('sys.symbol.pause_round_triangle')
     }
 
@@ -795,11 +899,8 @@ export struct ChatInputBar {
 
   @Monitor('inputText', 'attachments')
   onInputOrAttachmentsChanged(): void {
-    if (!this.isSendBusy()) {
+    if (!this.isSendDispatching) {
       this.onComposerContentChanged()
-    }
-    if (this.isSendBusy()) {
-      return
     }
 
     const hasContent = this.computeHasContent()

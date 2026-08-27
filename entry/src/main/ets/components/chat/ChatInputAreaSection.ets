@@ -17,6 +17,7 @@ export struct ChatInputAreaSection {
   @Event onAttachmentsChange: (value: MessageAttachment[]) => void = (_value: MessageAttachment[]): void => {}
   @Param isSending: boolean = false
   @Param isSendDispatching: boolean = false
+  @Param queuedMessageCount: number = 0
   @Param isAwaitingResponse: boolean = false
   @Param currentModelId: string = ''
   @Param currentProviderId: string = ''
@@ -50,6 +51,8 @@ export struct ChatInputAreaSection {
   @Event onCancelEdit: () => void = () => {}
   @Event onSend: () => void = () => {}
   @Event onStop: () => void = () => {}
+  @Event onQueueSend: () => void = () => {}
+  @Event onSteerSend: () => void = () => {}
   @Event onModelIconClick: () => void = () => {}
   @Param isAttachmentPanelOpen: boolean = false
   @Event onAttachmentClick: () => void = () => {}
@@ -177,6 +180,7 @@ export struct ChatInputAreaSection {
           },
           isSending: this.isSending,
           isSendDispatching: this.isSendDispatching,
+          queuedMessageCount: this.queuedMessageCount,
           isAwaitingResponse: this.isAwaitingResponse,
           currentModelId: this.currentModelId,
           currentProviderId: this.currentProviderId,
@@ -197,6 +201,12 @@ export struct ChatInputAreaSection {
           },
           onStop: (): void => {
             this.onStop()
+          },
+          onQueueSend: (): void => {
+            this.onQueueSend()
+          },
+          onSteerSend: (): void => {
+            this.onSteerSend()
           },
           onModelIconClick: (): void => {
             this.onModelIconClick()

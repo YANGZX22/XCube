@@ -87,6 +87,12 @@ import {
   buildConversationGoalSystemPrompt,
   normalizeConversationGoal
 } from '../utils/ConversationGoalUtils'
+import {
+  buildSteeringRequestContent,
+  buildSteeringTimelineText,
+  ChatInFlightMessage,
+  InFlightMessageDelivery
+} from '../pages/chat/ChatInFlightMessage'
 
 // 标题生成状态
 export interface TitleGenerationCallbacks {
@@ -209,6 +215,8 @@ interface PendingAIMessageInfo {
   message: ChatMessage
   sessionId: string
   persisted: boolean
+  onUpdated: (message: ChatMessage) => void
+  steeringSupported: boolean
 }
 
 // 重新生成分叉上下文：本次发送不创建新的用户消息，
@@ -273,6 +281,8 @@ export class ChatViewModel {
   private activeRequests: Map<string, ActiveRequestInfo> = new Map()
   // 待持久化 AI 消息 Map（key = messageId，支持多个并发请求）
   private pendingAIMessages: Map<string, PendingAIMessageInfo> = new Map()
+  // 用户在回答过程中追加的引导。只有模型的下一次请求边界才会消费，绝不销毁当前流。
+  private pendingSteeringMessages: Map<string, ChatInFlightMessage[]> = new Map()
   // 标题生成回调
   private titleCallbacks: TitleGenerationCallbacks | null = null
   // 上下文压缩完成回调：压缩在一轮回答中途发生，UI 需要立刻重算上下文用量
@@ -722,12 +732,98 @@ export class ChatViewModel {
     return snapshot !== this.cancelToken
   }
 
-  private addPendingAIMessage(message: ChatMessage, sessionId: string): void {
+  private addPendingAIMessage(
+    message: ChatMessage,
+    sessionId: string,
+    onUpdated: (message: ChatMessage) => void,
+    steeringSupported: boolean = false
+  ): void {
     this.pendingAIMessages.set(message.id, {
       message: message,
       sessionId: sessionId,
-      persisted: false
+      persisted: false,
+      onUpdated: onUpdated,
+      steeringSupported: steeringSupported
     } as PendingAIMessageInfo)
+  }
+
+  submitSteeringMessage(
+    sessionId: string,
+    content: string,
+    attachments: MessageAttachment[] = []
+  ): boolean {
+    if (sessionId === '' || (content.trim() === '' && attachments.length === 0)) {
+      return false
+    }
+    const candidates: PendingAIMessageInfo[] = []
+    this.pendingAIMessages.forEach((info: PendingAIMessageInfo) => {
+      if (info.sessionId === sessionId && info.message.isGenerating && info.steeringSupported) {
+        candidates.push(info)
+      }
+    })
+    if (candidates.length === 0) {
+      return false
+    }
+    let target = candidates[0]
+    for (let i = 1; i < candidates.length; i++) {
+      if (candidates[i].message.timestamp > target.message.timestamp) {
+        target = candidates[i]
+      }
+    }
+
+    const item = new ChatInFlightMessage(content, attachments, InFlightMessageDelivery.STEER)
+    const pending = this.pendingSteeringMessages.get(sessionId) ?? []
+    pending.push(item)
+    this.pendingSteeringMessages.set(sessionId, pending)
+
+    target.message.responseSegments.push(new AssistantResponseSegment(
+      `${target.message.id}_${target.message.responseSegments.length}_${AssistantResponseSegmentType.USER_GUIDANCE}`,
+      AssistantResponseSegmentType.USER_GUIDANCE,
+      buildSteeringTimelineText(item.content, item.attachments)
+    ))
+    target.onUpdated(target.message)
+    return true
+  }
+
+  clearPendingSteeringMessages(sessionId: string): void {
+    if (sessionId !== '') {
+      this.pendingSteeringMessages.delete(sessionId)
+    }
+  }
+
+  private hasPendingSteeringMessages(sessionId: string): boolean {
+    const pending = this.pendingSteeringMessages.get(sessionId)
+    return pending !== undefined && pending.length > 0
+  }
+
+  private async consumePendingSteeringRequestMessages(
+    sessionId: string,
+    providerId: string,
+    modelId: string
+  ): Promise<RequestMessage[]> {
+    const pending = this.pendingSteeringMessages.get(sessionId)
+    if (pending === undefined || pending.length === 0) {
+      return []
+    }
+    this.pendingSteeringMessages.delete(sessionId)
+
+    const requestMessages: RequestMessage[] = []
+    const supportsDocuments = this.getCurrentModelSupportsDocuments(providerId, modelId)
+    const supportsVision = this.getCurrentModelSupportsVision(providerId, modelId)
+    for (let i = 0; i < pending.length; i++) {
+      let preparedAttachments = await this.prepareOutgoingAttachments(pending[i].attachments)
+      preparedAttachments = this.filterNativeUnsupportedAttachments(
+        preparedAttachments,
+        supportsDocuments,
+        supportsVision
+      )
+      requestMessages.push(new RequestMessage(
+        'user',
+        buildSteeringRequestContent(pending[i].content),
+        preparedAttachments
+      ))
+    }
+    return requestMessages
   }
 
   private clearPendingAIMessageIfMatches(messageId: string): void {
@@ -825,6 +921,7 @@ export class ChatViewModel {
             matchedToolResults[j].content
           ))
         }
+        this.appendPersistedSteeringHistory(msg, historyMessages)
         if (msg.content !== '' || msg.reasoningContent !== '' || msg.attachments.length > 0) {
           const finalAssistant = new RequestMessage(
             msg.role,
@@ -836,11 +933,23 @@ export class ChatViewModel {
         }
         continue
       }
+      if (msg.role === MessageRole.ASSISTANT) {
+        this.appendPersistedSteeringHistory(msg, historyMessages)
+      }
       const requestMessage = new RequestMessage(msg.role, msg.content, this.cloneAttachments(msg.attachments))
       requestMessage.reasoningContent = msg.reasoningContent
       historyMessages.push(requestMessage)
     }
     return historyMessages
+  }
+
+  private appendPersistedSteeringHistory(message: ChatMessage, target: RequestMessage[]): void {
+    for (let i = 0; i < message.responseSegments.length; i++) {
+      const segment = message.responseSegments[i]
+      if (segment.type === AssistantResponseSegmentType.USER_GUIDANCE && segment.content.trim() !== '') {
+        target.push(new RequestMessage('user', buildSteeringRequestContent(segment.content)))
+      }
+    }
   }
 
   // ============ 上下文长度窗口与 compact 工具 ============
@@ -1693,7 +1802,7 @@ export class ChatViewModel {
     aiMessage.parentId = parentage.forkContext !== null ? parentage.forkContext.aiParentId : (userMessage !== null ? userMessage.id : '')
     aiMessage.isGenerating = true
     onAIMessageAdded(aiMessage)
-    this.addPendingAIMessage(aiMessage, snapshotSessionId)
+    this.addPendingAIMessage(aiMessage, snapshotSessionId, onAIMessageUpdated, true)
 
     // 保存用户消息到数据库
     if (snapshotSession !== null && userMessage !== null) {
@@ -1762,202 +1871,225 @@ export class ChatViewModel {
     }
 
     const usageTracker = new RequestTokenUsageTracker()
-    const estimatedRequestInput = this.aiApiService.estimateRequestInputTokens(
-      apiConfig,
-      requestMessages,
-      modelId,
-      reasoningLevel
-    )
-    usageTracker.beginRound(estimatedRequestInput)
-    usageTracker.applyToMessage(aiMessage)
-    onAIMessageUpdated(aiMessage)
-    const requestMaxOutputTokens = resolveRequestMaxOutputTokens(
-      this.getConfiguredMaxOutputTokens(providerId, modelId),
-      this.getCurrentModelContextWindow(providerId, modelId),
-      estimatedRequestInput
-    )
-
-    // 每请求独立的状态（通过闭包隔离）
+    const requestId = this.generateId()
     let cancelled = false
     let userCancelled = false
-    let hasReceivedFirstChunk = false
-    const localFirstChunkThrottle = createThrottle(50)
-    const localContentThrottle = createThrottle(150)
-    const localReasoningThrottle = createThrottle(150)
-    const requestId = this.generateId()
+    let resetCurrentRoundThrottles = (): void => {}
+    const requestTemperature = await this.getRequestTemperature()
 
-    if (this.isCancelled(cancelSnapshot)) {
-      return
-    }
+    const startStreamingRound = async (): Promise<void> => {
+      if (cancelled || this.isCancelled(cancelSnapshot)) {
+        return
+      }
 
-    // 发送流式请求
-	    const requestTemperature = await this.getRequestTemperature()
-	    const httpRequest = this.aiApiService.streamChatRequest(
-      apiConfig,
-      requestMessages,
-      modelId,
-      (contentChunk: string) => {
-        if (cancelled) {
+      const steeringAtBoundary = await this.consumePendingSteeringRequestMessages(
+        snapshotSessionId,
+        providerId,
+        modelId
+      )
+      if (cancelled || this.isCancelled(cancelSnapshot)) {
+        return
+      }
+      for (let i = 0; i < steeringAtBoundary.length; i++) {
+        requestMessages.push(steeringAtBoundary[i])
+      }
+
+      let hasReceivedFirstChunk = false
+      let roundGeneratedContent = ''
+      let roundGeneratedReasoning = ''
+      let roundContentSegment: AssistantResponseSegment | null = null
+      let roundReasoningSegment: AssistantResponseSegment | null = null
+      const localFirstChunkThrottle = createThrottle(50)
+      const localContentThrottle = createThrottle(150)
+      const localReasoningThrottle = createThrottle(150)
+      resetCurrentRoundThrottles = (): void => {
+        localFirstChunkThrottle.reset()
+        localContentThrottle.reset()
+        localReasoningThrottle.reset()
+      }
+
+      const appendRoundContent = (value: string): void => {
+        if (cancelled || value === '') {
           return
         }
-        if (!hasReceivedFirstChunk) {
-          localFirstChunkThrottle.throttle(contentChunk, (throttledContent: string) => {
-            if (cancelled) {
-              return
-            }
-            aiMessage.content += throttledContent
-            onAIMessageUpdated(aiMessage)
-            hasReceivedFirstChunk = true
-          })
-        } else {
-          localContentThrottle.throttle(contentChunk, (throttledContent: string) => {
-            if (cancelled) {
-              return
-            }
-            aiMessage.content += throttledContent
-            onAIMessageUpdated(aiMessage)
-          })
+        roundGeneratedContent += value
+        aiMessage.content += value
+        if (roundContentSegment === null) {
+          roundContentSegment = new AssistantResponseSegment(
+            `${aiMessage.id}_${aiMessage.responseSegments.length}_${AssistantResponseSegmentType.CONTENT}`,
+            AssistantResponseSegmentType.CONTENT,
+            ''
+          )
+          aiMessage.responseSegments.push(roundContentSegment)
         }
-      },
-      async () => {
-        if (cancelled) {
-          return
-        }
-        // 刷新节流器
-        localContentThrottle.flush((throttledContent: string) => {
-          if (cancelled) {
-            return
-          }
-          if (throttledContent !== '') {
-            aiMessage.content += throttledContent
-            onAIMessageUpdated(aiMessage)
-          }
-        })
-        localReasoningThrottle.flush((throttledReasoning: string) => {
-          if (cancelled) {
-            return
-          }
-          if (throttledReasoning !== '') {
-            aiMessage.reasoningContent += throttledReasoning
-            onAIMessageUpdated(aiMessage)
-          }
-        })
-        localFirstChunkThrottle.flush((throttledContent: string) => {
-          if (cancelled) {
-            return
-          }
-          if (throttledContent !== '') {
-            aiMessage.content += throttledContent
-            onAIMessageUpdated(aiMessage)
-          }
-        })
-
-        this.fillEmptyAIContentPlaceholder(aiMessage)
-        usageTracker.finishRound(estimateTextTokens(aiMessage.content) + estimateTextTokens(aiMessage.reasoningContent))
-        usageTracker.applyToMessage(aiMessage)
-        aiMessage.isGenerating = false
-        onAIMessageUpdated(aiMessage)
-
-        if (snapshotSession !== null) {
-          await this.databaseService.addMessage(snapshotSessionId, aiMessage)
-          this.appendMessageToSessionIfMissing(snapshotSession, aiMessage)
-          await this.advanceActiveLeaf(snapshotSession, snapshotSessionId, aiMessage.id)
-          this.markPendingAIMessagePersisted(aiMessage.id)
-          this.clearPendingAIMessageIfMatches(aiMessage.id)
-
-          if (shouldAutoGenerateTitle) {
-            this.generateSmartTitle(snapshotSession)
-          }
-        }
-        this.unregisterActiveRequest(requestId)
-        onComplete()
-      },
-      (error: string) => {
-        if (cancelled) {
-          return
-        }
-        localContentThrottle.flush((throttledContent: string) => {
-          if (cancelled) {
-            return
-          }
-          if (throttledContent !== '') {
-            aiMessage.content += throttledContent
-            onAIMessageUpdated(aiMessage)
-          }
-        })
-        localReasoningThrottle.flush((throttledReasoning: string) => {
-          if (cancelled) {
-            return
-          }
-          if (throttledReasoning !== '') {
-            aiMessage.reasoningContent += throttledReasoning
-            onAIMessageUpdated(aiMessage)
-          }
-        })
-        localFirstChunkThrottle.flush((throttledContent: string) => {
-          if (cancelled) {
-            return
-          }
-          if (throttledContent !== '') {
-            aiMessage.content += throttledContent
-            onAIMessageUpdated(aiMessage)
-          }
-        })
-        usageTracker.finishRound(estimateTextTokens(aiMessage.content) + estimateTextTokens(aiMessage.reasoningContent))
-        usageTracker.applyToMessage(aiMessage)
-        this.fillEmptyAIContentPlaceholder(aiMessage, error)
-        aiMessage.isGenerating = false
-        onAIMessageUpdated(aiMessage)
-
-        if (userCancelled) {
-          console.info('ChatViewModel', 'Request cancelled by user')
-          onComplete()
-        } else {
-          onError(error)
-        }
-        this.clearPendingAIMessageIfMatches(aiMessage.id)
-        this.unregisterActiveRequest(requestId)
-      },
-	      requestTemperature,
-      requestMaxOutputTokens,
-      (reasoningContent: string) => {
-        if (cancelled) {
-          return
-        }
-        localReasoningThrottle.throttle(reasoningContent, (throttledContent: string) => {
-          if (cancelled) {
-            return
-          }
-          aiMessage.reasoningContent += throttledContent
-          onAIMessageUpdated(aiMessage)
-        })
-      },
-      async (base64Data: string, mimeType: string) => {
-        if (cancelled) {
-          return
-        }
-        try {
-          await this.saveAIGeneratedImage(base64Data, mimeType, aiMessage, onAIMessageUpdated)
-        } catch (error) {
-          console.error('ChatViewModel', `Failed to save AI generated image: ${JSON.stringify(error)}`)
-        }
-      },
-      reasoningLevel,
-      (usage: UsageInfo): void => {
-        usageTracker.updateCurrentRoundUsage(usage.prompt_tokens, usage.completion_tokens)
-        usageTracker.applyToMessage(aiMessage)
+        roundContentSegment.content += value
         onAIMessageUpdated(aiMessage)
       }
-    )
+      const appendRoundReasoning = (value: string): void => {
+        if (cancelled || value === '') {
+          return
+        }
+        roundGeneratedReasoning += value
+        aiMessage.reasoningContent += value
+        if (roundReasoningSegment === null) {
+          roundReasoningSegment = new AssistantResponseSegment(
+            `${aiMessage.id}_${aiMessage.responseSegments.length}_${AssistantResponseSegmentType.REASONING}`,
+            AssistantResponseSegmentType.REASONING,
+            ''
+          )
+          aiMessage.responseSegments.push(roundReasoningSegment)
+        }
+        roundReasoningSegment.content += value
+        onAIMessageUpdated(aiMessage)
+      }
+      const flushRound = (): void => {
+        localContentThrottle.flush(appendRoundContent)
+        localReasoningThrottle.flush(appendRoundReasoning)
+        localFirstChunkThrottle.flush(appendRoundContent)
+      }
 
-    // 注册到活跃请求 Map
-    this.registerActiveRequest(requestId, httpRequest, () => {
-      cancelled = true
-      userCancelled = true
-      localFirstChunkThrottle.reset()
-      localContentThrottle.reset()
-      localReasoningThrottle.reset()
-    })
+      const estimatedRequestInput = this.aiApiService.estimateRequestInputTokens(
+        apiConfig,
+        requestMessages,
+        modelId,
+        reasoningLevel
+      )
+      usageTracker.beginRound(estimatedRequestInput)
+      usageTracker.applyToMessage(aiMessage)
+      onAIMessageUpdated(aiMessage)
+      const requestMaxOutputTokens = resolveRequestMaxOutputTokens(
+        this.getConfiguredMaxOutputTokens(providerId, modelId),
+        this.getCurrentModelContextWindow(providerId, modelId),
+        estimatedRequestInput
+      )
+
+      const httpRequest = this.aiApiService.streamChatRequest(
+        apiConfig,
+        requestMessages,
+        modelId,
+        (contentChunk: string) => {
+          if (cancelled) {
+            return
+          }
+          if (!hasReceivedFirstChunk) {
+            localFirstChunkThrottle.throttle(contentChunk, (value: string): void => {
+              appendRoundContent(value)
+              if (!cancelled) {
+                hasReceivedFirstChunk = true
+              }
+            })
+          } else {
+            localContentThrottle.throttle(contentChunk, appendRoundContent)
+          }
+        },
+        async () => {
+          if (cancelled) {
+            return
+          }
+          flushRound()
+          usageTracker.finishRound(
+            estimateTextTokens(roundGeneratedContent) + estimateTextTokens(roundGeneratedReasoning)
+          )
+          usageTracker.applyToMessage(aiMessage)
+
+          if (this.hasPendingSteeringMessages(snapshotSessionId)) {
+            const assistantContinuation = new RequestMessage('assistant', roundGeneratedContent)
+            assistantContinuation.reasoningContent = roundGeneratedReasoning
+            requestMessages.push(assistantContinuation)
+            const steeringMessages = await this.consumePendingSteeringRequestMessages(
+              snapshotSessionId,
+              providerId,
+              modelId
+            )
+            if (cancelled || this.isCancelled(cancelSnapshot)) {
+              return
+            }
+            for (let i = 0; i < steeringMessages.length; i++) {
+              requestMessages.push(steeringMessages[i])
+            }
+            aiMessage.content = ''
+            aiMessage.reasoningContent = ''
+            onAIMessageUpdated(aiMessage)
+            await startStreamingRound()
+            return
+          }
+
+          this.fillEmptyAIContentPlaceholder(aiMessage)
+          aiMessage.isGenerating = false
+          onAIMessageUpdated(aiMessage)
+          if (snapshotSession !== null) {
+            await this.databaseService.addMessage(snapshotSessionId, aiMessage)
+            this.appendMessageToSessionIfMissing(snapshotSession, aiMessage)
+            await this.advanceActiveLeaf(snapshotSession, snapshotSessionId, aiMessage.id)
+            this.markPendingAIMessagePersisted(aiMessage.id)
+            this.clearPendingAIMessageIfMatches(aiMessage.id)
+            if (shouldAutoGenerateTitle) {
+              this.generateSmartTitle(snapshotSession)
+            }
+          }
+          this.unregisterActiveRequest(requestId)
+          onComplete()
+        },
+        (error: string) => {
+          if (cancelled) {
+            return
+          }
+          flushRound()
+          usageTracker.finishRound(
+            estimateTextTokens(roundGeneratedContent) + estimateTextTokens(roundGeneratedReasoning)
+          )
+          usageTracker.applyToMessage(aiMessage)
+          this.fillEmptyAIContentPlaceholder(aiMessage, error)
+          aiMessage.isGenerating = false
+          onAIMessageUpdated(aiMessage)
+          this.clearPendingSteeringMessages(snapshotSessionId)
+          if (userCancelled) {
+            console.info('ChatViewModel', 'Request cancelled by user')
+            onComplete()
+          } else {
+            onError(error)
+          }
+          this.clearPendingAIMessageIfMatches(aiMessage.id)
+          this.unregisterActiveRequest(requestId)
+        },
+        requestTemperature,
+        requestMaxOutputTokens,
+        (reasoningContent: string) => {
+          if (!cancelled) {
+            localReasoningThrottle.throttle(reasoningContent, appendRoundReasoning)
+          }
+        },
+        async (base64Data: string, mimeType: string) => {
+          if (cancelled) {
+            return
+          }
+          try {
+            await this.saveAIGeneratedImage(base64Data, mimeType, aiMessage, onAIMessageUpdated)
+          } catch (error) {
+            console.error('ChatViewModel', `Failed to save AI generated image: ${JSON.stringify(error)}`)
+          }
+        },
+        reasoningLevel,
+        (usage: UsageInfo): void => {
+          usageTracker.updateCurrentRoundUsage(usage.prompt_tokens, usage.completion_tokens)
+          usageTracker.applyToMessage(aiMessage)
+          onAIMessageUpdated(aiMessage)
+        }
+      )
+
+      const existingInfo = this.activeRequests.get(requestId)
+      if (existingInfo !== undefined) {
+        existingInfo.httpRequest = httpRequest
+      } else {
+        this.registerActiveRequest(requestId, httpRequest, () => {
+          cancelled = true
+          userCancelled = true
+          resetCurrentRoundThrottles()
+        })
+      }
+    }
+
+    await startStreamingRound()
   }
 
   // 带网页上下文发送消息
@@ -2048,7 +2180,7 @@ ${webContext.content}
     aiMessage.parentId = parentage.forkContext !== null ? parentage.forkContext.aiParentId : (userMessage !== null ? userMessage.id : '')
     aiMessage.isGenerating = true
     onAIMessageAdded(aiMessage)
-    this.addPendingAIMessage(aiMessage, snapshotSessionId)
+    this.addPendingAIMessage(aiMessage, snapshotSessionId, onAIMessageUpdated)
 
     if (snapshotSession !== null && userMessage !== null) {
       await this.databaseService.addMessage(snapshotSessionId, userMessage)
@@ -2405,7 +2537,7 @@ ${limitedSearchContext}
     }
 
     onAIMessageAdded(aiMessage)
-    this.addPendingAIMessage(aiMessage, snapshotSessionId)
+    this.addPendingAIMessage(aiMessage, snapshotSessionId, onAIMessageUpdated)
 
     if (snapshotSession !== null && userMessage !== null) {
       await this.databaseService.addMessage(snapshotSessionId, userMessage)
@@ -2779,7 +2911,7 @@ ${limitedSearchContext}
     let requestTools: ToolDefinition[] = hasSubAgentTool ? appendSubAgentResultTool(tools) : tools
 
     onAIMessageAdded(aiMessage)
-    this.addPendingAIMessage(aiMessage, snapshotSessionId)
+    this.addPendingAIMessage(aiMessage, snapshotSessionId, onAIMessageUpdated, true)
 
     // 保存用户消息到数据库
     if (snapshotSession !== null && userMessage !== null) {
@@ -3793,6 +3925,19 @@ ${preview}`
       return
     }
 
+    // 已经发出的 HTTP 流不可变更；在每个工具/续答请求边界消费用户引导，当前流不会被销毁。
+    const steeringAtRequestBoundary = await this.consumePendingSteeringRequestMessages(
+      snapshotSessionId,
+      apiConfig.providerId,
+      modelId
+    )
+    if (isCancelledFn()) {
+      return
+    }
+    for (let i = 0; i < steeringAtRequestBoundary.length; i++) {
+      requestMessages.push(steeringAtRequestBoundary[i])
+    }
+
     // 工具结果可能让同一气泡的下一轮请求突然越过阈值。此时不再让模型调用 compact，
     // 而是在发起下一轮流式请求前由应用直接压缩，并继续复用当前 aiMessage。
     const compactionService = getContextCompactionService()
@@ -3953,7 +4098,15 @@ ${preview}`
         reusedContentSegmentOriginalLength = -1
       }
       if (aiMessage.responseSegments.length > roundResponseSegmentStartIndex) {
-        aiMessage.responseSegments = aiMessage.responseSegments.slice(0, roundResponseSegmentStartIndex)
+        const retainedGuidance: AssistantResponseSegment[] = []
+        for (let i = roundResponseSegmentStartIndex; i < aiMessage.responseSegments.length; i++) {
+          if (aiMessage.responseSegments[i].type === AssistantResponseSegmentType.USER_GUIDANCE) {
+            retainedGuidance.push(aiMessage.responseSegments[i])
+          }
+        }
+        aiMessage.responseSegments = aiMessage.responseSegments
+          .slice(0, roundResponseSegmentStartIndex)
+          .concat(retainedGuidance)
       }
       roundReasoningSegmentIndex = -1
       roundContentSegmentIndex = -1
@@ -4609,6 +4762,59 @@ ${preview}`
             )
             return
           }
+          // 用户可能在本轮流式正文生成期间追加了引导。先完整保留这一轮输出，再把引导
+          // 作为新的 user 输入续到同一任务/同一 AI 气泡，避免取消连接或丢失已完成工作。
+          if (this.hasPendingSteeringMessages(snapshotSessionId)) {
+            flushBufferedRoundOutput()
+            const assistantContinuation = new RequestMessage('assistant', roundGeneratedContent)
+            assistantContinuation.reasoningContent = roundGeneratedReasoning
+            requestMessages.push(assistantContinuation)
+            const steeringMessages = await this.consumePendingSteeringRequestMessages(
+              snapshotSessionId,
+              apiConfig.providerId,
+              modelId
+            )
+            if (isCancelledFn()) {
+              return
+            }
+            for (let i = 0; i < steeringMessages.length; i++) {
+              requestMessages.push(steeringMessages[i])
+            }
+            aiMessage.content = ''
+            aiMessage.reasoningContent = ''
+            onAIMessageUpdated(aiMessage)
+            await this.executeToolCallLoop(
+              apiConfig,
+              requestMessages,
+              modelId,
+              aiMessage,
+              onAIMessageUpdated,
+              onComplete,
+              onError,
+              tools,
+              toolCallbacks,
+              reasoningLevel,
+              requestTemperature,
+              iteration + 1,
+              snapshotSessionId,
+              snapshotSession,
+              shouldAutoGenerateTitle,
+              requestId,
+              isCancelledFn,
+              isUserCancelledFn,
+              isToolCancelledFn,
+              setUserCancelled,
+              getHasReceivedFirstChunk,
+              setHasReceivedFirstChunk,
+              localFirstChunkThrottle,
+              localContentThrottle,
+              localReasoningThrottle,
+              usageTracker,
+              automaticCompactionState,
+              compactionSourceMessages
+            )
+            return
+          }
           // 没有工具调用，完成
           flushBufferedRoundOutput()
           await this.finalizeAIMessage(
@@ -5011,6 +5217,7 @@ ${preview}`
     // 取消令牌前移：确保”仍在准备阶段的发送流程”也能被终止
     this.cancelToken = this.cancelToken + 1
     this.toolExecutionService.cancelAllPendingAskUserAnswers()
+    this.pendingSteeringMessages.clear()
 
     // 停止前持久化所有待处理的 AI 消息
     this.persistPendingAIMessageIfNeeded()

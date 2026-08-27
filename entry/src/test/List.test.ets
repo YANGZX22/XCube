@@ -24,6 +24,7 @@ import slashCommandUtilsTest from './SlashCommandUtils.test';
 import planServiceTest from './PlanService.test';
 import pythonSandboxRuntimeTest from './PythonSandboxRuntime.test';
 import attachmentCleanupTest from './AttachmentCleanup.test';
+import chatInFlightMessageTest from './ChatInFlightMessage.test';
 
 export default function testsuite() {
   localUnitTest();
@@ -52,4 +53,5 @@ export default function testsuite() {
   planServiceTest();
   pythonSandboxRuntimeTest();
   attachmentCleanupTest();
+  chatInFlightMessageTest();
 }

@@ -191,7 +191,8 @@ export enum AssistantResponseSegmentType {
   REASONING = 'reasoning',
   CONTENT = 'content',
   TOOL_CALLS = 'tool_calls',
-  CONTEXT_COMPACTION = 'context_compaction'
+  CONTEXT_COMPACTION = 'context_compaction',
+  USER_GUIDANCE = 'user_guidance'
 }
 
 export interface AssistantResponseSegmentJson {
@@ -219,7 +220,8 @@ export class AssistantResponseSegment {
   static fromJson(json: AssistantResponseSegmentJson): AssistantResponseSegment {
     const type = json.type === AssistantResponseSegmentType.REASONING ||
       json.type === AssistantResponseSegmentType.TOOL_CALLS ||
-      json.type === AssistantResponseSegmentType.CONTEXT_COMPACTION
+      json.type === AssistantResponseSegmentType.CONTEXT_COMPACTION ||
+      json.type === AssistantResponseSegmentType.USER_GUIDANCE
       ? json.type : AssistantResponseSegmentType.CONTENT
     return new AssistantResponseSegment(json.id || '', type, json.content || '', json.toolCallIds || [])
   }

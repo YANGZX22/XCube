@@ -29,6 +29,22 @@
       "value": "输入消息..."
     },
     {
+      "name": "chat_inflight_steer",
+      "value": "引导当前回答"
+    },
+    {
+      "name": "chat_inflight_queue",
+      "value": "排队等待回答完成"
+    },
+    {
+      "name": "chat_inflight_steer_accepted",
+      "value": "已追加引导，不会中断当前输出"
+    },
+    {
+      "name": "chat_inflight_queue_accepted",
+      "value": "消息已排队，将在当前回答完成后发送"
+    },
+    {
       "name": "api_key",
       "value": "API Key"
     },

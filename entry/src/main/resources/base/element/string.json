@@ -29,6 +29,22 @@
       "value": "Type a message..."
     },
     {
+      "name": "chat_inflight_steer",
+      "value": "Guide current answer"
+    },
+    {
+      "name": "chat_inflight_queue",
+      "value": "Queue after current answer"
+    },
+    {
+      "name": "chat_inflight_steer_accepted",
+      "value": "Guidance added without interrupting the current output"
+    },
+    {
+      "name": "chat_inflight_queue_accepted",
+      "value": "Message queued and will send after the current answer"
+    },
+    {
       "name": "api_key",
       "value": "API Key"
     },

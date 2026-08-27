@@ -213,7 +213,7 @@ export struct ChatToolPickerSheetContent {
       return $r('sys.symbol.picture')
     }
     if (toolId === 'vision_read_image') {
-      return $r('sys.symbol.picture_badge_arrowshape_turn_right_up')
+      return $r('sys.symbol.hi_vison')
     }
     if (toolId === 'use_skill') {
       return $r('sys.symbol.more')

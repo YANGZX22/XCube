@@ -2306,6 +2306,16 @@ export struct MessageBubble {
     return segments
   }
 
+  private getUserGuidanceSegments(): AssistantResponseSegment[] {
+    const result: AssistantResponseSegment[] = []
+    for (let i = 0; i < this.message.responseSegments.length; i++) {
+      if (this.message.responseSegments[i].type === AssistantResponseSegmentType.USER_GUIDANCE) {
+        result.push(this.message.responseSegments[i])
+      }
+    }
+    return result
+  }
+
   private isTimelineReasoningExpanded(segment: AssistantResponseSegment): boolean {
     // 用户的显式选择优先于"生成中默认展开"，否则思考过程中永远折不起来
     if (this.collapsedTimelineReasoningIds.includes(segment.id)) {
@@ -2555,6 +2565,8 @@ export struct MessageBubble {
           this.TimelineToolSection(segment)
         } else if (segment.type === AssistantResponseSegmentType.CONTEXT_COMPACTION) {
           this.ContextCompactionStatusBar(segment.content)
+        } else if (segment.type === AssistantResponseSegmentType.USER_GUIDANCE && segment.content.trim().length > 0) {
+          this.UserGuidanceSection(segment)
         } else if (segment.type === AssistantResponseSegmentType.CONTENT && segment.content.trim().length > 0) {
           this.TimelineContentSection(segment)
         }
@@ -2705,6 +2717,12 @@ export struct MessageBubble {
               this.ContextCompactionStatusBar(this.message.contextCompactionState)
             }
 
+            if (!getAppUiState().chatOrderedResponseHistory && this.getUserGuidanceSegments().length > 0) {
+              ForEach(this.getUserGuidanceSegments(), (segment: AssistantResponseSegment) => {
+                this.UserGuidanceSection(segment)
+              }, (segment: AssistantResponseSegment) => segment.id)
+            }
+
             // ========== 推理内容区域（可折叠） ==========
             if (!getAppUiState().chatOrderedResponseHistory && this.message.hasReasoningContent()) {
               this.ReasoningSection()
@@ -2819,6 +2837,32 @@ export struct MessageBubble {
     .onTouch((event: TouchEvent) => {
       this.handleMultiSelectTouch(event)
     })
+  }
+
+  @Builder
+  UserGuidanceSection(segment: AssistantResponseSegment) {
+    Row() {
+      Column() {
+        Text(segment.content)
+          .fontSize(13)
+          .fontFamily(this.chatBubbleTypeface)
+          .fontColor(this.isManuscriptMode ? $r('app.color.text_primary') : this.themeUserBubbleText)
+          .maxLines(4)
+          .textOverflow({ overflow: TextOverflow.Ellipsis })
+      }
+      .constraintSize({ maxWidth: '88%' })
+      .padding({ left: 10, right: 10, top: 7, bottom: 7 })
+      .backgroundColor(this.isManuscriptMode ? Color.Transparent : this.themeUserBubble)
+      .borderRadius(this.isManuscriptMode ? 0 : 10)
+      .border({
+        width: this.isManuscriptMode ? { top: 1, bottom: 1 } : 0.5,
+        color: this.isManuscriptMode ? getAppUiState().themeDivider : this.themePrimaryLight
+      })
+    }
+    .width('100%')
+    .justifyContent(FlexAlign.End)
+    .margin({ bottom: 8 })
+    .transition(TransitionEffect.OPACITY.animation({ duration: 160 }))
   }
 
   @Builder
