@@ -21,6 +21,8 @@ export const PYTHON_SOURCE_HAN_SERIF_FONT_URL: string =
 export const PYTHON_CMU_SERIF_FONT_PATH: string = '/usr/share/fonts/xcube/CMUSerif-Regular.ttf'
 export const PYTHON_SOURCE_HAN_SERIF_FONT_PATH: string =
   '/usr/share/fonts/xcube/SourceHanSerifSC-Regular.otf'
+export const PYTHON_FPDF_IMPORT_NAME: string = 'fpdf'
+export const PYTHON_FPDF_PACKAGE_NAME: string = 'fpdf2'
 
 // The page itself only coordinates ArkTS and a dedicated worker. Python never runs on
 // the WebView main thread, so a timed-out worker can be terminated without freezing the host.
@@ -45,6 +47,9 @@ export const PYODIDE_HOST_HTML: string = `<!DOCTYPE html>
     { url: '${PYTHON_CMU_SERIF_FONT_URL}', path: '${PYTHON_CMU_SERIF_FONT_PATH}' },
     { url: '${PYTHON_SOURCE_HAN_SERIF_FONT_URL}', path: '${PYTHON_SOURCE_HAN_SERIF_FONT_PATH}' }
   ];
+  const AUTO_PACKAGE_BY_IMPORT = new Map([
+    ['${PYTHON_FPDF_IMPORT_NAME}', '${PYTHON_FPDF_PACKAGE_NAME}']
+  ]);
   const PYTHON_FONT_ROOT = '/usr/share/fonts/xcube';
   const PYTHON_OUTPUT_ROOT = '/tmp/xcube-python-output';
   const MAX_OUTPUT_IMAGES = ${PYTHON_MAX_OUTPUT_IMAGES};
@@ -424,6 +429,34 @@ export const PYODIDE_HOST_HTML: string = `<!DOCTYPE html>
     };
   }
 
+  function normalizeDistributionName(packageSpec) {
+    const match = String(packageSpec).trim().match(/^[A-Za-z0-9][A-Za-z0-9._-]*/);
+    return match ? match[0].replace(/[._-]+/g, '-').toLowerCase() : '';
+  }
+
+  function resolveAutoPackages(code, requestedPackages, warnings) {
+    const packages = requestedPackages.slice();
+    let codeModule = null;
+    let importsProxy = null;
+    try {
+      codeModule = pyodide.pyimport('pyodide.code');
+      importsProxy = codeModule.find_imports(code);
+      const importedModules = importsProxy.toJs();
+      AUTO_PACKAGE_BY_IMPORT.forEach((packageName, importName) => {
+        if (!importedModules.includes(importName)) return;
+        const alreadyRequested = packages.some((packageSpec) =>
+          normalizeDistributionName(packageSpec) === normalizeDistributionName(packageName));
+        if (!alreadyRequested) packages.push(packageName);
+      });
+    } catch (e) {
+      warnings.push('自动解析 Python 第三方包失败: ' + (e && e.message ? e.message : String(e)));
+    } finally {
+      if (importsProxy && typeof importsProxy.destroy === 'function') importsProxy.destroy();
+      if (codeModule && typeof codeModule.destroy === 'function') codeModule.destroy();
+    }
+    return packages;
+  }
+
   async function installRequestedPackages(requestId, packages, warnings) {
     if (packages.length === 0) return;
     const callbacks = packageCallbacks(requestId, warnings);
@@ -529,11 +562,12 @@ export const PYODIDE_HOST_HTML: string = `<!DOCTYPE html>
       const code = b64ToUtf8(request.codeB64);
       const variablesJson = b64ToUtf8(request.varsB64);
       const requestedPackages = parseRequestedPackages(request.packagesB64);
+      const packagesToInstall = resolveAutoPackages(code, requestedPackages, result.warnings);
 
       packageNetworkAllowed = true;
       try {
         await pyodide.loadPackagesFromImports(code, packageCallbacks(request.requestId, result.warnings));
-        await installRequestedPackages(request.requestId, requestedPackages, result.warnings);
+        await installRequestedPackages(request.requestId, packagesToInstall, result.warnings);
       } finally {
         packageNetworkAllowed = false;
       }

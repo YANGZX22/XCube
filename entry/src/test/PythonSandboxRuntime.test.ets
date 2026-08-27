@@ -20,6 +20,8 @@ import {
   PYODIDE_VERSION,
   PYTHON_CMU_SERIF_FONT_PATH,
   PYTHON_CMU_SERIF_FONT_URL,
+  PYTHON_FPDF_IMPORT_NAME,
+  PYTHON_FPDF_PACKAGE_NAME,
   PYTHON_SOURCE_HAN_SERIF_FONT_PATH,
   PYTHON_SOURCE_HAN_SERIF_FONT_URL
 } from '../main/ets/services/PyodideHostHtml'
@@ -34,7 +36,7 @@ import {
   isPythonSandboxFileAttachmentId,
   parsePythonSandboxFileUrl
 } from '../main/ets/services/PythonSandboxArtifactLink'
-import { PYTHON_FONT_USAGE_GUIDANCE } from '../main/ets/config/BuiltinTools'
+import { PYTHON_FONT_USAGE_GUIDANCE, PYTHON_PDF_USAGE_GUIDANCE } from '../main/ets/config/BuiltinTools'
 
 export default function pythonSandboxRuntimeTest() {
   describe('pythonSandboxRuntimeTest', () => {
@@ -92,6 +94,18 @@ export default function pythonSandboxRuntimeTest() {
       expect(normalizePythonPackageSpecs(manyPackages).length).assertEqual(PYTHON_MAX_REQUESTED_PACKAGES)
     })
 
+    it('auto_installs_fpdf2_for_fpdf_imports_without_duplicate_requests', 0, () => {
+      expect(PYTHON_FPDF_IMPORT_NAME).assertEqual('fpdf')
+      expect(PYTHON_FPDF_PACKAGE_NAME).assertEqual('fpdf2')
+      expect(PYODIDE_HOST_HTML.includes("pyodide.pyimport('pyodide.code')")).assertTrue()
+      expect(PYODIDE_HOST_HTML.includes('codeModule.find_imports(code)')).assertTrue()
+      expect(PYODIDE_HOST_HTML.includes("['fpdf', 'fpdf2']")).assertTrue()
+      expect(PYODIDE_HOST_HTML.includes('normalizeDistributionName(packageSpec)')).assertTrue()
+      expect(PYODIDE_HOST_HTML.includes('resolveAutoPackages(code, requestedPackages')).assertTrue()
+      expect(PYODIDE_HOST_HTML.includes('installRequestedPackages(request.requestId, packagesToInstall'))
+        .assertTrue()
+    })
+
     it('captures_bounded_artifact_files_from_each_isolated_python_run', 0, () => {
       expect(PYTHON_MAX_OUTPUT_IMAGES).assertEqual(4)
       expect(PYTHON_MAX_OUTPUT_IMAGE_BYTES).assertEqual(4 * 1024 * 1024)
@@ -134,6 +148,12 @@ export default function pythonSandboxRuntimeTest() {
       expect(PYTHON_FONT_USAGE_GUIDANCE.includes('ImageFont.truetype(PYTHON_FONT_CJK, size)')).assertTrue()
       expect(PYTHON_FONT_USAGE_GUIDANCE.includes('Pillow 不会自动回退字体')).assertTrue()
       expect(PYTHON_FONT_USAGE_GUIDANCE.includes('中英混排须按文字脚本切分')).assertTrue()
+      expect(PYTHON_PDF_USAGE_GUIDANCE.includes('from fpdf import FPDF')).assertTrue()
+      expect(PYTHON_PDF_USAGE_GUIDANCE.includes("pdf.add_font('CMU', fname=PYTHON_FONT_EN)")).assertTrue()
+      expect(PYTHON_PDF_USAGE_GUIDANCE.includes("pdf.add_font('SourceHan', fname=PYTHON_FONT_CJK)"))
+        .assertTrue()
+      expect(PYTHON_PDF_USAGE_GUIDANCE.includes("pdf.set_fallback_fonts(['SourceHan']"))
+        .assertTrue()
     })
 
     it('normalizes_python_image_names_and_mime_extensions_before_persisting', 0, () => {

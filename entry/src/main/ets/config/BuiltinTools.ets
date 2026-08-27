@@ -104,6 +104,11 @@ export const PYTHON_FONT_USAGE_GUIDANCE: string =
     "不要把混排文本强制指定为单一字体。Pillow 不会自动回退字体：英文和数字使用 " +
     'ImageFont.truetype(PYTHON_FONT_EN, size)，中文使用 ImageFont.truetype(PYTHON_FONT_CJK, size)；' +
     '中英混排须按文字脚本切分，使用 textlength 或 textbbox 累计位置后分别 draw.text，不能把含中文的整段文字交给 CMU Serif。'
+export const PYTHON_PDF_USAGE_GUIDANCE: string =
+  'PDF 生成规则：from fpdf import FPDF 会自动安装 fpdf2，无需填写 packages。中英混排时先调用 ' +
+    "pdf.add_font('CMU', fname=PYTHON_FONT_EN) 与 pdf.add_font('SourceHan', fname=PYTHON_FONT_CJK)，" +
+    "再设置 pdf.set_font('CMU', size=14) 和 pdf.set_fallback_fonts(['SourceHan'], exact_match=False)；" +
+    '普通中英文无需开启 text shaping。将 PDF 输出到 PYTHON_OUTPUT_DIR 下，并在最终回复原样使用 files 返回的 markdown。'
 export const CANVAS_DOCUMENT_TOOL_ID: string = 'canvas_document'
 export const CANVAS_DOCUMENT_MAX_WRITE_CHARACTERS: number = 4000
 export const PDF_TO_TEXT_TOOL_ID: string = 'pdf_to_text'
@@ -2639,7 +2644,7 @@ function createPythonSandboxToolDefinition(): ToolDefinition {
     "properties": {
       "code": {
         "type": "string",
-        "description": "要执行的 Python 3 代码。支持完整 Python 语法与标准库；import pandas、numpy、scipy、scikit-learn、matplotlib、Pillow 等 Pyodide 官方包时会在执行前自动加载。Matplotlib 默认使用 CMU Serif 显示英文、思源宋体显示中文；Pillow 可分别通过 PYTHON_FONT_EN、PYTHON_FONT_CJK 获取字体路径。${PYTHON_FONT_USAGE_GUIDANCE}可用 print 输出，最后一个表达式的值会作为 result 返回。写入相对路径或 PYTHON_OUTPUT_DIR 的 PNG、JPEG、GIF、WebP 会在 images 中返回；PDF、CSV、JSON、Office、ZIP 等任意其他文件会在 files 中返回。要在气泡中交付普通文件，必须在最终回复原样输出 files 中的 markdown 字段，即 [文件名](xcube-file://attachmentId)；不要臆造 attachmentId 或内部链接。图片最多 4 张，单张 4 MiB、合计 8 MiB；普通文件最多 8 个，单个 16 MiB、合计 32 MiB。代码不能访问应用或系统文件、直接发起网络请求或运行系统命令。"
+        "description": "要执行的 Python 3 代码。支持完整 Python 语法与标准库；import pandas、numpy、scipy、scikit-learn、matplotlib、Pillow 等 Pyodide 官方包时会在执行前自动加载，import fpdf 时会自动安装 fpdf2。Matplotlib 默认使用 CMU Serif 显示英文、思源宋体显示中文；Pillow 可分别通过 PYTHON_FONT_EN、PYTHON_FONT_CJK 获取字体路径。${PYTHON_FONT_USAGE_GUIDANCE}${PYTHON_PDF_USAGE_GUIDANCE}可用 print 输出，最后一个表达式的值会作为 result 返回。写入相对路径或 PYTHON_OUTPUT_DIR 的 PNG、JPEG、GIF、WebP 会在 images 中返回；PDF、CSV、JSON、Office、ZIP 等任意其他文件会在 files 中返回。要在气泡中交付普通文件，必须在最终回复原样输出 files 中的 markdown 字段，即 [文件名](xcube-file://attachmentId)；不要臆造 attachmentId 或内部链接。图片最多 4 张，单张 4 MiB、合计 8 MiB；普通文件最多 8 个，单个 16 MiB、合计 32 MiB。代码不能访问应用或系统文件、直接发起网络请求或运行系统命令。"
       },
       "variables": {
         "type": "object",
@@ -2662,7 +2667,7 @@ function createPythonSandboxToolDefinition(): ToolDefinition {
 
   const func = new ToolFunction(
     PYTHON_SANDBOX_TOOL_ID,
-    `模型可在隔离的 Web Worker 中运行 Pyodide/CPython，用于数学计算、数据处理、统计分析、算法验证、生图和生成文件。import pandas、numpy、scipy、scikit-learn、matplotlib、Pillow 等官方包时会按需加载，也可通过 packages 安装纯 Python 或兼容的 PyEmscripten wheel。Matplotlib 默认使用 CMU Serif 显示英文、思源宋体显示中文；Pillow 可通过 PYTHON_FONT_EN、PYTHON_FONT_CJK 使用同一组字体。${PYTHON_FONT_USAGE_GUIDANCE}写入运行目录的图片会在 images 返回 attachmentId，可用 vision_read_image 或 image_to_text 调取；PDF 及其他文件会在 files 返回 markdown，在最终回复中原样输出即可以 Markdown 链接交付，用户点击后选择本地保存位置。不要臆造内部链接。代码不能访问应用/系统文件、直接联网或运行系统命令；包加载器自身会访问受限的 Pyodide/PyPI 源。`,
+    `模型可在隔离的 Web Worker 中运行 Pyodide/CPython，用于数学计算、数据处理、统计分析、算法验证、生图和生成文件。import pandas、numpy、scipy、scikit-learn、matplotlib、Pillow 等官方包时会按需加载；import fpdf 会自动安装 fpdf2；也可通过 packages 安装其他纯 Python 或兼容的 PyEmscripten wheel。Matplotlib 默认使用 CMU Serif 显示英文、思源宋体显示中文；Pillow 可通过 PYTHON_FONT_EN、PYTHON_FONT_CJK 使用同一组字体。${PYTHON_FONT_USAGE_GUIDANCE}${PYTHON_PDF_USAGE_GUIDANCE}写入运行目录的图片会在 images 返回 attachmentId，可用 vision_read_image 或 image_to_text 调取；PDF 及其他文件会在 files 返回 markdown，在最终回复中原样输出即可以 Markdown 链接交付，用户点击后选择本地保存位置。不要臆造内部链接。代码不能访问应用/系统文件、直接联网或运行系统命令；包加载器自身会访问受限的 Pyodide/PyPI 源。`,
     parameters
   )
 
