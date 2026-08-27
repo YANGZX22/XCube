@@ -14,13 +14,43 @@ export const PYODIDE_INDEX_URL: string = `https://cdn.jsdelivr.net/pyodide/v${PY
 export const PYODIDE_COMPAT_VERSION: string = '0.29.4'
 export const PYODIDE_COMPAT_INDEX_URL: string =
   `https://cdn.jsdelivr.net/pyodide/v${PYODIDE_COMPAT_VERSION}/full/`
-export const PYTHON_CMU_SERIF_FONT_URL: string =
+export const PYTHON_CMU_SERIF_REGULAR_FONT_URL: string =
   'https://python-fonts.xcube.invalid/CMUSerif-Regular.ttf'
-export const PYTHON_SOURCE_HAN_SERIF_FONT_URL: string =
+export const PYTHON_CMU_SERIF_BOLD_FONT_URL: string =
+  'https://python-fonts.xcube.invalid/CMUSerif-Bold.ttf'
+export const PYTHON_CMU_SERIF_ITALIC_FONT_URL: string =
+  'https://python-fonts.xcube.invalid/CMUSerif-Italic.ttf'
+export const PYTHON_CMU_SERIF_BOLD_ITALIC_FONT_URL: string =
+  'https://python-fonts.xcube.invalid/CMUSerif-BoldItalic.ttf'
+export const PYTHON_SOURCE_HAN_SERIF_REGULAR_FONT_URL: string =
   'https://python-fonts.xcube.invalid/SourceHanSerifSC-Regular.otf'
-export const PYTHON_CMU_SERIF_FONT_PATH: string = '/usr/share/fonts/xcube/CMUSerif-Regular.ttf'
-export const PYTHON_SOURCE_HAN_SERIF_FONT_PATH: string =
+export const PYTHON_SOURCE_HAN_SERIF_BOLD_FONT_URL: string =
+  'https://python-fonts.xcube.invalid/SourceHanSerifSC-Bold.otf'
+export const PYTHON_SOURCE_HAN_SERIF_ITALIC_FONT_URL: string =
+  'https://python-fonts.xcube.invalid/SourceHanSerifSC-Italic.ttf'
+export const PYTHON_SOURCE_HAN_SERIF_BOLD_ITALIC_FONT_URL: string =
+  'https://python-fonts.xcube.invalid/SourceHanSerifSC-BoldItalic.ttf'
+export const PYTHON_CMU_SERIF_REGULAR_FONT_PATH: string =
+  '/usr/share/fonts/xcube/CMUSerif-Regular.ttf'
+export const PYTHON_CMU_SERIF_BOLD_FONT_PATH: string =
+  '/usr/share/fonts/xcube/CMUSerif-Bold.ttf'
+export const PYTHON_CMU_SERIF_ITALIC_FONT_PATH: string =
+  '/usr/share/fonts/xcube/CMUSerif-Italic.ttf'
+export const PYTHON_CMU_SERIF_BOLD_ITALIC_FONT_PATH: string =
+  '/usr/share/fonts/xcube/CMUSerif-BoldItalic.ttf'
+export const PYTHON_SOURCE_HAN_SERIF_REGULAR_FONT_PATH: string =
   '/usr/share/fonts/xcube/SourceHanSerifSC-Regular.otf'
+export const PYTHON_SOURCE_HAN_SERIF_BOLD_FONT_PATH: string =
+  '/usr/share/fonts/xcube/SourceHanSerifSC-Bold.otf'
+export const PYTHON_SOURCE_HAN_SERIF_ITALIC_FONT_PATH: string =
+  '/usr/share/fonts/xcube/SourceHanSerifSC-Italic.ttf'
+export const PYTHON_SOURCE_HAN_SERIF_BOLD_ITALIC_FONT_PATH: string =
+  '/usr/share/fonts/xcube/SourceHanSerifSC-BoldItalic.ttf'
+// Keep the original regular-font exports for source compatibility.
+export const PYTHON_CMU_SERIF_FONT_URL: string = PYTHON_CMU_SERIF_REGULAR_FONT_URL
+export const PYTHON_SOURCE_HAN_SERIF_FONT_URL: string = PYTHON_SOURCE_HAN_SERIF_REGULAR_FONT_URL
+export const PYTHON_CMU_SERIF_FONT_PATH: string = PYTHON_CMU_SERIF_REGULAR_FONT_PATH
+export const PYTHON_SOURCE_HAN_SERIF_FONT_PATH: string = PYTHON_SOURCE_HAN_SERIF_REGULAR_FONT_PATH
 export const PYTHON_FPDF_IMPORT_NAME: string = 'fpdf'
 export const PYTHON_FPDF_PACKAGE_NAME: string = 'fpdf2'
 
@@ -40,12 +70,24 @@ export const PYODIDE_HOST_HTML: string = `<!DOCTYPE html>
   const PYODIDE_INDEX_URL = '${PYODIDE_INDEX_URL}';
   const PACKAGE_NETWORK_HOSTS = new Set(['cdn.jsdelivr.net', 'pypi.org', 'files.pythonhosted.org']);
   const BUILTIN_FONT_URLS = new Set([
-    '${PYTHON_CMU_SERIF_FONT_URL}',
-    '${PYTHON_SOURCE_HAN_SERIF_FONT_URL}'
+    '${PYTHON_CMU_SERIF_REGULAR_FONT_URL}',
+    '${PYTHON_CMU_SERIF_BOLD_FONT_URL}',
+    '${PYTHON_CMU_SERIF_ITALIC_FONT_URL}',
+    '${PYTHON_CMU_SERIF_BOLD_ITALIC_FONT_URL}',
+    '${PYTHON_SOURCE_HAN_SERIF_REGULAR_FONT_URL}',
+    '${PYTHON_SOURCE_HAN_SERIF_BOLD_FONT_URL}',
+    '${PYTHON_SOURCE_HAN_SERIF_ITALIC_FONT_URL}',
+    '${PYTHON_SOURCE_HAN_SERIF_BOLD_ITALIC_FONT_URL}'
   ]);
   const BUILTIN_FONTS = [
-    { url: '${PYTHON_CMU_SERIF_FONT_URL}', path: '${PYTHON_CMU_SERIF_FONT_PATH}' },
-    { url: '${PYTHON_SOURCE_HAN_SERIF_FONT_URL}', path: '${PYTHON_SOURCE_HAN_SERIF_FONT_PATH}' }
+    { url: '${PYTHON_CMU_SERIF_REGULAR_FONT_URL}', path: '${PYTHON_CMU_SERIF_REGULAR_FONT_PATH}' },
+    { url: '${PYTHON_CMU_SERIF_BOLD_FONT_URL}', path: '${PYTHON_CMU_SERIF_BOLD_FONT_PATH}' },
+    { url: '${PYTHON_CMU_SERIF_ITALIC_FONT_URL}', path: '${PYTHON_CMU_SERIF_ITALIC_FONT_PATH}' },
+    { url: '${PYTHON_CMU_SERIF_BOLD_ITALIC_FONT_URL}', path: '${PYTHON_CMU_SERIF_BOLD_ITALIC_FONT_PATH}' },
+    { url: '${PYTHON_SOURCE_HAN_SERIF_REGULAR_FONT_URL}', path: '${PYTHON_SOURCE_HAN_SERIF_REGULAR_FONT_PATH}' },
+    { url: '${PYTHON_SOURCE_HAN_SERIF_BOLD_FONT_URL}', path: '${PYTHON_SOURCE_HAN_SERIF_BOLD_FONT_PATH}' },
+    { url: '${PYTHON_SOURCE_HAN_SERIF_ITALIC_FONT_URL}', path: '${PYTHON_SOURCE_HAN_SERIF_ITALIC_FONT_PATH}' },
+    { url: '${PYTHON_SOURCE_HAN_SERIF_BOLD_ITALIC_FONT_URL}', path: '${PYTHON_SOURCE_HAN_SERIF_BOLD_ITALIC_FONT_PATH}' }
   ];
   const AUTO_PACKAGE_BY_IMPORT = new Map([
     ['${PYTHON_FPDF_IMPORT_NAME}', '${PYTHON_FPDF_PACKAGE_NAME}']
@@ -497,13 +539,29 @@ export const PYODIDE_HOST_HTML: string = `<!DOCTYPE html>
     }
 
     pyodide.globals.set('PYTHON_FONT_DIR', PYTHON_FONT_ROOT);
-    pyodide.globals.set('PYTHON_FONT_EN', '${PYTHON_CMU_SERIF_FONT_PATH}');
-    pyodide.globals.set('PYTHON_FONT_CJK', '${PYTHON_SOURCE_HAN_SERIF_FONT_PATH}');
+    pyodide.globals.set('PYTHON_FONT_EN', '${PYTHON_CMU_SERIF_REGULAR_FONT_PATH}');
+    pyodide.globals.set('PYTHON_FONT_CJK', '${PYTHON_SOURCE_HAN_SERIF_REGULAR_FONT_PATH}');
+    pyodide.globals.set('PYTHON_FONT_EN_REGULAR', '${PYTHON_CMU_SERIF_REGULAR_FONT_PATH}');
+    pyodide.globals.set('PYTHON_FONT_EN_BOLD', '${PYTHON_CMU_SERIF_BOLD_FONT_PATH}');
+    pyodide.globals.set('PYTHON_FONT_EN_ITALIC', '${PYTHON_CMU_SERIF_ITALIC_FONT_PATH}');
+    pyodide.globals.set('PYTHON_FONT_EN_BOLD_ITALIC', '${PYTHON_CMU_SERIF_BOLD_ITALIC_FONT_PATH}');
+    pyodide.globals.set('PYTHON_FONT_CJK_REGULAR', '${PYTHON_SOURCE_HAN_SERIF_REGULAR_FONT_PATH}');
+    pyodide.globals.set('PYTHON_FONT_CJK_BOLD', '${PYTHON_SOURCE_HAN_SERIF_BOLD_FONT_PATH}');
+    pyodide.globals.set('PYTHON_FONT_CJK_ITALIC', '${PYTHON_SOURCE_HAN_SERIF_ITALIC_FONT_PATH}');
+    pyodide.globals.set('PYTHON_FONT_CJK_BOLD_ITALIC', '${PYTHON_SOURCE_HAN_SERIF_BOLD_ITALIC_FONT_PATH}');
     pyodide.runPython([
       'import os as _xcube_os',
       "_xcube_os.environ['XCUBE_PYTHON_FONT_DIR'] = '" + PYTHON_FONT_ROOT + "'",
-      "_xcube_os.environ['XCUBE_PYTHON_FONT_EN'] = '${PYTHON_CMU_SERIF_FONT_PATH}'",
-      "_xcube_os.environ['XCUBE_PYTHON_FONT_CJK'] = '${PYTHON_SOURCE_HAN_SERIF_FONT_PATH}'"
+      "_xcube_os.environ['XCUBE_PYTHON_FONT_EN'] = '${PYTHON_CMU_SERIF_REGULAR_FONT_PATH}'",
+      "_xcube_os.environ['XCUBE_PYTHON_FONT_CJK'] = '${PYTHON_SOURCE_HAN_SERIF_REGULAR_FONT_PATH}'",
+      "_xcube_os.environ['XCUBE_PYTHON_FONT_EN_REGULAR'] = '${PYTHON_CMU_SERIF_REGULAR_FONT_PATH}'",
+      "_xcube_os.environ['XCUBE_PYTHON_FONT_EN_BOLD'] = '${PYTHON_CMU_SERIF_BOLD_FONT_PATH}'",
+      "_xcube_os.environ['XCUBE_PYTHON_FONT_EN_ITALIC'] = '${PYTHON_CMU_SERIF_ITALIC_FONT_PATH}'",
+      "_xcube_os.environ['XCUBE_PYTHON_FONT_EN_BOLD_ITALIC'] = '${PYTHON_CMU_SERIF_BOLD_ITALIC_FONT_PATH}'",
+      "_xcube_os.environ['XCUBE_PYTHON_FONT_CJK_REGULAR'] = '${PYTHON_SOURCE_HAN_SERIF_REGULAR_FONT_PATH}'",
+      "_xcube_os.environ['XCUBE_PYTHON_FONT_CJK_BOLD'] = '${PYTHON_SOURCE_HAN_SERIF_BOLD_FONT_PATH}'",
+      "_xcube_os.environ['XCUBE_PYTHON_FONT_CJK_ITALIC'] = '${PYTHON_SOURCE_HAN_SERIF_ITALIC_FONT_PATH}'",
+      "_xcube_os.environ['XCUBE_PYTHON_FONT_CJK_BOLD_ITALIC'] = '${PYTHON_SOURCE_HAN_SERIF_BOLD_ITALIC_FONT_PATH}'"
     ].join('\\n'));
     if (failures.length > 0) {
       throw new Error(failures.join('; '));
@@ -521,9 +579,21 @@ export const PYODIDE_HOST_HTML: string = `<!DOCTYPE html>
         'if _xcube_has_matplotlib:',
         '    import matplotlib as _xcube_matplotlib',
         '    from matplotlib import font_manager as _xcube_font_manager',
-        "    for _xcube_font_path in ('${PYTHON_CMU_SERIF_FONT_PATH}', '${PYTHON_SOURCE_HAN_SERIF_FONT_PATH}'):",
+        "    for _xcube_font_path in ('${PYTHON_CMU_SERIF_REGULAR_FONT_PATH}', '${PYTHON_CMU_SERIF_BOLD_FONT_PATH}', '${PYTHON_CMU_SERIF_ITALIC_FONT_PATH}', '${PYTHON_CMU_SERIF_BOLD_ITALIC_FONT_PATH}', '${PYTHON_SOURCE_HAN_SERIF_REGULAR_FONT_PATH}', '${PYTHON_SOURCE_HAN_SERIF_BOLD_FONT_PATH}', '${PYTHON_SOURCE_HAN_SERIF_ITALIC_FONT_PATH}', '${PYTHON_SOURCE_HAN_SERIF_BOLD_ITALIC_FONT_PATH}'):",
         '        if _xcube_os.path.isfile(_xcube_font_path):',
         '            _xcube_font_manager.fontManager.addfont(_xcube_font_path)',
+        '    _xcube_cjk_style_aliases = (',
+        "        ('${PYTHON_SOURCE_HAN_SERIF_ITALIC_FONT_PATH}', 'italic', 400),",
+        "        ('${PYTHON_SOURCE_HAN_SERIF_BOLD_ITALIC_FONT_PATH}', 'italic', 700),",
+        '    )',
+        '    for _xcube_font_path, _xcube_style, _xcube_weight in _xcube_cjk_style_aliases:',
+        '        if _xcube_os.path.isfile(_xcube_font_path):',
+        '            _xcube_font_manager.fontManager.ttflist.append(_xcube_font_manager.FontEntry(',
+        "                fname=_xcube_font_path, name='Source Han Serif SC', style=_xcube_style,",
+        "                variant='normal', weight=_xcube_weight, stretch='normal', size='scalable'))",
+        "    _xcube_findfont_cache = getattr(_xcube_font_manager.fontManager, '_findfont_cached', None)",
+        "    if _xcube_findfont_cache is not None and hasattr(_xcube_findfont_cache, 'cache_clear'):",
+        '        _xcube_findfont_cache.cache_clear()',
         "    _xcube_matplotlib.rcParams['font.family'] = ['CMU Serif', 'Source Han Serif SC', 'DejaVu Serif']",
         "    _xcube_matplotlib.rcParams['font.serif'] = ['CMU Serif', 'Source Han Serif SC', 'DejaVu Serif']",
         "    _xcube_matplotlib.rcParams['axes.unicode_minus'] = False",

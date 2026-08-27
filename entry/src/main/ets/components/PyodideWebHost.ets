@@ -3,8 +3,14 @@ import { hilog } from '@kit.PerformanceAnalysisKit'
 import { getPyodideRuntimeService, PyodideHost } from '../services/PyodideRuntimeService'
 import {
   PYODIDE_HOST_HTML,
-  PYTHON_CMU_SERIF_FONT_URL,
-  PYTHON_SOURCE_HAN_SERIF_FONT_URL
+  PYTHON_CMU_SERIF_BOLD_FONT_URL,
+  PYTHON_CMU_SERIF_BOLD_ITALIC_FONT_URL,
+  PYTHON_CMU_SERIF_ITALIC_FONT_URL,
+  PYTHON_CMU_SERIF_REGULAR_FONT_URL,
+  PYTHON_SOURCE_HAN_SERIF_BOLD_FONT_URL,
+  PYTHON_SOURCE_HAN_SERIF_BOLD_ITALIC_FONT_URL,
+  PYTHON_SOURCE_HAN_SERIF_ITALIC_FONT_URL,
+  PYTHON_SOURCE_HAN_SERIF_REGULAR_FONT_URL
 } from '../services/PyodideHostHtml'
 
 const DOMAIN = 0x0002
@@ -122,14 +128,41 @@ export struct PyodideWebHost {
           return null
         }
         const url = event.request.getRequestUrl()
-        if (url === PYTHON_CMU_SERIF_FONT_URL) {
+        if (url === PYTHON_CMU_SERIF_REGULAR_FONT_URL) {
           return this.createFontResponse(
             $rawfile('fonts/cmu-serif/fonts_/CMU Serif Roman.ttf'),
             'font/ttf'
           )
         }
-        if (url === PYTHON_SOURCE_HAN_SERIF_FONT_URL) {
+        if (url === PYTHON_CMU_SERIF_BOLD_FONT_URL) {
+          return this.createFontResponse(
+            $rawfile('fonts/cmu-serif/fonts_/CMU Serif Bold Extended Roman.ttf'),
+            'font/ttf'
+          )
+        }
+        if (url === PYTHON_CMU_SERIF_ITALIC_FONT_URL) {
+          return this.createFontResponse(
+            $rawfile('fonts/cmu-serif/fonts_/CMU Serif Italic.ttf'),
+            'font/ttf'
+          )
+        }
+        if (url === PYTHON_CMU_SERIF_BOLD_ITALIC_FONT_URL) {
+          return this.createFontResponse(
+            $rawfile('fonts/cmu-serif/fonts_/CMU Serif Bold Extended Italic.ttf'),
+            'font/ttf'
+          )
+        }
+        if (url === PYTHON_SOURCE_HAN_SERIF_REGULAR_FONT_URL) {
           return this.createFontResponse($rawfile('fonts/SourceHanSerifSC-Regular.otf'), 'font/otf')
+        }
+        if (url === PYTHON_SOURCE_HAN_SERIF_BOLD_FONT_URL) {
+          return this.createFontResponse($rawfile('fonts/SourceHanSerifSC-Bold.otf'), 'font/otf')
+        }
+        if (url === PYTHON_SOURCE_HAN_SERIF_ITALIC_FONT_URL) {
+          return this.createFontResponse($rawfile('fonts/SourceHanSerifSC-Italic.ttf'), 'font/ttf')
+        }
+        if (url === PYTHON_SOURCE_HAN_SERIF_BOLD_ITALIC_FONT_URL) {
+          return this.createFontResponse($rawfile('fonts/SourceHanSerifSC-ItalicBold.ttf'), 'font/ttf')
         }
         return null
       })

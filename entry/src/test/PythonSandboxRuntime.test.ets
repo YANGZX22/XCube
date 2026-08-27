@@ -18,12 +18,20 @@ import {
   PYODIDE_HOST_HTML,
   PYODIDE_INDEX_URL,
   PYODIDE_VERSION,
+  PYTHON_CMU_SERIF_BOLD_FONT_PATH,
+  PYTHON_CMU_SERIF_BOLD_ITALIC_FONT_PATH,
   PYTHON_CMU_SERIF_FONT_PATH,
   PYTHON_CMU_SERIF_FONT_URL,
+  PYTHON_CMU_SERIF_ITALIC_FONT_PATH,
+  PYTHON_CMU_SERIF_REGULAR_FONT_PATH,
   PYTHON_FPDF_IMPORT_NAME,
   PYTHON_FPDF_PACKAGE_NAME,
+  PYTHON_SOURCE_HAN_SERIF_BOLD_FONT_PATH,
+  PYTHON_SOURCE_HAN_SERIF_BOLD_ITALIC_FONT_PATH,
   PYTHON_SOURCE_HAN_SERIF_FONT_PATH,
-  PYTHON_SOURCE_HAN_SERIF_FONT_URL
+  PYTHON_SOURCE_HAN_SERIF_FONT_URL,
+  PYTHON_SOURCE_HAN_SERIF_ITALIC_FONT_PATH,
+  PYTHON_SOURCE_HAN_SERIF_REGULAR_FONT_PATH
 } from '../main/ets/services/PyodideHostHtml'
 import {
   getPythonImageExtension,
@@ -125,7 +133,7 @@ export default function pythonSandboxRuntimeTest() {
       expect(PYODIDE_HOST_HTML.includes('removeOutputDirectory(outputContext.outputDir)')).assertTrue()
     })
 
-    it('mounts_cmu_and_source_han_fonts_for_python_plotting', 0, () => {
+    it('mounts_all_cmu_and_source_han_styles_for_python_output', 0, () => {
       expect(PYTHON_CMU_SERIF_FONT_URL).assertEqual(
         'https://python-fonts.xcube.invalid/CMUSerif-Regular.ttf')
       expect(PYTHON_SOURCE_HAN_SERIF_FONT_URL).assertEqual(
@@ -133,26 +141,56 @@ export default function pythonSandboxRuntimeTest() {
       expect(PYTHON_CMU_SERIF_FONT_PATH).assertEqual('/usr/share/fonts/xcube/CMUSerif-Regular.ttf')
       expect(PYTHON_SOURCE_HAN_SERIF_FONT_PATH)
         .assertEqual('/usr/share/fonts/xcube/SourceHanSerifSC-Regular.otf')
+      expect(PYTHON_CMU_SERIF_FONT_PATH).assertEqual(PYTHON_CMU_SERIF_REGULAR_FONT_PATH)
+      expect(PYTHON_SOURCE_HAN_SERIF_FONT_PATH).assertEqual(PYTHON_SOURCE_HAN_SERIF_REGULAR_FONT_PATH)
+      expect(PYTHON_CMU_SERIF_BOLD_FONT_PATH).assertEqual('/usr/share/fonts/xcube/CMUSerif-Bold.ttf')
+      expect(PYTHON_CMU_SERIF_ITALIC_FONT_PATH).assertEqual('/usr/share/fonts/xcube/CMUSerif-Italic.ttf')
+      expect(PYTHON_CMU_SERIF_BOLD_ITALIC_FONT_PATH)
+        .assertEqual('/usr/share/fonts/xcube/CMUSerif-BoldItalic.ttf')
+      expect(PYTHON_SOURCE_HAN_SERIF_BOLD_FONT_PATH)
+        .assertEqual('/usr/share/fonts/xcube/SourceHanSerifSC-Bold.otf')
+      expect(PYTHON_SOURCE_HAN_SERIF_ITALIC_FONT_PATH)
+        .assertEqual('/usr/share/fonts/xcube/SourceHanSerifSC-Italic.ttf')
+      expect(PYTHON_SOURCE_HAN_SERIF_BOLD_ITALIC_FONT_PATH)
+        .assertEqual('/usr/share/fonts/xcube/SourceHanSerifSC-BoldItalic.ttf')
       expect(PYODIDE_HOST_HTML.includes("pyodide.globals.set('PYTHON_FONT_EN'")).assertTrue()
       expect(PYODIDE_HOST_HTML.includes("pyodide.globals.set('PYTHON_FONT_CJK'")).assertTrue()
+      expect(PYODIDE_HOST_HTML.includes("pyodide.globals.set('PYTHON_FONT_EN_BOLD'")).assertTrue()
+      expect(PYODIDE_HOST_HTML.includes("pyodide.globals.set('PYTHON_FONT_EN_ITALIC'")).assertTrue()
+      expect(PYODIDE_HOST_HTML.includes("pyodide.globals.set('PYTHON_FONT_EN_BOLD_ITALIC'"))
+        .assertTrue()
+      expect(PYODIDE_HOST_HTML.includes("pyodide.globals.set('PYTHON_FONT_CJK_BOLD'")).assertTrue()
+      expect(PYODIDE_HOST_HTML.includes("pyodide.globals.set('PYTHON_FONT_CJK_ITALIC'")).assertTrue()
+      expect(PYODIDE_HOST_HTML.includes("pyodide.globals.set('PYTHON_FONT_CJK_BOLD_ITALIC'"))
+        .assertTrue()
       expect(PYODIDE_HOST_HTML.includes("['CMU Serif', 'Source Han Serif SC', 'DejaVu Serif']"))
         .assertTrue()
       expect(PYODIDE_HOST_HTML.includes('_xcube_font_manager.fontManager.addfont')).assertTrue()
+      expect(PYODIDE_HOST_HTML.includes("name='Source Han Serif SC', style=_xcube_style"))
+        .assertTrue()
     })
 
     it('guides_models_to_use_mixed_script_fonts_without_losing_fallback', 0, () => {
       expect(PYTHON_FONT_USAGE_GUIDANCE.includes(
         "font.family=['CMU Serif', 'Source Han Serif SC', 'DejaVu Serif']"
       )).assertTrue()
-      expect(PYTHON_FONT_USAGE_GUIDANCE.includes('ImageFont.truetype(PYTHON_FONT_EN, size)')).assertTrue()
-      expect(PYTHON_FONT_USAGE_GUIDANCE.includes('ImageFont.truetype(PYTHON_FONT_CJK, size)')).assertTrue()
+      expect(PYTHON_FONT_USAGE_GUIDANCE.includes('PYTHON_FONT_EN_*')).assertTrue()
+      expect(PYTHON_FONT_USAGE_GUIDANCE.includes('PYTHON_FONT_CJK_*')).assertTrue()
+      expect(PYTHON_FONT_USAGE_GUIDANCE.includes('REGULAR、BOLD、ITALIC')).assertTrue()
+      expect(PYTHON_FONT_USAGE_GUIDANCE.includes('BOLD_ITALIC')).assertTrue()
       expect(PYTHON_FONT_USAGE_GUIDANCE.includes('Pillow 不会自动回退字体')).assertTrue()
       expect(PYTHON_FONT_USAGE_GUIDANCE.includes('中英混排须按文字脚本切分')).assertTrue()
       expect(PYTHON_PDF_USAGE_GUIDANCE.includes('from fpdf import FPDF')).assertTrue()
-      expect(PYTHON_PDF_USAGE_GUIDANCE.includes("pdf.add_font('CMU', fname=PYTHON_FONT_EN)")).assertTrue()
-      expect(PYTHON_PDF_USAGE_GUIDANCE.includes("pdf.add_font('SourceHan', fname=PYTHON_FONT_CJK)"))
+      expect(PYTHON_PDF_USAGE_GUIDANCE.includes("style=''、'B'、'I'、'BI'"))
         .assertTrue()
-      expect(PYTHON_PDF_USAGE_GUIDANCE.includes("pdf.set_fallback_fonts(['SourceHan']"))
+      expect(PYTHON_PDF_USAGE_GUIDANCE.includes("pdf.add_font('CMU', style=style"))
+        .assertTrue()
+      expect(PYTHON_PDF_USAGE_GUIDANCE.includes("pdf.add_font('SourceHan', style=style"))
+        .assertTrue()
+      expect(PYTHON_PDF_USAGE_GUIDANCE.includes(
+        "pdf.set_fallback_fonts(['SourceHan'], exact_match=True)"
+      )).assertTrue()
+      expect(PYTHON_PDF_USAGE_GUIDANCE.includes("pdf.set_font('CMU', style='BI'"))
         .assertTrue()
     })
 
