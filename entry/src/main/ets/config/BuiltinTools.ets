@@ -121,6 +121,13 @@ export const PYTHON_FONT_USAGE_GUIDANCE: string =
     'XCUBE_PYTHON_FONT_EN_*、XCUBE_PYTHON_FONT_CJK_*；PYTHON_FONT_EN 与 PYTHON_FONT_CJK 仍是 ' +
     'REGULAR 的全局兼容别名，字体文件也可直接从 /usr/share/fonts/xcube/ 读取。' +
     '中英混排须按文字脚本切分，使用 textlength 或 textbbox 累计位置后分别 draw.text，不能把含中文的整段文字交给 CMU Serif。'
+export const PYTHON_PLOTTING_USAGE_GUIDANCE: string =
+  "绘图运行规则：使用 Matplotlib 或 Seaborn 时，必须按 import matplotlib；matplotlib.use('Agg')；" +
+    '再 import matplotlib.pyplot as plt 或 import seaborn as sns 的顺序，在导入 pyplot、Seaborn 或创建 figure 前' +
+    "显式选择无界面的 Agg 后端。不得使用或依赖默认 webagg 后端；沙箱没有浏览器 document，" +
+    "否则会出现 cannot import name 'document' from 'js'。每次 action=run 或 run_files 调用都必须自包含依赖声明：" +
+    'Seaborn 等非 Pyodide 官方自动加载包必须在该次调用的 packages 中明确列出（例如 packages: ["seaborn"]），' +
+    '包括重复、并行或重试调用；不得假设先前调用安装的包或导入状态会被后续调用继承。'
 export const PYTHON_PDF_USAGE_GUIDANCE: string =
   'PDF 生成规则：from fpdf import FPDF 会自动安装 fpdf2，无需填写 packages。Pyodide 若在导入时提示 ' +
     'urllib.request 缺少 HTTPSHandler 或 http.client 缺少 HTTPSConnection，应先导入 urllib.request 与 ' +
@@ -2882,8 +2889,24 @@ function createUseSkillToolConfig(): ToolConfig {
   )
 }
 
-function createPythonSandboxToolDefinition(): ToolDefinition {
-  const parameters = new ToolParameters()
+export function buildPythonSandboxRawSchema(): object {
+  const codeDescription: string =
+    `action=run 时要执行的内联 Python 3 代码。支持完整 Python 语法与标准库；import pandas、numpy、scipy、` +
+      `scikit-learn、matplotlib、Pillow 等 Pyodide 官方包时会在执行前自动加载，import fpdf 时会自动安装 ` +
+      `fpdf2。${PYTHON_PLOTTING_USAGE_GUIDANCE}沙箱内置 CMU Serif 英文与思源宋体中文的 Regular、Bold、` +
+      `Italic、Bold Italic 四套字形；Pillow 可通过 PYTHON_FONT_EN_*、PYTHON_FONT_CJK_* 获取对应路径。` +
+      `${PYTHON_FONT_USAGE_GUIDANCE}${PYTHON_PDF_USAGE_GUIDANCE}可用 print 输出，最后一个表达式的值会作为 ` +
+      `result 返回。写入相对路径或 PYTHON_OUTPUT_DIR 的 PNG、JPEG、GIF、WebP 会在 images 中返回；PDF、` +
+      `CSV、JSON、Office、ZIP 等任意其他文件会在 files 中返回。要在气泡中交付普通文件，必须在最终回复` +
+      `原样输出 files 中的 markdown 字段，即 [文件名](xcube-file://attachmentId)；不要臆造 attachmentId 或` +
+      `内部链接。图片最多 4 张，单张 4 MiB、合计 8 MiB；普通文件最多 8 个，单个 16 MiB、合计 32 MiB。` +
+      `代码不能访问应用或系统文件、直接发起网络请求或运行系统命令。`
+  const packagesDescription: string =
+    '可选。代码需要但 Pyodide 未内置的 PyPI 包名或版本约束，例如 ["seaborn", ' +
+      '"snowballstemmer==2.2.0"]。仅支持纯 Python wheel 或兼容当前 Pyodide 的 PyEmscripten wheel；' +
+      '不接受 URL、本地路径或普通桌面/ARM wheel。包加载需要联网。直接 import Pyodide 官方包时通常无需填写；' +
+      'Seaborn 等非官方自动加载包必须在每一次 run 或 run_files 调用中重新声明，重复、并行和重试调用也不能依赖' +
+      '其他调用的安装状态。'
   const rawSchemaJson: string = `{
     "type": "object",
     "properties": {
@@ -2894,7 +2917,7 @@ function createPythonSandboxToolDefinition(): ToolDefinition {
       },
       "code": {
         "type": "string",
-        "description": "action=run 时要执行的内联 Python 3 代码。支持完整 Python 语法与标准库；import pandas、numpy、scipy、scikit-learn、matplotlib、Pillow 等 Pyodide 官方包时会在执行前自动加载，import fpdf 时会自动安装 fpdf2。沙箱内置 CMU Serif 英文与思源宋体中文的 Regular、Bold、Italic、Bold Italic 四套字形；Pillow 可通过 PYTHON_FONT_EN_*、PYTHON_FONT_CJK_* 获取对应路径。${PYTHON_FONT_USAGE_GUIDANCE}${PYTHON_PDF_USAGE_GUIDANCE}可用 print 输出，最后一个表达式的值会作为 result 返回。写入相对路径或 PYTHON_OUTPUT_DIR 的 PNG、JPEG、GIF、WebP 会在 images 中返回；PDF、CSV、JSON、Office、ZIP 等任意其他文件会在 files 中返回。要在气泡中交付普通文件，必须在最终回复原样输出 files 中的 markdown 字段，即 [文件名](xcube-file://attachmentId)；不要臆造 attachmentId 或内部链接。图片最多 4 张，单张 4 MiB、合计 8 MiB；普通文件最多 8 个，单个 16 MiB、合计 32 MiB。代码不能访问应用或系统文件、直接发起网络请求或运行系统命令。"
+        "description": ${JSON.stringify(codeDescription)}
       },
       "path": {
         "type": "string",
@@ -2934,7 +2957,7 @@ function createPythonSandboxToolDefinition(): ToolDefinition {
         "type": "array",
         "items": { "type": "string" },
         "maxItems": 8,
-        "description": "可选。代码需要但 Pyodide 未内置的 PyPI 包名或版本约束，例如 [\\"snowballstemmer==2.2.0\\"]。仅支持纯 Python wheel 或兼容当前 Pyodide 的 PyEmscripten wheel；不接受 URL、本地路径或普通桌面/ARM wheel。包加载需要联网。通常直接在 code 中 import 官方包即可，无需填写。"
+        "description": ${JSON.stringify(packagesDescription)}
       },
       "max_iterations": {
         "type": "number",
@@ -2942,11 +2965,16 @@ function createPythonSandboxToolDefinition(): ToolDefinition {
       }
     }
   }`
-  parameters.setRawSchema(JSON.parse(rawSchemaJson) as object)
+  return JSON.parse(rawSchemaJson) as object
+}
+
+function createPythonSandboxToolDefinition(): ToolDefinition {
+  const parameters = new ToolParameters()
+  parameters.setRawSchema(buildPythonSandboxRawSchema())
 
   const func = new ToolFunction(
     PYTHON_SANDBOX_TOOL_ID,
-    `模型可在隔离的 Web Worker 中运行 Pyodide/CPython，也可在当前会话的持久化文本工作区内创建、覆盖、追加、精确修改、分段读取、列出和删除安全相对路径下的 UTF-8 文件，包括 .py、txt、md、json、csv、yaml、toml、xml、html、sql 等，再按顺序运行一个或多个 .py 文件。长代码优先拆成多个文件并使用 write_file、replace_in_file 与 run_files，避免单次工具 JSON 过长；工作区最多 64 个文件、单文件 256 KiB、总计 2 MiB。run_files 会把全部文本文件同步进 Pyodide，Python 可直接读取数据文件，并自动扫描 .py 源码加载 pandas、numpy、scipy、scikit-learn、matplotlib、Pillow 等官方包；import fpdf 会自动安装 fpdf2，也可通过 packages 安装其他纯 Python 或兼容的 PyEmscripten wheel。生成图片、PDF 或其他二进制交付文件必须写入 PYTHON_OUTPUT_DIR；脚本创建或修改的有效 UTF-8 文本文件会同步回当前会话工作区。沙箱内置 CMU Serif 英文与思源宋体中文的 Regular、Bold、Italic、Bold Italic 四套字形，并向 Matplotlib、Pillow 和 fpdf2 暴露对应样式。${PYTHON_FONT_USAGE_GUIDANCE}${PYTHON_PDF_USAGE_GUIDANCE}图片可用 vision_read_image 或 image_to_text 调取；files 中的 markdown 应在最终回复原样输出。代码不能访问应用/系统文件、直接联网或运行系统命令；包加载器自身只访问受限的 Pyodide/PyPI 源。`,
+    `模型可在隔离的 Web Worker 中运行 Pyodide/CPython，也可在当前会话的持久化文本工作区内创建、覆盖、追加、精确修改、分段读取、列出和删除安全相对路径下的 UTF-8 文件，包括 .py、txt、md、json、csv、yaml、toml、xml、html、sql 等，再按顺序运行一个或多个 .py 文件。长代码优先拆成多个文件并使用 write_file、replace_in_file 与 run_files，避免单次工具 JSON 过长；工作区最多 64 个文件、单文件 256 KiB、总计 2 MiB。run_files 会把全部文本文件同步进 Pyodide，Python 可直接读取数据文件，并自动扫描 .py 源码加载 pandas、numpy、scipy、scikit-learn、matplotlib、Pillow 等官方包；import fpdf 会自动安装 fpdf2，也可通过 packages 安装其他纯 Python 或兼容的 PyEmscripten wheel。${PYTHON_PLOTTING_USAGE_GUIDANCE}生成图片、PDF 或其他二进制交付文件必须写入 PYTHON_OUTPUT_DIR；脚本创建或修改的有效 UTF-8 文本文件会同步回当前会话工作区。沙箱内置 CMU Serif 英文与思源宋体中文的 Regular、Bold、Italic、Bold Italic 四套字形，并向 Matplotlib、Pillow 和 fpdf2 暴露对应样式。${PYTHON_FONT_USAGE_GUIDANCE}${PYTHON_PDF_USAGE_GUIDANCE}图片可用 vision_read_image 或 image_to_text 调取；files 中的 markdown 应在最终回复原样输出。代码不能访问应用/系统文件、直接联网或运行系统命令；包加载器自身只访问受限的 Pyodide/PyPI 源。`,
     parameters
   )
 

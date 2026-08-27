@@ -48,7 +48,12 @@ import {
   isPythonSandboxFileAttachmentId,
   parsePythonSandboxFileUrl
 } from '../main/ets/services/PythonSandboxArtifactLink'
-import { PYTHON_FONT_USAGE_GUIDANCE, PYTHON_PDF_USAGE_GUIDANCE } from '../main/ets/config/BuiltinTools'
+import {
+  buildPythonSandboxRawSchema,
+  PYTHON_FONT_USAGE_GUIDANCE,
+  PYTHON_PDF_USAGE_GUIDANCE,
+  PYTHON_PLOTTING_USAGE_GUIDANCE
+} from '../main/ets/config/BuiltinTools'
 import {
   encodePythonWorkspaceSessionDirectory,
   normalizePythonWorkspacePath
@@ -283,6 +288,23 @@ export default function pythonSandboxRuntimeTest() {
       expect(PYTHON_PDF_USAGE_GUIDANCE.includes("os.environ['XCUBE_PYTHON_OUTPUT_DIR']"))
         .assertTrue()
       expect(PYTHON_PDF_USAGE_GUIDANCE.includes('不要探测或硬编码 /tmp')).assertTrue()
+    })
+
+    it('guides_models_to_use_headless_plotting_and_repeat_package_declarations', 0, () => {
+      expect(PYTHON_PLOTTING_USAGE_GUIDANCE.includes("matplotlib.use('Agg')")).assertTrue()
+      expect(PYTHON_PLOTTING_USAGE_GUIDANCE.includes('导入 pyplot、Seaborn 或创建 figure 前')).assertTrue()
+      expect(PYTHON_PLOTTING_USAGE_GUIDANCE.includes("cannot import name 'document' from 'js'"))
+        .assertTrue()
+      expect(PYTHON_PLOTTING_USAGE_GUIDANCE.includes('packages: ["seaborn"]')).assertTrue()
+      expect(PYTHON_PLOTTING_USAGE_GUIDANCE.includes('重复、并行或重试调用')).assertTrue()
+      expect(PYTHON_PLOTTING_USAGE_GUIDANCE.includes('不得假设先前调用安装的包或导入状态')).assertTrue()
+    })
+
+    it('builds_python_tool_schema_with_quoted_package_examples', 0, () => {
+      const schemaJson: string = JSON.stringify(buildPythonSandboxRawSchema())
+      expect(schemaJson.includes('packages')).assertTrue()
+      expect(schemaJson.includes('seaborn')).assertTrue()
+      expect(schemaJson.includes("matplotlib.use('Agg')")).assertTrue()
     })
 
     it('normalizes_python_image_names_and_mime_extensions_before_persisting', 0, () => {
