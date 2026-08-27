@@ -32,7 +32,9 @@ import {
 } from '../utils/ManuscriptVisualUtils'
 import { pickLocalizedText } from '../utils/LocalizedTextUtils'
 import {
+  buildPythonSandboxImageUrl,
   isPythonSandboxFileAttachmentId,
+  isPythonSandboxImageAttachmentId,
   parsePythonSandboxFileUrl
 } from '../services/PythonSandboxArtifactLink'
 
@@ -63,6 +65,15 @@ interface MathChartToolPayload {
   chart_type?: string
   summary?: string
   chart_spec?: string
+}
+
+interface PythonSandboxInlineImageReference {
+  attachmentId?: string
+  markdown?: string
+}
+
+interface PythonSandboxInlineImagePayload {
+  images?: PythonSandboxInlineImageReference[]
 }
 
 // 工具调用渲染分组：同一工具（同名 + 同来源）的多次调用合并成一张卡片
@@ -533,7 +544,7 @@ export struct MessageBubble {
   @Builder
   MessageContentMarkdown() {
     ChatMarkdownRenderer({
-      content: this.message.content,
+      content: this.resolvePythonSandboxImageSources(this.message.content),
       isInputEnded: !this.message.isGenerating,
       incrementalAnalysis: this.message.isGenerating,
       useCangjieComponent: true,
@@ -565,7 +576,7 @@ export struct MessageBubble {
   @Builder
   ReasoningMarkdown() {
     ChatMarkdownRenderer({
-      content: this.message.reasoningContent,
+      content: this.resolvePythonSandboxImageSources(this.message.reasoningContent),
       isInputEnded: !this.message.isGenerating,
       incrementalAnalysis: this.message.isGenerating,
       useCangjieComponent: true,
@@ -600,7 +611,7 @@ export struct MessageBubble {
   StaticMarkdown(content: string, compact: boolean, textColorOverride: string = '', titleColorOverride: string = '',
     useChatBubbleTypeface: boolean = false) {
     ChatMarkdownRenderer({
-      content: content,
+      content: this.resolvePythonSandboxImageSources(content),
       isInputEnded: true,
       incrementalAnalysis: false,
       useCangjieComponent: true,
@@ -1058,11 +1069,57 @@ export struct MessageBubble {
     return ''
   }
 
+  // 消息中持久化的是稳定的沙箱附件 URL；渲染时再解析为当前设备上的应用沙箱路径。
+  // 这样正文可以决定图片位置，同时附件仍跟随消息参与删除与缓存清理。
+  private resolvePythonSandboxImageSources(content: string): string {
+    let resolved = content
+    for (let i = 0; i < this.message.attachments.length; i++) {
+      const attachment = this.message.attachments[i]
+      if (!isPythonSandboxImageAttachmentId(attachment.id)) {
+        continue
+      }
+      const internalUrl = buildPythonSandboxImageUrl(attachment.id)
+      const imageSource = this.getAttachmentImageSource(attachment)
+      if (internalUrl !== '' && imageSource !== '' && resolved.indexOf(internalUrl) >= 0) {
+        resolved = resolved.split(internalUrl).join(imageSource)
+      }
+    }
+    return resolved
+  }
+
+  // 新版 Python 工具会在结果中显式返回图片 Markdown；据此隐藏附件区预览。
+  // 旧版结果没有 markdown 字段，继续使用顶部附件预览，避免历史消息中的图片消失。
+  private isInlinePythonSandboxImageAttachment(attachment: MessageAttachment): boolean {
+    if (!isPythonSandboxImageAttachmentId(attachment.id)) {
+      return false
+    }
+    const internalUrl = buildPythonSandboxImageUrl(attachment.id)
+    if (internalUrl !== '' && this.message.content.indexOf(internalUrl) >= 0) {
+      return true
+    }
+    for (let i = 0; i < this.message.toolResults.length; i++) {
+      try {
+        const payload = JSON.parse(this.message.toolResults[i].content) as PythonSandboxInlineImagePayload
+        const images = payload.images ?? []
+        for (let j = 0; j < images.length; j++) {
+          if ((images[j].attachmentId ?? '').trim() === attachment.id &&
+            (images[j].markdown ?? '').indexOf(internalUrl) >= 0) {
+            return true
+          }
+        }
+      } catch (_error) {
+        // 非 Python 工具结果无需处理。
+      }
+    }
+    return false
+  }
+
   // 提取图片附件并保留原始索引（用于正确映射预览索引）
   private buildImageAttachmentEntries(attachments: MessageAttachment[]): ImageAttachmentEntry[] {
     const imageEntries: ImageAttachmentEntry[] = []
     for (let i = 0; i < attachments.length; i++) {
-      if (attachments[i].type === AttachmentType.IMAGE) {
+      if (attachments[i].type === AttachmentType.IMAGE &&
+        !this.isInlinePythonSandboxImageAttachment(attachments[i])) {
         imageEntries.push({
           attachment: attachments[i],
           originalIndex: i
@@ -1085,7 +1142,8 @@ export struct MessageBubble {
 
   private hasRenderableAttachments(attachments: MessageAttachment[]): boolean {
     for (let i = 0; i < attachments.length; i++) {
-      if (attachments[i].type === AttachmentType.IMAGE ||
+      if ((attachments[i].type === AttachmentType.IMAGE &&
+        !this.isInlinePythonSandboxImageAttachment(attachments[i])) ||
         (attachments[i].type === AttachmentType.FILE &&
           !isPythonSandboxFileAttachmentId(attachments[i].id))) {
         return true
@@ -2421,7 +2479,7 @@ export struct MessageBubble {
   @Builder
   private TimelineSegmentMarkdown(segment: AssistantResponseSegment, compact: boolean = false) {
     ChatMarkdownRenderer({
-      content: segment.content,
+      content: this.resolvePythonSandboxImageSources(segment.content),
       isInputEnded: !this.isActiveTimelineSegment(segment),
       incrementalAnalysis: this.isActiveTimelineSegment(segment),
       useCangjieComponent: true,

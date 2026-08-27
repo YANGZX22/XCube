@@ -4,7 +4,9 @@ import { getAttachmentStorageService } from './AttachmentStorageService'
 import { getDocumentAttachmentRegistryService } from './DocumentAttachmentRegistryService'
 import {
   buildPythonSandboxFileMarkdown,
-  buildPythonSandboxFileUrl
+  buildPythonSandboxFileUrl,
+  buildPythonSandboxImageMarkdown,
+  buildPythonSandboxImageUrl
 } from './PythonSandboxArtifactLink'
 import { PyodideOutputArtifact } from './PyodideRuntimeService'
 import {
@@ -21,12 +23,16 @@ export class PythonSandboxImageReference {
   name: string = ''
   mimeType: string = ''
   size: number = 0
+  url: string = ''
+  markdown: string = ''
 
   constructor(attachmentId: string, name: string, mimeType: string, size: number) {
     this.attachmentId = attachmentId
     this.name = name
     this.mimeType = mimeType
     this.size = size
+    this.url = buildPythonSandboxImageUrl(attachmentId)
+    this.markdown = buildPythonSandboxImageMarkdown(name, attachmentId)
   }
 }
 

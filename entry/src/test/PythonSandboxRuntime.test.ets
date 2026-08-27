@@ -45,8 +45,12 @@ import {
 import {
   buildPythonSandboxFileMarkdown,
   buildPythonSandboxFileUrl,
+  buildPythonSandboxImageMarkdown,
+  buildPythonSandboxImageUrl,
   isPythonSandboxFileAttachmentId,
-  parsePythonSandboxFileUrl
+  isPythonSandboxImageAttachmentId,
+  parsePythonSandboxFileUrl,
+  parsePythonSandboxImageUrl
 } from '../main/ets/services/PythonSandboxArtifactLink'
 import {
   buildPythonSandboxRawSchema,
@@ -329,6 +333,22 @@ export default function pythonSandboxRuntimeTest() {
       expect(sanitizePythonFileName('../result', 'text/csv')).assertEqual('result.csv')
       expect(buildPythonSandboxFileMarkdown('报告 [最终].pdf', attachmentId))
         .assertEqual('[报告 \\[最终\\].pdf](xcube-file://python_file_1723456789_1)')
+    })
+
+    it('builds_safe_inline_markdown_for_python_generated_images', 0, () => {
+      const attachmentId = 'python_img_1723456789_2'
+      expect(isPythonSandboxImageAttachmentId(attachmentId)).assertTrue()
+      expect(isPythonSandboxImageAttachmentId('python_file_1723456789_2')).assertFalse()
+      expect(buildPythonSandboxImageUrl(attachmentId))
+        .assertEqual('xcube-image://python_img_1723456789_2')
+      expect(parsePythonSandboxImageUrl('xcube-image://python_img_1723456789_2'))
+        .assertEqual(attachmentId)
+      expect(parsePythonSandboxImageUrl('file:///data/chart.png')).assertEqual('')
+      expect(buildPythonSandboxImageMarkdown('趋势图 [最终].png', attachmentId))
+        .assertEqual('![趋势图 \\[最终\\].png](xcube-image://python_img_1723456789_2)')
+      const schemaJson = JSON.stringify(buildPythonSandboxRawSchema())
+      expect(schemaJson.includes('images 中的 markdown 字段')).assertTrue()
+      expect(schemaJson.includes('图片不会在气泡顶部自动展示')).assertTrue()
     })
   })
 }

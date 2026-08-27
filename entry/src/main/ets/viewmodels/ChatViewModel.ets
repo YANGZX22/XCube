@@ -88,7 +88,10 @@ import {
   getDocumentAttachmentRegistryService,
   isOfficeOpenXmlDocumentAttachment
 } from '../services/DocumentAttachmentRegistryService'
-import { isPythonSandboxFileAttachmentId } from '../services/PythonSandboxArtifactLink'
+import {
+  isPythonSandboxFileAttachmentId,
+  isPythonSandboxImageAttachmentId
+} from '../services/PythonSandboxArtifactLink'
 import {
   buildConversationGoalSummaryPrompt,
   buildConversationGoalSystemPrompt,
@@ -499,9 +502,10 @@ export class ChatViewModel {
     const filtered: MessageAttachment[] = []
     for (let i = 0; i < attachments.length; i++) {
       const attachment = attachments[i]
-      // Python 普通文件作为气泡内 Markdown 链接的持久化载体，
-      // 不作为原生文档附件重复发给模型供应商。
-      if (isPythonSandboxFileAttachmentId(attachment.id)) {
+      // Python 产物作为气泡内 Markdown 引用的持久化载体，
+      // 不作为原生附件重复发给模型供应商。
+      if (isPythonSandboxFileAttachmentId(attachment.id) ||
+        isPythonSandboxImageAttachmentId(attachment.id)) {
         continue
       }
       if (!modelSupportsDocuments &&

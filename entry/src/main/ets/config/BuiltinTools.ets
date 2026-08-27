@@ -981,8 +981,10 @@ class PythonSandboxExecutor implements ToolExecutor {
     output.images = savedArtifacts.images
     output.files = savedArtifacts.files
     if (output.images.length > 0) {
-      output.imageAccess = '图片已保存到当前会话附件沙箱。使用 attachmentId 调用 vision_read_image ' +
-        '进行视觉理解，或调用 image_to_text 识别图片文字。'
+      output.imageAccess = '图片已保存到当前会话附件沙箱。要向用户展示图片，必须在最终回复的目标位置原样输出 ' +
+        'images 里的 markdown 字段（Markdown 图片语法 ![说明](xcube-image://attachmentId)），不要只描述文件名，' +
+        '也不要臆造 attachmentId 或内部链接；图片不会再作为气泡顶部附件自动展示。需要理解图片内容时，可使用 ' +
+        'attachmentId 调用 vision_read_image，或调用 image_to_text 识别图片文字。'
     }
     if (output.files.length > 0) {
       output.fileAccess = '普通文件已保存到当前会话附件沙箱。请在最终回复中原样输出 files 里的 markdown 字段；' +
@@ -2913,7 +2915,9 @@ export function buildPythonSandboxRawSchema(): object {
       `result 返回。写入相对路径或 PYTHON_OUTPUT_DIR 的 PNG、JPEG、GIF、WebP 会在 images 中返回；PDF、` +
       `CSV、JSON、Office、ZIP 等任意其他文件会在 files 中返回。要在气泡中交付普通文件，必须在最终回复` +
       `原样输出 files 中的 markdown 字段，即 [文件名](xcube-file://attachmentId)；不要臆造 attachmentId 或` +
-      `内部链接。图片最多 4 张，单张 4 MiB、合计 8 MiB；普通文件最多 8 个，单个 16 MiB、合计 32 MiB。` +
+      `内部链接。要展示生成图片，必须在最终回复需要出现的位置原样输出 images 中的 markdown 字段，即 ` +
+      `![说明](xcube-image://attachmentId)；不要只报告图片已生成，也不要臆造或改写内部链接，图片不会在气泡顶部` +
+      `自动展示。图片最多 4 张，单张 4 MiB、合计 8 MiB；普通文件最多 8 个，单个 16 MiB、合计 32 MiB。` +
       `代码不能访问应用或系统文件、直接发起网络请求或运行系统命令。`
   const packagesDescription: string =
     '可选。代码需要但 Pyodide 未内置的 PyPI 包名或版本约束，例如 ["seaborn", ' +
@@ -2988,7 +2992,7 @@ function createPythonSandboxToolDefinition(): ToolDefinition {
 
   const func = new ToolFunction(
     PYTHON_SANDBOX_TOOL_ID,
-    `模型可在隔离的 Web Worker 中运行 Pyodide/CPython，也可在当前会话的持久化文本工作区内创建、覆盖、追加、精确修改、分段读取、列出和删除安全相对路径下的 UTF-8 文件，包括 .py、txt、md、json、csv、yaml、toml、xml、html、sql 等，再按顺序运行一个或多个 .py 文件。长代码优先拆成多个文件并使用 write_file、replace_in_file 与 run_files，避免单次工具 JSON 过长；工作区最多 64 个文件、单文件 256 KiB、总计 2 MiB。run_files 会把全部文本文件同步进 Pyodide，Python 可直接读取数据文件，并自动扫描 .py 源码加载 pandas、numpy、scipy、scikit-learn、matplotlib、Pillow 等官方包；import fpdf 会自动安装 fpdf2，也可通过 packages 安装其他纯 Python 或兼容的 PyEmscripten wheel。${PYTHON_PLOTTING_USAGE_GUIDANCE}生成图片、PDF 或其他二进制交付文件必须写入 PYTHON_OUTPUT_DIR；脚本创建或修改的有效 UTF-8 文本文件会同步回当前会话工作区。沙箱内置 CMU Serif 英文与思源宋体中文的 Regular、Bold、Italic、Bold Italic 四套字形，并向 Matplotlib、Pillow 和 fpdf2 暴露对应样式。${PYTHON_FONT_USAGE_GUIDANCE}${PYTHON_PDF_USAGE_GUIDANCE}图片可用 vision_read_image 或 image_to_text 调取；files 中的 markdown 应在最终回复原样输出。代码不能访问应用/系统文件、直接联网或运行系统命令；包加载器自身只访问受限的 Pyodide/PyPI 源。`,
+    `模型可在隔离的 Web Worker 中运行 Pyodide/CPython，也可在当前会话的持久化文本工作区内创建、覆盖、追加、精确修改、分段读取、列出和删除安全相对路径下的 UTF-8 文件，包括 .py、txt、md、json、csv、yaml、toml、xml、html、sql 等，再按顺序运行一个或多个 .py 文件。长代码优先拆成多个文件并使用 write_file、replace_in_file 与 run_files，避免单次工具 JSON 过长；工作区最多 64 个文件、单文件 256 KiB、总计 2 MiB。run_files 会把全部文本文件同步进 Pyodide，Python 可直接读取数据文件，并自动扫描 .py 源码加载 pandas、numpy、scipy、scikit-learn、matplotlib、Pillow 等官方包；import fpdf 会自动安装 fpdf2，也可通过 packages 安装其他纯 Python 或兼容的 PyEmscripten wheel。${PYTHON_PLOTTING_USAGE_GUIDANCE}生成图片、PDF 或其他二进制交付文件必须写入 PYTHON_OUTPUT_DIR；脚本创建或修改的有效 UTF-8 文本文件会同步回当前会话工作区。沙箱内置 CMU Serif 英文与思源宋体中文的 Regular、Bold、Italic、Bold Italic 四套字形，并向 Matplotlib、Pillow 和 fpdf2 暴露对应样式。${PYTHON_FONT_USAGE_GUIDANCE}${PYTHON_PDF_USAGE_GUIDANCE}图片可用 vision_read_image 或 image_to_text 调取；展示图片时必须把 images 中的 markdown 原样放在最终回复的目标位置，图片不会作为气泡顶部附件自动展示；files 中的 markdown 也应在最终回复原样输出。代码不能访问应用/系统文件、直接联网或运行系统命令；包加载器自身只访问受限的 Pyodide/PyPI 源。`,
     parameters
   )
 
