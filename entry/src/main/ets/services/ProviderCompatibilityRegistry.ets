@@ -563,6 +563,29 @@ export function resolveReasoningRequestStrategyWithOverride(
   return resolveReasoningRequestStrategy(info, modelId)
 }
 
+/**
+ * required 工具选择与推理模式并非在所有 OpenAI 兼容协议上都能同时使用。
+ * DashScope 会在 Thinking 开启时拒绝或忽略 required tool_choice；其他协议默认保留
+ * 用户选择的推理级别，以兼容只能在推理模式下工作的模型。调用方可在一次失败后通过
+ * retryWithoutReasoning 进行受控降级，而不是把所有模型的首轮推理一律关闭。
+ */
+export function resolveRequiredToolReasoningLevel(
+  info: CompatibilityProviderInfo,
+  modelId: string,
+  requestedLevel: ReasoningLevel,
+  rawOverride?: string,
+  retryWithoutReasoning: boolean = false
+): ReasoningLevel {
+  if (requestedLevel === ReasoningLevel.OFF || retryWithoutReasoning) {
+    return ReasoningLevel.OFF
+  }
+  const strategy = resolveReasoningRequestStrategyWithOverride(info, modelId, rawOverride)
+  if (strategy === ReasoningRequestStrategy.DASHSCOPE_THINKING) {
+    return ReasoningLevel.OFF
+  }
+  return requestedLevel
+}
+
 export function supportsReasoningControl(
   info: CompatibilityProviderInfo,
   modelId: string,

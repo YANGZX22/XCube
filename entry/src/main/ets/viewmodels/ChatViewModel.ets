@@ -73,7 +73,10 @@ import {
   DEFAULT_COMPACT_KEEP_RECENT_TURNS,
   getContextCompactionService
 } from '../services/ContextCompactionService'
-import { ReasoningRequestStrategy } from '../services/ProviderCompatibilityRegistry'
+import {
+  ReasoningRequestStrategy,
+  resolveRequiredToolReasoningLevel
+} from '../services/ProviderCompatibilityRegistry'
 import {
   buildContextUsageFromRequestTokens,
   ContextUsage,
@@ -3884,7 +3887,8 @@ ${preview}`
     localReasoningThrottle: ThrottleUtil,
     usageTracker: RequestTokenUsageTracker,
     automaticCompactionState: AutomaticCompactionState,
-    compactionSourceMessages: ChatMessage[]
+    compactionSourceMessages: ChatMessage[],
+    retryRequiredKnowledgeWithoutReasoning: boolean = false
   ): Promise<void> {
     if (isCancelledFn()) {
       return
@@ -3949,11 +3953,22 @@ ${preview}`
     const requestHasKnowledgeSearch = this.hasKnowledgeSearchTool(tools)
     const forceKnowledgeSearchInThisRound =
       requestHasKnowledgeSearch && completedKnowledgeQueryCount === 0
-    // DashScope 等 OpenAI 兼容接口在 Thinking 模式下拒绝 required tool_choice。
-    // 首轮只负责让模型生成知识库 query，因此临时关闭该轮 Thinking；拿到 tool result
-    // 后的续轮会恢复用户原本选择的推理级别。
-    const reasoningLevelForThisRound =
-      forceKnowledgeSearchInThisRound ? ReasoningLevel.OFF : reasoningLevel
+    // required tool_choice 与 Thinking 的兼容性按供应商协议决定。已知冲突的 DashScope
+    // 首轮关闭推理；其余模型保留用户选择，以兼容只能在推理模式下工作的模型。
+    // 若首次未产生知识库调用，受控重试时才临时关闭一次推理。
+    const reasoningLevelForThisRound = forceKnowledgeSearchInThisRound
+      ? resolveRequiredToolReasoningLevel(
+        {
+          providerId: apiConfig.providerId,
+          baseUrl: apiConfig.baseUrl,
+          apiStyle: apiConfig.apiStyle
+        },
+        modelId,
+        reasoningLevel,
+        apiConfig.modelReasoningStrategyOverride,
+        retryRequiredKnowledgeWithoutReasoning
+      )
+      : reasoningLevel
     let toolsForThisRound: ToolDefinition[] = []
     let toolChoiceForThisRound = 'none'
     if (forceKnowledgeSearchInThisRound) {
@@ -3979,7 +3994,7 @@ ${preview}`
       toolChoiceForThisRound = toolsForThisRound.length > 0 ? toolChoiceForThisRound : 'none'
     }
     const toolsEnabledInThisRound = toolsForThisRound.length > 0
-    const requestMessagesForRound = forceKnowledgeSearchInThisRound && iteration > 0
+    const requestMessagesForRound = forceKnowledgeSearchInThisRound && retryRequiredKnowledgeWithoutReasoning
       ? requestMessages.concat([new RequestMessage(
         'system',
         '重试指令：上一次输出没有包含必需的 knowledge_search function call。' +
@@ -4312,7 +4327,8 @@ ${preview}`
           localReasoningThrottle,
           usageTracker,
           automaticCompactionState,
-          compactionSourceMessages
+          compactionSourceMessages,
+          retryRequiredKnowledgeWithoutReasoning
         )
       }
       resumeAfterCompaction().catch((error: Object): void => {
@@ -4407,8 +4423,9 @@ ${preview}`
           discardCurrentRoundResponseSegments()
           roundContentBuffer = ''
           roundReasoningBuffer = ''
-          if (iteration === 0) {
-            console.warn('ChatViewModel', 'Required knowledge_search was not called; retrying once with explicit instruction')
+          if (!retryRequiredKnowledgeWithoutReasoning) {
+            console.warn('ChatViewModel',
+              'Required knowledge_search was not called; retrying once without reasoning and with explicit instruction')
             aiMessage.content = ''
             aiMessage.reasoningContent = ''
             onAIMessageUpdated(aiMessage)
@@ -4442,7 +4459,8 @@ ${preview}`
               localReasoningThrottle,
               usageTracker,
               automaticCompactionState,
-              compactionSourceMessages
+              compactionSourceMessages,
+              true
             )
             return
           }

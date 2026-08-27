@@ -120,6 +120,7 @@ import {
   normalizeReasoningLevelForControl,
   resolveReasoningControlMode,
   resolveReasoningRequestStrategyWithOverride,
+  resolveRequiredToolReasoningLevel,
   supportsReasoningXhighControl
 } from '../main/ets/services/ProviderCompatibilityRegistry'
 import {
@@ -1160,6 +1161,45 @@ export default function refactorGuardTest() {
       expect(compatXhigh).assertTrue()
       expect(deepSeekXhigh).assertTrue()
       expect(openRouterNoXhigh).assertFalse()
+    })
+
+    it('requiredToolReasoning_should_disable_only_for_known_conflicts_or_controlled_retry', 0, () => {
+      const dashScope = {
+        providerId: 'qwen',
+        baseUrl: 'https://dashscope.aliyuncs.com/compatible-mode/v1',
+        apiStyle: ApiStyle.OPENAI
+      }
+      const openAI = {
+        providerId: 'openai',
+        baseUrl: 'https://api.openai.com/v1',
+        apiStyle: ApiStyle.OPENAI
+      }
+      const deepSeek = {
+        providerId: 'deepseek',
+        baseUrl: 'https://api.deepseek.com/v1',
+        apiStyle: ApiStyle.OPENAI
+      }
+      const kimi = {
+        providerId: 'kimi',
+        baseUrl: 'https://api.moonshot.cn/v1',
+        apiStyle: ApiStyle.OPENAI
+      }
+
+      expect(resolveRequiredToolReasoningLevel(
+        dashScope, 'qwen3.6-plus', ReasoningLevel.HIGH
+      )).assertEqual(ReasoningLevel.OFF)
+      expect(resolveRequiredToolReasoningLevel(
+        openAI, 'o3', ReasoningLevel.HIGH
+      )).assertEqual(ReasoningLevel.HIGH)
+      expect(resolveRequiredToolReasoningLevel(
+        deepSeek, 'deepseek-v4', ReasoningLevel.HIGH
+      )).assertEqual(ReasoningLevel.HIGH)
+      expect(resolveRequiredToolReasoningLevel(
+        kimi, 'kimi-k2.5', ReasoningLevel.AUTO
+      )).assertEqual(ReasoningLevel.AUTO)
+      expect(resolveRequiredToolReasoningLevel(
+        openAI, 'o3', ReasoningLevel.HIGH, undefined, true
+      )).assertEqual(ReasoningLevel.OFF)
     })
 
     it('reasoningControl_should_normalize_level_by_control_mode', 0, () => {

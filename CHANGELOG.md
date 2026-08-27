@@ -29,6 +29,7 @@
 - 修复 Canvas 与 Plan 入口布局：普通模式保持右侧竖列，手稿模式保持底部横排
 - 修复 Python 运行时初始化、包加载或执行超时后无法可靠终止并重建的问题
 - 修复 Python 工作区 Worker 模板换行转义导致的 `Invalid or unexpected token`，以及重复创建已存在目录时误报 `File exists` 的问题
+- 修复知识库首次检索对所有模型一律关闭推理的问题：仅对已知与 `required tool_choice` 冲突的协议临时关闭，其他模型保留推理；首次未调用时再受控降级重试一次
 - 修复 `PYTHON_OUTPUT_DIR` 只在入口脚本全局可见、被导入模块复检时触发 `NameError` 的问题；运行期同步注入 builtins 与稳定环境变量，结束后可靠清理
 - 修复部分 OpenAI 兼容服务在长工具参数流中重复发送累计快照、造成多个 JSON 被错误拼接的问题；应用不再按参数长度截断，并可安全补齐仅缺容器闭合符的 Python 工具参数
 - 完善 Pyodide/FPDF2 提示词，固定 HTTPS 占位兼容、XCube 字体环境变量、`pdf.page` 翻页方式以及 run/run_files 的 PDF 输出目录规则
