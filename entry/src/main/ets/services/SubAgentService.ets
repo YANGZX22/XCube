@@ -8,6 +8,11 @@ import {
   UNLIMITED_RETRIEVAL_CALL_LIMIT
 } from '../config/RetrievalCallLimit'
 import { resolveRequestMaxOutputTokens } from '../utils/ContextWindowUtils'
+import {
+  parseSubAgentToolArguments,
+  SubAgentDispatchArguments,
+  SubAgentTaskArguments
+} from './SubAgentArgumentParser'
 
 export const SUB_AGENT_TOOL_ID: string = 'sub_agent'
 
@@ -113,18 +118,6 @@ export class SubAgentRuntimeConfig {
     this.webSearchCallLimit = webSearchCallLimit
     this.knowledgeSearchCallLimit = knowledgeSearchCallLimit
   }
-}
-
-// sub_agent 工具入参
-interface SubAgentTaskArgs {
-  name?: string
-  prompt?: string
-  expected_output?: string
-}
-
-interface SubAgentToolArgs {
-  main_thread_work?: string
-  tasks?: SubAgentTaskArgs[]
 }
 
 interface SubAgentMessageItemArgs {
@@ -387,19 +380,21 @@ export class SubAgentService {
       return JSON.stringify(new SubAgentErrorResponse('子智能体运行时未初始化，请重新发送消息后再试'))
     }
 
-    let parsedArgs: SubAgentToolArgs = {}
+    let parsedArgs: SubAgentDispatchArguments = {}
     try {
-      parsedArgs = JSON.parse(argsJson) as SubAgentToolArgs
+      parsedArgs = parseSubAgentToolArguments(argsJson)
     } catch (_error) {
       return JSON.stringify(new SubAgentErrorResponse('sub_agent 参数不是合法 JSON'))
     }
 
     const rawTasks = parsedArgs.tasks
     if (rawTasks === undefined || rawTasks.length === 0) {
-      return JSON.stringify(new SubAgentErrorResponse('sub_agent 需要 1-3 个 tasks，每个任务必须包含自包含的 prompt'))
+      return JSON.stringify(new SubAgentErrorResponse(
+        'sub_agent 需要 1-3 个任务；请至少提供非空 task_1_prompt'
+      ))
     }
 
-    const tasks: SubAgentTaskArgs[] = []
+    const tasks: SubAgentTaskArguments[] = []
     for (let i = 0; i < rawTasks.length && tasks.length < SUB_AGENT_MAX_TASKS; i++) {
       const prompt = rawTasks[i].prompt
       if (prompt !== undefined && prompt.trim() !== '') {
@@ -708,7 +703,7 @@ export class SubAgentService {
     this.previewState.active = this.hasRunningBatch()
   }
 
-  private resolveTaskName(task: SubAgentTaskArgs, index: number): string {
+  private resolveTaskName(task: SubAgentTaskArguments, index: number): string {
     return task.name !== undefined && task.name.trim() !== '' ? task.name.trim() : `sub-agent-${index + 1}`
   }
 
@@ -1010,7 +1005,7 @@ ${knowledgeSearchRule}
 - 每轮回复末尾附上简短“交付自检”：标明完成度（complete/partial/blocked）、仍缺少的证据或风险（没有则写“无”），以及主助手下一轮最值得追问的一个点（无需追问则写“无”）。不要虚报完成度。`
   }
 
-  private buildSubAgentTaskPrompt(task: SubAgentTaskArgs): string {
+  private buildSubAgentTaskPrompt(task: SubAgentTaskArguments): string {
     const prompt = task.prompt !== undefined ? task.prompt.trim() : ''
     const expectedOutput = task.expected_output !== undefined ? task.expected_output.trim() : ''
     if (expectedOutput === '') {

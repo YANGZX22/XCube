@@ -2303,36 +2303,50 @@ function createSubAgentToolDefinition(): ToolDefinition {
         "type": "string",
         "description": "Required scheduling commitment: one concrete, useful deliverable the main agent will complete after dispatch and before any sub_agent_result call. Examples: perform another search, build the comparison rubric, verify known facts, analyze a reserved section, or draft the synthesis outline. Do not use sub-agents if no such parallel main-thread work exists."
       },
-      "tasks": {
-        "type": "array",
-        "description": "1 to ${SUB_AGENT_MAX_TASKS} independent sub-tasks to run in parallel. Each sub-agent gets a persistent isolated conversation that can later be continued with sub_agent_message. It has the same tools exposed to this conversation except the sub-agent coordination tools. Every sub-agent has its own web_search and knowledge_search budgets, independent from the main conversation and other sub-agents. Sub-agent ask_user questions open as queued dialogs and generated charts appear in the main conversation; other sub-agent tool activity is visible to the user in a live preview panel.",
-        "items": {
-          "type": "object",
-          "properties": {
-            "name": {
-              "type": "string",
-              "description": "Short label for this sub-agent, e.g. 'price-research'."
-            },
-            "prompt": {
-              "type": "string",
-              "description": "Complete standalone instructions for the sub-agent. It cannot see this conversation, so include the goal, all necessary background, constraints, acceptance criteria, and what to return."
-            },
-            "expected_output": {
-              "type": "string",
-              "description": "Optional description of the desired output format of the initial reply."
-            }
-          },
-          "required": ["prompt"]
-        }
+      "task_1_name": {
+        "type": "string",
+        "description": "Optional short label for the first sub-agent."
+      },
+      "task_1_prompt": {
+        "type": "string",
+        "description": "Required complete standalone instructions for the first sub-agent. Include the goal, background, constraints, acceptance criteria, and what to return."
+      },
+      "task_1_expected_output": {
+        "type": "string",
+        "description": "Optional desired output format for the first sub-agent."
+      },
+      "task_2_name": {
+        "type": "string",
+        "description": "Optional short label for the second sub-agent. Omit all task_2 fields when only one sub-agent is needed."
+      },
+      "task_2_prompt": {
+        "type": "string",
+        "description": "Optional complete standalone instructions for the second independent sub-agent."
+      },
+      "task_2_expected_output": {
+        "type": "string",
+        "description": "Optional desired output format for the second sub-agent."
+      },
+      "task_3_name": {
+        "type": "string",
+        "description": "Optional short label for the third sub-agent. Omit all task_3 fields unless three-way parallel work is useful."
+      },
+      "task_3_prompt": {
+        "type": "string",
+        "description": "Optional complete standalone instructions for the third independent sub-agent."
+      },
+      "task_3_expected_output": {
+        "type": "string",
+        "description": "Optional desired output format for the third sub-agent."
       }
     },
-    "required": ["main_thread_work", "tasks"]
+    "required": ["main_thread_work", "task_1_prompt"]
   }`
   parameters.setRawSchema(JSON.parse(rawSchemaJson) as object)
 
   const func = new ToolFunction(
     SUB_AGENT_TOOL_ID,
-    `Dispatch 1-${SUB_AGENT_MAX_TASKS} autonomous sub-agents for genuinely independent parallel work. SCHEDULING CONTRACT: before calling, reserve a concrete deliverable for the main thread and define acceptance criteria for every sub-task. This call returns IMMEDIATELY with a batchId and stable agentIds. After dispatch, work on the reserved main-thread deliverable; sub_agent_result (even wait=false) MUST NOT be your next tool call, and you must not poll. Only collect after useful main-thread work is complete and further progress depends on the replies. Collection keeps sessions alive. Quality-check every reply and promptly use sub_agent_message to correct specific gaps, request evidence, verify, or deepen the same agent. Do not use sub-agents when there is no useful main-thread work to overlap, for simple tasks, or for strongly sequential tasks.`,
+    `Dispatch 1-${SUB_AGENT_MAX_TASKS} autonomous sub-agents for genuinely independent parallel work. ARGUMENT SHAPE: use flat string fields only. task_1_prompt is required; task_2_prompt and task_3_prompt add optional parallel tasks. Pair them with the matching task_N_name and task_N_expected_output fields. Do not send a tasks array or stringify the arguments object. SCHEDULING CONTRACT: before calling, reserve a concrete deliverable for the main thread and define acceptance criteria for every sub-task. This call returns IMMEDIATELY with a batchId and stable agentIds. After dispatch, work on the reserved main-thread deliverable; sub_agent_result (even wait=false) MUST NOT be your next tool call, and you must not poll. Only collect after useful main-thread work is complete and further progress depends on the replies. Collection keeps sessions alive. Quality-check every reply and promptly use sub_agent_message to correct specific gaps, request evidence, verify, or deepen the same agent. Do not use sub-agents when there is no useful main-thread work to overlap, for simple tasks, or for strongly sequential tasks.`,
     parameters
   )
 
