@@ -982,11 +982,11 @@
     },
     {
       "name": "reasoning_process",
-      "value": "Reasoning"
+      "value": "Thought Process"
     },
     {
       "name": "reasoning_thinking",
-      "value": "Thinking"
+      "value": "Thinking..."
     },
     {
       "name": "favorite_models_empty_title",
