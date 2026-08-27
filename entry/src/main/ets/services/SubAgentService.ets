@@ -3,6 +3,10 @@ import { AIApiConfig, AIApiService, RequestMessage, UsageInfo } from './AIApiSer
 import { ReasoningLevel, ToolCall, ToolDefinition, ToolResult } from '../models/ChatModels'
 import { createThrottle } from '../utils/ThrottleUtil'
 import { estimateTextTokens } from '../utils/ModelBillingUtils'
+import {
+  hasFiniteRetrievalCallLimit,
+  UNLIMITED_RETRIEVAL_CALL_LIMIT
+} from '../config/RetrievalCallLimit'
 import { resolveRequestMaxOutputTokens } from '../utils/ContextWindowUtils'
 
 export const SUB_AGENT_TOOL_ID: string = 'sub_agent'
@@ -67,6 +71,8 @@ export class SubAgentRuntimeConfig {
   isCancelled: () => boolean
   onUsage: SubAgentUsageCallback
   contextWindowTokens: number
+  webSearchCallLimit: number
+  knowledgeSearchCallLimit: number
 
   constructor(
     apiConfig: AIApiConfig,
@@ -81,7 +87,9 @@ export class SubAgentRuntimeConfig {
     onToolCallCompleted: SubAgentToolCallCompleted,
     isCancelled: () => boolean,
     onUsage: SubAgentUsageCallback,
-    contextWindowTokens: number = 0
+    contextWindowTokens: number = 0,
+    webSearchCallLimit: number = UNLIMITED_RETRIEVAL_CALL_LIMIT,
+    knowledgeSearchCallLimit: number = UNLIMITED_RETRIEVAL_CALL_LIMIT
   ) {
     this.apiConfig = apiConfig
     this.modelId = modelId
@@ -96,6 +104,8 @@ export class SubAgentRuntimeConfig {
     this.isCancelled = isCancelled
     this.onUsage = onUsage
     this.contextWindowTokens = contextWindowTokens
+    this.webSearchCallLimit = webSearchCallLimit
+    this.knowledgeSearchCallLimit = knowledgeSearchCallLimit
   }
 }
 
@@ -969,10 +979,14 @@ export class SubAgentService {
       ? '- 仅在遇到无法自行决定的关键歧义时，才调用 ask_user 向用户提问（问题会显示在主对话中）；能合理假设时优先继续完成，并在结果中说明假设。'
       : '- 你无法向用户提问。信息不足时基于合理假设继续，并在结果中说明假设与不确定性。'
     const knowledgeSearchRule = hasKnowledgeSearch
-      ? '- 本次对话已开启知识库，你可调用 knowledge_search 检索用户文件。你拥有独立的每次用户提问最多 5 次知识库查询额度，不与主助手或其他子智能体共享；工具返回额度耗尽后立即停止检索。'
+      ? (hasFiniteRetrievalCallLimit(runtime.knowledgeSearchCallLimit)
+        ? `- 本次对话已开启知识库，你可调用 knowledge_search 检索用户文件。每轮最多调用 ${runtime.knowledgeSearchCallLimit} 次；你独立计数，不与主助手或其他子智能体共享。达到上限或证据充分后立即停止检索。`
+        : '- 本次对话已开启知识库，你可按需调用 knowledge_search 检索用户文件，不设固定次数上限。你独立计数，不与主助手或其他子智能体共享；证据充分、结果重复或已无新信息时立即停止检索。')
       : ''
     const webSearchRule = hasWebSearch
-      ? '- 你拥有独立的默认 5 次 web_search 额度，不与主助手或其他子智能体共享。默认额度用完后，仅在确有必要且 ask_user 可用时请求用户允许追加搜索；否则基于已有结果完成报告。'
+      ? (hasFiniteRetrievalCallLimit(runtime.webSearchCallLimit)
+        ? `- 每轮最多调用 web_search ${runtime.webSearchCallLimit} 次；你独立计数，不与主助手或其他子智能体共享。达到上限后基于已有结果完成报告。`
+        : '- 你可按需调用 web_search，不设固定次数上限，并独立计数，不与主助手或其他子智能体共享；证据充分、结果重复或已无新信息时立即停止搜索。')
       : ''
     return `当前时间: ${runtime.timeContext}
 

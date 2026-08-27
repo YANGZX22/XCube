@@ -48,6 +48,8 @@ export class PreferenceKeys {
   static readonly SEARCH_MAX_RESULTS: string = 'search_max_results'
   static readonly SEARCH_TIMEOUT: string = 'search_timeout'
   static readonly SEARCH_AUTO_TEST: string = 'search_auto_test'
+  static readonly WEB_SEARCH_CALL_LIMIT_PER_TURN: string = 'web_search_call_limit_per_turn'
+  static readonly KNOWLEDGE_SEARCH_CALL_LIMIT_PER_TURN: string = 'knowledge_search_call_limit_per_turn'
   static readonly SEARCH_QUERY_OPTIMIZATION_ENABLED: string = 'search_query_optimization_enabled'
   static readonly SEARCH_BRAVE_API_KEY: string = 'search_brave_api_key'
   static readonly SEARCH_TAVILY_API_KEY: string = 'search_tavily_api_key'

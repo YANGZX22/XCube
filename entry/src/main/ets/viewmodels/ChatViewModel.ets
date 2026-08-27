@@ -56,10 +56,12 @@ import {
   normalizeOptimizedSearchQuery,
   normalizeRelativeTimeForSearchQuery as normalizeRelativeTimeForSearchQueryShared
 } from '../utils/SearchQueryUtils'
+import { KNOWLEDGE_SEARCH_TOOL_ID } from '../config/KnowledgeSearchTool'
 import {
-  KNOWLEDGE_SEARCH_MAX_CALLS_PER_USER_TURN,
-  KNOWLEDGE_SEARCH_TOOL_ID
-} from '../config/KnowledgeSearchTool'
+  hasFiniteRetrievalCallLimit,
+  normalizeRetrievalCallLimit,
+  UNLIMITED_RETRIEVAL_CALL_LIMIT
+} from '../config/RetrievalCallLimit'
 import { COMPACT_TOOL_ID } from '../config/CompactTool'
 import {
   COMPACT_SUMMARY_PROMPT_MARKER,
@@ -202,16 +204,6 @@ class PersistedKnowledgeToolResult {
   hits: PersistedKnowledgeToolHit[] = []
 }
 
-interface AskUserApprovalAnswer {
-  answer?: string
-  selected_options?: string[]
-  skipped?: boolean
-}
-
-interface AskUserApprovalPayload {
-  answers?: Record<string, AskUserApprovalAnswer>
-}
-
 // 待持久化 AI 消息信息（每请求独立）
 interface PendingAIMessageInfo {
   message: ChatMessage
@@ -291,8 +283,6 @@ export class ChatViewModel {
   private contextCompactedCallback: (() => void) | null = null
   // 标题是轻量请求：失败后只快速重试一次，避免 UI 长时间停在生成状态。
   private readonly MAX_TITLE_RETRY = 1
-  private readonly DEFAULT_WEB_SEARCH_LIMIT = 5
-  private readonly EXTRA_WEB_SEARCH_LIMIT = 5
   // 取消令牌：用于停止”尚未开始发送的请求”（例如退出页面时）
   private cancelToken: number = 0
   // 历史附件懒加载配置
@@ -2912,6 +2902,18 @@ ${limitedSearchContext}
         hasKnowledgeSearchTool = true
       }
     }
+    const webSearchCallLimit = normalizeRetrievalCallLimit(
+      await getPreferencesService().getNumber(
+        PreferenceKeys.WEB_SEARCH_CALL_LIMIT_PER_TURN,
+        UNLIMITED_RETRIEVAL_CALL_LIMIT
+      )
+    )
+    const knowledgeSearchCallLimit = normalizeRetrievalCallLimit(
+      await getPreferencesService().getNumber(
+        PreferenceKeys.KNOWLEDGE_SEARCH_CALL_LIMIT_PER_TURN,
+        UNLIMITED_RETRIEVAL_CALL_LIMIT
+      )
+    )
 
     // sub_agent 派发后立即返回；sub_agent_result 负责收取当前轮回复，
     // sub_agent_message 负责向持久会话续发指令。二者始终随 sub_agent 一起曝光。
@@ -2949,9 +2951,12 @@ ${limitedSearchContext}
 - 对外部系统有副作用的工具（例如创建、修改、删除、提交、上传）必须先确认用户意图与目标对象，不要擅自操作。
 - 编程、写作、翻译、数学、创意等纯生成任务，若不依赖外部状态，绝对不要调用任何工具。`
     if (hasWebSearchTool) {
+      const webSearchLimitRule = hasFiniteRetrievalCallLimit(webSearchCallLimit)
+        ? `- 当前设置中，针对同一个用户问题最多调用 web_search ${webSearchCallLimit} 次；达到上限后基于已有信息回答并说明必要的不确定性。`
+        : '- 当前设置不限制 web_search 的固定调用次数；仍须在证据充分、结果重复或已无新信息时立即停止搜索。'
       toolUsageSystemPrompt += `
-- 针对同一个用户问题，默认最多调用 web_search ${this.DEFAULT_WEB_SEARCH_LIMIT} 次。达到上限后，如果已有信息足够，请直接整理最终回答；不要把搜索摘要或工具结果原样返回给用户。
-- 如果达到 ${this.DEFAULT_WEB_SEARCH_LIMIT} 次后仍确实需要继续搜索，并且 ask_user 可用，必须先调用 ask_user 询问用户是否允许额外最多 ${this.EXTRA_WEB_SEARCH_LIMIT} 次联网搜索；用户同意后才继续搜索。用户不同意、跳过或 ask_user 不可用时，必须基于已有信息直接回答并说明不确定性。
+${webSearchLimitRule}
+- 不要把搜索摘要或工具结果原样返回给用户。
 - 生成 web_search.query 时优先保留用户原始关键词，不要擅自改写实体、地点和时间。
 - 如果需要继续搜索，必须主动更换搜索词角度，优先换关键词而不是只增加 page；不要连续提交完全相同或只差空格/标点的 query。
 - 多次搜索同一问题时，每次 query 应尽量覆盖不同信息源或不同角度，例如: 精确短语、官方/作品页、歌词/资料站、作者/制作人、排除百科字典类结果、site: 限定站点。
@@ -2977,11 +2982,15 @@ ${limitedSearchContext}
 8. 在拿到所有被最终答案依赖的子智能体回复之前，不得给出最终回答。简单任务或强依赖前后顺序的任务不要使用 sub_agent。`
     }
     if (hasKnowledgeSearchTool) {
+      const knowledgeSearchLimitRule = hasFiniteRetrievalCallLimit(knowledgeSearchCallLimit)
+        ? `- 当前设置中，本次回答最多调用 knowledge_search ${knowledgeSearchCallLimit} 次；达到上限后基于已有证据回答。`
+        : '- 当前设置不限制 knowledge_search 的固定调用次数；仍须避免重复查询，并在证据充分或已无新信息时立即停止。'
       toolUsageSystemPrompt += `
 - 以下知识库规则优先级高于前面的“普通问答不调用工具”和“纯生成任务不调用工具”规则。
 - 用户已开启知识库。在本次回答的第一步，必须先调用 knowledge_search，根据用户当前问题生成独立、具体的 query。
 - 首次 knowledge_search 返回之前，禁止直接回答用户，禁止以自然语言文本代替工具调用，也不要输出伪造的工具调用标记。
-- 只能通过模型的正式 function call 调用 knowledge_search，arguments 必须是符合工具 schema 的有效 JSON。`
+- 只能通过模型的正式 function call 调用 knowledge_search，arguments 必须是符合工具 schema 的有效 JSON。
+${knowledgeSearchLimitRule}`
     }
     if (hasSkillTool) {
       const skillContext = await this.buildEnabledSkillSystemContext()
@@ -3205,10 +3214,12 @@ ${limitedSearchContext}
           subAgentBudgetMessages.set(budgetKey, budgetMessage)
         }
         budgetMessage.toolCalls.push(toolCall)
-        const subToolResults = await this.executeToolCallsWithSearchBudgets(
+        const subToolResults = await this.executeToolCallsWithRetrievalLimit(
           [toolCall],
           budgetMessage,
           allowedFunctionNames,
+          webSearchCallLimit,
+          knowledgeSearchCallLimit,
           true
         )
         const subToolResult = subToolResults[0]
@@ -3251,7 +3262,9 @@ ${limitedSearchContext}
         usageTracker.applyToMessage(aiMessage)
         onAIMessageUpdated(aiMessage)
       },
-      this.getCurrentModelContextWindow(providerId, modelId)
+      this.getCurrentModelContextWindow(providerId, modelId),
+      webSearchCallLimit,
+      knowledgeSearchCallLimit
     ))
 
     // 开始工具调用循环
@@ -3268,6 +3281,8 @@ ${limitedSearchContext}
 	      reasoningLevel,
 	      requestTemperature,
 	      0,  // 初始迭代次数
+      webSearchCallLimit,
+      knowledgeSearchCallLimit,
       snapshotSessionId,
       snapshotSession,
       shouldAutoGenerateTitle,
@@ -3478,28 +3493,29 @@ ${preview}`
     onComplete()
   }
 
-  private async executeToolCallsWithSearchBudgets(
+  private async executeToolCallsWithRetrievalLimit(
     toolCalls: ToolCall[],
     aiMessage: ChatMessage,
     allowedFunctionNames: string[],
+    webSearchCallLimit: number,
+    knowledgeSearchCallLimit: number,
     includeSubAgentCalls: boolean = false
   ): Promise<ToolResult[]> {
     const results: ToolResult[] = []
     let executedSearchesInBatch = 0
     let executedKnowledgeQueriesInBatch = 0
+    const finiteWebSearchLimit = hasFiniteRetrievalCallLimit(webSearchCallLimit)
+    const finiteKnowledgeSearchLimit = hasFiniteRetrievalCallLimit(knowledgeSearchCallLimit)
     for (let i = 0; i < toolCalls.length; i++) {
       const toolCall = toolCalls[i]
       if (this.isWebSearchFunction(toolCall.functionName)) {
         const usedSearchCount =
           this.countCompletedWebSearchCalls(aiMessage, includeSubAgentCalls) + executedSearchesInBatch
-        const limit = this.getCurrentWebSearchLimit(aiMessage, includeSubAgentCalls)
-        if (usedSearchCount >= limit) {
+        if (finiteWebSearchLimit && usedSearchCount >= webSearchCallLimit) {
           results.push(this.buildWebSearchBudgetResult(
             toolCall,
             usedSearchCount,
-            limit,
-            aiMessage,
-            includeSubAgentCalls
+            webSearchCallLimit
           ))
           continue
         }
@@ -3513,13 +3529,17 @@ ${preview}`
       if (this.isKnowledgeSearchFunction(toolCall.functionName)) {
         const usedKnowledgeQueryCount =
           this.countCompletedKnowledgeSearchCalls(aiMessage, includeSubAgentCalls) + executedKnowledgeQueriesInBatch
-        if (usedKnowledgeQueryCount >= KNOWLEDGE_SEARCH_MAX_CALLS_PER_USER_TURN) {
-          results.push(this.buildKnowledgeSearchBudgetResult(toolCall, usedKnowledgeQueryCount))
+        if (finiteKnowledgeSearchLimit && usedKnowledgeQueryCount >= knowledgeSearchCallLimit) {
+          results.push(this.buildKnowledgeSearchBudgetResult(
+            toolCall,
+            usedKnowledgeQueryCount,
+            knowledgeSearchCallLimit
+          ))
           continue
         }
         const result = await this.runToolCallGuarded(toolCall, allowedFunctionNames)
         executedKnowledgeQueriesInBatch += 1
-        this.decorateKnowledgeSearchResult(result, usedKnowledgeQueryCount + 1)
+        this.decorateKnowledgeSearchResult(result, usedKnowledgeQueryCount + 1, knowledgeSearchCallLimit)
         results.push(result)
         continue
       }
@@ -3600,6 +3620,16 @@ ${preview}`
     const remainingTools: ToolDefinition[] = []
     for (let i = 0; i < tools.length; i++) {
       if (!this.isKnowledgeSearchFunction(tools[i].function.name)) {
+        remainingTools.push(tools[i])
+      }
+    }
+    return remainingTools
+  }
+
+  private getToolsWithoutWebSearch(tools: ToolDefinition[]): ToolDefinition[] {
+    const remainingTools: ToolDefinition[] = []
+    for (let i = 0; i < tools.length; i++) {
+      if (!this.isWebSearchFunction(tools[i].function.name)) {
         remainingTools.push(tools[i])
       }
     }
@@ -3691,16 +3721,24 @@ ${preview}`
     return count
   }
 
-  private decorateKnowledgeSearchResult(result: ToolResult, completedCount: number): void {
+  private decorateKnowledgeSearchResult(
+    result: ToolResult,
+    completedCount: number,
+    retrievalCallLimit: number
+  ): void {
     try {
       const data = JSON.parse(result.content) as Record<string, Object>
-      const remaining = Math.max(0, KNOWLEDGE_SEARCH_MAX_CALLS_PER_USER_TURN - completedCount)
       data['knowledgeQueryCount'] = completedCount
-      data['remainingKnowledgeQueries'] = remaining
-      data['maxKnowledgeQueries'] = KNOWLEDGE_SEARCH_MAX_CALLS_PER_USER_TURN
-      if (remaining <= 0) {
+      const finiteLimit = hasFiniteRetrievalCallLimit(retrievalCallLimit)
+      const remaining = finiteLimit ? Math.max(0, retrievalCallLimit - completedCount) : -1
+      if (finiteLimit) {
+        data['remainingKnowledgeQueries'] = remaining
+        data['maxKnowledgeQueries'] = retrievalCallLimit
+      }
+      if (finiteLimit && remaining <= 0) {
         data['continuationGuidance'] =
-          '知识库查询次数已达上限。停止调用 knowledge_search，基于已有证据直接回答；证据不足时明确说明。'
+          `知识库查询次数已达当前设置的 ${retrievalCallLimit} 次上限。停止调用 knowledge_search，` +
+            '基于已有证据直接回答；证据不足时明确说明。'
       } else if (data['truncated'] === true) {
         data['continuationGuidance'] =
           'truncated 仅表示本次返回受长度预算截断。若当前证据已足够，立即回答；仅在能指出明确缺口且下一条 query 能更聚焦地补齐时续查，禁止重复或仅同义改写。'
@@ -3710,11 +3748,15 @@ ${preview}`
       }
       result.content = JSON.stringify(data)
     } catch (_error) {
-      // knowledge_search 的标准结果始终为 JSON；异常结果仍计入查询上限。
+      // knowledge_search 的标准结果始终为 JSON；异常结果仍计入已完成查询次数。
     }
   }
 
-  private buildKnowledgeSearchBudgetResult(toolCall: ToolCall, usedQueryCount: number): ToolResult {
+  private buildKnowledgeSearchBudgetResult(
+    toolCall: ToolCall,
+    usedQueryCount: number,
+    retrievalCallLimit: number
+  ): ToolResult {
     toolCall.toolId = KNOWLEDGE_SEARCH_TOOL_ID
     toolCall.displayName = '知识库检索'
     if (!toolCall.sourceLabel.startsWith(SUB_AGENT_SOURCE_LABEL_PREFIX)) {
@@ -3729,8 +3771,9 @@ ${preview}`
         code: 'KNOWLEDGE_SEARCH_BUDGET_EXHAUSTED',
         knowledgeQueryCount: usedQueryCount,
         remainingKnowledgeQueries: 0,
-        maxKnowledgeQueries: KNOWLEDGE_SEARCH_MAX_CALLS_PER_USER_TURN,
-        message: '本次用户提问的知识库查询已达 5 次上限。不要继续调用 knowledge_search；请基于已有结果直接回答，证据不足时明确说明。',
+        maxKnowledgeQueries: retrievalCallLimit,
+        message: `本次用户提问的知识库查询已达当前设置的 ${retrievalCallLimit} 次上限。` +
+          '不要继续调用 knowledge_search；请基于已有结果直接回答，证据不足时明确说明。',
         continuationGuidance: '停止查询并完成最终回答。'
       }),
       true,
@@ -3739,24 +3782,11 @@ ${preview}`
     )
   }
 
-  private getCurrentWebSearchLimit(
-    aiMessage: ChatMessage,
-    includeSubAgentCalls: boolean = false
-  ): number {
-    if (this.hasApprovedExtraWebSearch(aiMessage, includeSubAgentCalls)) {
-      return this.DEFAULT_WEB_SEARCH_LIMIT + this.EXTRA_WEB_SEARCH_LIMIT
-    }
-    return this.DEFAULT_WEB_SEARCH_LIMIT
-  }
-
   private buildWebSearchBudgetResult(
     toolCall: ToolCall,
     usedSearchCount: number,
-    limit: number,
-    aiMessage: ChatMessage,
-    includeSubAgentCalls: boolean = false
+    retrievalCallLimit: number
   ): ToolResult {
-    const extraApproved = this.hasApprovedExtraWebSearch(aiMessage, includeSubAgentCalls)
     toolCall.toolId = 'web_search'
     toolCall.displayName = '联网搜索'
     if (!toolCall.sourceLabel.startsWith(SUB_AGENT_SOURCE_LABEL_PREFIX)) {
@@ -3769,14 +3799,9 @@ ${preview}`
         error: 'web_search_budget_exhausted',
         code: 'WEB_SEARCH_BUDGET_EXHAUSTED',
         webSearchCount: usedSearchCount,
-        limit: limit,
-        defaultLimit: this.DEFAULT_WEB_SEARCH_LIMIT,
-        extraLimit: this.EXTRA_WEB_SEARCH_LIMIT,
-        canRequestMore: !extraApproved,
-        message: extraApproved
-          ? '额外联网搜索次数也已用完。请不要继续调用 web_search，必须根据已有搜索结果直接回答用户，并说明必要的不确定性。'
-          : `默认联网搜索次数已用完。如确有必要继续搜索，请先调用 ask_user 询问用户是否允许额外最多 ${this.EXTRA_WEB_SEARCH_LIMIT} 次联网搜索；否则必须根据已有搜索结果直接回答用户。不要把搜索摘要或工具 JSON 原样返回。`,
-        suggestedAskUserJson: `{"questions":[{"id":"allow_extra_web_search","question":"当前已完成 ${this.DEFAULT_WEB_SEARCH_LIMIT} 次联网搜索。是否允许我额外最多再搜索 ${this.EXTRA_WEB_SEARCH_LIMIT} 次来提高把握？","selection_type":"single","options":["同意追加搜索","不追加，直接回答"]}]}`
+        limit: retrievalCallLimit,
+        message: `本次用户提问的联网搜索已达当前设置的 ${retrievalCallLimit} 次上限。` +
+          '请不要继续调用 web_search，基于已有搜索结果回答用户，并说明必要的不确定性。'
       }),
       true,
       toolCall.displayName,
@@ -3788,15 +3813,6 @@ ${preview}`
     for (let i = 0; i < aiMessage.toolResults.length; i++) {
       if (aiMessage.toolResults[i].toolCallId === toolCallId) {
         return aiMessage.toolResults[i]
-      }
-    }
-    return null
-  }
-
-  private findToolCall(aiMessage: ChatMessage, toolCallId: string): ToolCall | null {
-    for (let i = 0; i < aiMessage.toolCalls.length; i++) {
-      if (aiMessage.toolCalls[i].id === toolCallId) {
-        return aiMessage.toolCalls[i]
       }
     }
     return null
@@ -3834,72 +3850,6 @@ ${preview}`
     return false
   }
 
-  private hasApprovedExtraWebSearch(
-    aiMessage: ChatMessage,
-    includeSubAgentCalls: boolean = false
-  ): boolean {
-    for (let i = 0; i < aiMessage.toolResults.length; i++) {
-      const result = aiMessage.toolResults[i]
-      const toolCall = this.findToolCall(aiMessage, result.toolCallId)
-      if (!includeSubAgentCalls && toolCall !== null &&
-        toolCall.sourceLabel.startsWith(SUB_AGENT_SOURCE_LABEL_PREFIX)) {
-        continue
-      }
-      if (this.isWebSearchBudgetResult(result)) {
-        continue
-      }
-      if (this.isExtraSearchApprovalResult(result.content)) {
-        return true
-      }
-    }
-    return false
-  }
-
-  private isExtraSearchApprovalResult(content: string): boolean {
-    try {
-      const payload = JSON.parse(content) as AskUserApprovalPayload
-      if (payload.answers === undefined) {
-        return false
-      }
-      const answer = payload.answers['allow_extra_web_search']
-      if (answer === undefined || answer.skipped === true) {
-        return false
-      }
-      const textParts: string[] = []
-      if (answer.answer !== undefined) {
-        textParts.push(answer.answer)
-      }
-      if (answer.selected_options !== undefined) {
-        for (let i = 0; i < answer.selected_options.length; i++) {
-          textParts.push(answer.selected_options[i])
-        }
-      }
-      return this.isExtraSearchApprovalText(textParts.join(' '))
-    } catch (_error) {
-      return this.isExtraSearchApprovalText(content)
-    }
-  }
-
-  private isExtraSearchApprovalText(text: string): boolean {
-    const normalized = text.toLowerCase().trim()
-    if (normalized === '') {
-      return false
-    }
-    const rejectWords: string[] = ['不追加', '直接回答', '不同意', '拒绝', 'no', 'skip', '跳过']
-    for (let i = 0; i < rejectWords.length; i++) {
-      if (normalized.includes(rejectWords[i])) {
-        return false
-      }
-    }
-    const approveWords: string[] = ['同意', '允许', '可以', '继续', '追加搜索', 'approve', 'yes', 'allow']
-    for (let i = 0; i < approveWords.length; i++) {
-      if (normalized.includes(approveWords[i])) {
-        return true
-      }
-    }
-    return false
-  }
-
   // 工具调用循环
   private async executeToolCallLoop(
     apiConfig: AIApiConfig,
@@ -3913,7 +3863,9 @@ ${preview}`
 	    toolCallbacks: ToolCallCallbacks | undefined,
 	    reasoningLevel: ReasoningLevel,
 	    requestTemperature: number,
-	    iteration: number,
+    iteration: number,
+    webSearchCallLimit: number,
+    knowledgeSearchCallLimit: number,
     snapshotSessionId: string,
     snapshotSession: ChatSession | null,
     shouldAutoGenerateTitle: boolean,
@@ -3989,6 +3941,7 @@ ${preview}`
       }
     }
 
+    const completedWebSearchCount = this.countCompletedWebSearchCalls(aiMessage)
     const completedKnowledgeQueryCount = this.countCompletedKnowledgeSearchCalls(aiMessage)
     const requestHasKnowledgeSearch = this.hasKnowledgeSearchTool(tools)
     const forceKnowledgeSearchInThisRound =
@@ -4003,13 +3956,18 @@ ${preview}`
     if (forceKnowledgeSearchInThisRound) {
       toolsForThisRound = this.getOnlyKnowledgeSearchTools(tools)
       toolChoiceForThisRound = 'required'
-    } else if (requestHasKnowledgeSearch &&
-      completedKnowledgeQueryCount >= KNOWLEDGE_SEARCH_MAX_CALLS_PER_USER_TURN) {
+    } else if (requestHasKnowledgeSearch && hasFiniteRetrievalCallLimit(knowledgeSearchCallLimit) &&
+      completedKnowledgeQueryCount >= knowledgeSearchCallLimit) {
       toolsForThisRound = this.getToolsWithoutKnowledgeSearch(tools)
       toolChoiceForThisRound = toolsForThisRound.length > 0 ? 'auto' : 'none'
     } else {
       toolsForThisRound = tools
       toolChoiceForThisRound = toolsForThisRound.length > 0 ? 'auto' : 'none'
+    }
+    if (hasFiniteRetrievalCallLimit(webSearchCallLimit) &&
+      completedWebSearchCount >= webSearchCallLimit) {
+      toolsForThisRound = this.getToolsWithoutWebSearch(toolsForThisRound)
+      toolChoiceForThisRound = toolsForThisRound.length > 0 ? toolChoiceForThisRound : 'none'
     }
     // 每次用户提问最多压缩一次：已压缩成功后从后续回合移除 compact，避免反复压缩摘要
     if (this.hasCompactTool(toolsForThisRound) &&
@@ -4334,6 +4292,8 @@ ${preview}`
           reasoningLevel,
           requestTemperature,
           iteration + 1,
+          webSearchCallLimit,
+          knowledgeSearchCallLimit,
           snapshotSessionId,
           snapshotSession,
           shouldAutoGenerateTitle,
@@ -4462,6 +4422,8 @@ ${preview}`
 	            reasoningLevel,
 	            requestTemperature,
 	            iteration + 1,
+              webSearchCallLimit,
+              knowledgeSearchCallLimit,
               snapshotSessionId,
               snapshotSession,
               shouldAutoGenerateTitle,
@@ -4555,10 +4517,12 @@ ${preview}`
           }
 
           // 执行工具调用
-          const toolResults = await this.executeToolCallsWithSearchBudgets(
+          const toolResults = await this.executeToolCallsWithRetrievalLimit(
             toolCalls,
             aiMessage,
-            this.buildAllowedToolFunctionNames(toolsForThisRound)
+            this.buildAllowedToolFunctionNames(toolsForThisRound),
+            webSearchCallLimit,
+            knowledgeSearchCallLimit
           )
           if (isCancelledFn()) {
             return
@@ -4694,6 +4658,8 @@ ${preview}`
 	            reasoningLevel,
 	            requestTemperature,
 	            iteration + 1,
+            webSearchCallLimit,
+            knowledgeSearchCallLimit,
             snapshotSessionId,
             snapshotSession,
             shouldAutoGenerateTitle,
@@ -4753,6 +4719,8 @@ ${preview}`
               reasoningLevel,
               requestTemperature,
               iteration + 1,
+              webSearchCallLimit,
+              knowledgeSearchCallLimit,
               snapshotSessionId,
               snapshotSession,
               shouldAutoGenerateTitle,
@@ -4806,6 +4774,8 @@ ${preview}`
               reasoningLevel,
               requestTemperature,
               iteration + 1,
+              webSearchCallLimit,
+              knowledgeSearchCallLimit,
               snapshotSessionId,
               snapshotSession,
               shouldAutoGenerateTitle,

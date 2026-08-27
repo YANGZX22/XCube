@@ -32,6 +32,11 @@ import {
   formatTokenCount
 } from '../utils/ContextWindowUtils'
 import { getPreferencesService, PreferencesService, PreferenceKeys } from '../services/PreferencesService'
+import {
+  MAX_RETRIEVAL_CALL_LIMIT,
+  normalizeRetrievalCallLimit,
+  UNLIMITED_RETRIEVAL_CALL_LIMIT
+} from '../config/RetrievalCallLimit'
 import { showSnackBar, SnackBarDisplayOptions, SnackBarTone } from '../utils/ToastUtil'
 import { getAppUiState } from '../state/AppUiState'
 import { formatLocalizedCount, pickLocalizedText } from '../utils/LocalizedTextUtils'
@@ -91,6 +96,8 @@ export struct ToolsCenterPanel {
   @Local searchBochaApiKey: string = ''
   @Local searchBochaBaseUrl: string = 'https://api.bochaai.com'
   @Local searchQueryOptimizationEnabled: boolean = false
+  @Local webSearchCallLimit: number = UNLIMITED_RETRIEVAL_CALL_LIMIT
+  @Local knowledgeSearchCallLimit: number = UNLIMITED_RETRIEVAL_CALL_LIMIT
   @Local isLoading: boolean = false
   @Local isRefreshingMcpServers: boolean = false
   @Local showSearchConfigSheet: boolean = false
@@ -311,6 +318,43 @@ export struct ToolsCenterPanel {
     this.contextCompactMaxTokens = compactionService.getMaxContextTokens()
   }
 
+  private async loadRetrievalCallLimits(): Promise<void> {
+    const webSearchLimit = await this.preferencesService.getNumber(
+      PreferenceKeys.WEB_SEARCH_CALL_LIMIT_PER_TURN,
+      UNLIMITED_RETRIEVAL_CALL_LIMIT
+    )
+    const knowledgeSearchLimit = await this.preferencesService.getNumber(
+      PreferenceKeys.KNOWLEDGE_SEARCH_CALL_LIMIT_PER_TURN,
+      UNLIMITED_RETRIEVAL_CALL_LIMIT
+    )
+    this.webSearchCallLimit = normalizeRetrievalCallLimit(webSearchLimit)
+    this.knowledgeSearchCallLimit = normalizeRetrievalCallLimit(knowledgeSearchLimit)
+  }
+
+  private handleWebSearchCallLimitChanged(limit: number): void {
+    const normalizedLimit = normalizeRetrievalCallLimit(limit)
+    this.webSearchCallLimit = normalizedLimit
+    this.preferencesService.setNumber(
+      PreferenceKeys.WEB_SEARCH_CALL_LIMIT_PER_TURN,
+      normalizedLimit
+    ).catch((error: Object): void => {
+      console.error('ToolsCenterPanel', `Failed to save web search call limit: ${JSON.stringify(error)}`)
+      this.showToolsSnack(pickLocalizedText('保存失败，请重试', 'Failed to save, please try again'))
+    })
+  }
+
+  private handleKnowledgeSearchCallLimitChanged(limit: number): void {
+    const normalizedLimit = normalizeRetrievalCallLimit(limit)
+    this.knowledgeSearchCallLimit = normalizedLimit
+    this.preferencesService.setNumber(
+      PreferenceKeys.KNOWLEDGE_SEARCH_CALL_LIMIT_PER_TURN,
+      normalizedLimit
+    ).catch((error: Object): void => {
+      console.error('ToolsCenterPanel', `Failed to save knowledge search call limit: ${JSON.stringify(error)}`)
+      this.showToolsSnack(pickLocalizedText('保存失败，请重试', 'Failed to save, please try again'))
+    })
+  }
+
   private handleContextCompactEnabledChanged(enabled: boolean): void {
     this.contextCompactEnabled = enabled
     const compactTool = this.toolRegistry.getTool(COMPACT_TOOL_ID)
@@ -359,6 +403,7 @@ export struct ToolsCenterPanel {
       await this.loadSelectedToolIds()
       await this.loadModLensConfig()
       await this.loadSearchSettings()
+      await this.loadRetrievalCallLimits()
       await this.loadContextCompactSettings()
       await this.loadSkills()
       await this.loadMcpServers()
@@ -2538,6 +2583,17 @@ export struct ToolsCenterPanel {
                 }
               })
 
+              RetrievalCallLimitCardItem({
+                webSearchCallLimit: this.webSearchCallLimit,
+                knowledgeSearchCallLimit: this.knowledgeSearchCallLimit,
+                onWebSearchLimitChange: (limit: number): void => {
+                  this.handleWebSearchCallLimitChanged(limit)
+                },
+                onKnowledgeSearchLimitChange: (limit: number): void => {
+                  this.handleKnowledgeSearchCallLimitChanged(limit)
+                }
+              })
+
               ContextCompactCardItem({
                 compactEnabled: this.contextCompactEnabled,
                 thresholdPercent: this.contextCompactThresholdPercent,
@@ -2900,6 +2956,180 @@ struct SearchServiceCardItem {
     .onClick(() => {
       this.onOpenConfig()
     })
+  }
+}
+
+@ComponentV2
+struct RetrievalCallLimitSlider {
+  @Param label: string = ''
+  @Param callLimit: number = UNLIMITED_RETRIEVAL_CALL_LIMIT
+  @Event onLimitChange: (limit: number) => void = (_limit: number): void => {}
+  @Local draggingLimit: number = -1
+  private readonly scaleValues: number[] = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
+
+  private get themePrimary(): string {
+    return getAppUiState().themePrimary
+  }
+
+  private getDisplayLimit(): number {
+    return this.draggingLimit >= 0 ? this.draggingLimit : this.callLimit
+  }
+
+  private getDisplayLimitText(): string {
+    const limit = this.getDisplayLimit()
+    if (limit === UNLIMITED_RETRIEVAL_CALL_LIMIT) {
+      return pickLocalizedText('不设限制', 'No limit')
+    }
+    return pickLocalizedText(`${limit} 次`, `${limit} calls`)
+  }
+
+  private isSliderCommitted(mode: SliderChangeMode): boolean {
+    return mode === SliderChangeMode.End || mode === SliderChangeMode.Click
+  }
+
+  build() {
+    Column({ space: 4 }) {
+      Row() {
+        Text(this.label)
+          .fontSize(12)
+          .fontWeight(FontWeight.Medium)
+          .fontColor($r('app.color.text_secondary'))
+          .layoutWeight(1)
+
+        Text(this.getDisplayLimitText())
+          .fontSize(12)
+          .fontWeight(FontWeight.Medium)
+          .fontColor(this.themePrimary)
+      }
+      .width('100%')
+
+      Slider({
+        value: this.getDisplayLimit(),
+        min: UNLIMITED_RETRIEVAL_CALL_LIMIT,
+        max: MAX_RETRIEVAL_CALL_LIMIT,
+        step: 1,
+        style: SliderStyle.OutSet
+      })
+        .width('100%')
+        .selectedColor(this.themePrimary)
+        .trackColor(getAppUiState().themeBackground)
+        .blockColor(Color.White)
+        .showSteps(true)
+        .stepColor(this.themePrimary)
+        .onChange((value: number, mode: SliderChangeMode) => {
+          this.draggingLimit = Math.round(value)
+          if (this.isSliderCommitted(mode)) {
+            const committedLimit = this.draggingLimit
+            this.draggingLimit = -1
+            this.onLimitChange(committedLimit)
+          }
+        })
+
+      Row() {
+        ForEach(this.scaleValues, (scaleValue: number) => {
+          Text(scaleValue === 0 ? '∞' : `${scaleValue}`)
+            .fontSize(9)
+            .fontColor(scaleValue === this.getDisplayLimit()
+              ? this.themePrimary
+              : $r('app.color.text_tertiary'))
+            .fontWeight(scaleValue === this.getDisplayLimit() ? FontWeight.Bold : FontWeight.Regular)
+            .textAlign(TextAlign.Center)
+            .layoutWeight(1)
+        }, (scaleValue: number) => `${scaleValue}`)
+      }
+      .width('100%')
+    }
+    .width('100%')
+  }
+}
+
+// Web Search 与知识库各自选择档位，主助手和每个子智能体分别独立计数。
+@ComponentV2
+struct RetrievalCallLimitCardItem {
+  @Param webSearchCallLimit: number = UNLIMITED_RETRIEVAL_CALL_LIMIT
+  @Param knowledgeSearchCallLimit: number = UNLIMITED_RETRIEVAL_CALL_LIMIT
+  @Event onWebSearchLimitChange: (limit: number) => void = (_limit: number): void => {}
+  @Event onKnowledgeSearchLimitChange: (limit: number) => void = (_limit: number): void => {}
+
+  private get themePrimary(): string {
+    return getAppUiState().themePrimary
+  }
+
+  build() {
+    Column({ space: 12 }) {
+      Row({ space: 12 }) {
+        ChatFloatingImmersiveButton({
+          barWidth: 44,
+          barHeight: 44,
+          iconResource: $r('sys.symbol.magnifyingglass'),
+          iconSize: 20,
+          iconColor: [this.themePrimary],
+          responsePadding: 0,
+          onButtonClick: (): void => {}
+        }) {
+          Stack({ alignContent: Alignment.Center }) {
+            SymbolGlyph($r('sys.symbol.magnifyingglass'))
+              .renderingStrategy(SymbolRenderingStrategy.SINGLE)
+              .fontSize(20)
+              .fontColor([this.themePrimary])
+          }
+          .width(44)
+          .height(44)
+        }
+
+        Column({ space: 4 }) {
+          Text(pickLocalizedText('每轮检索次数', 'Searches per turn'))
+            .fontSize(17)
+            .fontWeight(FontWeight.Bold)
+            .fontColor($r('app.color.text_primary'))
+            .width('100%')
+
+          Text(pickLocalizedText('Web Search 与知识库分别设置', 'Separate limits for web and knowledge'))
+            .fontSize(12)
+            .fontColor($r('app.color.text_secondary'))
+            .width('100%')
+        }
+        .layoutWeight(1)
+        .alignItems(HorizontalAlign.Start)
+      }
+      .width('100%')
+
+      Text(pickLocalizedText(
+        '主助手与每个子智能体分别计数。不设限制时仍会要求模型在证据充分、结果重复或已无新信息时停止。',
+        'The main assistant and each sub-agent count independently. No-limit mode still tells the model to stop ' +
+          'when evidence is sufficient, results repeat, or no new information remains.'
+      ))
+        .fontSize(12)
+        .lineHeight(18)
+        .fontColor($r('app.color.text_secondary'))
+        .width('100%')
+
+      RetrievalCallLimitSlider({
+        label: 'Web Search',
+        callLimit: this.webSearchCallLimit,
+        onLimitChange: (limit: number): void => {
+          this.onWebSearchLimitChange(limit)
+        }
+      })
+
+      Divider()
+        .strokeWidth(0.5)
+        .color($r('app.color.divider'))
+
+      RetrievalCallLimitSlider({
+        label: pickLocalizedText('知识库检索', 'Knowledge search'),
+        callLimit: this.knowledgeSearchCallLimit,
+        onLimitChange: (limit: number): void => {
+          this.onKnowledgeSearchLimitChange(limit)
+        }
+      })
+    }
+    .width('100%')
+    .padding(16)
+    .borderRadius(16)
+    .backgroundColor(Color.Transparent)
+    .border({ width: 0.5, color: getAppUiState().themePrimaryLight })
+    .systemMaterial(createToolServiceCardMaterial(false))
   }
 }
 
