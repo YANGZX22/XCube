@@ -25,6 +25,7 @@ import { AppStorageKeys } from '../config/AppStorageKeys'
 import { setAppUiStateValue } from '../state/AppUiState'
 import { getAttachmentStorageService } from './AttachmentStorageService'
 import { getDocumentAttachmentRegistryService } from './DocumentAttachmentRegistryService'
+import { getPythonWorkspaceService } from './PythonWorkspaceService'
 
 // 数据库配置
 const DB_CONFIG: relationalStore.StoreConfig = {
@@ -1992,6 +1993,11 @@ export class DatabaseService {
       // 数据库记录已经成功提交。文件清理失败时保留孤儿文件，不能回滚成损坏的数据库引用。
       console.error('DatabaseService', `Failed to clean session attachment files: ${JSON.stringify(error)}`)
     }
+    try {
+      getPythonWorkspaceService().deleteSessionWorkspace(sessionId)
+    } catch (error) {
+      console.error('DatabaseService', `Failed to clean Python workspace: ${JSON.stringify(error)}`)
+    }
     return true
   }
 
@@ -2031,6 +2037,21 @@ export class DatabaseService {
       } else {
         result.failedFiles++
       }
+    }
+    try {
+      const sessions = await this.getAllSessions(false)
+      const sessionIds: string[] = []
+      for (let i = 0; i < sessions.length; i++) {
+        sessionIds.push(sessions[i].id)
+      }
+      const workspaceResult = getPythonWorkspaceService()
+        .cleanupOrphanedWorkspaces(sessionIds, cleanupStartedAt)
+      result.scannedFiles += workspaceResult.scannedFiles
+      result.deletedFiles += workspaceResult.deletedFiles
+      result.failedFiles += workspaceResult.failedFiles
+    } catch (error) {
+      console.error('DatabaseService', `Failed to clean Python workspace cache: ${JSON.stringify(error)}`)
+      result.failedFiles++
     }
     return result
   }

@@ -8,6 +8,10 @@ import {
   PYTHON_MAX_OUTPUT_IMAGE_BYTES,
   PYTHON_MAX_OUTPUT_IMAGE_TOTAL_BYTES,
   PYTHON_MAX_REQUESTED_PACKAGES,
+  PYTHON_MAX_WORKSPACE_FILE_BYTES,
+  PYTHON_MAX_WORKSPACE_FILES,
+  PYTHON_MAX_WORKSPACE_RUN_FILES,
+  PYTHON_MAX_WORKSPACE_TOTAL_BYTES,
   PYTHON_PACKAGE_LOAD_TIMEOUT_MS,
   PYTHON_RUNTIME_READY_TIMEOUT_MS,
   normalizePythonPackageSpecs
@@ -45,6 +49,14 @@ import {
   parsePythonSandboxFileUrl
 } from '../main/ets/services/PythonSandboxArtifactLink'
 import { PYTHON_FONT_USAGE_GUIDANCE, PYTHON_PDF_USAGE_GUIDANCE } from '../main/ets/config/BuiltinTools'
+import {
+  encodePythonWorkspaceSessionDirectory,
+  normalizePythonWorkspacePath
+} from '../main/ets/services/PythonWorkspaceService'
+import {
+  parsePythonSandboxRequestArguments,
+  repairTruncatedPythonToolArguments
+} from '../main/ets/services/PythonSandboxService'
 
 export default function pythonSandboxRuntimeTest() {
   describe('pythonSandboxRuntimeTest', () => {
@@ -127,10 +139,73 @@ export default function pythonSandboxRuntimeTest() {
       expect(PYODIDE_HOST_HTML.includes('collectOutputArtifacts(outputContext.outputDir')).assertTrue()
       expect(PYODIDE_HOST_HTML.includes("pyodide.globals.set('PYTHON_OUTPUT_DIR'"))
         .assertTrue()
+      expect(PYODIDE_HOST_HTML.includes(
+        "setattr(_xcube_builtins, 'PYTHON_OUTPUT_DIR', PYTHON_OUTPUT_DIR)"
+      )).assertTrue()
+      expect(PYODIDE_HOST_HTML.includes(
+        "_xcube_os.environ['XCUBE_PYTHON_OUTPUT_DIR'] = PYTHON_OUTPUT_DIR"
+      )).assertTrue()
+      expect(PYODIDE_HOST_HTML.includes(
+        "delattr(_xcube_builtins, 'PYTHON_OUTPUT_DIR')"
+      )).assertTrue()
+      expect(PYODIDE_HOST_HTML.includes("clearOutputGlobals();")).assertTrue()
       expect(PYODIDE_HOST_HTML.includes('detectImageMime(bytes)')).assertTrue()
       expect(PYODIDE_HOST_HTML.includes('detectFileMime(bytes, candidate.name)')).assertTrue()
       expect(PYODIDE_HOST_HTML.includes("kind: isImage ? 'image' : 'file'")).assertTrue()
       expect(PYODIDE_HOST_HTML.includes('removeOutputDirectory(outputContext.outputDir)')).assertTrue()
+    })
+
+    it('mounts_a_bounded_session_workspace_for_python_and_utf8_data_files', 0, () => {
+      expect(PYTHON_MAX_WORKSPACE_FILES).assertEqual(64)
+      expect(PYTHON_MAX_WORKSPACE_FILE_BYTES).assertEqual(256 * 1024)
+      expect(PYTHON_MAX_WORKSPACE_TOTAL_BYTES).assertEqual(2 * 1024 * 1024)
+      expect(PYTHON_MAX_WORKSPACE_RUN_FILES).assertEqual(16)
+      expect(normalizePythonWorkspacePath('src/main.py')).assertEqual('src/main.py')
+      expect(normalizePythonWorkspacePath('data/input.txt')).assertEqual('data/input.txt')
+      expect(normalizePythonWorkspacePath('./notes\\readme.md')).assertEqual('notes/readme.md')
+      expect(encodePythonWorkspaceSessionDirectory('abc')).assertEqual('session_616263')
+
+      let rejectedParentPath = false
+      try {
+        normalizePythonWorkspacePath('../secret.py')
+      } catch (_error) {
+        rejectedParentPath = true
+      }
+      expect(rejectedParentPath).assertTrue()
+
+      expect(PYODIDE_HOST_HTML.includes("const PYTHON_WORKSPACE_ROOT = '/tmp/xcube-python-workspace'"))
+        .assertTrue()
+      expect(PYODIDE_HOST_HTML.includes('parseWorkspacePayload(request.workspaceB64)')).assertTrue()
+      expect(PYODIDE_HOST_HTML.includes("pyodide.globals.set('PYTHON_WORKSPACE_DIR'"))
+        .assertTrue()
+      expect(PYODIDE_HOST_HTML.includes("file.path.toLowerCase().endsWith('.py')"))
+        .assertTrue()
+      expect(PYODIDE_HOST_HTML.includes("combined += '\\n' + file.content;"))
+        .assertTrue()
+      expect(PYODIDE_HOST_HTML.includes('result.workspaceFiles = collectWorkspaceFiles'))
+        .assertFalse()
+      expect(PYODIDE_HOST_HTML.includes('result.workspaceFiles = workspaceCapture.files'))
+        .assertTrue()
+      expect(PYODIDE_HOST_HTML.includes('result.workspaceCaptured = workspaceCapture.complete'))
+        .assertTrue()
+      expect(PYODIDE_HOST_HTML.includes("new TextDecoder('utf-8', { fatal: true })"))
+        .assertTrue()
+    })
+
+    it('repairs_only_structurally_truncated_python_tool_json', 0, () => {
+      const missingContainerClose =
+        '{"action":"write_file","path":"notes.md","content":"完整内容"'
+      expect(repairTruncatedPythonToolArguments(missingContainerClose))
+        .assertEqual(`${missingContainerClose}}`)
+      const parsed = parsePythonSandboxRequestArguments(missingContainerClose)
+      expect(parsed.action).assertEqual('write_file')
+      expect(parsed.path).assertEqual('notes.md')
+      expect(parsed.content).assertEqual('完整内容')
+
+      expect(repairTruncatedPythonToolArguments(
+        '{"action":"write_file","path":"notes.md","content":"半截内容'
+      )).assertEqual('')
+      expect(repairTruncatedPythonToolArguments('{"action":"write_file",')).assertEqual('')
     })
 
     it('mounts_all_cmu_and_source_han_styles_for_python_output', 0, () => {
@@ -176,11 +251,16 @@ export default function pythonSandboxRuntimeTest() {
       )).assertTrue()
       expect(PYTHON_FONT_USAGE_GUIDANCE.includes('PYTHON_FONT_EN_*')).assertTrue()
       expect(PYTHON_FONT_USAGE_GUIDANCE.includes('PYTHON_FONT_CJK_*')).assertTrue()
+      expect(PYTHON_FONT_USAGE_GUIDANCE.includes('XCUBE_PYTHON_FONT_EN_*')).assertTrue()
+      expect(PYTHON_FONT_USAGE_GUIDANCE.includes('XCUBE_PYTHON_FONT_CJK_*')).assertTrue()
+      expect(PYTHON_FONT_USAGE_GUIDANCE.includes('/usr/share/fonts/xcube/')).assertTrue()
       expect(PYTHON_FONT_USAGE_GUIDANCE.includes('REGULAR、BOLD、ITALIC')).assertTrue()
       expect(PYTHON_FONT_USAGE_GUIDANCE.includes('BOLD_ITALIC')).assertTrue()
       expect(PYTHON_FONT_USAGE_GUIDANCE.includes('Pillow 不会自动回退字体')).assertTrue()
       expect(PYTHON_FONT_USAGE_GUIDANCE.includes('中英混排须按文字脚本切分')).assertTrue()
       expect(PYTHON_PDF_USAGE_GUIDANCE.includes('from fpdf import FPDF')).assertTrue()
+      expect(PYTHON_PDF_USAGE_GUIDANCE.includes('HTTPSHandler')).assertTrue()
+      expect(PYTHON_PDF_USAGE_GUIDANCE.includes('HTTPSConnection')).assertTrue()
       expect(PYTHON_PDF_USAGE_GUIDANCE.includes("style=''、'B'、'I'、'BI'"))
         .assertTrue()
       expect(PYTHON_PDF_USAGE_GUIDANCE.includes("pdf.add_font('CMU', style=style"))
@@ -192,6 +272,17 @@ export default function pythonSandboxRuntimeTest() {
       )).assertTrue()
       expect(PYTHON_PDF_USAGE_GUIDANCE.includes("pdf.set_font('CMU', style='BI'"))
         .assertTrue()
+      expect(PYTHON_PDF_USAGE_GUIDANCE.includes('pdf.page = i')).assertTrue()
+      expect(PYTHON_PDF_USAGE_GUIDANCE.includes('fpdf2 没有 set_page()')).assertTrue()
+      expect(PYTHON_PDF_USAGE_GUIDANCE.includes('action=run 的当前目录就是本次 PYTHON_OUTPUT_DIR'))
+        .assertTrue()
+      expect(PYTHON_PDF_USAGE_GUIDANCE.includes('action=run_files 的当前目录是工作区'))
+        .assertTrue()
+      expect(PYTHON_PDF_USAGE_GUIDANCE.includes('通过 builtins 向入口及其 import 的模块统一暴露'))
+        .assertTrue()
+      expect(PYTHON_PDF_USAGE_GUIDANCE.includes("os.environ['XCUBE_PYTHON_OUTPUT_DIR']"))
+        .assertTrue()
+      expect(PYTHON_PDF_USAGE_GUIDANCE.includes('不要探测或硬编码 /tmp')).assertTrue()
     })
 
     it('normalizes_python_image_names_and_mime_extensions_before_persisting', 0, () => {

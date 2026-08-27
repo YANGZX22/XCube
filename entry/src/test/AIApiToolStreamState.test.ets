@@ -43,5 +43,52 @@ export default function aiApiToolStreamStateTest() {
       expect(rightCalls[0].arguments).assertEqual('{"query":"right only"}')
       expect(rightCalls[0].arguments.includes('left')).assertEqual(false)
     })
+
+    it('merges_cumulative_argument_snapshots_without_concatenating_json_objects', 0, () => {
+      const stream = new ToolCallStreamState(true)
+      stream.appendToolCallDelta({
+        index: 0,
+        functionName: 'python_sandbox',
+        arguments: '{"action":"write_file","path":"main.py","content":"pri'
+      })
+      stream.appendToolCallDelta({
+        index: 0,
+        arguments: '{"action":"write_file","path":"main.py","content":"print(42)"}'
+      })
+      stream.appendToolCallDelta({
+        index: 0,
+        arguments: '{"action":"write_file","path":"main.py","content":"print(42)"}'
+      })
+
+      const calls = stream.getAccumulatedToolCalls()
+      expect(calls.length).assertEqual(1)
+      expect(calls[0].arguments)
+        .assertEqual('{"action":"write_file","path":"main.py","content":"print(42)"}')
+      const parsed = JSON.parse(calls[0].arguments) as Record<string, string>
+      expect(parsed.content).assertEqual('print(42)')
+    })
+
+    it('keeps_large_incremental_tool_arguments_without_an_app_side_length_cutoff', 0, () => {
+      const stream = new ToolCallStreamState(true)
+      const content = 'x'.repeat(192 * 1024)
+      const argumentsJson = JSON.stringify({
+        action: 'write_file',
+        path: 'large.txt',
+        content: content
+      })
+      const chunkSize = 4096
+      for (let start = 0; start < argumentsJson.length; start += chunkSize) {
+        stream.appendToolCallDelta({
+          index: 0,
+          functionName: start === 0 ? 'python_sandbox' : undefined,
+          arguments: argumentsJson.substring(start, Math.min(argumentsJson.length, start + chunkSize))
+        })
+      }
+
+      const calls = stream.getAccumulatedToolCalls()
+      expect(calls[0].arguments.length).assertEqual(argumentsJson.length)
+      const parsed = JSON.parse(calls[0].arguments) as Record<string, string>
+      expect(parsed.content.length).assertEqual(content.length)
+    })
   })
 }

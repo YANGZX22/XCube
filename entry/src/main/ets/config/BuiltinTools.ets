@@ -12,14 +12,28 @@ import { ToolExecutor, RegisteredTool, getToolRegistry } from '../services/ToolR
 import { getWebSearchService, SearchResult, WebSearchResult } from '../services/WebSearchService'
 import { cleanSearchQuery } from '../utils/SearchQueryUtils'
 import { getCalendarWriteService, ReadScheduleRequest, WriteScheduleRequest } from '../services/CalendarWriteService'
-import { getPythonSandboxService, PythonSandboxRequest } from '../services/PythonSandboxService'
-import { getPyodideRuntimeService } from '../services/PyodideRuntimeService'
-import { normalizePythonPackageSpecs } from '../services/PythonSandboxRuntimePolicy'
+import {
+  getPythonSandboxService,
+  parsePythonSandboxRequestArguments,
+  PythonSandboxRequest
+} from '../services/PythonSandboxService'
+import { getPyodideRuntimeService, PyodideRunResult, PyodideWorkspaceRequest } from '../services/PyodideRuntimeService'
+import {
+  normalizePythonPackageSpecs,
+  PYTHON_MAX_WORKSPACE_RUN_FILES
+} from '../services/PythonSandboxRuntimePolicy'
 import {
   getPythonSandboxArtifactService,
   PythonSandboxFileReference,
   PythonSandboxImageReference
 } from '../services/PythonSandboxArtifactService'
+import {
+  getPythonWorkspaceService,
+  normalizePythonWorkspacePath,
+  PythonWorkspaceFileInfo,
+  PythonWorkspaceReadResult
+} from '../services/PythonWorkspaceService'
+import { getAppUiState } from '../state/AppUiState'
 import { CanvasDocumentMutationResult, CanvasDocumentState, getCanvasDocumentService } from '../services/CanvasDocumentService'
 import { getPdfTextExtractionService, PdfTextExtractionRequest } from '../services/PdfTextExtractionService'
 import { getImageTextRecognitionService, ImageTextRecognitionRequest } from '../services/ImageTextRecognitionService'
@@ -103,15 +117,24 @@ export const PYTHON_FONT_USAGE_GUIDANCE: string =
     "'DejaVu Serif'] 的回退顺序；运行时已预设，若调用样式或重置 rcParams，应在之后恢复该设置，" +
     "fontweight='bold'、fontstyle='italic' 及二者组合会选择对应字形。Pillow 不会自动回退字体：" +
     '英文和中文分别从 PYTHON_FONT_EN_*、PYTHON_FONT_CJK_* 选择 REGULAR、BOLD、ITALIC 或 ' +
-    'BOLD_ITALIC 路径；PYTHON_FONT_EN 与 PYTHON_FONT_CJK 仍是 REGULAR 的兼容别名。' +
+    'BOLD_ITALIC 路径；这些是 Python 全局变量，不是 os.environ 键。若从环境变量读取，须使用对应的 ' +
+    'XCUBE_PYTHON_FONT_EN_*、XCUBE_PYTHON_FONT_CJK_*；PYTHON_FONT_EN 与 PYTHON_FONT_CJK 仍是 ' +
+    'REGULAR 的全局兼容别名，字体文件也可直接从 /usr/share/fonts/xcube/ 读取。' +
     '中英混排须按文字脚本切分，使用 textlength 或 textbbox 累计位置后分别 draw.text，不能把含中文的整段文字交给 CMU Serif。'
 export const PYTHON_PDF_USAGE_GUIDANCE: string =
-  'PDF 生成规则：from fpdf import FPDF 会自动安装 fpdf2，无需填写 packages。中英混排时须分别以 ' +
+  'PDF 生成规则：from fpdf import FPDF 会自动安装 fpdf2，无需填写 packages。Pyodide 若在导入时提示 ' +
+    'urllib.request 缺少 HTTPSHandler 或 http.client 缺少 HTTPSConnection，应先导入 urllib.request 与 ' +
+    "http.client，并仅对缺失项赋值 type('HTTPSHandler', (), {})、type('HTTPSConnection', (), {}) " +
+    '占位类后再导入 FPDF；该兼容处理只用于不含网络图片的本地 PDF。中英混排时须分别以 ' +
     "style=''、'B'、'I'、'BI' 调用 pdf.add_font('CMU', style=style, fname=对应的 PYTHON_FONT_EN_*) " +
     "与 pdf.add_font('SourceHan', style=style, fname=对应的 PYTHON_FONT_CJK_*)，再调用 " +
     "pdf.set_fallback_fonts(['SourceHan'], exact_match=True)；pdf.set_font('CMU', style='BI', size=14) " +
     '等设置即可获得 Regular、Bold、Italic、Bold Italic。' +
-    '普通中英文无需开启 text shaping。将 PDF 输出到 PYTHON_OUTPUT_DIR 下，并在最终回复原样使用 files 返回的 markdown。'
+    '普通中英文无需开启 text shaping。回写已有页面时使用 pdf.page = i，fpdf2 没有 set_page()。' +
+    'action=run 的当前目录就是本次 PYTHON_OUTPUT_DIR，可直接输出相对文件名；action=run_files 的当前目录是工作区，' +
+    '必须将交付 PDF 写到 PYTHON_OUTPUT_DIR 下。PYTHON_OUTPUT_DIR 已通过 builtins 向入口及其 import 的模块统一暴露；' +
+    "需要从环境变量取值时使用 os.environ['XCUBE_PYTHON_OUTPUT_DIR']。不要探测或硬编码 /tmp 下的内部目录。" +
+    '最终回复原样使用 files 返回的 markdown。'
 export const CANVAS_DOCUMENT_TOOL_ID: string = 'canvas_document'
 export const CANVAS_DOCUMENT_MAX_WRITE_CHARACTERS: number = 4000
 export const PDF_TO_TEXT_TOOL_ID: string = 'pdf_to_text'
@@ -754,34 +777,17 @@ class OfficeToTextExecutor implements ToolExecutor {
 class PythonSandboxExecutor implements ToolExecutor {
   async execute(args: string): Promise<string> {
     try {
-      const params = JSON.parse(args) as PythonSandboxRequest
+      const params = parsePythonSandboxRequestArguments(args)
+      const action = this.resolveAction(params)
+      if (action !== 'run') {
+        return await this.executeWorkspaceAction(action, params)
+      }
       const code = params.code ?? ''
       const packages = normalizePythonPackageSpecs(params.packages)
       // 优先走 Pyodide（真正的 CPython 运行时）
       const pyResult = await getPyodideRuntimeService().run(code, params.variables, packages)
       if (!pyResult.fallback) {
-        const savedArtifacts = await getPythonSandboxArtifactService().saveForCurrentSession(pyResult.artifacts)
-        for (let i = 0; i < savedArtifacts.warnings.length; i++) {
-          pyResult.warnings.push(savedArtifacts.warnings[i])
-        }
-        const output = new PythonSandboxToolOutput()
-        output.ok = pyResult.ok
-        output.stdout = pyResult.stdout
-        output.result = pyResult.result
-        output.variables = pyResult.variables
-        output.warnings = pyResult.warnings
-        output.error = pyResult.error
-        output.images = savedArtifacts.images
-        output.files = savedArtifacts.files
-        if (output.images.length > 0) {
-          output.imageAccess = '图片已保存到当前会话附件沙箱。使用 attachmentId 调用 vision_read_image ' +
-            '进行视觉理解，或调用 image_to_text 识别图片文字。'
-        }
-        if (output.files.length > 0) {
-          output.fileAccess = '普通文件已保存到当前会话附件沙箱。请在最终回复中原样输出 files 里的 markdown 字段；' +
-            '用户点击链接后可选择保存到本地的位置。'
-        }
-        return JSON.stringify(output)
+        return JSON.stringify(await this.buildRunOutput(pyResult, 'run', []))
       }
       // 运行时未就绪/加载失败/超时：降级到本地受限解释器
       const fallback = getPythonSandboxService().run(params)
@@ -789,8 +795,227 @@ class PythonSandboxExecutor implements ToolExecutor {
         '请按括号内的具体错误处理，只有错误明确提到下载或 HTTP 时才需要检查网络。')
       return JSON.stringify(fallback)
     } catch (error) {
-      return JSON.stringify(new ErrorOutput(`Python 执行失败: ${this.stringifyError(error)}`))
+      const detail = this.stringifyError(error)
+      const jsonHint = detail.includes('JSON') || detail.includes('Unexpected end') ||
+        detail.toLowerCase().includes('unterminated') ?
+        '。工具参数内容被模型或服务商截断时，请先用 write_file 写入较小首段，再用 append_file 分段追加；' +
+          '不要重复发送整份长文件' : ''
+      return JSON.stringify(new ErrorOutput(`Python 执行失败: ${detail}${jsonHint}`))
     }
+  }
+
+  private resolveAction(params: PythonSandboxRequest): string {
+    const action = (params.action ?? '').trim().toLowerCase()
+    if (action !== '') {
+      return action
+    }
+    return params.code !== undefined ? 'run' : ''
+  }
+
+  private async executeWorkspaceAction(action: string, params: PythonSandboxRequest): Promise<string> {
+    const sessionId = getAppUiState().activeChatSessionId.trim()
+    if (sessionId === '') {
+      throw new Error('当前没有活动会话，无法使用 Python 工作区')
+    }
+    const workspace = getPythonWorkspaceService()
+    const path = params.path ?? ''
+    if (action === 'write_file') {
+      if (params.content === undefined) {
+        throw new Error('write_file 缺少 content')
+      }
+      const info = workspace.writeFile(sessionId, path, params.content)
+      return JSON.stringify(this.buildWorkspaceOutput(action, info.path,
+        `已创建或覆盖 ${info.path}`, workspace.listFiles(sessionId)))
+    }
+    if (action === 'append_file') {
+      if (params.content === undefined) {
+        throw new Error('append_file 缺少 content')
+      }
+      const info = workspace.appendFile(sessionId, path, params.content)
+      return JSON.stringify(this.buildWorkspaceOutput(action, info.path,
+        `已追加写入 ${info.path}`, workspace.listFiles(sessionId)))
+    }
+    if (action === 'replace_in_file') {
+      if (params.old_text === undefined || params.new_text === undefined) {
+        throw new Error('replace_in_file 需要 old_text 和 new_text')
+      }
+      const info = workspace.replaceInFile(sessionId, path, params.old_text, params.new_text)
+      return JSON.stringify(this.buildWorkspaceOutput(action, info.path,
+        `已修改 ${info.path}`, workspace.listFiles(sessionId)))
+    }
+    if (action === 'read_file') {
+      const readResult = workspace.readFile(
+        sessionId,
+        path,
+        this.resolveInteger(params.start_line, 1),
+        this.resolveInteger(params.end_line, 0)
+      )
+      return JSON.stringify(this.buildReadOutput(readResult))
+    }
+    if (action === 'list_files') {
+      return JSON.stringify(this.buildWorkspaceOutput(
+        action,
+        '',
+        '已列出当前会话的 Python 文本工作区',
+        workspace.listFiles(sessionId)
+      ))
+    }
+    if (action === 'delete_file') {
+      const normalizedPath = normalizePythonWorkspacePath(path)
+      if (!workspace.deleteFile(sessionId, normalizedPath)) {
+        throw new Error(`工作区文件不存在: ${normalizedPath}`)
+      }
+      return JSON.stringify(this.buildWorkspaceOutput(action, normalizedPath,
+        `已删除 ${normalizedPath}`, workspace.listFiles(sessionId)))
+    }
+    if (action === 'run_files') {
+      return await this.runWorkspaceFiles(sessionId, params)
+    }
+    throw new Error('action 必须是 run、write_file、append_file、replace_in_file、read_file、' +
+      'list_files、delete_file 或 run_files')
+  }
+
+  private async runWorkspaceFiles(sessionId: string, params: PythonSandboxRequest): Promise<string> {
+    const workspace = getPythonWorkspaceService()
+    const snapshot = workspace.snapshot(sessionId)
+    const runFiles = this.resolveRunFiles(params, snapshot.map((file): string => file.path))
+    const packages = normalizePythonPackageSpecs(params.packages)
+    const pyResult = await getPyodideRuntimeService().run(
+      this.buildWorkspaceRunnerCode(),
+      params.variables,
+      packages,
+      new PyodideWorkspaceRequest(snapshot, runFiles)
+    )
+    if (pyResult.fallback) {
+      const output = new PythonSandboxToolOutput()
+      output.ok = false
+      output.action = 'run_files'
+      output.executedFiles = runFiles
+      output.error = `Python 运行时未就绪：${pyResult.error}；多文件工作区不能使用受限解释器运行`
+      output.workspaceFiles = workspace.listFiles(sessionId)
+      return JSON.stringify(output)
+    }
+    if (pyResult.workspaceCaptured) {
+      try {
+        workspace.syncSnapshot(sessionId, pyResult.workspaceFiles)
+      } catch (error) {
+        pyResult.warnings.push(`工作区文件修改未能同步到持久化存储：${this.stringifyError(error)}`)
+      }
+    }
+    return JSON.stringify(await this.buildRunOutput(pyResult, 'run_files', runFiles,
+      workspace.listFiles(sessionId)))
+  }
+
+  private resolveRunFiles(params: PythonSandboxRequest, availablePaths: string[]): string[] {
+    const requested = Array.isArray(params.paths) ? params.paths.slice() : []
+    if (requested.length === 0 && params.path !== undefined && params.path.trim() !== '') {
+      requested.push(params.path)
+    }
+    if (requested.length === 0) {
+      throw new Error('run_files 至少需要通过 path 或 paths 指定一个 .py 文件')
+    }
+    if (requested.length > PYTHON_MAX_WORKSPACE_RUN_FILES) {
+      throw new Error(`一次最多运行 ${PYTHON_MAX_WORKSPACE_RUN_FILES} 个 Python 文件`)
+    }
+    const normalized: string[] = []
+    for (let i = 0; i < requested.length; i++) {
+      const path = normalizePythonWorkspacePath(requested[i])
+      if (!path.toLowerCase().endsWith('.py')) {
+        throw new Error(`run_files 只能运行 .py 文件: ${path}`)
+      }
+      if (!availablePaths.includes(path)) {
+        throw new Error(`Python 文件不存在: ${path}`)
+      }
+      if (!normalized.includes(path)) {
+        normalized.push(path)
+      }
+    }
+    return normalized
+  }
+
+  private buildWorkspaceRunnerCode(): string {
+    return [
+      'import os as _xcube_os',
+      'import runpy as _xcube_runpy',
+      'import sys as _xcube_sys',
+      'if PYTHON_WORKSPACE_DIR not in _xcube_sys.path:',
+      '    _xcube_sys.path.insert(0, PYTHON_WORKSPACE_DIR)',
+      '_xcube_previous_cwd = _xcube_os.getcwd()',
+      '_xcube_initial_globals = {key: value for key, value in globals().items() if not key.startswith("_")}',
+      '_xcube_last_module = {}',
+      'try:',
+      '    _xcube_os.chdir(PYTHON_WORKSPACE_DIR)',
+      '    for _xcube_run_file in PYTHON_RUN_FILES:',
+      '        _xcube_last_module = _xcube_runpy.run_path(',
+      '            _xcube_os.path.join(PYTHON_WORKSPACE_DIR, _xcube_run_file),',
+      '            init_globals=_xcube_initial_globals, run_name="__main__")',
+      'finally:',
+      '    _xcube_os.chdir(_xcube_previous_cwd)',
+      '_xcube_last_module.get("result", "")'
+    ].join('\n')
+  }
+
+  private async buildRunOutput(pyResult: PyodideRunResult, action: string,
+    executedFiles: string[], workspaceFiles: PythonWorkspaceFileInfo[] = []): Promise<PythonSandboxToolOutput> {
+    const savedArtifacts = await getPythonSandboxArtifactService().saveForCurrentSession(pyResult.artifacts)
+    for (let i = 0; i < savedArtifacts.warnings.length; i++) {
+      pyResult.warnings.push(savedArtifacts.warnings[i])
+    }
+    const output = new PythonSandboxToolOutput()
+    output.ok = pyResult.ok
+    output.action = action
+    output.executedFiles = executedFiles
+    output.workspaceFiles = workspaceFiles
+    output.stdout = pyResult.stdout
+    output.result = pyResult.result
+    output.variables = pyResult.variables
+    output.warnings = pyResult.warnings
+    output.error = pyResult.error
+    output.images = savedArtifacts.images
+    output.files = savedArtifacts.files
+    if (output.images.length > 0) {
+      output.imageAccess = '图片已保存到当前会话附件沙箱。使用 attachmentId 调用 vision_read_image ' +
+        '进行视觉理解，或调用 image_to_text 识别图片文字。'
+    }
+    if (output.files.length > 0) {
+      output.fileAccess = '普通文件已保存到当前会话附件沙箱。请在最终回复中原样输出 files 里的 markdown 字段；' +
+        '用户点击链接后可选择保存到本地的位置。'
+    }
+    return output
+  }
+
+  private buildWorkspaceOutput(action: string, path: string, message: string,
+    files: PythonWorkspaceFileInfo[]): PythonWorkspaceToolOutput {
+    const output = new PythonWorkspaceToolOutput()
+    output.action = action
+    output.path = path
+    output.message = message
+    output.files = files
+    return output
+  }
+
+  private buildReadOutput(readResult: PythonWorkspaceReadResult): PythonWorkspaceToolOutput {
+    const output = new PythonWorkspaceToolOutput()
+    output.action = 'read_file'
+    output.path = readResult.path
+    output.content = readResult.content
+    output.startLine = readResult.startLine
+    output.endLine = readResult.endLine
+    output.totalLines = readResult.totalLines
+    output.truncated = readResult.truncated
+    output.message = readResult.truncated ? '文件内容已按范围截取，可继续指定行号读取' : '已读取完整文件'
+    return output
+  }
+
+  private resolveInteger(value: number | string | undefined, fallback: number): number {
+    if (typeof value === 'number') {
+      return Number.isFinite(value) ? Math.floor(value) : fallback
+    }
+    if (typeof value === 'string' && value.trim() !== '') {
+      const parsed = Number.parseInt(value, 10)
+      return Number.isNaN(parsed) ? fallback : parsed
+    }
+    return fallback
   }
 
   private stringifyError(error: Object): string {
@@ -803,6 +1028,9 @@ class PythonSandboxExecutor implements ToolExecutor {
 
 class PythonSandboxToolOutput {
   ok: boolean = true
+  action: string = 'run'
+  executedFiles: string[] = []
+  workspaceFiles: PythonWorkspaceFileInfo[] = []
   stdout: string[] = []
   result: string = ''
   variables: Record<string, Object> = {}
@@ -812,6 +1040,20 @@ class PythonSandboxToolOutput {
   imageAccess: string = ''
   files: PythonSandboxFileReference[] = []
   fileAccess: string = ''
+}
+
+class PythonWorkspaceToolOutput {
+  ok: boolean = true
+  action: string = ''
+  path: string = ''
+  message: string = ''
+  content: string = ''
+  startLine: number = 1
+  endLine: number = 0
+  totalLines: number = 0
+  truncated: boolean = false
+  files: PythonWorkspaceFileInfo[] = []
+  error: string = ''
 }
 
 class MathChartSeriesRuntime {
@@ -2645,9 +2887,44 @@ function createPythonSandboxToolDefinition(): ToolDefinition {
   const rawSchemaJson: string = `{
     "type": "object",
     "properties": {
+      "action": {
+        "type": "string",
+        "enum": ["run", "write_file", "append_file", "replace_in_file", "read_file", "list_files", "delete_file", "run_files"],
+        "description": "操作类型。省略时兼容为 run。可用 write_file 创建 .py 源码及 txt、md、json、csv、yaml、toml、xml、html、sql 等 UTF-8 文本；长代码再用 run_files 运行 .py 入口。长文件不要放在一次 code/content JSON 中，应先 write_file 写首段、再用 append_file 分段追加；修改已有内容优先用 replace_in_file。"
+      },
       "code": {
         "type": "string",
-        "description": "要执行的 Python 3 代码。支持完整 Python 语法与标准库；import pandas、numpy、scipy、scikit-learn、matplotlib、Pillow 等 Pyodide 官方包时会在执行前自动加载，import fpdf 时会自动安装 fpdf2。沙箱内置 CMU Serif 英文与思源宋体中文的 Regular、Bold、Italic、Bold Italic 四套字形；Pillow 可通过 PYTHON_FONT_EN_*、PYTHON_FONT_CJK_* 获取对应路径。${PYTHON_FONT_USAGE_GUIDANCE}${PYTHON_PDF_USAGE_GUIDANCE}可用 print 输出，最后一个表达式的值会作为 result 返回。写入相对路径或 PYTHON_OUTPUT_DIR 的 PNG、JPEG、GIF、WebP 会在 images 中返回；PDF、CSV、JSON、Office、ZIP 等任意其他文件会在 files 中返回。要在气泡中交付普通文件，必须在最终回复原样输出 files 中的 markdown 字段，即 [文件名](xcube-file://attachmentId)；不要臆造 attachmentId 或内部链接。图片最多 4 张，单张 4 MiB、合计 8 MiB；普通文件最多 8 个，单个 16 MiB、合计 32 MiB。代码不能访问应用或系统文件、直接发起网络请求或运行系统命令。"
+        "description": "action=run 时要执行的内联 Python 3 代码。支持完整 Python 语法与标准库；import pandas、numpy、scipy、scikit-learn、matplotlib、Pillow 等 Pyodide 官方包时会在执行前自动加载，import fpdf 时会自动安装 fpdf2。沙箱内置 CMU Serif 英文与思源宋体中文的 Regular、Bold、Italic、Bold Italic 四套字形；Pillow 可通过 PYTHON_FONT_EN_*、PYTHON_FONT_CJK_* 获取对应路径。${PYTHON_FONT_USAGE_GUIDANCE}${PYTHON_PDF_USAGE_GUIDANCE}可用 print 输出，最后一个表达式的值会作为 result 返回。写入相对路径或 PYTHON_OUTPUT_DIR 的 PNG、JPEG、GIF、WebP 会在 images 中返回；PDF、CSV、JSON、Office、ZIP 等任意其他文件会在 files 中返回。要在气泡中交付普通文件，必须在最终回复原样输出 files 中的 markdown 字段，即 [文件名](xcube-file://attachmentId)；不要臆造 attachmentId 或内部链接。图片最多 4 张，单张 4 MiB、合计 8 MiB；普通文件最多 8 个，单个 16 MiB、合计 32 MiB。代码不能访问应用或系统文件、直接发起网络请求或运行系统命令。"
+      },
+      "path": {
+        "type": "string",
+        "description": "工作区内的安全相对文本文件路径，用于单文件操作，例如 src/main.py、data/input.csv 或 notes/readme.md；run_files 入口必须是 .py。"
+      },
+      "paths": {
+        "type": "array",
+        "items": { "type": "string" },
+        "maxItems": 16,
+        "description": "action=run_files 时按顺序运行的 .py 相对路径，最多 16 个。文件可互相 import；需要共享状态时应拆成可导入模块。"
+      },
+      "content": {
+        "type": "string",
+        "description": "write_file 覆盖写入或 append_file 追加的 UTF-8 文本。单文件最多 256 KiB；长内容可跨多次 append_file 累积，避免服务商输出 Token 截断造成不完整 JSON。"
+      },
+      "old_text": {
+        "type": "string",
+        "description": "replace_in_file 要精确替换且在文件中只出现一次的原文本。"
+      },
+      "new_text": {
+        "type": "string",
+        "description": "replace_in_file 的替换文本，可以为空字符串。"
+      },
+      "start_line": {
+        "type": "number",
+        "description": "read_file 的起始行，1 开始；默认 1。"
+      },
+      "end_line": {
+        "type": "number",
+        "description": "read_file 的结束行；单次最多返回 400 行或 64 KiB，可分段继续读取。"
       },
       "variables": {
         "type": "object",
@@ -2663,14 +2940,13 @@ function createPythonSandboxToolDefinition(): ToolDefinition {
         "type": "number",
         "description": "可选。已废弃，保留向后兼容；仅在运行时未就绪降级到受限子集时生效。"
       }
-    },
-    "required": ["code"]
+    }
   }`
   parameters.setRawSchema(JSON.parse(rawSchemaJson) as object)
 
   const func = new ToolFunction(
     PYTHON_SANDBOX_TOOL_ID,
-    `模型可在隔离的 Web Worker 中运行 Pyodide/CPython，用于数学计算、数据处理、统计分析、算法验证、生图和生成文件。import pandas、numpy、scipy、scikit-learn、matplotlib、Pillow 等官方包时会按需加载；import fpdf 会自动安装 fpdf2；也可通过 packages 安装其他纯 Python 或兼容的 PyEmscripten wheel。沙箱内置 CMU Serif 英文与思源宋体中文的 Regular、Bold、Italic、Bold Italic 四套字形，并向 Matplotlib、Pillow 和 fpdf2 暴露对应样式。${PYTHON_FONT_USAGE_GUIDANCE}${PYTHON_PDF_USAGE_GUIDANCE}写入运行目录的图片会在 images 返回 attachmentId，可用 vision_read_image 或 image_to_text 调取；PDF 及其他文件会在 files 返回 markdown，在最终回复中原样输出即可以 Markdown 链接交付，用户点击后选择本地保存位置。不要臆造内部链接。代码不能访问应用/系统文件、直接联网或运行系统命令；包加载器自身会访问受限的 Pyodide/PyPI 源。`,
+    `模型可在隔离的 Web Worker 中运行 Pyodide/CPython，也可在当前会话的持久化文本工作区内创建、覆盖、追加、精确修改、分段读取、列出和删除安全相对路径下的 UTF-8 文件，包括 .py、txt、md、json、csv、yaml、toml、xml、html、sql 等，再按顺序运行一个或多个 .py 文件。长代码优先拆成多个文件并使用 write_file、replace_in_file 与 run_files，避免单次工具 JSON 过长；工作区最多 64 个文件、单文件 256 KiB、总计 2 MiB。run_files 会把全部文本文件同步进 Pyodide，Python 可直接读取数据文件，并自动扫描 .py 源码加载 pandas、numpy、scipy、scikit-learn、matplotlib、Pillow 等官方包；import fpdf 会自动安装 fpdf2，也可通过 packages 安装其他纯 Python 或兼容的 PyEmscripten wheel。生成图片、PDF 或其他二进制交付文件必须写入 PYTHON_OUTPUT_DIR；脚本创建或修改的有效 UTF-8 文本文件会同步回当前会话工作区。沙箱内置 CMU Serif 英文与思源宋体中文的 Regular、Bold、Italic、Bold Italic 四套字形，并向 Matplotlib、Pillow 和 fpdf2 暴露对应样式。${PYTHON_FONT_USAGE_GUIDANCE}${PYTHON_PDF_USAGE_GUIDANCE}图片可用 vision_read_image 或 image_to_text 调取；files 中的 markdown 应在最终回复原样输出。代码不能访问应用/系统文件、直接联网或运行系统命令；包加载器自身只访问受限的 Pyodide/PyPI 源。`,
     parameters
   )
 

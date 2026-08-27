@@ -47,6 +47,7 @@ import {
 } from '../pages/chat/ChatMessageTreeHelper'
 import { createThrottle, ThrottleUtil } from '../utils/ThrottleUtil'
 import {
+  appendResponseLanguageSystemPrompt,
   buildCurrentTimeContext,
   renderSystemPromptTemplate,
   SystemPromptTemplateDefaults
@@ -401,11 +402,13 @@ export class ChatViewModel {
       const currentSession = this.sessionStore.getCurrentSession()
       const effectiveGoal = conversationGoal !== undefined
         ? conversationGoal : (currentSession !== null ? currentSession.conversationGoal : '')
-      // 目标放在最终系统提示末尾，确保工具规则、网页上下文或搜索上下文很长时仍保持显著。
-	    return this.assistantService.combineSystemPrompts(
+      // 目标放在动态上下文之后，避免被工具规则、网页上下文或搜索上下文淹没。
+	    const promptWithGoal = this.assistantService.combineSystemPrompts(
         promptWithRuntimeContext,
         buildConversationGoalSystemPrompt(effectiveGoal)
       )
+	    // 语言规则最后注入：网页、知识库、工具描述或工具结果的语言不能改变面向用户的回复语言。
+	    return appendResponseLanguageSystemPrompt(promptWithGoal)
 	  }
 
 	  private async getRequestTemperature(): Promise<number> {

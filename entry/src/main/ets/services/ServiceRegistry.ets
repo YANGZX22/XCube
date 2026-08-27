@@ -1,6 +1,7 @@
 import { getPreferencesService, PreferencesService } from './PreferencesService'
 import { getDatabaseService, DatabaseService } from './DatabaseService'
 import { getAttachmentStorageService, AttachmentStorageService } from './AttachmentStorageService'
+import { getPythonWorkspaceService, PythonWorkspaceService } from './PythonWorkspaceService'
 import { getDefaultModelService, DefaultModelService } from './DefaultModelService'
 import { getThemeService, ThemeService } from './ThemeService'
 import { getAIApiService, AIApiService } from './AIApiService'
@@ -56,6 +57,10 @@ export class ServiceRegistry {
 
   static attachmentStorage(): AttachmentStorageService {
     return getAttachmentStorageService()
+  }
+
+  static pythonWorkspace(): PythonWorkspaceService {
+    return getPythonWorkspaceService()
   }
 
   static defaultModel(): DefaultModelService {

@@ -1,8 +1,101 @@
 export class PythonSandboxRequest {
+  action?: string
   code?: string
   variables?: Record<string, Object>
   packages?: string[]
   max_iterations?: number | string
+  path?: string
+  paths?: string[]
+  content?: string
+  old_text?: string
+  new_text?: string
+  start_line?: number | string
+  end_line?: number | string
+}
+
+// 仅修复“所有字符串和值均已完整收到，但末尾容器闭合符缺失”的工具参数。
+// 如果截断发生在源码字符串内部，必须拒绝执行，避免把半截代码写入工作区。
+export function repairTruncatedPythonToolArguments(raw: string): string {
+  const source = raw.trim()
+  if (!source.startsWith('{')) {
+    return ''
+  }
+  const stack: string[] = []
+  let inString = false
+  let escaped = false
+  let rootClosed = false
+  for (let i = 0; i < source.length; i++) {
+    const character = source.charAt(i)
+    if (inString) {
+      if (escaped) {
+        escaped = false
+      } else if (character === '\\') {
+        escaped = true
+      } else if (character === '"') {
+        inString = false
+      }
+      continue
+    }
+    if (character === '"') {
+      inString = true
+      continue
+    }
+    if (rootClosed) {
+      if (character.trim() !== '') {
+        return ''
+      }
+      continue
+    }
+    if (character === '{' || character === '[') {
+      stack.push(character)
+    } else if (character === '}' || character === ']') {
+      if (stack.length === 0) {
+        return ''
+      }
+      const expectedOpen = character === '}' ? '{' : '['
+      if (stack[stack.length - 1] !== expectedOpen) {
+        return ''
+      }
+      stack.pop()
+      if (stack.length === 0) {
+        rootClosed = true
+      }
+    }
+  }
+  if (inString || escaped || stack.length === 0) {
+    return ''
+  }
+  const lastCharacter = source.charAt(source.length - 1)
+  if (lastCharacter === ',' || lastCharacter === ':' || lastCharacter === '{' || lastCharacter === '[') {
+    return ''
+  }
+  let repaired = source
+  for (let i = stack.length - 1; i >= 0; i--) {
+    repaired += stack[i] === '{' ? '}' : ']'
+  }
+  return repaired
+}
+
+export function parsePythonSandboxRequestArguments(raw: string): PythonSandboxRequest {
+  const source = raw.trim()
+  let parsed: Object | string
+  try {
+    parsed = JSON.parse(source) as Object | string
+  } catch (firstError) {
+    const repaired = repairTruncatedPythonToolArguments(source)
+    if (repaired === '') {
+      throw new Error(firstError instanceof Error ? firstError.message : JSON.stringify(firstError))
+    }
+    parsed = JSON.parse(repaired) as Object | string
+  }
+  // 兼容少数代理把 function.arguments 再 JSON 编码一层的响应。
+  if (typeof parsed === 'string') {
+    parsed = JSON.parse(parsed) as Object
+  }
+  if (parsed === null || typeof parsed !== 'object' || Array.isArray(parsed)) {
+    throw new Error('Python 工具参数必须是 JSON 对象')
+  }
+  return parsed as PythonSandboxRequest
 }
 
 export class PythonSandboxResult {

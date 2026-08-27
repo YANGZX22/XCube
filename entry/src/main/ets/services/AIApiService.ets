@@ -195,7 +195,7 @@ interface OpenAITool {
 // OpenAI 工具调用接口（用于 API 响应）
 interface OpenAIToolCallFunction {
   name: string
-  arguments: string
+  arguments: string | Object
 }
 
 interface OpenAIToolCall {
@@ -578,7 +578,7 @@ interface MiniMaxReasoningDetail {
 // 流式响应中的工具调用增量
 interface OpenAIStreamToolCallFunction {
   name?: string
-  arguments?: string
+  arguments?: string | Object
 }
 
 interface OpenAIStreamToolCall {
@@ -684,6 +684,8 @@ export interface ToolCallDelta {
   id?: string
   functionName?: string
   arguments?: string
+  // 少数 OpenAI 兼容服务会把 arguments 作为完整对象重复返回，而不是字符串增量。
+  argumentsAreSnapshot?: boolean
 }
 
 /**
@@ -708,7 +710,7 @@ export class ToolCallStreamState {
     this.requestNonce = `${Date.now()}_${ToolCallStreamState.nextRequestSequence}`
   }
 
-  appendToolCallDelta(delta: ToolCallDelta): void {
+  appendToolCallDelta(delta: ToolCallDelta): ToolCallDelta {
     let existingToolCall = this.streamToolCalls.get(delta.index)
     if (existingToolCall === undefined) {
       existingToolCall = new ToolCall('', '', '')
@@ -724,9 +726,33 @@ export class ToolCallStreamState {
       existingToolCall.functionName = this.mergeToolFunctionName(existingToolCall.functionName, incomingName)
     }
     const incomingArguments = delta.arguments
+    let appendedArguments = ''
     if (incomingArguments !== undefined && incomingArguments !== '') {
-      existingToolCall.arguments += incomingArguments
+      const previousArguments = existingToolCall.arguments
+      if (delta.argumentsAreSnapshot === true) {
+        existingToolCall.arguments = incomingArguments
+        if (incomingArguments.startsWith(previousArguments)) {
+          appendedArguments = incomingArguments.substring(previousArguments.length)
+        } else if (incomingArguments !== previousArguments) {
+          appendedArguments = incomingArguments
+        }
+      } else {
+        existingToolCall.arguments = this.mergeToolArguments(previousArguments, incomingArguments)
+        if (existingToolCall.arguments.startsWith(previousArguments)) {
+          appendedArguments = existingToolCall.arguments.substring(previousArguments.length)
+        } else if (existingToolCall.arguments !== previousArguments) {
+          appendedArguments = incomingArguments
+        }
+      }
     }
+    const normalized: ToolCallDelta = {
+      index: delta.index,
+      id: delta.id,
+      functionName: delta.functionName,
+      arguments: appendedArguments !== '' ? appendedArguments : undefined,
+      argumentsAreSnapshot: delta.argumentsAreSnapshot
+    }
+    return normalized
   }
 
   getAccumulatedToolCalls(): ToolCall[] {
@@ -844,7 +870,25 @@ export class ToolCallStreamState {
     return prev + next
   }
 
-  private normalizeToolArguments(rawArgs: string): string {
+  private mergeToolArguments(previousArguments: string, incomingArguments: string): string {
+    if (previousArguments === '') {
+      return incomingArguments
+    }
+    if (incomingArguments === '' || incomingArguments === previousArguments) {
+      return previousArguments
+    }
+    // 标准 OpenAI 流返回纯增量；部分兼容服务则每次重复返回从 JSON 起点开始的
+    // 累计快照。识别包含关系后只保留较完整版本，避免长参数被拼成 `{}{}...`。
+    if (incomingArguments.startsWith(previousArguments)) {
+      return incomingArguments
+    }
+    if (previousArguments.startsWith(incomingArguments)) {
+      return previousArguments
+    }
+    return previousArguments + incomingArguments
+  }
+
+  private normalizeToolArguments(rawArgs: string | Object): string {
     const value = rawArgs as string | Object | null | undefined
     if (value === undefined || value === null) {
       return '{}'
@@ -1440,7 +1484,7 @@ export class AIApiService {
     return value.trim()
   }
 
-  private normalizeToolArguments(rawArgs: string): string {
+  private normalizeToolArguments(rawArgs: string | Object): string {
     const value = rawArgs as string | Object | null | undefined
     if (value === undefined || value === null) {
       return '{}'
@@ -1457,7 +1501,7 @@ export class AIApiService {
     }
   }
 
-  private normalizeToolArgumentsChunk(rawArgs: string): string {
+  private normalizeToolArgumentsChunk(rawArgs: string | Object): string {
     const value = rawArgs as string | Object | null | undefined
     if (value === undefined || value === null) {
       return ''
@@ -3505,15 +3549,17 @@ export class AIApiService {
           for (let i = 0; i < delta.tool_calls.length; i++) {
             const tc = delta.tool_calls[i]
             const incomingName = this.normalizeToolFunctionName(tc.function?.name || '')
-            const incomingArgs = this.normalizeToolArgumentsChunk(tc.function?.arguments || '')
+            const rawArguments = tc.function?.arguments
+            const incomingArgs = this.normalizeToolArgumentsChunk(rawArguments || '')
             const tcDelta: ToolCallDelta = {
               index: tc.index,
               id: tc.id,
               functionName: incomingName !== '' ? incomingName : undefined,
-              arguments: incomingArgs !== '' ? incomingArgs : undefined
+              arguments: incomingArgs !== '' ? incomingArgs : undefined,
+              argumentsAreSnapshot: rawArguments !== undefined && rawArguments !== null &&
+                typeof rawArguments !== 'string'
             }
-            toolCallDeltas.push(tcDelta)
-            toolStreamState.appendToolCallDelta(tcDelta)
+            toolCallDeltas.push(toolStreamState.appendToolCallDelta(tcDelta))
           }
           result.toolCallDeltas = toolCallDeltas
         }

@@ -47,13 +47,15 @@ class PyodideHostAdapter implements PyodideHost {
     this.controller = null
   }
 
-  runPython(requestId: string, codeB64: string, varsB64: string, packagesB64: string): void {
+  runPython(requestId: string, codeB64: string, varsB64: string, packagesB64: string,
+    workspaceB64: string): void {
     const controller = this.controller
     if (controller === null) {
       getPyodideRuntimeService().onError('WebView 控制器未就绪')
       return
     }
-    const script = `window.__runPythonB64("${requestId}","${codeB64}","${varsB64}","${packagesB64}")`
+    const script = `window.__runPythonB64("${requestId}","${codeB64}","${varsB64}",` +
+      `"${packagesB64}","${workspaceB64}")`
     try {
       controller.runJavaScript(script)
     } catch (e) {

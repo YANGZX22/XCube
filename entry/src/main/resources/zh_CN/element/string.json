@@ -769,6 +769,10 @@
       "value": "推理"
     },
     {
+      "name": "chat_toolbar_workspace",
+      "value": "工作区"
+    },
+    {
       "name": "reasoning_level_off",
       "value": "关闭"
     },

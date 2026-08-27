@@ -769,6 +769,10 @@
       "value": "Reasoning"
     },
     {
+      "name": "chat_toolbar_workspace",
+      "value": "Workspace"
+    },
+    {
       "name": "reasoning_level_off",
       "value": "Off"
     },

@@ -4,7 +4,11 @@ import {
   PYTHON_MAX_OUTPUT_FILE_TOTAL_BYTES,
   PYTHON_MAX_OUTPUT_IMAGES,
   PYTHON_MAX_OUTPUT_IMAGE_BYTES,
-  PYTHON_MAX_OUTPUT_IMAGE_TOTAL_BYTES
+  PYTHON_MAX_OUTPUT_IMAGE_TOTAL_BYTES,
+  PYTHON_MAX_WORKSPACE_FILES,
+  PYTHON_MAX_WORKSPACE_FILE_BYTES,
+  PYTHON_MAX_WORKSPACE_RUN_FILES,
+  PYTHON_MAX_WORKSPACE_TOTAL_BYTES
 } from './PythonSandboxRuntimePolicy'
 
 export const PYODIDE_VERSION: string = '314.0.6'
@@ -94,14 +98,20 @@ export const PYODIDE_HOST_HTML: string = `<!DOCTYPE html>
   ]);
   const PYTHON_FONT_ROOT = '/usr/share/fonts/xcube';
   const PYTHON_OUTPUT_ROOT = '/tmp/xcube-python-output';
+  const PYTHON_WORKSPACE_ROOT = '/tmp/xcube-python-workspace';
   const MAX_OUTPUT_IMAGES = ${PYTHON_MAX_OUTPUT_IMAGES};
   const MAX_OUTPUT_IMAGE_BYTES = ${PYTHON_MAX_OUTPUT_IMAGE_BYTES};
   const MAX_OUTPUT_IMAGE_TOTAL_BYTES = ${PYTHON_MAX_OUTPUT_IMAGE_TOTAL_BYTES};
   const MAX_OUTPUT_FILES = ${PYTHON_MAX_OUTPUT_FILES};
   const MAX_OUTPUT_FILE_BYTES = ${PYTHON_MAX_OUTPUT_FILE_BYTES};
   const MAX_OUTPUT_FILE_TOTAL_BYTES = ${PYTHON_MAX_OUTPUT_FILE_TOTAL_BYTES};
+  const MAX_WORKSPACE_FILES = ${PYTHON_MAX_WORKSPACE_FILES};
+  const MAX_WORKSPACE_FILE_BYTES = ${PYTHON_MAX_WORKSPACE_FILE_BYTES};
+  const MAX_WORKSPACE_TOTAL_BYTES = ${PYTHON_MAX_WORKSPACE_TOTAL_BYTES};
+  const MAX_WORKSPACE_RUN_FILES = ${PYTHON_MAX_WORKSPACE_RUN_FILES};
   const MAX_OUTPUT_DIRECTORY_ENTRIES = 64;
   const MAX_OUTPUT_DIRECTORY_DEPTH = 4;
+  const MAX_WORKSPACE_DIRECTORY_ENTRIES = 640;
 
   const hostPostMessage = self.postMessage.bind(self);
   const nativeFetch = typeof self.fetch === 'function' ? self.fetch.bind(self) : null;
@@ -135,6 +145,60 @@ export const PYODIDE_HOST_HTML: string = `<!DOCTYPE html>
     } catch (e) {
       return [];
     }
+  }
+
+  function normalizeWorkspacePath(value) {
+    let normalized = typeof value === 'string' ? value.trim().replace(/\\\\/g, '/') : '';
+    while (normalized.startsWith('./')) normalized = normalized.substring(2);
+    if (normalized === '' || normalized.length > 240 || normalized.startsWith('/')) return '';
+    const segments = normalized.split('/');
+    if (segments.length > 8) return '';
+    for (const segment of segments) {
+      if (segment === '' || segment === '.' || segment === '..' || !/^[A-Za-z0-9._-]+$/.test(segment)) {
+        return '';
+      }
+    }
+    return segments.join('/');
+  }
+
+  function parseWorkspacePayload(workspaceB64) {
+    if (!workspaceB64) return null;
+    let parsed = null;
+    try {
+      parsed = JSON.parse(b64ToUtf8(workspaceB64));
+    } catch (e) {
+      throw new Error('Python 工作区数据不是有效 JSON');
+    }
+    if (!parsed || !Array.isArray(parsed.files) || !Array.isArray(parsed.runFiles)) {
+      throw new Error('Python 工作区数据结构无效');
+    }
+    if (parsed.files.length > MAX_WORKSPACE_FILES || parsed.runFiles.length > MAX_WORKSPACE_RUN_FILES) {
+      throw new Error('Python 工作区文件数量超过限制');
+    }
+    const files = [];
+    const paths = new Set();
+    let totalBytes = 0;
+    for (const source of parsed.files) {
+      const path = normalizeWorkspacePath(source && source.path);
+      const content = source && typeof source.content === 'string' ? source.content : '';
+      if (path === '' || paths.has(path)) throw new Error('Python 工作区包含无效或重复路径');
+      const size = new TextEncoder().encode(content).byteLength;
+      if (size > MAX_WORKSPACE_FILE_BYTES) throw new Error('Python 工作区单文件超过大小限制');
+      totalBytes += size;
+      if (totalBytes > MAX_WORKSPACE_TOTAL_BYTES) throw new Error('Python 工作区超过总大小限制');
+      paths.add(path);
+      files.push({ path: path, content: content, size: size });
+    }
+    const runFiles = [];
+    for (const sourcePath of parsed.runFiles) {
+      const path = normalizeWorkspacePath(sourcePath);
+      if (path === '' || !path.toLowerCase().endsWith('.py') || !paths.has(path)) {
+        throw new Error('待运行的 .py 文件不存在于工作区');
+      }
+      if (!runFiles.includes(path)) runFiles.push(path);
+    }
+    if (runFiles.length === 0) throw new Error('至少需要指定一个待运行的 Python 文件');
+    return { files: files, runFiles: runFiles };
   }
 
   function isAllowedPackageRequest(input, init) {
@@ -286,6 +350,115 @@ export const PYODIDE_HOST_HTML: string = `<!DOCTYPE html>
     try { pyodide.FS.rmdir(path); } catch (e) {}
   }
 
+  function prepareWorkspace(payload) {
+    removeOutputDirectory(PYTHON_WORKSPACE_ROOT);
+    pyodide.FS.mkdirTree(PYTHON_WORKSPACE_ROOT);
+    for (const file of payload.files) {
+      const slashIndex = file.path.lastIndexOf('/');
+      if (slashIndex > 0) {
+        pyodide.FS.mkdirTree(joinOutputPath(PYTHON_WORKSPACE_ROOT, file.path.substring(0, slashIndex)));
+      }
+      pyodide.FS.writeFile(
+        joinOutputPath(PYTHON_WORKSPACE_ROOT, file.path),
+        new TextEncoder().encode(file.content)
+      );
+    }
+    pyodide.globals.set('PYTHON_WORKSPACE_DIR', PYTHON_WORKSPACE_ROOT);
+    pyodide.globals.set('PYTHON_RUN_FILES', pyodide.toPy(payload.runFiles));
+    pyodide.FS.chdir(PYTHON_WORKSPACE_ROOT);
+  }
+
+  function collectWorkspaceFiles(warnings) {
+    const files = [];
+    let totalBytes = 0;
+    let visitedEntries = 0;
+    let complete = true;
+
+    function walk(path, relativePath, depth) {
+      if (depth > 8) {
+        warnings.push('Python 工作区目录层级超过限制，已保留运行前版本: ' + relativePath);
+        complete = false;
+        return;
+      }
+      let entries = [];
+      try {
+        entries = pyodide.FS.readdir(path).slice().sort();
+      } catch (e) {
+        warnings.push('读取 Python 工作区目录失败: ' + relativePath);
+        complete = false;
+        return;
+      }
+      for (const name of entries) {
+        if (name === '.' || name === '..') continue;
+        if (files.length >= MAX_WORKSPACE_FILES ||
+          visitedEntries >= MAX_WORKSPACE_DIRECTORY_ENTRIES) {
+          warnings.push('Python 工作区超过可持久化的文件或目录数量，已保留运行前版本');
+          complete = false;
+          return;
+        }
+        visitedEntries += 1;
+        const childPath = joinOutputPath(path, name);
+        const childRelativePath = relativePath === '' ? name : relativePath + '/' + name;
+        try {
+          const stat = pyodide.FS.lstat(childPath);
+          if (pyodide.FS.isLink(stat.mode)) {
+            warnings.push('Python 工作区不支持持久化符号链接: ' + childRelativePath);
+            complete = false;
+            continue;
+          }
+          if (pyodide.FS.isDir(stat.mode)) {
+            walk(childPath, childRelativePath, depth + 1);
+          } else if (pyodide.FS.isFile(stat.mode)) {
+            if (normalizeWorkspacePath(childRelativePath) === '') {
+              warnings.push('Python 工作区包含不安全路径，已保留运行前版本: ' + childRelativePath);
+              complete = false;
+              continue;
+            }
+            if (stat.size > MAX_WORKSPACE_FILE_BYTES || totalBytes + stat.size > MAX_WORKSPACE_TOTAL_BYTES) {
+              warnings.push('Python 工作区文件超过大小限制，已保留运行前版本: ' + childRelativePath);
+              complete = false;
+              continue;
+            }
+            const bytes = pyodide.FS.readFile(childPath, { encoding: 'binary' });
+            let content = '';
+            try {
+              content = new TextDecoder('utf-8', { fatal: true }).decode(bytes);
+            } catch (e) {
+              warnings.push('Python 工作区文件不是有效 UTF-8，已保留运行前版本: ' + childRelativePath);
+              complete = false;
+              continue;
+            }
+            files.push({ path: childRelativePath, content: content, size: bytes.byteLength });
+            totalBytes += bytes.byteLength;
+          } else {
+            warnings.push('Python 工作区包含不支持的文件类型: ' + childRelativePath);
+            complete = false;
+          }
+        } catch (e) {
+          warnings.push('读取 Python 工作区文件失败: ' + childRelativePath);
+          complete = false;
+        }
+      }
+    }
+
+    walk(PYTHON_WORKSPACE_ROOT, '', 0);
+    return { files: files, complete: complete };
+  }
+
+  function clearWorkspaceGlobals() {
+    try { pyodide.globals.delete('PYTHON_WORKSPACE_DIR'); } catch (e) {}
+    try { pyodide.globals.delete('PYTHON_RUN_FILES'); } catch (e) {}
+  }
+
+  function buildImportScanCode(code, workspacePayload) {
+    if (workspacePayload === null) return code;
+    let combined = code;
+    for (const file of workspacePayload.files) {
+      if (file.path.toLowerCase().endsWith('.py')) combined += '\\n' + file.content;
+    }
+    return combined;
+  }
+
   function prepareOutputDirectory(requestId) {
     const safeRequestId = String(requestId || 'run').replace(/[^A-Za-z0-9_-]/g, '_');
     const outputDir = joinOutputPath(PYTHON_OUTPUT_ROOT, safeRequestId);
@@ -294,7 +467,29 @@ export const PYODIDE_HOST_HTML: string = `<!DOCTYPE html>
     pyodide.FS.mkdirTree(outputDir);
     pyodide.FS.chdir(outputDir);
     pyodide.globals.set('PYTHON_OUTPUT_DIR', outputDir);
+    // runpy 的 init_globals 只覆盖入口脚本；被入口 import 的普通模块拥有独立 globals。
+    // 同时注入 builtins 与环境变量，让模块复检/二次导入无需猜测内部 /tmp 路径。
+    pyodide.runPython([
+      'import builtins as _xcube_builtins',
+      'import os as _xcube_os',
+      "setattr(_xcube_builtins, 'PYTHON_OUTPUT_DIR', PYTHON_OUTPUT_DIR)",
+      "_xcube_os.environ['XCUBE_PYTHON_OUTPUT_DIR'] = PYTHON_OUTPUT_DIR",
+      "_xcube_os.environ['PYTHON_OUTPUT_DIR'] = PYTHON_OUTPUT_DIR"
+    ].join('\\n'));
     return { outputDir: outputDir, previousCwd: previousCwd };
+  }
+
+  function clearOutputGlobals() {
+    try { pyodide.globals.delete('PYTHON_OUTPUT_DIR'); } catch (e) {}
+    try {
+      pyodide.runPython([
+        'import builtins as _xcube_builtins',
+        'import os as _xcube_os',
+        "if hasattr(_xcube_builtins, 'PYTHON_OUTPUT_DIR'): delattr(_xcube_builtins, 'PYTHON_OUTPUT_DIR')",
+        "_xcube_os.environ.pop('XCUBE_PYTHON_OUTPUT_DIR', None)",
+        "_xcube_os.environ.pop('PYTHON_OUTPUT_DIR', None)"
+      ].join('\\n'));
+    } catch (e) {}
   }
 
   function detectImageMime(bytes) {
@@ -611,7 +806,8 @@ export const PYODIDE_HOST_HTML: string = `<!DOCTYPE html>
 
   async function runPython(request) {
     const result = {
-      ok: true, stdout: [], result: '', variables: {}, warnings: [], error: '', artifacts: []
+      ok: true, stdout: [], result: '', variables: {}, warnings: [], error: '', artifacts: [],
+      workspaceFiles: [], workspaceCaptured: false
     };
     if (!pyodide) {
       result.ok = false;
@@ -628,15 +824,21 @@ export const PYODIDE_HOST_HTML: string = `<!DOCTYPE html>
     pyodide.setStderr({ batched: (message) => stdout.push(message) });
 
     let outputContext = null;
+    let workspacePayload = null;
     try {
       const code = b64ToUtf8(request.codeB64);
       const variablesJson = b64ToUtf8(request.varsB64);
       const requestedPackages = parseRequestedPackages(request.packagesB64);
-      const packagesToInstall = resolveAutoPackages(code, requestedPackages, result.warnings);
+      workspacePayload = parseWorkspacePayload(request.workspaceB64);
+      const importScanCode = buildImportScanCode(code, workspacePayload);
+      const packagesToInstall = resolveAutoPackages(importScanCode, requestedPackages, result.warnings);
 
       packageNetworkAllowed = true;
       try {
-        await pyodide.loadPackagesFromImports(code, packageCallbacks(request.requestId, result.warnings));
+        await pyodide.loadPackagesFromImports(
+          importScanCode,
+          packageCallbacks(request.requestId, result.warnings)
+        );
         await installRequestedPackages(request.requestId, packagesToInstall, result.warnings);
       } finally {
         packageNetworkAllowed = false;
@@ -646,6 +848,9 @@ export const PYODIDE_HOST_HTML: string = `<!DOCTYPE html>
       postHostMessage({ type: 'executionStarted', requestId: request.requestId });
 
       outputContext = prepareOutputDirectory(request.requestId);
+      if (workspacePayload !== null) {
+        prepareWorkspace(workspacePayload);
+      }
 
       if (variablesJson) {
         let variables = {};
@@ -678,9 +883,21 @@ export const PYODIDE_HOST_HTML: string = `<!DOCTYPE html>
         } catch (e) {
           result.warnings.push('收集 Python 文件产物失败: ' + (e && e.message ? e.message : String(e)));
         }
+        if (workspacePayload !== null) {
+          try {
+            const workspaceCapture = collectWorkspaceFiles(result.warnings);
+            result.workspaceFiles = workspaceCapture.files;
+            result.workspaceCaptured = workspaceCapture.complete;
+          } catch (e) {
+            result.warnings.push('同步 Python 工作区失败: ' + (e && e.message ? e.message : String(e)));
+          }
+        }
         try { pyodide.FS.chdir(outputContext.previousCwd); } catch (e) {}
         removeOutputDirectory(outputContext.outputDir);
       }
+      clearOutputGlobals();
+      clearWorkspaceGlobals();
+      removeOutputDirectory(PYTHON_WORKSPACE_ROOT);
     }
     postHostMessage({ type: 'result', requestId: request.requestId, result: result });
   }
@@ -706,6 +923,8 @@ export const PYODIDE_HOST_HTML: string = `<!DOCTYPE html>
       const keysProxy = pyodide.runPython('list(globals().keys())');
       initialGlobalKeys = new Set(keysProxy.toJs());
       initialGlobalKeys.add('PYTHON_OUTPUT_DIR');
+      initialGlobalKeys.add('PYTHON_WORKSPACE_DIR');
+      initialGlobalKeys.add('PYTHON_RUN_FILES');
       keysProxy.destroy();
       postHostMessage({ type: 'ready' });
     } catch (e) {
@@ -878,7 +1097,7 @@ export const PYODIDE_HOST_HTML: string = `<!DOCTYPE html>
     worker.postMessage({ type: 'initialize', controlToken: currentControlToken });
   }
 
-  window.__runPythonB64 = function (requestId, codeB64, varsB64, packagesB64) {
+  window.__runPythonB64 = function (requestId, codeB64, varsB64, packagesB64, workspaceB64) {
     if (pythonWorker === null) {
       safeBridgeError('Python Worker 尚未就绪');
       return;
@@ -889,7 +1108,8 @@ export const PYODIDE_HOST_HTML: string = `<!DOCTYPE html>
       requestId: requestId,
       codeB64: codeB64,
       varsB64: varsB64,
-      packagesB64: packagesB64
+      packagesB64: packagesB64,
+      workspaceB64: workspaceB64
     });
   };
 

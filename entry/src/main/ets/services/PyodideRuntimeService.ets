@@ -5,6 +5,7 @@ import {
   PYTHON_PACKAGE_LOAD_TIMEOUT_MS,
   PYTHON_RUNTIME_READY_TIMEOUT_MS
 } from './PythonSandboxRuntimePolicy'
+import { PythonWorkspaceFileData } from './PythonWorkspaceService'
 
 const DOMAIN = 0x0002
 const TAG = 'PyodideRuntime'
@@ -34,6 +35,8 @@ export class PyodideRunResult {
   warnings: string[] = []
   error: string = ''
   artifacts: PyodideOutputArtifact[] = []
+  workspaceFiles: PythonWorkspaceFileData[] = []
+  workspaceCaptured: boolean = false
   // 仅内部使用：标记运行时不可用，需由调用方降级
   fallback: boolean = false
 
@@ -44,8 +47,19 @@ export class PyodideRunResult {
 
 // UI 层隐藏 Web 宿主需实现的接口，供服务触发网页执行
 export interface PyodideHost {
-  runPython(requestId: string, codeB64: string, varsB64: string, packagesB64: string): void
+  runPython(requestId: string, codeB64: string, varsB64: string, packagesB64: string,
+    workspaceB64: string): void
   resetPython(): boolean
+}
+
+export class PyodideWorkspaceRequest {
+  files: PythonWorkspaceFileData[] = []
+  runFiles: string[] = []
+
+  constructor(files: PythonWorkspaceFileData[], runFiles: string[]) {
+    this.files = files
+    this.runFiles = runFiles
+  }
 }
 
 enum PythonRunPhase {
@@ -153,6 +167,7 @@ export class PyodideRuntimeService {
       parsed.variables = raw.variables ?? {}
       parsed.warnings = raw.warnings ?? []
       parsed.error = raw.error ?? ''
+      parsed.workspaceCaptured = raw.workspaceCaptured === true
       const artifacts = raw.artifacts ?? []
       for (let i = 0; i < artifacts.length; i++) {
         const source = artifacts[i]
@@ -168,6 +183,15 @@ export class PyodideRuntimeService {
         artifact.data = source.data
         parsed.artifacts.push(artifact)
       }
+      const workspaceFiles = raw.workspaceFiles ?? []
+      for (let i = 0; i < workspaceFiles.length; i++) {
+        const source = workspaceFiles[i]
+        if (typeof source.path !== 'string' || typeof source.content !== 'string' ||
+          typeof source.size !== 'number') {
+          continue
+        }
+        parsed.workspaceFiles.push(new PythonWorkspaceFileData(source.path, source.content, source.size))
+      }
     } catch (e) {
       parsed = new PyodideRunResult(false)
       parsed.error = `结果解析失败: ${json}`
@@ -178,7 +202,7 @@ export class PyodideRuntimeService {
   // ---- 执行入口 ----
 
   async run(code: string, variables: Record<string, Object> | undefined,
-    packages: string[] = []): Promise<PyodideRunResult> {
+    packages: string[] = [], workspace?: PyodideWorkspaceRequest): Promise<PyodideRunResult> {
     if (this.host === null) {
       return this.fallbackResult('Python 运行时宿主未挂载')
     }
@@ -200,13 +224,14 @@ export class PyodideRuntimeService {
     const codeB64 = this.encodeUtf8ToBase64(code)
     const varsB64 = this.encodeUtf8ToBase64(variables === undefined ? '' : JSON.stringify(variables))
     const packagesB64 = this.encodeUtf8ToBase64(JSON.stringify(packages))
+    const workspaceB64 = workspace === undefined ? '' : this.encodeUtf8ToBase64(JSON.stringify(workspace))
 
     return new Promise<PyodideRunResult>((resolve) => {
       const entry = new PendingRequest(resolve)
       this.pending.set(requestId, entry)
       this.armTimeout(requestId, entry, PythonRunPhase.PACKAGE_LOADING, PYTHON_PACKAGE_LOAD_TIMEOUT_MS)
       try {
-        host.runPython(requestId, codeB64, varsB64, packagesB64)
+        host.runPython(requestId, codeB64, varsB64, packagesB64, workspaceB64)
       } catch (e) {
         this.pending.delete(requestId)
         if (entry.timerId !== -1) {

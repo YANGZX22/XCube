@@ -4235,6 +4235,8 @@ export struct ChatPage {
               onKnowledgeToggle: (enabled: boolean): void => {
                 this.updateKnowledgeConversationEnabled(enabled)
               },
+              workspaceSessionId: this.sessionId,
+              workspaceSessionTitle: this.sessionTitle,
               hasRecentScreenshot: this.hasRecentScreenshot,
               bottomAvoidHeight: this.getComposerBottomAvoidHeightVp(),
               contentMaxWidth: this.getChatContentMaxWidth(),
