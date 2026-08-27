@@ -112,6 +112,22 @@ export class AttachmentCacheCleanupResult {
   failedFiles: number = 0
 }
 
+class AttachmentRegistryRemoval {
+  sessionId: string = ''
+  attachmentId: string = ''
+
+  constructor(sessionId: string, attachmentId: string) {
+    this.sessionId = sessionId
+    this.attachmentId = attachmentId
+  }
+}
+
+class MessageDeletionAttachmentSnapshot {
+  filePaths: string[] = []
+  sessionIds: string[] = []
+  registryRemovals: AttachmentRegistryRemoval[] = []
+}
+
 // 数据库服务 - 单例模式
 export class DatabaseService {
   private static instance: DatabaseService | null = null
@@ -1729,6 +1745,35 @@ export class DatabaseService {
     return filePaths
   }
 
+  private async collectMessageDeletionAttachmentSnapshot(
+    store: relationalStore.RdbStore,
+    messageIds: string[]
+  ): Promise<MessageDeletionAttachmentSnapshot> {
+    const snapshot = new MessageDeletionAttachmentSnapshot()
+    for (let i = 0; i < messageIds.length; i++) {
+      const sessionId = await this.getMessageSessionId(messageIds[i])
+      this.addUniqueSessionId(snapshot.sessionIds, sessionId)
+
+      const resultSet = await store.querySql(
+        `SELECT id, file_path FROM ${TableNames.ATTACHMENTS} WHERE message_id = ?`,
+        [messageIds[i]]
+      )
+      try {
+        while (resultSet.goToNextRow()) {
+          const attachmentId = resultSet.getString(resultSet.getColumnIndex('id')).trim()
+          const filePath = resultSet.getString(resultSet.getColumnIndex('file_path')).trim()
+          this.appendUniqueAttachmentFilePath(snapshot.filePaths, filePath)
+          if (sessionId !== '' && attachmentId !== '') {
+            snapshot.registryRemovals.push(new AttachmentRegistryRemoval(sessionId, attachmentId))
+          }
+        }
+      } finally {
+        resultSet.close()
+      }
+    }
+    return snapshot
+  }
+
   private async collectPersistedAttachmentFilePaths(store: relationalStore.RdbStore): Promise<string[]> {
     const filePaths: string[] = []
     const attachmentResultSet = await store.querySql(
@@ -1806,6 +1851,66 @@ export class DatabaseService {
       }
       throw new Error(toErrorDetail(error as Object))
     }
+  }
+
+  private async isPersistedAttachmentFilePathReferenced(
+    store: relationalStore.RdbStore,
+    filePath: string
+  ): Promise<boolean> {
+    const normalizedPath = filePath.trim()
+    if (normalizedPath === '') {
+      return false
+    }
+
+    const attachmentResultSet = await store.querySql(
+      `SELECT a.id AS id
+       FROM ${TableNames.ATTACHMENTS} a
+       INNER JOIN ${TableNames.MESSAGES} m ON m.id = a.message_id
+       INNER JOIN ${TableNames.SESSIONS} s ON s.id = m.session_id
+       WHERE a.file_path = ?
+       LIMIT 1`,
+      [normalizedPath]
+    )
+    try {
+      if (attachmentResultSet.goToNextRow()) {
+        return true
+      }
+    } finally {
+      attachmentResultSet.close()
+    }
+
+    const sessionResultSet = await store.querySql(
+      `SELECT draft_attachments_json FROM ${TableNames.SESSIONS} WHERE draft_attachments_json <> ''`
+    )
+    try {
+      while (sessionResultSet.goToNextRow()) {
+        const draftAttachments = this.parseDraftAttachments(
+          sessionResultSet.getString(sessionResultSet.getColumnIndex('draft_attachments_json')) || ''
+        )
+        for (let i = 0; i < draftAttachments.length; i++) {
+          if (draftAttachments[i].filePath.trim() === normalizedPath) {
+            return true
+          }
+        }
+      }
+    } finally {
+      sessionResultSet.close()
+    }
+    return false
+  }
+
+  private isRegisteredAttachmentFilePath(filePath: string): boolean {
+    const normalizedPath = filePath.trim()
+    if (normalizedPath === '') {
+      return false
+    }
+    const registeredFilePaths = getDocumentAttachmentRegistryService().listAllFilePaths()
+    for (let i = 0; i < registeredFilePaths.length; i++) {
+      if (registeredFilePaths[i].trim() === normalizedPath) {
+        return true
+      }
+    }
+    return false
   }
 
   private async deleteUnreferencedAttachmentFiles(
@@ -1902,20 +2007,23 @@ export class DatabaseService {
       throw new Error('附件存储尚未就绪')
     }
 
+    const cleanupStartedAt = Date.now()
     // 先固定扫描范围；扫描之后新创建的文件不会被本轮清理选中。
     const storedFilePaths = attachmentStorage.listManagedAttachmentFiles()
     await this.deleteLegacyOrphanedConversationRecords(store)
-    const referencedFilePaths = await this.collectPersistedAttachmentFilePaths(store)
-    const registeredFilePaths = getDocumentAttachmentRegistryService().listAllFilePaths()
-    for (let i = 0; i < registeredFilePaths.length; i++) {
-      this.appendUniqueAttachmentFilePath(referencedFilePaths, registeredFilePaths[i])
-    }
 
     const result = new AttachmentCacheCleanupResult()
     result.scannedFiles = storedFilePaths.length
     for (let i = 0; i < storedFilePaths.length; i++) {
       const filePath = storedFilePaths[i]
-      if (referencedFilePaths.indexOf(filePath) >= 0) {
+      // 防止误删刚生成、但附件记录尚未落库的图片或普通文件。
+      if (!attachmentStorage.isOldEnoughForCacheCleanup(filePath, cleanupStartedAt)) {
+        continue
+      }
+      // 每个文件都在实际 unlink 前重新查询持久化引用；查询完成后再同步检查运行时注册表，
+      // 覆盖 Python 工具已生成产物但消息尚未落库的窗口。
+      if (await this.isPersistedAttachmentFilePathReferenced(store, filePath) ||
+        this.isRegisteredAttachmentFilePath(filePath)) {
         continue
       }
       if (await attachmentStorage.deleteAttachment(filePath)) {
@@ -2419,60 +2527,79 @@ export class DatabaseService {
 
   // 删除消息
   async deleteMessage(messageId: string): Promise<void> {
-    await this.waitForInitialization()
-    if (this.rdbStore === null) {
-      return
-    }
-    const sessionId = await this.getMessageSessionId(messageId)
-    try {
-      // 先删除附件记录（不删除文件，可能被重新生成复用）
-      const attachmentPredicates = new relationalStore.RdbPredicates(TableNames.ATTACHMENTS)
-      attachmentPredicates.equalTo('message_id', messageId)
-      await this.rdbStore.delete(attachmentPredicates)
-
-      const predicates = new relationalStore.RdbPredicates(TableNames.MESSAGES)
-      predicates.equalTo('id', messageId)
-      await this.rdbStore.delete(predicates)
-
-      if (sessionId !== '') {
-        await this.refreshSessionSummary(sessionId)
-      }
-    } catch (error) {
-      console.error('DatabaseService', `Failed to delete message: ${JSON.stringify(error)}`)
-    }
+    await this.deleteMessagesByIds([messageId])
   }
 
   // 批量删除消息
   async deleteMessagesByIds(messageIds: string[]): Promise<void> {
     await this.waitForInitialization()
-    if (this.rdbStore === null) {
+    const store = this.rdbStore
+    if (store === null) {
       return
     }
-    if (messageIds.length === 0) {
+    const normalizedMessageIds: string[] = []
+    for (let i = 0; i < messageIds.length; i++) {
+      const messageId = messageIds[i].trim()
+      if (messageId !== '' && normalizedMessageIds.indexOf(messageId) < 0) {
+        normalizedMessageIds.push(messageId)
+      }
+    }
+    if (normalizedMessageIds.length === 0) {
       return
+    }
+
+    let snapshot = new MessageDeletionAttachmentSnapshot()
+    let transactionStarted = false
+    try {
+      snapshot = await this.collectMessageDeletionAttachmentSnapshot(store, normalizedMessageIds)
+      store.beginTransaction()
+      transactionStarted = true
+      for (let i = 0; i < normalizedMessageIds.length; i++) {
+        const messageId = normalizedMessageIds[i]
+
+        const toolEventPredicates = new relationalStore.RdbPredicates(TableNames.TOOL_EVENTS)
+        toolEventPredicates.equalTo('message_id', messageId)
+        await store.delete(toolEventPredicates)
+
+        const attachmentPredicates = new relationalStore.RdbPredicates(TableNames.ATTACHMENTS)
+        attachmentPredicates.equalTo('message_id', messageId)
+        await store.delete(attachmentPredicates)
+
+        const messagePredicates = new relationalStore.RdbPredicates(TableNames.MESSAGES)
+        messagePredicates.equalTo('id', messageId)
+        await store.delete(messagePredicates)
+      }
+      store.commit()
+      transactionStarted = false
+    } catch (error) {
+      if (transactionStarted) {
+        try {
+          store.rollBack()
+        } catch (rollbackError) {
+          console.error('DatabaseService', `Failed to roll back message deletion: ${JSON.stringify(rollbackError)}`)
+        }
+      }
+      console.error('DatabaseService', `Failed to delete messages: ${JSON.stringify(error)}`)
+      return
+    }
+
+    const registry = getDocumentAttachmentRegistryService()
+    for (let i = 0; i < snapshot.registryRemovals.length; i++) {
+      registry.unregisterAttachment(
+        snapshot.registryRemovals[i].sessionId,
+        snapshot.registryRemovals[i].attachmentId
+      )
     }
     try {
-      const touchedSessionIds: string[] = []
-      for (let i = 0; i < messageIds.length; i++) {
-        const sessionId = await this.getMessageSessionId(messageIds[i])
-        this.addUniqueSessionId(touchedSessionIds, sessionId)
-
-        // 先删除附件记录（不删除文件，可能被重新生成复用）
-        const attachmentPredicates = new relationalStore.RdbPredicates(TableNames.ATTACHMENTS)
-        attachmentPredicates.equalTo('message_id', messageIds[i])
-        await this.rdbStore.delete(attachmentPredicates)
-
-        const predicates = new relationalStore.RdbPredicates(TableNames.MESSAGES)
-        predicates.equalTo('id', messageIds[i])
-        await this.rdbStore.delete(predicates)
-      }
-      for (let i = 0; i < touchedSessionIds.length; i++) {
-        await this.refreshSessionSummary(touchedSessionIds[i])
-      }
-      console.info('DatabaseService', `Deleted ${messageIds.length} messages with attachments`)
+      await this.deleteUnreferencedAttachmentFiles(store, snapshot.filePaths)
     } catch (error) {
-      console.error('DatabaseService', `Failed to delete messages: ${JSON.stringify(error)}`)
+      // 数据库删除已提交；沙箱文件清理失败时保留孤儿文件，可由缓存清理功能后续回收。
+      console.error('DatabaseService', `Failed to clean message attachment files: ${JSON.stringify(error)}`)
     }
+    for (let i = 0; i < snapshot.sessionIds.length; i++) {
+      await this.refreshSessionSummary(snapshot.sessionIds[i])
+    }
+    console.info('DatabaseService', `Deleted ${normalizedMessageIds.length} messages with attachment files`)
   }
 
   // 更新消息内容

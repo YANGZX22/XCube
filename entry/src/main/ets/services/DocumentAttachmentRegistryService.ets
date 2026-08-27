@@ -90,6 +90,22 @@ export class DocumentAttachmentRegistryService {
     return documents
   }
 
+  unregisterAttachment(sessionId: string, attachmentId: string): void {
+    const normalizedSessionId = sessionId.trim()
+    const normalizedAttachmentId = attachmentId.trim()
+    if (normalizedSessionId === '' || normalizedAttachmentId === '') {
+      return
+    }
+    const sessionDocuments = this.documentsBySession.get(normalizedSessionId)
+    if (sessionDocuments === undefined) {
+      return
+    }
+    sessionDocuments.delete(normalizedAttachmentId)
+    if (sessionDocuments.size === 0) {
+      this.documentsBySession.delete(normalizedSessionId)
+    }
+  }
+
   clearSession(sessionId: string): void {
     const normalizedSessionId = sessionId.trim()
     if (normalizedSessionId !== '') {

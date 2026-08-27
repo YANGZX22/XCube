@@ -1870,7 +1870,7 @@
     },
     {
       "name": "about_clear_cache_warning_message",
-      "value": "XCube will permanently delete cached chat images and files that are not referenced by any existing conversation or draft. If metadata from an older or damaged database is incomplete, files you still need may be removed and cannot be recovered. Back up important conversations before continuing."
+      "value": "XCube will permanently delete cached chat images and files that are older than the safety window and are not referenced by any existing message, draft, or running task. If metadata from an older or damaged database is incomplete, files you still need may be removed and cannot be recovered. Back up important conversations before continuing."
     },
     {
       "name": "about_clear_cache_confirm",

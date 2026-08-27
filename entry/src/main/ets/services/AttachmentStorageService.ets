@@ -12,6 +12,16 @@ import { MessageAttachment, AttachmentType } from '../models/ChatModels'
 const ATTACHMENTS_DIR = 'attachments'
 const IMAGES_DIR = 'images'
 const FILES_DIR = 'files'
+export const ATTACHMENT_CACHE_CLEANUP_GRACE_PERIOD_MS: number = 5 * 60 * 1000
+
+export function isAttachmentCacheFileOldEnough(
+  modifiedAt: number,
+  cleanupStartedAt: number,
+  gracePeriodMs: number = ATTACHMENT_CACHE_CLEANUP_GRACE_PERIOD_MS
+): boolean {
+  return modifiedAt > 0 && cleanupStartedAt > 0 && gracePeriodMs >= 0 &&
+    modifiedAt <= cleanupStartedAt - gracePeriodMs
+}
 
 export function isAttachmentFilePathManaged(filePath: string, attachmentsDir: string): boolean {
   const normalizedFilePath = filePath.trim()
@@ -214,6 +224,19 @@ export class AttachmentStorageService {
       }
     }
     return filePaths
+  }
+
+  // 刚写入的文件可能尚未来得及登记到消息、草稿或运行时注册表，清理时先保留一段安全窗口。
+  isOldEnoughForCacheCleanup(filePath: string, cleanupStartedAt: number): boolean {
+    if (!this.isManagedAttachmentPath(filePath)) {
+      return false
+    }
+    try {
+      return isAttachmentCacheFileOldEnough(fileIo.statSync(filePath).mtime, cleanupStartedAt)
+    } catch (error) {
+      console.warn('AttachmentStorageService', `Failed to inspect cache file: ${JSON.stringify(error)}`)
+      return false
+    }
   }
 
   // 获取附件目录路径（用于 WebDAV 同步）
