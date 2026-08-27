@@ -4113,6 +4113,7 @@ export struct ChatPage {
               isSending: this.isSending,
               isSendDispatching: this.isSendDispatching,
               queuedMessageCount: this.queuedMessageCount,
+              inFlightSendMenuAvailable: this.calcInFlightSendMenuAvailable(),
               isAwaitingResponse: this.calcIsAwaitingAiOutput(),
               currentModelId: this.currentModelId,
               currentProviderId: this.currentProvider?.id ?? '',
@@ -4894,6 +4895,25 @@ export struct ChatPage {
       }
     }
 
+    return true
+  }
+
+  private calcInFlightSendMenuAvailable(): boolean {
+    if (!this.isSending) {
+      return false
+    }
+
+    // AI 气泡一旦结束生成，后续短暂的持久化/任务收尾不应继续触发发送方式选择。
+    // 尚未创建 AI 气泡时，最近一条是当前用户消息，仍属于等待回答阶段。
+    for (let i = this.messages.length - 1; i >= 0; i--) {
+      const message = this.messages[i]
+      if (message.role === MessageRole.ASSISTANT) {
+        return message.isGenerating
+      }
+      if (message.role === MessageRole.USER) {
+        return true
+      }
+    }
     return true
   }
 

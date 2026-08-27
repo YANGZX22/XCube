@@ -17,6 +17,7 @@ export struct ChatInputAreaSection {
   @Event onAttachmentsChange: (value: MessageAttachment[]) => void = (_value: MessageAttachment[]): void => {}
   @Param isSending: boolean = false
   @Param isSendDispatching: boolean = false
+  @Param inFlightSendMenuAvailable: boolean = false
   @Param queuedMessageCount: number = 0
   @Param isAwaitingResponse: boolean = false
   @Param currentModelId: string = ''
@@ -180,6 +181,7 @@ export struct ChatInputAreaSection {
           },
           isSending: this.isSending,
           isSendDispatching: this.isSendDispatching,
+          inFlightSendMenuAvailable: this.inFlightSendMenuAvailable,
           queuedMessageCount: this.queuedMessageCount,
           isAwaitingResponse: this.isAwaitingResponse,
           currentModelId: this.currentModelId,

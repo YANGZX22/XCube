@@ -9,7 +9,7 @@ import {
 } from '@kit.MediaLibraryKit'
 import { fileIo } from '@kit.CoreFileKit'
 import { util } from '@kit.ArkTS'
-import { uiMaterial } from '@kit.ArkUI'
+import { SymbolGlyphModifier, uiMaterial } from '@kit.ArkUI'
 import { getAttachmentStorageService } from '../services/AttachmentStorageService'
 import { getAppUiState } from '../state/AppUiState'
 import { withColorAlpha } from '../utils/ColorAlphaUtils'
@@ -33,6 +33,7 @@ export struct ChatInputBar {
   @Local sendBtnRotation: number = 0
   @Local modelBtnPressed: boolean = false
   @Local attachmentBtnPressed: boolean = false
+  @Local showInFlightSendMenu: boolean = false
   @Local immersiveBarHeightVp: number = 52
   private readonly editingHeaderHeightVp: number = 28
   @Param inputText: string = ''
@@ -41,6 +42,7 @@ export struct ChatInputBar {
   @Event onAttachmentsChange: (value: MessageAttachment[]) => void = (_value: MessageAttachment[]): void => {}
   @Param isSending: boolean = false
   @Param isSendDispatching: boolean = false
+  @Param inFlightSendMenuAvailable: boolean = false
   @Param queuedMessageCount: number = 0
   // isSending 为 true 时，pause 在整个发送期都保留轻微呼吸感
   @Param isAwaitingResponse: boolean = false
@@ -358,7 +360,7 @@ export struct ChatInputBar {
           this.onAttachmentClick()
         })
 
-        if (this.isSending && this.computeHasContent()) {
+        if (this.isInFlightSendChoiceActive() && this.computeHasContent()) {
           Button({ type: ButtonType.Normal, stateEffect: false }) {
             Text($r('app.string.manuscript_stop'))
               .fontFamily(MANUSCRIPT_HEADING_FONT)
@@ -399,15 +401,22 @@ export struct ChatInputBar {
           if (this.isSending) {
             if (!this.computeHasContent()) {
               this.onStop()
+            } else if (this.isInFlightSendChoiceActive()) {
+              this.showInFlightSendMenu = true
+            } else if (!this.isInFlightSendChoiceActive()) {
+              this.onQueueSend()
             }
           } else if (!this.isSendDispatching && this.computeHasContent()) {
             this.onSend()
           }
         })
-        .bindMenu(this.isSending && this.computeHasContent() ? this.InFlightSendMenu() : undefined, {
+        .bindMenu(this.showInFlightSendMenu, this.InFlightSendMenu(), {
           systemMaterial: new uiMaterial.ImmersiveMaterial({
             style: uiMaterial.ImmersiveStyle.THICK
-          })
+          }),
+          onDisappear: (): void => {
+            this.showInFlightSendMenu = false
+          }
         })
       }
       .width('100%')
@@ -626,7 +635,7 @@ export struct ChatInputBar {
           this.onAttachmentClick()
         })
 
-        if (this.isSending && this.computeHasContent()) {
+        if (this.isInFlightSendChoiceActive() && this.computeHasContent()) {
           // 生成期间仍保留独立停止入口，发送按钮用于选择“引导”或“排队”。
           Button({ type: ButtonType.Circle, stateEffect: false }) {
             SymbolGlyph($r('sys.symbol.pause_round_triangle'))
@@ -699,6 +708,11 @@ export struct ChatInputBar {
           if (this.isSending) {
             if (!this.computeHasContent()) {
               this.onStop()
+            } else if (this.isInFlightSendChoiceActive()) {
+              this.showInFlightSendMenu = true
+            } else if (!this.isInFlightSendChoiceActive()) {
+              // 回答已经结束、仅剩任务收尾时直接按默认队列发送，不再要求用户二次选择。
+              this.onQueueSend()
             }
           } else if (this.isSendDispatching) {
             return
@@ -709,10 +723,13 @@ export struct ChatInputBar {
             this.onSend()
           }
         })
-        .bindMenu(this.isSending && this.computeHasContent() ? this.InFlightSendMenu() : undefined, {
+        .bindMenu(this.showInFlightSendMenu, this.InFlightSendMenu(), {
           systemMaterial: new uiMaterial.ImmersiveMaterial({
             style: uiMaterial.ImmersiveStyle.THICK
-          })
+          }),
+          onDisappear: (): void => {
+            this.showInFlightSendMenu = false
+          }
         })
       }
       .width('100%')
@@ -728,20 +745,22 @@ export struct ChatInputBar {
   InFlightSendMenu() {
     Menu() {
       MenuItem({
-        startIcon: $r('sys.symbol.start_to_end_distance_fill'),
+        symbolStartIcon: new SymbolGlyphModifier($r('sys.symbol.start_to_end_distance_fill')).fontSize(16),
         content: $r('app.string.chat_inflight_steer')
       })
         .contentFont({ size: 14 })
         .onClick(() => {
+          this.showInFlightSendMenu = false
           this.onSteerSend()
         })
 
       MenuItem({
-        startIcon: $r('sys.symbol.paperplan_right_2'),
+        symbolStartIcon: new SymbolGlyphModifier($r('sys.symbol.paperplan_right_2')).fontSize(16),
         content: $r('app.string.chat_inflight_queue')
       })
         .contentFont({ size: 14 })
         .onClick(() => {
+          this.showInFlightSendMenu = false
           this.onQueueSend()
         })
     }
@@ -877,6 +896,10 @@ export struct ChatInputBar {
     return this.inputText.trim() !== '' || this.attachments.length > 0
   }
 
+  private isInFlightSendChoiceActive(): boolean {
+    return this.isSending && this.inFlightSendMenuAvailable
+  }
+
   private isSendBusy(): boolean {
     return this.isSending || this.isSendDispatching
   }
@@ -914,11 +937,21 @@ export struct ChatInputBar {
 
   @Monitor('isSending')
   onSendingChanged(): void {
+    if (!this.isInFlightSendChoiceActive()) {
+      this.showInFlightSendMenu = false
+    }
     this.iconTrigger++
     this.lastHasContent = this.computeHasContent()
     this.updateBreathing()
     // 发送按钮状态切换动画
     this.animateSendButton()
+  }
+
+  @Monitor('inFlightSendMenuAvailable')
+  onInFlightSendMenuAvailabilityChanged(): void {
+    if (!this.isInFlightSendChoiceActive()) {
+      this.showInFlightSendMenu = false
+    }
   }
 
   @Monitor('isSendDispatching')
