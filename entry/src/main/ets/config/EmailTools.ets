@@ -133,7 +133,7 @@ export function createEmailReadToolDefinition(): ToolDefinition {
       "action": {
         "type": "string",
         "enum": ["list", "view"],
-        "description": "list 按条件列出邮件摘要；view 按 uid 查看一封邮件的正文与附件清单。"
+        "description": "list 按条件列出邮件摘要；view 按 uid 查看一封邮件的正文、附件清单及受支持附件的解析内容。"
       },
       "uid": {
         "type": "string",
@@ -163,7 +163,7 @@ export function createEmailReadToolDefinition(): ToolDefinition {
   }`) as object)
   return new ToolDefinition(new ToolFunction(
     EMAIL_READ_TOOL_ID,
-    '读取已授权邮箱中的邮件，支持按时间、发件人、未读状态和文本筛选，也可按 uid 查看正文与附件清单。邮件涉及隐私，每次执行前客户端都会展示参数并要求用户明确批准；不得尝试获取或输出邮箱密码、授权码。',
+    '读取已授权邮箱中的邮件，支持按时间、发件人、未读状态和文本筛选，也可按 uid 查看正文、附件清单及受支持附件的文本或 OCR 解析内容。邮件涉及隐私，每次执行前客户端都会展示参数并要求用户明确批准；不得尝试获取或输出邮箱密码、授权码。',
     parameters
   ))
 }

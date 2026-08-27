@@ -67,6 +67,9 @@ interface EmailToolAttachmentOutput {
   mimeType: string
   inline: boolean
   size: number
+  parsedText: string
+  parsedTextTruncated: boolean
+  parseStatus: string
 }
 
 interface EmailDetailToolOutput {
@@ -141,6 +144,8 @@ const EMAIL_SOCKET_TIMEOUT_MS: number = 30000
 const EMAIL_SOCKET_OPERATION_SETTLE_MS: number = 80
 const EMAIL_MAX_RESPONSE_CHARACTERS: number = 28 * 1024 * 1024
 const EMAIL_MAX_TOOL_BODY_CHARACTERS: number = 30000
+const EMAIL_MAX_TOOL_ATTACHMENT_CHARACTERS: number = 30000
+const EMAIL_MAX_COMBINED_TOOL_ATTACHMENT_CHARACTERS: number = 120000
 const EMAIL_MAX_SEND_BODY_CHARACTERS: number = 200000
 const EMAIL_MAX_ATTACHMENT_KNOWLEDGE_CHARACTERS: number = 240000
 const EMAIL_MAX_COMBINED_ATTACHMENT_KNOWLEDGE_CHARACTERS: number = 1500000
@@ -1228,15 +1233,7 @@ export class EmailService {
         date: detail.date,
         body: detail.bodyText.substring(0, EMAIL_MAX_TOOL_BODY_CHARACTERS),
         bodyTruncated: detail.bodyText.length > EMAIL_MAX_TOOL_BODY_CHARACTERS,
-        attachments: detail.attachments.map((item: EmailAttachmentPart): EmailToolAttachmentOutput => {
-          const attachmentOutput: EmailToolAttachmentOutput = {
-            name: item.name,
-            mimeType: item.mimeType,
-            inline: item.inline,
-            size: item.bytes.byteLength
-          }
-          return attachmentOutput
-        })
+        attachments: await this.buildToolAttachmentOutputs(detail)
       }
       return JSON.stringify(output)
     }
@@ -2188,6 +2185,72 @@ export class EmailService {
     }
     return lines.filter((line: string, index: number): boolean => line !== '' ||
       (index > 0 && lines[index - 1] !== '')).join('\n')
+  }
+
+  private async buildToolAttachmentOutputs(detail: EmailMessageDetail): Promise<EmailToolAttachmentOutput[]> {
+    const outputs: EmailToolAttachmentOutput[] = []
+    if (detail.attachments.length === 0) {
+      return outputs
+    }
+    this.ensureTempDirectory()
+    const knowledgeService = getKnowledgeDocumentService()
+    let combinedCharacters = 0
+    for (let index = 0; index < detail.attachments.length; index++) {
+      const item = detail.attachments[index]
+      const displayName = item.name.trim() !== '' ? item.name : `附件${index + 1}`
+      const output: EmailToolAttachmentOutput = {
+        name: displayName,
+        mimeType: item.mimeType,
+        inline: item.inline,
+        size: item.bytes.byteLength,
+        parsedText: '',
+        parsedTextTruncated: false,
+        parseStatus: ''
+      }
+      if (item.bytes.byteLength === 0) {
+        output.parseStatus = '附件内容为空或传输编码无效'
+        outputs.push(output)
+        continue
+      }
+      const extension = this.supportedKnowledgeExtension(displayName, item.mimeType, item.bytes)
+      if (extension === '') {
+        output.parseStatus = `暂不支持解析此附件格式 (${item.mimeType || '未知类型'})`
+        outputs.push(output)
+        continue
+      }
+      const remainingCharacters = EMAIL_MAX_COMBINED_TOOL_ATTACHMENT_CHARACTERS - combinedCharacters
+      if (remainingCharacters < 1000) {
+        output.parsedTextTruncated = true
+        output.parseStatus = '已达到本次邮件读取的附件解析内容上限'
+        outputs.push(output)
+        continue
+      }
+      const attachmentName = this.buildImportName(
+        detail,
+        this.fileStem(displayName),
+        extension
+      )
+      const attachmentPath = this.tempPath(`tool_${Date.now()}_${index}_${attachmentName}`)
+      try {
+        this.writeBytes(attachmentPath, item.bytes)
+        const previewLimit = Math.min(EMAIL_MAX_TOOL_ATTACHMENT_CHARACTERS, remainingCharacters)
+        const preview = await knowledgeService.extractFileTextPreview(
+          attachmentPath,
+          attachmentName,
+          previewLimit
+        )
+        output.parsedText = preview.text
+        output.parsedTextTruncated = preview.truncated
+        output.parseStatus = preview.truncated ? '附件解析成功，返回内容为节选' : '附件解析成功'
+        combinedCharacters += preview.text.length
+      } catch (error) {
+        output.parseStatus = `附件解析失败：${this.safeErrorMessage(error)}`
+      } finally {
+        this.removeFileQuietly(attachmentPath)
+      }
+      outputs.push(output)
+    }
+    return outputs
   }
 
   private markdownHeadingText(value: string): string {
