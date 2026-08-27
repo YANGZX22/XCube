@@ -5,7 +5,7 @@
 <h1 align="center">XCube</h1>
 
 <p align="center">
-  A native AI chat client for HarmonyOS 7.
+  A native AI agent harness for HarmonyOS 7.
 </p>
 
 <p align="center">

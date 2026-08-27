@@ -2,11 +2,11 @@
   "string": [
     {
       "name": "module_desc",
-      "value": "AI Chat Application"
+      "value": "A native AI agent harness for HarmonyOS 7."
     },
     {
       "name": "EntryAbility_desc",
-      "value": "AI Chat Box"
+      "value": "A native AI agent harness for HarmonyOS 7."
     },
     {
       "name": "EntryAbility_label",

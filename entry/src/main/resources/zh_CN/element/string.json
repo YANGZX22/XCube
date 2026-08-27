@@ -2,11 +2,11 @@
   "string": [
     {
       "name": "module_desc",
-      "value": "AI聊天应用"
+      "value": "为 HarmonyOS 7 打造的原生 AI 智能体工作台"
     },
     {
       "name": "EntryAbility_desc",
-      "value": "AI对话助手"
+      "value": "为 HarmonyOS 7 打造的原生 AI 智能体工作台"
     },
     {
       "name": "EntryAbility_label",

@@ -5,7 +5,7 @@
 <h1 align="center">XCube</h1>
 
 <p align="center">
-  一款基于 HarmonyOS 7 原生 AI 聊天客户端。
+  为 HarmonyOS 7 打造的原生 AI 智能体工作台。
 </p>
 
 <p align="center">
