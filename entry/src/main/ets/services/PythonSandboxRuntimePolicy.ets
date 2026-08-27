@@ -3,10 +3,13 @@ export const PYTHON_PACKAGE_LOAD_TIMEOUT_MS: number = 90000
 export const PYTHON_EXECUTION_TIMEOUT_MS: number = 20000
 export const PYTHON_MAX_REQUESTED_PACKAGES: number = 8
 // Python 产物会先通过 WebView bridge 传回 ArkTS，再落到应用附件沙箱。
-// 对数量和体积同时设限，避免模型代码用图片产物耗尽移动端内存。
+// 对数量和体积同时设限，避免模型代码用产物耗尽移动端内存。
 export const PYTHON_MAX_OUTPUT_IMAGES: number = 4
 export const PYTHON_MAX_OUTPUT_IMAGE_BYTES: number = 4 * 1024 * 1024
 export const PYTHON_MAX_OUTPUT_IMAGE_TOTAL_BYTES: number = 8 * 1024 * 1024
+export const PYTHON_MAX_OUTPUT_FILES: number = 8
+export const PYTHON_MAX_OUTPUT_FILE_BYTES: number = 16 * 1024 * 1024
+export const PYTHON_MAX_OUTPUT_FILE_TOTAL_BYTES: number = 32 * 1024 * 1024
 
 const PYTHON_PACKAGE_SPEC_PATTERN: RegExp =
   /^[A-Za-z0-9][A-Za-z0-9._-]{0,63}(?:\[[A-Za-z0-9._,-]+\])?(?:[<>=!~]=?[A-Za-z0-9.*+_,<>=!~-]+)?$/

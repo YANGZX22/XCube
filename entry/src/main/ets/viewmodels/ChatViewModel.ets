@@ -82,6 +82,7 @@ import {
   getDocumentAttachmentRegistryService,
   isOfficeOpenXmlDocumentAttachment
 } from '../services/DocumentAttachmentRegistryService'
+import { isPythonSandboxFileAttachmentId } from '../services/PythonSandboxArtifactLink'
 import {
   buildConversationGoalSummaryPrompt,
   buildConversationGoalSystemPrompt,
@@ -131,12 +132,13 @@ interface SearchResultData {
   summary: string
 }
 
-interface PythonSandboxImageResultData {
+interface PythonSandboxArtifactResultData {
   attachmentId?: string
 }
 
 interface PythonSandboxToolResultData {
-  images?: PythonSandboxImageResultData[]
+  images?: PythonSandboxArtifactResultData[]
+  files?: PythonSandboxArtifactResultData[]
 }
 
 interface KnowledgeToolResultHitData {
@@ -501,6 +503,11 @@ export class ChatViewModel {
     const filtered: MessageAttachment[] = []
     for (let i = 0; i < attachments.length; i++) {
       const attachment = attachments[i]
+      // Python 普通文件作为气泡内 Markdown 链接的持久化载体，
+      // 不作为原生文档附件重复发给模型供应商。
+      if (isPythonSandboxFileAttachmentId(attachment.id)) {
+        continue
+      }
       if (!modelSupportsDocuments &&
         (this.isPdfAttachment(attachment) || isOfficeOpenXmlDocumentAttachment(attachment))) {
         continue
@@ -3385,7 +3392,7 @@ ${preview}`
     }
   }
 
-  private attachPythonSandboxImagesToMessage(
+  private attachPythonSandboxArtifactsToMessage(
     aiMessage: ChatMessage,
     toolCalls: ToolCall[],
     toolResults: ToolResult[],
@@ -3399,8 +3406,11 @@ ${preview}`
       try {
         const payload = JSON.parse(toolResults[i].content) as PythonSandboxToolResultData
         const images = payload.images ?? []
-        for (let j = 0; j < images.length; j++) {
-          const rawAttachmentId = images[j].attachmentId
+        const files = payload.files ?? []
+        for (let j = 0; j < images.length + files.length; j++) {
+          const isImage = j < images.length
+          const source = isImage ? images[j] : files[j - images.length]
+          const rawAttachmentId = source.attachmentId
           const attachmentId = rawAttachmentId === undefined ? '' : rawAttachmentId.trim()
           if (attachmentId === '') {
             continue
@@ -3417,12 +3427,12 @@ ${preview}`
           }
           const registered = registry.getAttachment(sessionId, attachmentId)
           if (registered === null || registered.filePath === '') {
-            console.warn('ChatViewModel', `Python image attachment not found: ${attachmentId}`)
+            console.warn('ChatViewModel', `Python artifact attachment not found: ${attachmentId}`)
             continue
           }
           aiMessage.addAttachment(new MessageAttachment(
             registered.attachmentId,
-            AttachmentType.IMAGE,
+            isImage ? AttachmentType.IMAGE : AttachmentType.FILE,
             registered.name,
             registered.filePath,
             registered.mimeType,
@@ -3430,7 +3440,7 @@ ${preview}`
           ))
         }
       } catch (error) {
-        console.warn('ChatViewModel', `Failed to attach Python images: ${JSON.stringify(error)}`)
+        console.warn('ChatViewModel', `Failed to attach Python artifacts: ${JSON.stringify(error)}`)
       }
     }
   }
@@ -4568,7 +4578,7 @@ ${preview}`
           for (let i = 0; i < toolResults.length; i++) {
             aiMessage.toolResults.push(toolResults[i])
           }
-          this.attachPythonSandboxImagesToMessage(
+          this.attachPythonSandboxArtifactsToMessage(
             aiMessage,
             toolCalls,
             toolResults,

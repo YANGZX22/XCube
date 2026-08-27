@@ -17,7 +17,8 @@ export enum PyodideState {
 }
 
 // 仅在 WebView -> ArkTS bridge 内短暂存在；落盘后不会把 base64 返回给模型。
-export class PyodideImageArtifact {
+export class PyodideOutputArtifact {
+  kind: string = 'file'
   name: string = ''
   mimeType: string = ''
   size: number = 0
@@ -32,7 +33,7 @@ export class PyodideRunResult {
   variables: Record<string, Object> = {}
   warnings: string[] = []
   error: string = ''
-  artifacts: PyodideImageArtifact[] = []
+  artifacts: PyodideOutputArtifact[] = []
   // 仅内部使用：标记运行时不可用，需由调用方降级
   fallback: boolean = false
 
@@ -159,7 +160,8 @@ export class PyodideRuntimeService {
           typeof source.size !== 'number' || typeof source.data !== 'string') {
           continue
         }
-        const artifact = new PyodideImageArtifact()
+        const artifact = new PyodideOutputArtifact()
+        artifact.kind = source.kind === 'file' ? 'file' : 'image'
         artifact.name = source.name
         artifact.mimeType = source.mimeType
         artifact.size = source.size

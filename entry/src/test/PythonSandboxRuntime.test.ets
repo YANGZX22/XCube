@@ -1,6 +1,9 @@
 import { describe, expect, it } from '@ohos/hypium'
 import {
   PYTHON_EXECUTION_TIMEOUT_MS,
+  PYTHON_MAX_OUTPUT_FILES,
+  PYTHON_MAX_OUTPUT_FILE_BYTES,
+  PYTHON_MAX_OUTPUT_FILE_TOTAL_BYTES,
   PYTHON_MAX_OUTPUT_IMAGES,
   PYTHON_MAX_OUTPUT_IMAGE_BYTES,
   PYTHON_MAX_OUTPUT_IMAGE_TOTAL_BYTES,
@@ -22,8 +25,15 @@ import {
 } from '../main/ets/services/PyodideHostHtml'
 import {
   getPythonImageExtension,
+  sanitizePythonFileName,
   sanitizePythonImageName
 } from '../main/ets/services/PythonSandboxArtifactService'
+import {
+  buildPythonSandboxFileMarkdown,
+  buildPythonSandboxFileUrl,
+  isPythonSandboxFileAttachmentId,
+  parsePythonSandboxFileUrl
+} from '../main/ets/services/PythonSandboxArtifactLink'
 import { PYTHON_FONT_USAGE_GUIDANCE } from '../main/ets/config/BuiltinTools'
 
 export default function pythonSandboxRuntimeTest() {
@@ -82,17 +92,22 @@ export default function pythonSandboxRuntimeTest() {
       expect(normalizePythonPackageSpecs(manyPackages).length).assertEqual(PYTHON_MAX_REQUESTED_PACKAGES)
     })
 
-    it('captures_bounded_image_files_from_each_isolated_python_run', 0, () => {
+    it('captures_bounded_artifact_files_from_each_isolated_python_run', 0, () => {
       expect(PYTHON_MAX_OUTPUT_IMAGES).assertEqual(4)
       expect(PYTHON_MAX_OUTPUT_IMAGE_BYTES).assertEqual(4 * 1024 * 1024)
       expect(PYTHON_MAX_OUTPUT_IMAGE_TOTAL_BYTES).assertEqual(8 * 1024 * 1024)
+      expect(PYTHON_MAX_OUTPUT_FILES).assertEqual(8)
+      expect(PYTHON_MAX_OUTPUT_FILE_BYTES).assertEqual(16 * 1024 * 1024)
+      expect(PYTHON_MAX_OUTPUT_FILE_TOTAL_BYTES).assertEqual(32 * 1024 * 1024)
       expect(PYODIDE_HOST_HTML.includes("const PYTHON_OUTPUT_ROOT = '/tmp/xcube-python-output'"))
         .assertTrue()
       expect(PYODIDE_HOST_HTML.includes('prepareOutputDirectory(request.requestId)')).assertTrue()
-      expect(PYODIDE_HOST_HTML.includes('collectOutputImages(outputContext.outputDir')).assertTrue()
+      expect(PYODIDE_HOST_HTML.includes('collectOutputArtifacts(outputContext.outputDir')).assertTrue()
       expect(PYODIDE_HOST_HTML.includes("pyodide.globals.set('PYTHON_OUTPUT_DIR'"))
         .assertTrue()
       expect(PYODIDE_HOST_HTML.includes('detectImageMime(bytes)')).assertTrue()
+      expect(PYODIDE_HOST_HTML.includes('detectFileMime(bytes, candidate.name)')).assertTrue()
+      expect(PYODIDE_HOST_HTML.includes("kind: isImage ? 'image' : 'file'")).assertTrue()
       expect(PYODIDE_HOST_HTML.includes('removeOutputDirectory(outputContext.outputDir)')).assertTrue()
     })
 
@@ -127,6 +142,22 @@ export default function pythonSandboxRuntimeTest() {
       expect(getPythonImageExtension('image/svg+xml')).assertEqual('')
       expect(sanitizePythonImageName('../bad chart.jpeg', 'image/png')).assertEqual('bad_chart.png')
       expect(sanitizePythonImageName('', 'image/webp')).assertEqual('python_image.webp')
+    })
+
+    it('builds_safe_markdown_links_for_python_generated_files', 0, () => {
+      const attachmentId = 'python_file_1723456789_1'
+      expect(isPythonSandboxFileAttachmentId(attachmentId)).assertTrue()
+      expect(isPythonSandboxFileAttachmentId('python_img_1723456789_1')).assertFalse()
+      expect(buildPythonSandboxFileUrl(attachmentId))
+        .assertEqual('xcube-file://python_file_1723456789_1')
+      expect(parsePythonSandboxFileUrl('xcube-file://python_file_1723456789_1'))
+        .assertEqual(attachmentId)
+      expect(parsePythonSandboxFileUrl('https://example.com/report.pdf')).assertEqual('')
+      expect(sanitizePythonFileName('../报告 [最终].pdf', 'application/pdf'))
+        .assertEqual('报告 [最终].pdf')
+      expect(sanitizePythonFileName('../result', 'text/csv')).assertEqual('result.csv')
+      expect(buildPythonSandboxFileMarkdown('报告 [最终].pdf', attachmentId))
+        .assertEqual('[报告 \\[最终\\].pdf](xcube-file://python_file_1723456789_1)')
     })
   })
 }

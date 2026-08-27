@@ -65,6 +65,7 @@ import { inputMethod } from '@kit.IMEKit'
 import { pasteboard } from '@kit.BasicServicesKit'
 import { webview } from '@kit.ArkWeb'
 import { pdfService, pdfViewManager, PdfView } from '@kit.PDFKit'
+import { fileIo, picker } from '@kit.CoreFileKit'
 import { dismissActiveSnackBarOnBack, showSnackBar, SnackBarDisplayOptions, SnackBarTone } from '../utils/ToastUtil'
 import { hilog } from '@kit.PerformanceAnalysisKit'
 import { ChatModelSelectorSheetContent } from '../components/chat/ChatModelSelectorSheetContent'
@@ -129,7 +130,12 @@ import {
   PlanStep
 } from '../services/PlanService'
 import { PlanPanel } from '../components/chat/PlanPanel'
-import { DocumentAttachmentRegistryService } from '../services/DocumentAttachmentRegistryService'
+import {
+  DocumentAttachmentRegistryService,
+  RegisteredDocumentAttachment
+} from '../services/DocumentAttachmentRegistryService'
+import { getAttachmentStorageService } from '../services/AttachmentStorageService'
+import { parsePythonSandboxFileUrl } from '../services/PythonSandboxArtifactLink'
 import { getPdfTextExtractionService } from '../services/PdfTextExtractionService'
 import { getImageTextRecognitionService } from '../services/ImageTextRecognitionService'
 import { resolveKnowledgeToolExposure } from './chat/KnowledgeToolExposurePolicy'
@@ -1938,9 +1944,74 @@ export struct ChatPage {
   }
 
   private handleMessageLinkOpen(title: string, url: string): void {
+    const attachmentId = parsePythonSandboxFileUrl(url)
+    if (attachmentId !== '') {
+      this.savePythonSandboxFileAttachment(attachmentId).catch((error: Object) => {
+        console.error('ChatPage', `Failed to save Python sandbox file: ${JSON.stringify(error)}`)
+        this.showError(pickLocalizedText('保存文件失败', 'Failed to save file'))
+      })
+      return
+    }
     this.messageWebSheetTitle = title
     this.messageWebSheetUrl = url
     this.showMessageWebSheet = true
+  }
+
+  private resolvePythonSandboxFileAttachment(attachmentId: string): RegisteredDocumentAttachment | null {
+    const registered = this.documentAttachmentRegistry.getAttachment(this.sessionId, attachmentId)
+    if (registered !== null) {
+      return registered
+    }
+    for (let i = 0; i < this.messages.length; i++) {
+      for (let j = 0; j < this.messages[i].attachments.length; j++) {
+        const attachment = this.messages[i].attachments[j]
+        if (attachment.id === attachmentId && attachment.filePath.trim() !== '') {
+          return new RegisteredDocumentAttachment(this.sessionId, attachment)
+        }
+      }
+    }
+    return null
+  }
+
+  private async savePythonSandboxFileAttachment(attachmentId: string): Promise<void> {
+    const attachment = this.resolvePythonSandboxFileAttachment(attachmentId)
+    const storage = getAttachmentStorageService()
+    if (attachment === null || attachment.filePath.trim() === '' ||
+      !storage.isManagedAttachmentPath(attachment.filePath) || !storage.fileExists(attachment.filePath)) {
+      this.showError(pickLocalizedText('文件已不存在或已被清理', 'The file no longer exists or has been cleaned'))
+      return
+    }
+
+    const context = this.getUIContext().getHostContext()
+    if (context === undefined || context === null) {
+      this.showError(pickLocalizedText('无法打开文件保存器', 'Unable to open the file saver'))
+      return
+    }
+
+    const options = new picker.DocumentSaveOptions()
+    const suggestedName = attachment.name.trim() !== '' ? attachment.name : 'python_file'
+    options.newFileNames = [suggestedName]
+    const dotIndex = suggestedName.lastIndexOf('.')
+    if (dotIndex > 0 && suggestedName.length - dotIndex <= 16) {
+      options.fileSuffixChoices = [suggestedName.substring(dotIndex)]
+    }
+    const saveUris = await new picker.DocumentViewPicker(context).save(options)
+    if (saveUris === undefined || saveUris.length === 0) {
+      return
+    }
+
+    const sourceFile = fileIo.openSync(attachment.filePath, fileIo.OpenMode.READ_ONLY)
+    try {
+      const destinationFile = fileIo.openSync(saveUris[0], fileIo.OpenMode.READ_WRITE)
+      try {
+        await fileIo.copyFile(sourceFile.fd, destinationFile.fd)
+      } finally {
+        fileIo.closeSync(destinationFile)
+      }
+    } finally {
+      fileIo.closeSync(sourceFile)
+    }
+    this.showChatSnack(pickLocalizedText('文件已保存', 'File saved'), 2000, SnackBarTone.SUCCESS)
   }
 
   private handleMapOpen(visualizationJson: string): void {

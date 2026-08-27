@@ -1,4 +1,7 @@
 import {
+  PYTHON_MAX_OUTPUT_FILES,
+  PYTHON_MAX_OUTPUT_FILE_BYTES,
+  PYTHON_MAX_OUTPUT_FILE_TOTAL_BYTES,
   PYTHON_MAX_OUTPUT_IMAGES,
   PYTHON_MAX_OUTPUT_IMAGE_BYTES,
   PYTHON_MAX_OUTPUT_IMAGE_TOTAL_BYTES
@@ -47,6 +50,9 @@ export const PYODIDE_HOST_HTML: string = `<!DOCTYPE html>
   const MAX_OUTPUT_IMAGES = ${PYTHON_MAX_OUTPUT_IMAGES};
   const MAX_OUTPUT_IMAGE_BYTES = ${PYTHON_MAX_OUTPUT_IMAGE_BYTES};
   const MAX_OUTPUT_IMAGE_TOTAL_BYTES = ${PYTHON_MAX_OUTPUT_IMAGE_TOTAL_BYTES};
+  const MAX_OUTPUT_FILES = ${PYTHON_MAX_OUTPUT_FILES};
+  const MAX_OUTPUT_FILE_BYTES = ${PYTHON_MAX_OUTPUT_FILE_BYTES};
+  const MAX_OUTPUT_FILE_TOTAL_BYTES = ${PYTHON_MAX_OUTPUT_FILE_TOTAL_BYTES};
   const MAX_OUTPUT_DIRECTORY_ENTRIES = 64;
   const MAX_OUTPUT_DIRECTORY_DEPTH = 4;
 
@@ -265,6 +271,35 @@ export const PYODIDE_HOST_HTML: string = `<!DOCTYPE html>
     return '';
   }
 
+  function detectFileMime(bytes, name) {
+    if (bytes.length >= 5 && bytes[0] === 0x25 && bytes[1] === 0x50 && bytes[2] === 0x44 &&
+      bytes[3] === 0x46 && bytes[4] === 0x2d) {
+      return 'application/pdf';
+    }
+    const normalizedName = String(name || '').toLowerCase();
+    const dotIndex = normalizedName.lastIndexOf('.');
+    const extension = dotIndex >= 0 ? normalizedName.substring(dotIndex + 1) : '';
+    const mimeByExtension = {
+      'pdf': 'application/pdf',
+      'txt': 'text/plain',
+      'md': 'text/markdown',
+      'csv': 'text/csv',
+      'json': 'application/json',
+      'xml': 'application/xml',
+      'html': 'text/html',
+      'htm': 'text/html',
+      'svg': 'image/svg+xml',
+      'zip': 'application/zip',
+      'gz': 'application/gzip',
+      'tar': 'application/x-tar',
+      'docx': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+      'xlsx': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+      'pptx': 'application/vnd.openxmlformats-officedocument.presentationml.presentation'
+    };
+    const detectedMime = mimeByExtension[extension];
+    return typeof detectedMime === 'string' ? detectedMime : 'application/octet-stream';
+  }
+
   function bytesToBase64(bytes) {
     let binary = '';
     const chunkSize = 0x8000;
@@ -279,7 +314,7 @@ export const PYODIDE_HOST_HTML: string = `<!DOCTYPE html>
     return btoa(binary);
   }
 
-  function collectOutputImages(outputDir, warnings) {
+  function collectOutputArtifacts(outputDir, warnings) {
     const candidates = [];
     let visitedEntries = 0;
 
@@ -310,34 +345,71 @@ export const PYODIDE_HOST_HTML: string = `<!DOCTYPE html>
     }
 
     const artifacts = [];
-    let totalBytes = 0;
+    let imageCount = 0;
+    let imageTotalBytes = 0;
+    let fileCount = 0;
+    let fileTotalBytes = 0;
+    let warnedImageCount = false;
+    let warnedFileCount = false;
     for (const candidate of candidates) {
-      if (artifacts.length >= MAX_OUTPUT_IMAGES) {
-        warnings.push('Python 最多保存 ' + MAX_OUTPUT_IMAGES + ' 张图片，其余图片已忽略');
-        break;
-      }
       if (candidate.size <= 0) continue;
-      if (candidate.size > MAX_OUTPUT_IMAGE_BYTES) {
-        warnings.push('图片 ' + candidate.name + ' 超过单图 ' + MAX_OUTPUT_IMAGE_BYTES + ' 字节限制，已忽略');
+      if (candidate.size > Math.max(MAX_OUTPUT_IMAGE_BYTES, MAX_OUTPUT_FILE_BYTES)) {
+        warnings.push('文件 ' + candidate.name + ' 超过单文件大小限制，已忽略');
         continue;
-      }
-      if (totalBytes + candidate.size > MAX_OUTPUT_IMAGE_TOTAL_BYTES) {
-        warnings.push('Python 图片总大小超过 ' + MAX_OUTPUT_IMAGE_TOTAL_BYTES + ' 字节限制，其余图片已忽略');
-        break;
       }
       try {
         const bytes = pyodide.FS.readFile(candidate.path, { encoding: 'binary' });
-        const mimeType = detectImageMime(bytes);
-        if (mimeType === '') continue;
+        const imageMimeType = detectImageMime(bytes);
+        const isImage = imageMimeType !== '';
+        if (isImage) {
+          if (imageCount >= MAX_OUTPUT_IMAGES) {
+            if (!warnedImageCount) {
+              warnings.push('Python 最多保存 ' + MAX_OUTPUT_IMAGES + ' 张图片，其余图片已忽略');
+              warnedImageCount = true;
+            }
+            continue;
+          }
+          if (bytes.byteLength > MAX_OUTPUT_IMAGE_BYTES) {
+            warnings.push('图片 ' + candidate.name + ' 超过单图 ' + MAX_OUTPUT_IMAGE_BYTES + ' 字节限制，已忽略');
+            continue;
+          }
+          if (imageTotalBytes + bytes.byteLength > MAX_OUTPUT_IMAGE_TOTAL_BYTES) {
+            warnings.push('Python 图片总大小超过 ' + MAX_OUTPUT_IMAGE_TOTAL_BYTES + ' 字节限制，该图片已忽略');
+            continue;
+          }
+        } else {
+          if (fileCount >= MAX_OUTPUT_FILES) {
+            if (!warnedFileCount) {
+              warnings.push('Python 最多保存 ' + MAX_OUTPUT_FILES + ' 个普通文件，其余文件已忽略');
+              warnedFileCount = true;
+            }
+            continue;
+          }
+          if (bytes.byteLength > MAX_OUTPUT_FILE_BYTES) {
+            warnings.push('文件 ' + candidate.name + ' 超过单文件 ' + MAX_OUTPUT_FILE_BYTES + ' 字节限制，已忽略');
+            continue;
+          }
+          if (fileTotalBytes + bytes.byteLength > MAX_OUTPUT_FILE_TOTAL_BYTES) {
+            warnings.push('Python 文件总大小超过 ' + MAX_OUTPUT_FILE_TOTAL_BYTES + ' 字节限制，该文件已忽略');
+            continue;
+          }
+        }
         artifacts.push({
           name: candidate.name,
-          mimeType: mimeType,
+          kind: isImage ? 'image' : 'file',
+          mimeType: isImage ? imageMimeType : detectFileMime(bytes, candidate.name),
           size: bytes.byteLength,
           data: bytesToBase64(bytes)
         });
-        totalBytes += bytes.byteLength;
+        if (isImage) {
+          imageCount += 1;
+          imageTotalBytes += bytes.byteLength;
+        } else {
+          fileCount += 1;
+          fileTotalBytes += bytes.byteLength;
+        }
       } catch (e) {
-        warnings.push('读取 Python 图片 ' + candidate.name + ' 失败');
+        warnings.push('读取 Python 产物 ' + candidate.name + ' 失败');
       }
     }
     return artifacts;
@@ -498,9 +570,9 @@ export const PYODIDE_HOST_HTML: string = `<!DOCTYPE html>
     } finally {
       if (outputContext !== null) {
         try {
-          result.artifacts = collectOutputImages(outputContext.outputDir, result.warnings);
+          result.artifacts = collectOutputArtifacts(outputContext.outputDir, result.warnings);
         } catch (e) {
-          result.warnings.push('收集 Python 图片产物失败: ' + (e && e.message ? e.message : String(e)));
+          result.warnings.push('收集 Python 文件产物失败: ' + (e && e.message ? e.message : String(e)));
         }
         try { pyodide.FS.chdir(outputContext.previousCwd); } catch (e) {}
         removeOutputDirectory(outputContext.outputDir);

@@ -17,6 +17,7 @@ import { getPyodideRuntimeService } from '../services/PyodideRuntimeService'
 import { normalizePythonPackageSpecs } from '../services/PythonSandboxRuntimePolicy'
 import {
   getPythonSandboxArtifactService,
+  PythonSandboxFileReference,
   PythonSandboxImageReference
 } from '../services/PythonSandboxArtifactService'
 import { CanvasDocumentMutationResult, CanvasDocumentState, getCanvasDocumentService } from '../services/CanvasDocumentService'
@@ -763,9 +764,14 @@ class PythonSandboxExecutor implements ToolExecutor {
         output.warnings = pyResult.warnings
         output.error = pyResult.error
         output.images = savedArtifacts.images
+        output.files = savedArtifacts.files
         if (output.images.length > 0) {
           output.imageAccess = '图片已保存到当前会话附件沙箱。使用 attachmentId 调用 vision_read_image ' +
             '进行视觉理解，或调用 image_to_text 识别图片文字。'
+        }
+        if (output.files.length > 0) {
+          output.fileAccess = '普通文件已保存到当前会话附件沙箱。请在最终回复中原样输出 files 里的 markdown 字段；' +
+            '用户点击链接后可选择保存到本地的位置。'
         }
         return JSON.stringify(output)
       }
@@ -796,6 +802,8 @@ class PythonSandboxToolOutput {
   error: string = ''
   images: PythonSandboxImageReference[] = []
   imageAccess: string = ''
+  files: PythonSandboxFileReference[] = []
+  fileAccess: string = ''
 }
 
 class MathChartSeriesRuntime {
@@ -2631,7 +2639,7 @@ function createPythonSandboxToolDefinition(): ToolDefinition {
     "properties": {
       "code": {
         "type": "string",
-        "description": "要执行的 Python 3 代码。支持完整 Python 语法与标准库；import pandas、numpy、scipy、scikit-learn、matplotlib、Pillow 等 Pyodide 官方包时会在执行前自动加载。Matplotlib 默认使用 CMU Serif 显示英文、思源宋体显示中文；Pillow 可分别通过 PYTHON_FONT_EN、PYTHON_FONT_CJK 获取字体路径。${PYTHON_FONT_USAGE_GUIDANCE}可用 print 输出，最后一个表达式的值会作为 result 返回。可用 matplotlib 的 plt.savefig('chart.png') 或 Pillow 的 image.save('image.png') 将 PNG、JPEG、GIF、WebP 保存到本次运行的隔离目录；相对路径会自动落到该目录，也可使用 PYTHON_OUTPUT_DIR。返回结果的 images 含已持久化图片的 attachmentId，模型随后可用 vision_read_image 或 image_to_text 调取。最多保存 4 张，单张不超过 4 MiB、合计不超过 8 MiB。代码不能访问应用或系统文件、直接发起网络请求或运行系统命令。"
+        "description": "要执行的 Python 3 代码。支持完整 Python 语法与标准库；import pandas、numpy、scipy、scikit-learn、matplotlib、Pillow 等 Pyodide 官方包时会在执行前自动加载。Matplotlib 默认使用 CMU Serif 显示英文、思源宋体显示中文；Pillow 可分别通过 PYTHON_FONT_EN、PYTHON_FONT_CJK 获取字体路径。${PYTHON_FONT_USAGE_GUIDANCE}可用 print 输出，最后一个表达式的值会作为 result 返回。写入相对路径或 PYTHON_OUTPUT_DIR 的 PNG、JPEG、GIF、WebP 会在 images 中返回；PDF、CSV、JSON、Office、ZIP 等任意其他文件会在 files 中返回。要在气泡中交付普通文件，必须在最终回复原样输出 files 中的 markdown 字段，即 [文件名](xcube-file://attachmentId)；不要臆造 attachmentId 或内部链接。图片最多 4 张，单张 4 MiB、合计 8 MiB；普通文件最多 8 个，单个 16 MiB、合计 32 MiB。代码不能访问应用或系统文件、直接发起网络请求或运行系统命令。"
       },
       "variables": {
         "type": "object",
@@ -2654,7 +2662,7 @@ function createPythonSandboxToolDefinition(): ToolDefinition {
 
   const func = new ToolFunction(
     PYTHON_SANDBOX_TOOL_ID,
-    `模型可在隔离的 Web Worker 中运行 Pyodide/CPython，用于数学计算、数据处理、统计分析、算法验证和 Python 生图。import pandas、numpy、scipy、scikit-learn、matplotlib、Pillow 等官方包时会按需加载，也可通过 packages 安装纯 Python 或兼容的 PyEmscripten wheel。Matplotlib 默认使用 CMU Serif 显示英文、思源宋体显示中文；Pillow 可通过 PYTHON_FONT_EN、PYTHON_FONT_CJK 使用同一组字体。${PYTHON_FONT_USAGE_GUIDANCE}用 savefig/save 将 PNG、JPEG、GIF、WebP 写到相对路径后，工具会保存到当前会话附件沙箱，并在 images 返回 attachmentId；随后可用 vision_read_image 或 image_to_text 调取。代码不能访问应用/系统文件、直接联网或运行系统命令；包加载器自身会访问受限的 Pyodide/PyPI 源。`,
+    `模型可在隔离的 Web Worker 中运行 Pyodide/CPython，用于数学计算、数据处理、统计分析、算法验证、生图和生成文件。import pandas、numpy、scipy、scikit-learn、matplotlib、Pillow 等官方包时会按需加载，也可通过 packages 安装纯 Python 或兼容的 PyEmscripten wheel。Matplotlib 默认使用 CMU Serif 显示英文、思源宋体显示中文；Pillow 可通过 PYTHON_FONT_EN、PYTHON_FONT_CJK 使用同一组字体。${PYTHON_FONT_USAGE_GUIDANCE}写入运行目录的图片会在 images 返回 attachmentId，可用 vision_read_image 或 image_to_text 调取；PDF 及其他文件会在 files 返回 markdown，在最终回复中原样输出即可以 Markdown 链接交付，用户点击后选择本地保存位置。不要臆造内部链接。代码不能访问应用/系统文件、直接联网或运行系统命令；包加载器自身会访问受限的 Pyodide/PyPI 源。`,
     parameters
   )
 

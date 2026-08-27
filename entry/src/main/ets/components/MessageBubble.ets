@@ -31,6 +31,10 @@ import {
   MANUSCRIPT_COMPACT_BAR_HEIGHT
 } from '../utils/ManuscriptVisualUtils'
 import { pickLocalizedText } from '../utils/LocalizedTextUtils'
+import {
+  isPythonSandboxFileAttachmentId,
+  parsePythonSandboxFileUrl
+} from '../services/PythonSandboxArtifactLink'
 
 const DOMAIN = 0x0002
 const TAG = 'MessageBubble'
@@ -499,7 +503,9 @@ export struct MessageBubble {
 
   private syncDerivedRenderCaches(): void {
     this.cachedDisplayContent = this.computeDisplayContent()
-    this.cachedHasDisplayAttachments = this.isEditing ? this.previewAttachments.length > 0 : this.message.hasAttachments()
+    this.cachedHasDisplayAttachments = this.isEditing
+      ? this.hasRenderableAttachments(this.previewAttachments)
+      : this.hasRenderableAttachments(this.message.attachments)
     this.cachedHasPreviewTextContent = this.cachedDisplayContent.length > 0
     this.cachedHasMessageTextContent = this.message.content.trim().length > 0
     this.cachedHasToolbarPayload = this.cachedHasMessageTextContent || this.message.hasAttachments()
@@ -856,7 +862,7 @@ export struct MessageBubble {
       }
 
       Column({ space: 8 }) {
-        if (this.message.hasAttachments()) {
+        if (this.hasRenderableAttachments(this.message.attachments)) {
           this.AssistantAttachments()
         }
 
@@ -1064,11 +1070,23 @@ export struct MessageBubble {
   private getFileAttachments(attachments: MessageAttachment[]): MessageAttachment[] {
     const fileAttachments: MessageAttachment[] = []
     for (let i = 0; i < attachments.length; i++) {
-      if (attachments[i].type === AttachmentType.FILE) {
+      if (attachments[i].type === AttachmentType.FILE &&
+        !isPythonSandboxFileAttachmentId(attachments[i].id)) {
         fileAttachments.push(attachments[i])
       }
     }
     return fileAttachments
+  }
+
+  private hasRenderableAttachments(attachments: MessageAttachment[]): boolean {
+    for (let i = 0; i < attachments.length; i++) {
+      if (attachments[i].type === AttachmentType.IMAGE ||
+        (attachments[i].type === AttachmentType.FILE &&
+          !isPythonSandboxFileAttachmentId(attachments[i].id))) {
+        return true
+      }
+    }
+    return false
   }
 
   private isPdfAttachment(attachment: MessageAttachment): boolean {
@@ -1453,6 +1471,10 @@ export struct MessageBubble {
     let url = src.trim()
     if (url === '') {
       return false
+    }
+    if (parsePythonSandboxFileUrl(url) !== '') {
+      this.onOpenLink(title.trim(), url)
+      return true
     }
     if (url.startsWith('mailto:') || url.startsWith('tel:')) {
       return false
@@ -2707,7 +2729,7 @@ export struct MessageBubble {
             }
 
             // ========== 附件区域（AI 生成的图片） ==========
-            if (this.message.hasAttachments()) {
+            if (this.hasRenderableAttachments(this.message.attachments)) {
               this.AssistantAttachments()
             }
 

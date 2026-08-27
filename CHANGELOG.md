@@ -8,6 +8,7 @@
 - 新增邮件能力：支持在工具中心配置 IMAP/SMTP 邮箱，通过逐次确认让模型读取或发送邮件，并可将邮件正文、附件和内嵌图片导入知识库；补充 Outlook OAuth2、网易邮箱客户端身份信息及系统安全资产凭据存储
 - Python 沙箱升级为完整 Pyodide/CPython 运行时，自动加载 `pandas`、`numpy`、`scipy`、`scikit-learn`、`matplotlib`、Pillow 等官方包，也可安装纯 Python 或兼容 PyEmscripten wheel；模块 Worker 不兼容时自动回退经典 Worker 运行时
 - Python 沙箱支持将 Matplotlib、Pillow 等生成的图片保存到当前会话附件沙箱；模型可通过附件 ID 继续读取，生成结果也会直接显示在聊天气泡中
+- Python 沙箱可将生成的 PDF、CSV、JSON、Office、压缩包及其他任意文件作为 Markdown 链接直接交付到聊天气泡，点击后通过系统文件选择器另存到本地
 - Python 绘图沙箱内置 CMU Serif 英文字体与思源宋体中文回退，Matplotlib 自动注册中英文字体，Pillow 可直接读取对应字体路径；工具提示词会指导模型保留 Matplotlib 回退顺序，并在 Pillow 中正确分段绘制中英混排；开源许可页同步补充 CMU Serif 的 OFL 1.1 署名
 - 上下文达到用户设定阈值时改由应用直接压缩；正文、思考或工具调用生成途中越过阈值都会立即中断，压缩后在同一个消息气泡中续答；压缩状态栏会跟随聊天的历史输出展示设置定位
 - “关于 XCube”新增缓存清理入口，可扫描并删除无现有会话、消息或草稿引用的历史附件残留；执行前会明确提示永久删除与潜在数据丢失风险

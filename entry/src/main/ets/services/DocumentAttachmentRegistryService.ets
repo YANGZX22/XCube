@@ -1,4 +1,5 @@
 import { MessageAttachment } from '../models/ChatModels'
+import { isPythonSandboxFileAttachmentId } from './PythonSandboxArtifactLink'
 
 export function isDocxDocumentAttachment(attachment: MessageAttachment): boolean {
   const mimeType = attachment.mimeType.toLowerCase()
@@ -60,7 +61,8 @@ export class DocumentAttachmentRegistryService {
     for (let i = 0; i < attachments.length; i++) {
       const attachment = attachments[i]
       if ((!this.isPdfAttachment(attachment) && !this.isImageAttachment(attachment) &&
-        !isOfficeOpenXmlDocumentAttachment(attachment)) ||
+        !isOfficeOpenXmlDocumentAttachment(attachment) &&
+        !isPythonSandboxFileAttachmentId(attachment.id)) ||
         attachment.filePath.trim() === '') {
         continue
       }
