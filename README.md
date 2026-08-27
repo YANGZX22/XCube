@@ -33,7 +33,7 @@
 
 <table>
   <tr>
-    <td align="center"><img src="docs/screenshots/conversation-list.png" width="220" /><br/><sub>Conversation List</sub></td>
+    <td align="center"><img src="docs/screenshots/multi-tools.png" width="220" /><br/><sub>Work using Multiple Tools</sub></td>
     <td align="center"><img src="docs/screenshots/new-python.png" width="220" /><br/><sub>Work with Python Packages</sub></td>
     <td align="center"><img src="docs/screenshots/answer-using-knowledge-base.png" width="220" /><br/><sub>Work in RAG</sub></td>
   </tr>

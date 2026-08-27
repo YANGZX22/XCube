@@ -34,7 +34,7 @@
 
 <table>
   <tr>
-    <td align="center"><img src="docs/screenshots/conversation-list.png" width="220" /><br/><sub>对话列表</sub></td>
+    <td align="center"><img src="docs/screenshots/multi-tools.png" width="220" /><br/><sub>多工具组合工作</sub></td>
     <td align="center"><img src="docs/screenshots/new-python.png" width="220" /><br/><sub>使用各种 Python 包</sub></td>
     <td align="center"><img src="docs/screenshots/answer-using-knowledge-base.png" width="220" /><br/><sub>RAG 智能问答</sub></td>
   </tr>
