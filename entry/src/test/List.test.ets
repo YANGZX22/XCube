@@ -25,6 +25,7 @@ import planServiceTest from './PlanService.test';
 import pythonSandboxRuntimeTest from './PythonSandboxRuntime.test';
 import attachmentCleanupTest from './AttachmentCleanup.test';
 import chatInFlightMessageTest from './ChatInFlightMessage.test';
+import deepSeekWebSearchUtilsTest from './DeepSeekWebSearchUtils.test';
 import subAgentArgumentParserTest from './SubAgentArgumentParser.test';
 
 export default function testsuite() {
@@ -55,5 +56,6 @@ export default function testsuite() {
   pythonSandboxRuntimeTest();
   attachmentCleanupTest();
   chatInFlightMessageTest();
+  deepSeekWebSearchUtilsTest();
   subAgentArgumentParserTest();
 }

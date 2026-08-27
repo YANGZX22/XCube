@@ -9,6 +9,19 @@ import { SearchReference, SearchServiceConfig, SearchEngine } from '../models/Ch
 import { getPreferencesService, PreferenceKeys } from './PreferencesService'
 import { cleanSearchQuery as cleanSearchQueryShared } from '../utils/SearchQueryUtils'
 import { JsonResponseContent, parseJsonResponseContent } from '../utils/JsonResponseUtils'
+import { getDatabaseService, ProviderConfig } from './DatabaseService'
+import { getEffectiveApiKey } from '../config/PresetProviders'
+import {
+  buildDeepSeekWebSearchEndpoint,
+  DEEPSEEK_WEB_SEARCH_DEFAULT_BASE_URL,
+  DEEPSEEK_WEB_SEARCH_DEFAULT_MODEL,
+  DEEPSEEK_WEB_SEARCH_MAX_TOKENS,
+  DEEPSEEK_WEB_SEARCH_MAX_USES,
+  DEEPSEEK_WEB_SEARCH_TIMEOUT_MS,
+  extractDeepSeekWebSearchError,
+  isDeepSeekProvider,
+  parseDeepSeekWebSearchResponse
+} from '../utils/DeepSeekWebSearchUtils'
 
 // 搜索结果类（用于返回给业务层）
 export class SearchResult {
@@ -94,6 +107,9 @@ export class SearchRuntimeConfigSnapshot {
   exaBaseUrl: string = 'https://api.exa.ai'
   bochaApiKey: string = ''
   bochaBaseUrl: string = 'https://api.bochaai.com'
+  deepseekUseCurrentProvider: boolean = true
+  deepseekApiKey: string = ''
+  deepseekBaseUrl: string = DEEPSEEK_WEB_SEARCH_DEFAULT_BASE_URL
 }
 
 // 搜索执行选项（可选）
@@ -173,6 +189,41 @@ class BochaSearchRequest {
   }
 }
 
+class DeepSeekSearchTextContent {
+  type: string = 'text'
+  text: string = ''
+
+  constructor(text: string) {
+    this.text = text
+  }
+}
+
+class DeepSeekSearchMessage {
+  role: string = 'user'
+  content: DeepSeekSearchTextContent[] = []
+
+  constructor(text: string) {
+    this.content = [new DeepSeekSearchTextContent(text)]
+  }
+}
+
+class DeepSeekSearchTool {
+  type: string = 'web_search_20250305'
+  name: string = 'web_search'
+  max_uses: number = DEEPSEEK_WEB_SEARCH_MAX_USES
+}
+
+class DeepSeekSearchRequest {
+  model: string = DEEPSEEK_WEB_SEARCH_DEFAULT_MODEL
+  max_tokens: number = DEEPSEEK_WEB_SEARCH_MAX_TOKENS
+  messages: DeepSeekSearchMessage[] = []
+  tools: DeepSeekSearchTool[] = [new DeepSeekSearchTool()]
+
+  constructor(query: string) {
+    this.messages = [new DeepSeekSearchMessage(`Perform a web search for the query: ${query}`)]
+  }
+}
+
 class TavilyExtractRequest {
   urls: string[] = []
   extract_depth: string = 'basic'
@@ -208,6 +259,8 @@ export class WebSearchService {
   private exaBaseUrl: string = 'https://api.exa.ai'
   private bochaApiKey: string = ''
   private bochaBaseUrl: string = 'https://api.bochaai.com'
+  private deepseekApiKey: string = ''
+  private deepseekBaseUrl: string = DEEPSEEK_WEB_SEARCH_DEFAULT_BASE_URL
 
   private requestControllerMap: Map<string, RequestControllerEntry> = new Map()
   // 记录本次用户请求已返回过的 URL，用于跨查询、跨页去重（新用户消息时清空）
@@ -255,6 +308,9 @@ export class WebSearchService {
     }
     if (raw === SearchEngine.BOCHA) {
       return SearchEngine.BOCHA
+    }
+    if (raw === SearchEngine.DEEPSEEK) {
+      return SearchEngine.DEEPSEEK
     }
     if (raw === SearchEngine.CUSTOM) {
       return SearchEngine.CUSTOM
@@ -309,6 +365,8 @@ export class WebSearchService {
     this.exaBaseUrl = snapshot.exaBaseUrl
     this.bochaApiKey = snapshot.bochaApiKey
     this.bochaBaseUrl = snapshot.bochaBaseUrl
+    this.deepseekApiKey = snapshot.deepseekApiKey
+    this.deepseekBaseUrl = snapshot.deepseekBaseUrl
   }
 
   // 加载搜索服务配置（旧接口，保留）
@@ -335,6 +393,15 @@ export class WebSearchService {
     const exaBaseUrl = await prefsService.getString(PreferenceKeys.SEARCH_EXA_BASE_URL, 'https://api.exa.ai')
     const bochaApiKey = await prefsService.getString(PreferenceKeys.SEARCH_BOCHA_API_KEY, '')
     const bochaBaseUrl = await prefsService.getString(PreferenceKeys.SEARCH_BOCHA_BASE_URL, 'https://api.bochaai.com')
+    const deepseekUseCurrentProvider = await prefsService.getBoolean(
+      PreferenceKeys.SEARCH_DEEPSEEK_USE_CURRENT_PROVIDER,
+      true
+    )
+    const deepseekApiKey = await prefsService.getString(PreferenceKeys.SEARCH_DEEPSEEK_API_KEY, '')
+    const deepseekBaseUrl = await prefsService.getString(
+      PreferenceKeys.SEARCH_DEEPSEEK_BASE_URL,
+      DEEPSEEK_WEB_SEARCH_DEFAULT_BASE_URL
+    )
 
     snapshot.enabled = enabled
     snapshot.searchEngine = this.parseSearchEngine(engine)
@@ -348,6 +415,13 @@ export class WebSearchService {
     snapshot.exaBaseUrl = this.normalizeBaseUrl(exaBaseUrl, 'https://api.exa.ai')
     snapshot.bochaApiKey = bochaApiKey.trim()
     snapshot.bochaBaseUrl = this.normalizeBaseUrl(bochaBaseUrl, 'https://api.bochaai.com')
+    snapshot.deepseekUseCurrentProvider = deepseekUseCurrentProvider
+    snapshot.deepseekApiKey = deepseekUseCurrentProvider
+      ? (snapshot.searchEngine === SearchEngine.DEEPSEEK ? await this.resolveCurrentDeepSeekProviderApiKey() : '')
+      : deepseekApiKey.trim()
+    snapshot.deepseekBaseUrl = deepseekUseCurrentProvider
+      ? DEEPSEEK_WEB_SEARCH_DEFAULT_BASE_URL
+      : this.normalizeBaseUrl(deepseekBaseUrl, DEEPSEEK_WEB_SEARCH_DEFAULT_BASE_URL)
 
     // 同步到旧字段，兼容依赖 this.config 的现有逻辑
     this.applyRuntimeConfig(snapshot)
@@ -367,7 +441,25 @@ export class WebSearchService {
     if (runtime.searchEngine === SearchEngine.BOCHA && runtime.bochaApiKey !== '') {
       return '博查(Bocha)'
     }
+    if (runtime.searchEngine === SearchEngine.DEEPSEEK) {
+      return 'DeepSeek Web Search'
+    }
     return 'Bing(local)'
+  }
+
+  private async resolveCurrentDeepSeekProviderApiKey(): Promise<string> {
+    const providerId = await getPreferencesService().getCurrentProviderId()
+    if (providerId === '') {
+      return ''
+    }
+    const providers = await getDatabaseService().getAllProviders()
+    for (let i = 0; i < providers.length; i++) {
+      const provider: ProviderConfig = providers[i]
+      if (provider.id === providerId && isDeepSeekProvider(provider.id, provider.type, provider.baseUrl)) {
+        return getEffectiveApiKey(provider.id, provider.apiKey).trim()
+      }
+    }
+    return ''
   }
 
   async getPreferredEngineName(runtimeConfig?: SearchRuntimeConfigSnapshot): Promise<string> {
@@ -606,6 +698,9 @@ export class WebSearchService {
       // 博查失败不回退 Bing，直接返回错误，让用户明确是 Key/配额/网络问题
       return await this.bochaSearchEnhanced(query, runtime, controller, cancelCheck, page)
     }
+    if (runtime.searchEngine === SearchEngine.DEEPSEEK) {
+      return await this.deepSeekSearchEnhanced(query, runtime, controller, cancelCheck, page)
+    }
     return await this.bingSearchEnhanced(query, runtime, controller, cancelCheck, page)
   }
 
@@ -681,6 +776,11 @@ export class WebSearchService {
         return dedupedResult
       }
       if (!dedupedResult.exhausted && dedupedResult.references.length > 0) {
+        return dedupedResult
+      }
+
+      // DeepSeek 的一次请求已允许服务器侧多次检索；空结果不再自动追加昂贵的模型轮次。
+      if (runtime.searchEngine === SearchEngine.DEEPSEEK) {
         return dedupedResult
       }
 
@@ -880,6 +980,48 @@ export class WebSearchService {
       contentForAI,
       '',
       this.getSearchStartIndex(runtime.maxResults, page)
+    )
+  }
+
+  private async deepSeekSearchEnhanced(
+    query: string,
+    runtime: SearchRuntimeConfigSnapshot,
+    controller: HttpRequestController | null,
+    cancelCheck?: () => boolean,
+    page: number = 1
+  ): Promise<SearchResult> {
+    if (runtime.deepseekApiKey === '') {
+      const message = runtime.deepseekUseCurrentProvider
+        ? '当前聊天未选择已配置 API Key 的 DeepSeek 服务商；请切换到 DeepSeek 服务商，或在搜索设置中改为手动配置'
+        : 'DeepSeek Web Search API Key 未配置'
+      return new SearchResult(false, query, 'DeepSeek Web Search', [], '', message)
+    }
+
+    const effectiveQuery = page > 1 && !this.isWeatherIntent(query)
+      ? this.buildDiversifiedSearchQuery(query, page)
+      : query
+    const response = await this.deepSeekSearch(effectiveQuery, runtime, controller, cancelCheck)
+    if (!response.success) {
+      return new SearchResult(false, effectiveQuery, 'DeepSeek Web Search', [], '', response.errorMessage)
+    }
+    if (this.isCancelled(controller, cancelCheck)) {
+      return this.buildCancelledSearchResult(effectiveQuery, 'DeepSeek Web Search')
+    }
+
+    const references: SearchReference[] = []
+    for (let i = 0; i < response.results.length; i++) {
+      const item = response.results[i]
+      references.push(new SearchReference(`ref_${Date.now()}_${i}`, item.title, item.url, item.snippet))
+    }
+    return new SearchResult(
+      true,
+      effectiveQuery,
+      'DeepSeek Web Search',
+      references,
+      this.limitPromptContent(this.buildContentForAI(response.results), 6000),
+      '',
+      this.getSearchStartIndex(runtime.maxResults, page),
+      references.length === 0
     )
   }
 
@@ -1160,6 +1302,67 @@ export class WebSearchService {
       )
     } catch (error) {
       return new BingSearchResponse(false, query, [], `Tavily 搜索失败: ${JSON.stringify(error)}`)
+    }
+  }
+
+  private async deepSeekSearch(
+    query: string,
+    runtime: SearchRuntimeConfigSnapshot,
+    controller: HttpRequestController | null,
+    cancelCheck?: () => boolean
+  ): Promise<BingSearchResponse> {
+    try {
+      if (this.isCancelled(controller, cancelCheck)) {
+        return new BingSearchResponse(false, query, [], '请求已取消')
+      }
+
+      const timeout = Math.max(this.normalizeTimeout(runtime.timeout), DEEPSEEK_WEB_SEARCH_TIMEOUT_MS)
+      const headers: Record<string, string> = {
+        'Content-Type': 'application/json',
+        'Accept': 'application/json',
+        'x-api-key': runtime.deepseekApiKey,
+        'Authorization': `Bearer ${runtime.deepseekApiKey}`,
+        'anthropic-version': '2023-06-01'
+      }
+      const response = await this.httpService.postWithTimeout(
+        buildDeepSeekWebSearchEndpoint(runtime.deepseekBaseUrl),
+        JSON.stringify(new DeepSeekSearchRequest(query)),
+        headers,
+        timeout,
+        this.buildHttpOptions(timeout, controller)
+      )
+
+      if (!response.success) {
+        const detail = extractDeepSeekWebSearchError(response.data)
+        const message = detail !== '' ? detail : response.errorMessage
+        return new BingSearchResponse(false, query, [], `DeepSeek Web Search 请求失败: ${message}`)
+      }
+      if (this.isCancelled(controller, cancelCheck)) {
+        return new BingSearchResponse(false, query, [], '请求已取消')
+      }
+
+      const errorMessage = extractDeepSeekWebSearchError(response.data)
+      if (errorMessage !== '') {
+        return new BingSearchResponse(false, query, [], errorMessage)
+      }
+      const parsed = parseDeepSeekWebSearchResponse(response.data, this.normalizeResultCount(runtime.maxResults))
+      if (!parsed.hasResultBlock) {
+        return new BingSearchResponse(
+          false,
+          query,
+          [],
+          'DeepSeek 未返回结构化 web_search_tool_result，请确认接口支持 Anthropic Web Search'
+        )
+      }
+
+      const results: SearchResultItem[] = []
+      for (let i = 0; i < parsed.sources.length; i++) {
+        const source = parsed.sources[i]
+        results.push(new SearchResultItem(source.title, source.url, source.snippet))
+      }
+      return new BingSearchResponse(true, query, results, '')
+    } catch (error) {
+      return new BingSearchResponse(false, query, [], `DeepSeek Web Search 失败: ${JSON.stringify(error)}`)
     }
   }
 

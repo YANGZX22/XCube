@@ -47,7 +47,7 @@
 ## 项目概览
 
 - 🤖 **多模型兼容** —— 内置 15 个以上的服务商，并支持 OpenAI、Anthropic 和 Gemini 兼容 API
-- 🔍 **联网搜索与 MCP** —— 支持博查、Bing（本地）、Tavily、Exa 和远程 Streamable MCP Server
+- 🔍 **联网搜索与 MCP** —— 支持 Bing（本地）、Brave、Tavily、Exa、博查和 DeepSeek Web Search，以及远程 Streamable MCP Server
 - 🧩 **多轮子智能体协作** —— 主智能体可将复杂任务分配给最多 3 个子智能体，并在多轮交互后统一汇总结果
 - 📚 **本地知识库** —— 结合关键词与向量的混合 RAG，内置 DOCX／XLSX 解析与 OCR；文件始终保留在应用沙箱内
 - 🛠️ **内置工具** —— Canvas 文档、计划模式、Python 沙箱、图表、日历、地图与常用地点，以及 PDF／图片／DOCX／XLSX 转文本功能
@@ -65,6 +65,12 @@
 OpenAI · Claude · Gemini · DeepSeek · Grok · Ollama · OpenRouter · SiliconFlow · Qwen · Kimi · Zhipu（GLM）· Doubao · MiniMax · AiHubMix · MiMo
 
 此外，用户可以添加符合 OpenAI、Anthropic 或 Gemini 接口规范的自定义端点。
+
+### 🔍 联网搜索
+
+在“工具中心 → 联网搜索”中启用 `web_search` 并选择 Bing（本地）、Brave、Tavily、Exa、博查或 DeepSeek Web Search。每次对话使用独立的搜索预算，模型超出预算前会请求用户确认。
+
+DeepSeek Web Search 默认在每次搜索时读取当前 DeepSeek 服务商的 API Key，不会将密钥复制到搜索设置，并且只请求 DeepSeek 官方 Anthropic 端点。也可关闭自动模式，单独配置 API Key 和 Anthropic 兼容接口。DeepSeek Web Search 会发起模型请求并消耗对应账户的 Token 额度。
 
 ### 🧩 并行子智能体
 
@@ -97,7 +103,7 @@ OpenAI · Claude · Gemini · DeepSeek · Grok · Ollama · OpenRouter · Silico
 | 工具                           | 功能                                                                                                            |
 |------------------------------|---------------------------------------------------------------------------------------------------------------|
 | **上下文压缩**                    | 将较早对话压缩为摘要以节省上下文                                                                                              |
-| **联网搜索**                     | 在搜索预算内获取实时信息；超出预算时请求用户确认                                                                                      |
+| **联网搜索**                     | 通过 Bing（本地）、Brave、Tavily、Exa、博查或 DeepSeek 获取实时信息；超出搜索预算时请求用户确认                                                     |
 | **向用户提问**                    | 模型遇到关键歧义时，可通过确认卡片请求用户补充信息                                                                                     |
 | **子智能体**                     | 派出并行子智能体处理独立子任务                                                                                               |
 | **Python**                   | 运行 Python 进行计算、数据处理和中间推导                                                                                      |

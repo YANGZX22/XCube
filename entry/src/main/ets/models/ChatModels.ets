@@ -493,6 +493,7 @@ export enum SearchEngine {
   EXA = 'exa',
   TAVILY = 'tavily',
   BOCHA = 'bocha',
+  DEEPSEEK = 'deepseek',
   CUSTOM = 'custom'
 }
 

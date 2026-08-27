@@ -184,6 +184,7 @@ const SENSITIVE_PREFERENCE_KEYS: string[] = [
   PreferenceKeys.SEARCH_TAVILY_API_KEY,
   PreferenceKeys.SEARCH_EXA_API_KEY,
   PreferenceKeys.SEARCH_BOCHA_API_KEY,
+  PreferenceKeys.SEARCH_DEEPSEEK_API_KEY,
   PreferenceKeys.MCP_SERVER_CONFIGS_JSON,
   PreferenceKeys.WEBDAV_SERVER_URL,
   PreferenceKeys.WEBDAV_USERNAME,

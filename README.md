@@ -47,7 +47,7 @@
 ## Project Overview
 
 - 🤖 **Multi-model support** — built-in configurations for more than 15 providers, plus support for OpenAI-, Anthropic-, and Gemini-compatible APIs
-- 🔍 **Web search and MCP** — Bocha, Bing (local), Tavily, Exa, and remote Streamable MCP servers
+- 🔍 **Web search and MCP** — Bing (local), Brave, Tavily, Exa, Bocha, DeepSeek Web Search, and remote Streamable MCP servers
 - 🧩 **Multi-turn sub-agent collaboration** — the main agent can delegate complex work to up to three sub-agents, guide them through multiple rounds, and consolidate their results
 - 📚 **Local knowledge base** — hybrid keyword and vector RAG with built-in DOCX/XLSX parsing and OCR; files remain in the app sandbox
 - 🛠️ **Built-in tools** — Canvas documents, Plan mode, Python sandbox, charts, calendar, maps and saved places, plus PDF/image/DOCX/XLSX text extraction
@@ -65,6 +65,12 @@ Built-in support for more than 15 providers:
 OpenAI · Claude · Gemini · DeepSeek · Grok · Ollama · OpenRouter · SiliconFlow · Qwen · Kimi · Zhipu (GLM) · Doubao · MiniMax · AiHubMix · MiMo
 
 Custom endpoints that follow the OpenAI, Anthropic, or Gemini API specifications can also be added.
+
+### 🔍 Web Search
+
+Enable `web_search` under **Tool Center → Web Search**, then choose Bing (local), Brave, Tavily, Exa, Bocha, or DeepSeek Web Search. Each conversation has its own search budget, and the model requests confirmation before exceeding it.
+
+By default, DeepSeek Web Search reads the API key from the currently selected DeepSeek provider for each search. The key is not copied into search settings, and auto mode only calls DeepSeek's official Anthropic endpoint. You can disable auto mode to configure a separate API key and Anthropic-compatible endpoint. DeepSeek Web Search makes a model request and consumes token balance on the corresponding account.
 
 ### 🧩 Parallel Sub-agents
 
@@ -97,7 +103,7 @@ The Knowledge Base tab accepts DOCX, XLSX, PDF, Markdown, text, and image upload
 | Tool                           | Function                                                                                                                                                                                                                                                                                                                        |
 |--------------------------------|---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
 | **Context Compaction**         | Summarizes earlier turns to save context space                                                                                                                                                                                                                                                                                  |
-| **Web Search**                 | Retrieves real-time information within a search budget and requests user confirmation before exceeding it                                                                                                                                                                                                                       |
+| **Web Search**                 | Retrieves real-time information through Bing (local), Brave, Tavily, Exa, Bocha, or DeepSeek and requests user confirmation before exceeding the search budget                                                                                                                                                                   |
 | **Ask User**                   | Requests additional information through a confirmation card when the model encounters a critical ambiguity                                                                                                                                                                                                                      |
 | **Sub-agent**                  | Dispatches parallel sub-agents for independent tasks                                                                                                                                                                                                                                                                            |
 | **Python**                     | Runs Python for calculations, data processing, and intermediate reasoning                                                                                                                                                                                                                                                       |

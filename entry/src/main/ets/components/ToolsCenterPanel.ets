@@ -53,6 +53,7 @@ import {
   parseCustomHeaderEntries,
   validateCustomHeaderEntries
 } from '../utils/CustomHeaderUtils'
+import { DEEPSEEK_WEB_SEARCH_DEFAULT_BASE_URL } from '../utils/DeepSeekWebSearchUtils'
 
 @ObservedV2
 class McpHeaderEntry {
@@ -95,6 +96,9 @@ export struct ToolsCenterPanel {
   @Local searchExaBaseUrl: string = 'https://api.exa.ai'
   @Local searchBochaApiKey: string = ''
   @Local searchBochaBaseUrl: string = 'https://api.bochaai.com'
+  @Local searchDeepSeekUseCurrentProvider: boolean = true
+  @Local searchDeepSeekApiKey: string = ''
+  @Local searchDeepSeekBaseUrl: string = DEEPSEEK_WEB_SEARCH_DEFAULT_BASE_URL
   @Local searchQueryOptimizationEnabled: boolean = false
   @Local webSearchCallLimit: number = UNLIMITED_RETRIEVAL_CALL_LIMIT
   @Local knowledgeSearchCallLimit: number = UNLIMITED_RETRIEVAL_CALL_LIMIT
@@ -155,7 +159,8 @@ export struct ToolsCenterPanel {
     { value: 'Brave Search' },
     { value: 'Tavily' },
     { value: 'Exa' },
-    { value: '博查(Bocha)' }
+    { value: '博查(Bocha)' },
+    { value: 'DeepSeek Web Search' }
   ]
   private readonly mcpAuthTypeOptions: Array<SelectOption> = [
     { value: 'None' },
@@ -176,6 +181,9 @@ export struct ToolsCenterPanel {
   private originalSearchExaBaseUrl: string = 'https://api.exa.ai'
   private originalSearchBochaApiKey: string = ''
   private originalSearchBochaBaseUrl: string = 'https://api.bochaai.com'
+  private originalSearchDeepSeekUseCurrentProvider: boolean = true
+  private originalSearchDeepSeekApiKey: string = ''
+  private originalSearchDeepSeekBaseUrl: string = DEEPSEEK_WEB_SEARCH_DEFAULT_BASE_URL
   private originalSearchQueryOptimizationEnabled: boolean = false
 
   private showToolsSnack(message: string | Resource, duration: number = 2000,
@@ -538,6 +546,9 @@ export struct ToolsCenterPanel {
     if (raw === SearchEngine.BOCHA) {
       return SearchEngine.BOCHA
     }
+    if (raw === SearchEngine.DEEPSEEK) {
+      return SearchEngine.DEEPSEEK
+    }
     return SearchEngine.BING
   }
 
@@ -553,6 +564,9 @@ export struct ToolsCenterPanel {
     }
     if (engine === SearchEngine.BOCHA) {
       return '博查(Bocha)'
+    }
+    if (engine === SearchEngine.DEEPSEEK) {
+      return 'DeepSeek Web Search'
     }
     return 'Bing(local)'
   }
@@ -570,6 +584,9 @@ export struct ToolsCenterPanel {
     if (index === 4) {
       return SearchEngine.BOCHA
     }
+    if (index === 5) {
+      return SearchEngine.DEEPSEEK
+    }
     return SearchEngine.BING
   }
 
@@ -585,6 +602,9 @@ export struct ToolsCenterPanel {
     }
     if (engine === SearchEngine.BOCHA) {
       return 4
+    }
+    if (engine === SearchEngine.DEEPSEEK) {
+      return 5
     }
     return 0
   }
@@ -819,6 +839,15 @@ export struct ToolsCenterPanel {
     const bochaApiKey = await this.preferencesService.getString(PreferenceKeys.SEARCH_BOCHA_API_KEY, '')
     const bochaBaseUrl =
       await this.preferencesService.getString(PreferenceKeys.SEARCH_BOCHA_BASE_URL, 'https://api.bochaai.com')
+    const deepseekUseCurrentProvider = await this.preferencesService.getBoolean(
+      PreferenceKeys.SEARCH_DEEPSEEK_USE_CURRENT_PROVIDER,
+      true
+    )
+    const deepseekApiKey = await this.preferencesService.getString(PreferenceKeys.SEARCH_DEEPSEEK_API_KEY, '')
+    const deepseekBaseUrl = await this.preferencesService.getString(
+      PreferenceKeys.SEARCH_DEEPSEEK_BASE_URL,
+      DEEPSEEK_WEB_SEARCH_DEFAULT_BASE_URL
+    )
     const optimizationEnabled = await this.preferencesService.getBoolean(
       PreferenceKeys.SEARCH_QUERY_OPTIMIZATION_ENABLED,
       false
@@ -835,6 +864,12 @@ export struct ToolsCenterPanel {
     this.searchExaBaseUrl = this.normalizeSearchBaseUrl(exaBaseUrl, 'https://api.exa.ai')
     this.searchBochaApiKey = bochaApiKey
     this.searchBochaBaseUrl = this.normalizeSearchBaseUrl(bochaBaseUrl, 'https://api.bochaai.com')
+    this.searchDeepSeekUseCurrentProvider = deepseekUseCurrentProvider
+    this.searchDeepSeekApiKey = deepseekApiKey
+    this.searchDeepSeekBaseUrl = this.normalizeSearchBaseUrl(
+      deepseekBaseUrl,
+      DEEPSEEK_WEB_SEARCH_DEFAULT_BASE_URL
+    )
     this.searchQueryOptimizationEnabled = optimizationEnabled
     this.syncOriginalSearchSettings()
   }
@@ -860,6 +895,12 @@ export struct ToolsCenterPanel {
     this.originalSearchExaBaseUrl = this.normalizeSearchBaseUrl(this.searchExaBaseUrl, 'https://api.exa.ai')
     this.originalSearchBochaApiKey = this.searchBochaApiKey.trim()
     this.originalSearchBochaBaseUrl = this.normalizeSearchBaseUrl(this.searchBochaBaseUrl, 'https://api.bochaai.com')
+    this.originalSearchDeepSeekUseCurrentProvider = this.searchDeepSeekUseCurrentProvider
+    this.originalSearchDeepSeekApiKey = this.searchDeepSeekApiKey.trim()
+    this.originalSearchDeepSeekBaseUrl = this.normalizeSearchBaseUrl(
+      this.searchDeepSeekBaseUrl,
+      DEEPSEEK_WEB_SEARCH_DEFAULT_BASE_URL
+    )
     this.originalSearchQueryOptimizationEnabled = this.searchQueryOptimizationEnabled
   }
 
@@ -888,6 +929,16 @@ export struct ToolsCenterPanel {
     }
     if (this.normalizeSearchBaseUrl(this.searchBochaBaseUrl, 'https://api.bochaai.com') !==
       this.originalSearchBochaBaseUrl) {
+      return true
+    }
+    if (this.searchDeepSeekUseCurrentProvider !== this.originalSearchDeepSeekUseCurrentProvider) {
+      return true
+    }
+    if (this.searchDeepSeekApiKey.trim() !== this.originalSearchDeepSeekApiKey) {
+      return true
+    }
+    if (this.normalizeSearchBaseUrl(this.searchDeepSeekBaseUrl, DEEPSEEK_WEB_SEARCH_DEFAULT_BASE_URL) !==
+      this.originalSearchDeepSeekBaseUrl) {
       return true
     }
     if (this.searchQueryOptimizationEnabled !== this.originalSearchQueryOptimizationEnabled) {
@@ -933,9 +984,14 @@ export struct ToolsCenterPanel {
     const tavilyKey = this.searchTavilyApiKey.trim()
     const exaKey = this.searchExaApiKey.trim()
     const bochaKey = this.searchBochaApiKey.trim()
+    const deepseekKey = this.searchDeepSeekApiKey.trim()
     const tavilyBaseUrl = this.normalizeSearchBaseUrl(this.searchTavilyBaseUrl, 'https://api.tavily.com')
     const exaBaseUrl = this.normalizeSearchBaseUrl(this.searchExaBaseUrl, 'https://api.exa.ai')
     const bochaBaseUrl = this.normalizeSearchBaseUrl(this.searchBochaBaseUrl, 'https://api.bochaai.com')
+    const deepseekBaseUrl = this.normalizeSearchBaseUrl(
+      this.searchDeepSeekBaseUrl,
+      DEEPSEEK_WEB_SEARCH_DEFAULT_BASE_URL
+    )
     if (this.searchEngine === SearchEngine.BRAVE && braveKey === '') {
       this.showToolsSnack(pickLocalizedText(
         '请选择 Brave Search 时先填写 API Key',
@@ -961,6 +1017,13 @@ export struct ToolsCenterPanel {
       ), 2000, SnackBarTone.ERROR)
       return false
     }
+    if (this.searchEngine === SearchEngine.DEEPSEEK && !this.searchDeepSeekUseCurrentProvider && deepseekKey === '') {
+      this.showToolsSnack(pickLocalizedText(
+        '手动配置 DeepSeek Web Search 时请先填写 API Key',
+        'Enter the API key when manually configuring DeepSeek Web Search'
+      ), 2000, SnackBarTone.ERROR)
+      return false
+    }
 
     const shouldValidateTavilyBaseUrl = this.searchEngine === SearchEngine.TAVILY
     if (shouldValidateTavilyBaseUrl && !tavilyBaseUrl.startsWith('http://') && !tavilyBaseUrl.startsWith('https://')) {
@@ -977,6 +1040,13 @@ export struct ToolsCenterPanel {
       this.showToolsSnack($r('app.string.search_base_url_invalid'), 2000, SnackBarTone.ERROR)
       return false
     }
+    const shouldValidateDeepSeekBaseUrl = this.searchEngine === SearchEngine.DEEPSEEK &&
+      !this.searchDeepSeekUseCurrentProvider
+    if (shouldValidateDeepSeekBaseUrl && !deepseekBaseUrl.startsWith('http://') &&
+      !deepseekBaseUrl.startsWith('https://')) {
+      this.showToolsSnack($r('app.string.search_base_url_invalid'), 2000, SnackBarTone.ERROR)
+      return false
+    }
 
     await this.preferencesService.setString(PreferenceKeys.SEARCH_ENGINE, this.searchEngine)
     await this.preferencesService.setString(PreferenceKeys.SEARCH_BRAVE_API_KEY, braveKey)
@@ -986,6 +1056,12 @@ export struct ToolsCenterPanel {
     await this.preferencesService.setString(PreferenceKeys.SEARCH_EXA_BASE_URL, exaBaseUrl)
     await this.preferencesService.setString(PreferenceKeys.SEARCH_BOCHA_API_KEY, bochaKey)
     await this.preferencesService.setString(PreferenceKeys.SEARCH_BOCHA_BASE_URL, bochaBaseUrl)
+    await this.preferencesService.setBoolean(
+      PreferenceKeys.SEARCH_DEEPSEEK_USE_CURRENT_PROVIDER,
+      this.searchDeepSeekUseCurrentProvider
+    )
+    await this.preferencesService.setString(PreferenceKeys.SEARCH_DEEPSEEK_API_KEY, deepseekKey)
+    await this.preferencesService.setString(PreferenceKeys.SEARCH_DEEPSEEK_BASE_URL, deepseekBaseUrl)
     await this.preferencesService.setBoolean(
       PreferenceKeys.SEARCH_QUERY_OPTIMIZATION_ENABLED,
       this.searchQueryOptimizationEnabled
@@ -997,6 +1073,8 @@ export struct ToolsCenterPanel {
     this.searchExaBaseUrl = exaBaseUrl
     this.searchBochaApiKey = bochaKey
     this.searchBochaBaseUrl = bochaBaseUrl
+    this.searchDeepSeekApiKey = deepseekKey
+    this.searchDeepSeekBaseUrl = deepseekBaseUrl
     this.syncOriginalSearchSettings()
 
     this.showToolsSnack($r('app.string.search_config_saved'), 2000, SnackBarTone.SUCCESS)
@@ -1797,6 +1875,99 @@ export struct ToolsCenterPanel {
                 .fontColor($r('app.color.text_tertiary'))
                 .width('100%')
                 .margin({ top: 6 })
+            }
+
+            if (this.searchEngine === SearchEngine.DEEPSEEK) {
+              Row() {
+                Column() {
+                  Text(pickLocalizedText('自动使用当前 DeepSeek 服务商', 'Use current DeepSeek provider'))
+                    .fontSize(12)
+                    .fontColor($r('app.color.text_secondary'))
+                    .width('100%')
+
+                  Text(pickLocalizedText(
+                    '每次搜索时读取当前已选 DeepSeek 服务商的 API Key，不复制到搜索设置。',
+                    'Read the selected DeepSeek provider API key for each search without copying it into search settings.'
+                  ))
+                    .fontSize(11)
+                    .lineHeight(16)
+                    .fontColor($r('app.color.text_tertiary'))
+                    .width('100%')
+                    .margin({ top: 2, right: 8 })
+                }
+                .layoutWeight(1)
+
+                Toggle({ type: ToggleType.Switch, isOn: this.searchDeepSeekUseCurrentProvider })
+                  .selectedColor(this.themePrimary)
+                  .systemMaterial(new uiMaterial.Material())
+                  .switchPointColor(Color.White)
+                  .onChange((value: boolean) => {
+                    this.searchDeepSeekUseCurrentProvider = value
+                  })
+              }
+              .width('100%')
+              .margin({ top: 10 })
+
+              if (this.searchDeepSeekUseCurrentProvider) {
+                Text(pickLocalizedText(
+                  '自动模式只请求 DeepSeek 官方 Anthropic 端点；当前服务商必须为 DeepSeek 且已配置 API Key。',
+                  'Auto mode only calls the official DeepSeek Anthropic endpoint; the selected provider must be DeepSeek with an API key.'
+                ))
+                  .fontSize(11)
+                  .lineHeight(16)
+                  .fontColor($r('app.color.text_tertiary'))
+                  .width('100%')
+                  .margin({ top: 8 })
+              } else {
+                TextInput({ text: this.searchDeepSeekApiKey, placeholder: 'DeepSeek Web Search API Key' })
+                  .onChange((value: string) => {
+                    this.searchDeepSeekApiKey = value
+                  })
+                  .type(InputType.Password)
+                  .enableAutoFill(false)
+                  .fontSize(13)
+                  .width('100%')
+                  .height(40)
+                  .borderRadius(10)
+                  .backgroundColor(getAppUiState().themeBackground)
+                  .padding({ left: 12, right: 12 })
+                  .margin({ top: 8 })
+
+                TextInput({
+                  text: this.searchDeepSeekBaseUrl,
+                  placeholder: DEEPSEEK_WEB_SEARCH_DEFAULT_BASE_URL
+                })
+                  .onChange((value: string) => {
+                    this.searchDeepSeekBaseUrl = value
+                  })
+                  .fontSize(13)
+                  .width('100%')
+                  .height(40)
+                  .borderRadius(10)
+                  .backgroundColor(getAppUiState().themeBackground)
+                  .padding({ left: 12, right: 12 })
+                  .margin({ top: 8 })
+
+                Text(pickLocalizedText(
+                  '填写 Anthropic 兼容接口前缀，默认请求 /anthropic/v1/messages。',
+                  'Enter an Anthropic-compatible API prefix; the default calls /anthropic/v1/messages.'
+                ))
+                  .fontSize(11)
+                  .lineHeight(16)
+                  .fontColor($r('app.color.text_tertiary'))
+                  .width('100%')
+                  .margin({ top: 6 })
+              }
+
+              Text(pickLocalizedText(
+                'Web Search 会发起 DeepSeek 模型请求，并消耗对应账户的 Token 额度。',
+                'Web Search makes a DeepSeek model request and consumes token balance on that account.'
+              ))
+                .fontSize(11)
+                .lineHeight(16)
+                .fontColor($r('app.color.text_tertiary'))
+                .width('100%')
+                .margin({ top: 8 })
             }
 
             Text($r('app.string.search_engine_runtime_hint'))
