@@ -764,14 +764,19 @@ export class ModelInfo {
   @Trace billingCurrency: string
   @Trace inputPricePerMillion: number
   @Trace outputPricePerMillion: number
+  // 开启后，供应商返回的 cacheReadTokens 使用独立缓存读取价；缓存写入仍按输入价。
+  @Trace billingCacheHitEnabled: boolean
+  @Trace cacheReadPricePerMillion: number
   // 峰谷计费以设备本地时间的“分钟/日”为边界，价格仍为“币种 / 百万 Token”
   @Trace billingTimeOfUseEnabled: boolean
   @Trace billingRestDayOffPeakEnabled: boolean
   @Trace billingPeakPeriods: BillingTimePeriod[]
   @Trace billingPeakInputPricePerMillion: number
   @Trace billingPeakOutputPricePerMillion: number
+  @Trace billingPeakCacheReadPricePerMillion: number
   @Trace billingOffPeakInputPricePerMillion: number
   @Trace billingOffPeakOutputPricePerMillion: number
+  @Trace billingOffPeakCacheReadPricePerMillion: number
 
   constructor(
     id: string,
@@ -797,13 +802,17 @@ export class ModelInfo {
     this.billingCurrency = 'CNY'
     this.inputPricePerMillion = 0
     this.outputPricePerMillion = 0
+    this.billingCacheHitEnabled = false
+    this.cacheReadPricePerMillion = 0
     this.billingTimeOfUseEnabled = false
     this.billingRestDayOffPeakEnabled = false
     this.billingPeakPeriods = [new BillingTimePeriod(8 * 60, 22 * 60)]
     this.billingPeakInputPricePerMillion = 0
     this.billingPeakOutputPricePerMillion = 0
+    this.billingPeakCacheReadPricePerMillion = 0
     this.billingOffPeakInputPricePerMillion = 0
     this.billingOffPeakOutputPricePerMillion = 0
+    this.billingOffPeakCacheReadPricePerMillion = 0
   }
 
   // 从扩展 JSON 对象创建
@@ -851,6 +860,12 @@ export class ModelInfo {
     if (json.outputPricePerMillion !== undefined && Number.isFinite(json.outputPricePerMillion)) {
       model.outputPricePerMillion = Math.max(0, json.outputPricePerMillion)
     }
+    if (json.billingCacheHitEnabled !== undefined) {
+      model.billingCacheHitEnabled = json.billingCacheHitEnabled
+    }
+    if (json.cacheReadPricePerMillion !== undefined && Number.isFinite(json.cacheReadPricePerMillion)) {
+      model.cacheReadPricePerMillion = Math.max(0, json.cacheReadPricePerMillion)
+    }
     if (json.billingTimeOfUseEnabled !== undefined) {
       model.billingTimeOfUseEnabled = json.billingTimeOfUseEnabled
     }
@@ -879,6 +894,10 @@ export class ModelInfo {
       Number.isFinite(json.billingPeakOutputPricePerMillion)) {
       model.billingPeakOutputPricePerMillion = Math.max(0, json.billingPeakOutputPricePerMillion)
     }
+    if (json.billingPeakCacheReadPricePerMillion !== undefined &&
+      Number.isFinite(json.billingPeakCacheReadPricePerMillion)) {
+      model.billingPeakCacheReadPricePerMillion = Math.max(0, json.billingPeakCacheReadPricePerMillion)
+    }
     if (json.billingOffPeakInputPricePerMillion !== undefined &&
       Number.isFinite(json.billingOffPeakInputPricePerMillion)) {
       model.billingOffPeakInputPricePerMillion = Math.max(0, json.billingOffPeakInputPricePerMillion)
@@ -886,6 +905,10 @@ export class ModelInfo {
     if (json.billingOffPeakOutputPricePerMillion !== undefined &&
       Number.isFinite(json.billingOffPeakOutputPricePerMillion)) {
       model.billingOffPeakOutputPricePerMillion = Math.max(0, json.billingOffPeakOutputPricePerMillion)
+    }
+    if (json.billingOffPeakCacheReadPricePerMillion !== undefined &&
+      Number.isFinite(json.billingOffPeakCacheReadPricePerMillion)) {
+      model.billingOffPeakCacheReadPricePerMillion = Math.max(0, json.billingOffPeakCacheReadPricePerMillion)
     }
 
     return model
@@ -909,14 +932,18 @@ export class ModelInfo {
       billingCurrency: this.billingCurrency,
       inputPricePerMillion: this.inputPricePerMillion,
       outputPricePerMillion: this.outputPricePerMillion,
+      billingCacheHitEnabled: this.billingCacheHitEnabled,
+      cacheReadPricePerMillion: this.cacheReadPricePerMillion,
       billingTimeOfUseEnabled: this.billingTimeOfUseEnabled,
       billingRestDayOffPeakEnabled: this.billingRestDayOffPeakEnabled,
       billingPeakPeriods: this.billingPeakPeriods.slice(0, 3)
         .map((period: BillingTimePeriod): BillingTimePeriodJson => period.toJson()),
       billingPeakInputPricePerMillion: this.billingPeakInputPricePerMillion,
       billingPeakOutputPricePerMillion: this.billingPeakOutputPricePerMillion,
+      billingPeakCacheReadPricePerMillion: this.billingPeakCacheReadPricePerMillion,
       billingOffPeakInputPricePerMillion: this.billingOffPeakInputPricePerMillion,
-      billingOffPeakOutputPricePerMillion: this.billingOffPeakOutputPricePerMillion
+      billingOffPeakOutputPricePerMillion: this.billingOffPeakOutputPricePerMillion,
+      billingOffPeakCacheReadPricePerMillion: this.billingOffPeakCacheReadPricePerMillion
     }
     return json
   }
@@ -939,6 +966,8 @@ export interface ModelInfoExtendedJson {
   billingCurrency?: string
   inputPricePerMillion?: number
   outputPricePerMillion?: number
+  billingCacheHitEnabled?: boolean
+  cacheReadPricePerMillion?: number
   billingTimeOfUseEnabled?: boolean
   billingRestDayOffPeakEnabled?: boolean
   billingPeakPeriods?: BillingTimePeriodJson[]
@@ -947,8 +976,10 @@ export interface ModelInfoExtendedJson {
   billingPeakEndMinutes?: number
   billingPeakInputPricePerMillion?: number
   billingPeakOutputPricePerMillion?: number
+  billingPeakCacheReadPricePerMillion?: number
   billingOffPeakInputPricePerMillion?: number
   billingOffPeakOutputPricePerMillion?: number
+  billingOffPeakCacheReadPricePerMillion?: number
 }
 
 // 模型提供商类型

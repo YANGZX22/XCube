@@ -373,6 +373,12 @@ export class ProviderViewModel {
           if (modelObj.outputPricePerMillion !== undefined && Number.isFinite(modelObj.outputPricePerMillion)) {
             modelInfo.outputPricePerMillion = Math.max(0, modelObj.outputPricePerMillion)
           }
+          if (modelObj.billingCacheHitEnabled !== undefined) {
+            modelInfo.billingCacheHitEnabled = modelObj.billingCacheHitEnabled
+          }
+          if (modelObj.cacheReadPricePerMillion !== undefined && Number.isFinite(modelObj.cacheReadPricePerMillion)) {
+            modelInfo.cacheReadPricePerMillion = Math.max(0, modelObj.cacheReadPricePerMillion)
+          }
           if (modelObj.billingTimeOfUseEnabled !== undefined) {
             modelInfo.billingTimeOfUseEnabled = modelObj.billingTimeOfUseEnabled
           }
@@ -401,6 +407,13 @@ export class ProviderViewModel {
             Number.isFinite(modelObj.billingPeakOutputPricePerMillion)) {
             modelInfo.billingPeakOutputPricePerMillion = Math.max(0, modelObj.billingPeakOutputPricePerMillion)
           }
+          if (modelObj.billingPeakCacheReadPricePerMillion !== undefined &&
+            Number.isFinite(modelObj.billingPeakCacheReadPricePerMillion)) {
+            modelInfo.billingPeakCacheReadPricePerMillion = Math.max(
+              0,
+              modelObj.billingPeakCacheReadPricePerMillion
+            )
+          }
           if (modelObj.billingOffPeakInputPricePerMillion !== undefined &&
             Number.isFinite(modelObj.billingOffPeakInputPricePerMillion)) {
             modelInfo.billingOffPeakInputPricePerMillion = Math.max(0, modelObj.billingOffPeakInputPricePerMillion)
@@ -408,6 +421,13 @@ export class ProviderViewModel {
           if (modelObj.billingOffPeakOutputPricePerMillion !== undefined &&
             Number.isFinite(modelObj.billingOffPeakOutputPricePerMillion)) {
             modelInfo.billingOffPeakOutputPricePerMillion = Math.max(0, modelObj.billingOffPeakOutputPricePerMillion)
+          }
+          if (modelObj.billingOffPeakCacheReadPricePerMillion !== undefined &&
+            Number.isFinite(modelObj.billingOffPeakCacheReadPricePerMillion)) {
+            modelInfo.billingOffPeakCacheReadPricePerMillion = Math.max(
+              0,
+              modelObj.billingOffPeakCacheReadPricePerMillion
+            )
           }
 
           provider.models.push(modelInfo)
@@ -650,6 +670,8 @@ interface ModelData {
   billingCurrency?: string
   inputPricePerMillion?: number
   outputPricePerMillion?: number
+  billingCacheHitEnabled?: boolean
+  cacheReadPricePerMillion?: number
   billingTimeOfUseEnabled?: boolean
   billingRestDayOffPeakEnabled?: boolean
   billingPeakPeriods?: BillingTimePeriodJson[]
@@ -658,8 +680,10 @@ interface ModelData {
   billingPeakEndMinutes?: number
   billingPeakInputPricePerMillion?: number
   billingPeakOutputPricePerMillion?: number
+  billingPeakCacheReadPricePerMillion?: number
   billingOffPeakInputPricePerMillion?: number
   billingOffPeakOutputPricePerMillion?: number
+  billingOffPeakCacheReadPricePerMillion?: number
 }
 
 // 导出获取实例方法

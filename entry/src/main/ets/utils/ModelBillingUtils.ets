@@ -5,6 +5,8 @@ export class ModelBillingSnapshot {
   currency: string = 'CNY'
   inputPricePerMillion: number = 0
   outputPricePerMillion: number = 0
+  cacheHitBillingEnabled: boolean = false
+  cacheReadPricePerMillion: number = 0
 
   constructor(model: ModelInfo | null = null) {
     if (model === null) {
@@ -15,17 +17,26 @@ export class ModelBillingSnapshot {
     const prices = resolveModelBillingPrices(model)
     this.inputPricePerMillion = prices.inputPricePerMillion
     this.outputPricePerMillion = prices.outputPricePerMillion
+    this.cacheHitBillingEnabled = model.billingCacheHitEnabled
+    this.cacheReadPricePerMillion = prices.cacheReadPricePerMillion
   }
 }
 
 export class ResolvedBillingPrices {
   inputPricePerMillion: number
   outputPricePerMillion: number
+  cacheReadPricePerMillion: number
   isPeak: boolean
 
-  constructor(inputPricePerMillion: number, outputPricePerMillion: number, isPeak: boolean) {
+  constructor(
+    inputPricePerMillion: number,
+    outputPricePerMillion: number,
+    cacheReadPricePerMillion: number,
+    isPeak: boolean
+  ) {
     this.inputPricePerMillion = inputPricePerMillion
     this.outputPricePerMillion = outputPricePerMillion
+    this.cacheReadPricePerMillion = cacheReadPricePerMillion
     this.isPeak = isPeak
   }
 }
@@ -124,6 +135,7 @@ export function resolveModelBillingPrices(model: ModelInfo, date: Date = new Dat
     return new ResolvedBillingPrices(
       normalizeBillingPrice(model.inputPricePerMillion),
       normalizeBillingPrice(model.outputPricePerMillion),
+      normalizeBillingPrice(model.cacheReadPricePerMillion),
       false
     )
   }
@@ -134,12 +146,14 @@ export function resolveModelBillingPrices(model: ModelInfo, date: Date = new Dat
     return new ResolvedBillingPrices(
       normalizeBillingPrice(model.billingPeakInputPricePerMillion),
       normalizeBillingPrice(model.billingPeakOutputPricePerMillion),
+      normalizeBillingPrice(model.billingPeakCacheReadPricePerMillion),
       true
     )
   }
   return new ResolvedBillingPrices(
     normalizeBillingPrice(model.billingOffPeakInputPricePerMillion),
     normalizeBillingPrice(model.billingOffPeakOutputPricePerMillion),
+    normalizeBillingPrice(model.billingOffPeakCacheReadPricePerMillion),
     false
   )
 }
@@ -404,6 +418,32 @@ export function calculateEstimatedCost(
   return inputCost + outputCost
 }
 
+// 缓存命中使用与命中率展示相同的互斥输入分桶。缓存读取按独立价格计费；
+// 未缓存、缓存写入，以及没有供应商 usage 可分类的估算 Token 均按普通输入价计费。
+export function calculateCacheAwareEstimatedCost(
+  inputTokens: number,
+  outputTokens: number,
+  uncachedInputTokens: number,
+  cacheReadTokens: number,
+  cacheWriteTokens: number,
+  inputPricePerMillion: number,
+  outputPricePerMillion: number,
+  cacheReadPricePerMillion: number
+): number {
+  const safeUncachedInputTokens = Math.max(0, uncachedInputTokens)
+  const safeCacheReadTokens = Math.max(0, cacheReadTokens)
+  const safeCacheWriteTokens = Math.max(0, cacheWriteTokens)
+  const classifiedInputTokens = safeUncachedInputTokens + safeCacheReadTokens + safeCacheWriteTokens
+  // 流式工具轮次可能同时包含真实 usage 和尚未返回 usage 的本地估算，后者按普通输入价处理。
+  const totalInputTokens = Math.max(Math.max(0, inputTokens), classifiedInputTokens)
+  const billedCacheReadTokens = Math.min(totalInputTokens, safeCacheReadTokens)
+  const regularInputTokens = totalInputTokens - billedCacheReadTokens
+  const regularInputCost = regularInputTokens * normalizeBillingPrice(inputPricePerMillion) / 1_000_000
+  const cacheReadCost = billedCacheReadTokens * normalizeBillingPrice(cacheReadPricePerMillion) / 1_000_000
+  const outputCost = Math.max(0, outputTokens) * normalizeBillingPrice(outputPricePerMillion) / 1_000_000
+  return regularInputCost + cacheReadCost + outputCost
+}
+
 export function applyEstimatedBilling(
   message: ChatMessage,
   historyMessages: ChatMessage[],
@@ -423,12 +463,21 @@ export function applyEstimatedBilling(
   if (!message.tokenUsageTracked) {
     message.estimatedOutputTokens = estimateAssistantOutputTokens(message)
   }
-  message.estimatedCost = calculateEstimatedCost(
+  message.estimatedCost = billing.cacheHitBillingEnabled ? calculateCacheAwareEstimatedCost(
     message.estimatedInputTokens,
     message.estimatedOutputTokens,
+    message.uncachedInputTokens,
+    message.cacheReadTokens,
+    message.cacheWriteTokens,
     message.inputPricePerMillion,
-    message.outputPricePerMillion
-  )
+    message.outputPricePerMillion,
+    billing.cacheReadPricePerMillion
+  ) : calculateEstimatedCost(
+      message.estimatedInputTokens,
+      message.estimatedOutputTokens,
+      message.inputPricePerMillion,
+      message.outputPricePerMillion
+    )
 }
 
 export function getBillingCurrencySymbol(currency: string): string {

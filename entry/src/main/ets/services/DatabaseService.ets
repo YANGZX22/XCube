@@ -61,13 +61,17 @@ interface ModelJsonData {
   billingCurrency?: string
   inputPricePerMillion?: number
   outputPricePerMillion?: number
+  billingCacheHitEnabled?: boolean
+  cacheReadPricePerMillion?: number
   billingTimeOfUseEnabled?: boolean
   billingRestDayOffPeakEnabled?: boolean
   billingPeakPeriods?: BillingTimePeriodJson[]
   billingPeakInputPricePerMillion?: number
   billingPeakOutputPricePerMillion?: number
+  billingPeakCacheReadPricePerMillion?: number
   billingOffPeakInputPricePerMillion?: number
   billingOffPeakOutputPricePerMillion?: number
+  billingOffPeakCacheReadPricePerMillion?: number
 }
 
 // 能力配置 JSON 数据
@@ -2792,14 +2796,18 @@ export class DatabaseService {
         billingCurrency: model.billingCurrency,
         inputPricePerMillion: model.inputPricePerMillion,
         outputPricePerMillion: model.outputPricePerMillion,
+        billingCacheHitEnabled: model.billingCacheHitEnabled,
+        cacheReadPricePerMillion: model.cacheReadPricePerMillion,
         billingTimeOfUseEnabled: model.billingTimeOfUseEnabled,
         billingRestDayOffPeakEnabled: model.billingRestDayOffPeakEnabled,
         billingPeakPeriods: model.billingPeakPeriods.slice(0, 3)
           .map((period): BillingTimePeriodJson => period.toJson()),
         billingPeakInputPricePerMillion: model.billingPeakInputPricePerMillion,
         billingPeakOutputPricePerMillion: model.billingPeakOutputPricePerMillion,
+        billingPeakCacheReadPricePerMillion: model.billingPeakCacheReadPricePerMillion,
         billingOffPeakInputPricePerMillion: model.billingOffPeakInputPricePerMillion,
-        billingOffPeakOutputPricePerMillion: model.billingOffPeakOutputPricePerMillion
+        billingOffPeakOutputPricePerMillion: model.billingOffPeakOutputPricePerMillion,
+        billingOffPeakCacheReadPricePerMillion: model.billingOffPeakCacheReadPricePerMillion
       }
       modelsArray.push(modelObj)
     }

@@ -57,6 +57,12 @@ export function applyModelDraft(target: ModelInfo, draft: ModelInfoExtendedJson)
   if (draft.outputPricePerMillion !== undefined && Number.isFinite(draft.outputPricePerMillion)) {
     target.outputPricePerMillion = Math.max(0, draft.outputPricePerMillion)
   }
+  if (draft.billingCacheHitEnabled !== undefined) {
+    target.billingCacheHitEnabled = draft.billingCacheHitEnabled
+  }
+  if (draft.cacheReadPricePerMillion !== undefined && Number.isFinite(draft.cacheReadPricePerMillion)) {
+    target.cacheReadPricePerMillion = Math.max(0, draft.cacheReadPricePerMillion)
+  }
   if (draft.billingTimeOfUseEnabled !== undefined) {
     target.billingTimeOfUseEnabled = draft.billingTimeOfUseEnabled
   }
@@ -84,6 +90,10 @@ export function applyModelDraft(target: ModelInfo, draft: ModelInfoExtendedJson)
     Number.isFinite(draft.billingPeakOutputPricePerMillion)) {
     target.billingPeakOutputPricePerMillion = Math.max(0, draft.billingPeakOutputPricePerMillion)
   }
+  if (draft.billingPeakCacheReadPricePerMillion !== undefined &&
+    Number.isFinite(draft.billingPeakCacheReadPricePerMillion)) {
+    target.billingPeakCacheReadPricePerMillion = Math.max(0, draft.billingPeakCacheReadPricePerMillion)
+  }
   if (draft.billingOffPeakInputPricePerMillion !== undefined &&
     Number.isFinite(draft.billingOffPeakInputPricePerMillion)) {
     target.billingOffPeakInputPricePerMillion = Math.max(0, draft.billingOffPeakInputPricePerMillion)
@@ -91,5 +101,9 @@ export function applyModelDraft(target: ModelInfo, draft: ModelInfoExtendedJson)
   if (draft.billingOffPeakOutputPricePerMillion !== undefined &&
     Number.isFinite(draft.billingOffPeakOutputPricePerMillion)) {
     target.billingOffPeakOutputPricePerMillion = Math.max(0, draft.billingOffPeakOutputPricePerMillion)
+  }
+  if (draft.billingOffPeakCacheReadPricePerMillion !== undefined &&
+    Number.isFinite(draft.billingOffPeakCacheReadPricePerMillion)) {
+    target.billingOffPeakCacheReadPricePerMillion = Math.max(0, draft.billingOffPeakCacheReadPricePerMillion)
   }
 }

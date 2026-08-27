@@ -15,6 +15,8 @@ import {
   resolveRequestMaxOutputTokens
 } from '../main/ets/utils/ContextWindowUtils'
 import {
+  applyEstimatedBilling,
+  calculateCacheAwareEstimatedCost,
   doBillingPeakPeriodsOverlap,
   estimateProviderManagedAttachmentTokens,
   estimateTextTokens,
@@ -22,6 +24,7 @@ import {
   hasOverlappingBillingPeakPeriods,
   isBillingPeakMinute,
   isDeviceLocalRestDay,
+  ModelBillingSnapshot,
   resolveModelBillingPrices,
   RequestTokenUsageTracker
 } from '../main/ets/utils/ModelBillingUtils'
@@ -144,14 +147,52 @@ export default function tokenAccountingTest() {
       expect(formatCacheHitPercent(0, 10000, 0)).assertEqual('100')
     })
 
+    it('prices_cache_hit_input_separately_and_keeps_one_output_price', 0, () => {
+      const cost = calculateCacheAwareEstimatedCost(
+        200,
+        50,
+        10,
+        90,
+        100,
+        10,
+        20,
+        2
+      )
+      // 未命中输入=(10 未缓存 + 100 写入)，命中输入=90，输出统一按 20 计费。
+      expect(Math.round(cost * 1_000_000)).assertEqual(2280)
+    })
+
+    it('bills_unclassified_estimated_input_as_cache_miss', 0, () => {
+      const model = new ModelInfo('billing-cache-model', 'Billing cache model')
+      model.billingEnabled = true
+      model.inputPricePerMillion = 10
+      model.outputPricePerMillion = 20
+      model.billingCacheHitEnabled = true
+      model.cacheReadPricePerMillion = 2
+
+      const message = new ChatMessage('billing-cache-message', MessageRole.ASSISTANT, '')
+      message.tokenUsageTracked = true
+      message.estimatedInputTokens = 300
+      message.estimatedOutputTokens = 50
+      message.uncachedInputTokens = 10
+      message.cacheReadTokens = 90
+      message.cacheWriteTokens = 0
+
+      applyEstimatedBilling(message, [], new ModelBillingSnapshot(model))
+      // 100 个已分类输入之外的 200 个本地估算输入按未命中价计费。
+      expect(Math.round(message.estimatedCost * 1_000_000)).assertEqual(3280)
+    })
+
     it('resolves_peak_and_off_peak_prices_from_device_local_time', 0, () => {
       const model = new ModelInfo('billing-model', 'Billing model')
       model.billingTimeOfUseEnabled = true
       model.billingPeakPeriods = [new BillingTimePeriod(8 * 60, 22 * 60)]
       model.billingPeakInputPricePerMillion = 10
       model.billingPeakOutputPricePerMillion = 20
+      model.billingPeakCacheReadPricePerMillion = 1
       model.billingOffPeakInputPricePerMillion = 4
       model.billingOffPeakOutputPricePerMillion = 8
+      model.billingOffPeakCacheReadPricePerMillion = 0.4
 
       const peak = resolveModelBillingPrices(model, new Date(2026, 0, 1, 12, 30))
       const offPeak = resolveModelBillingPrices(model, new Date(2026, 0, 1, 23, 30))
@@ -159,9 +200,11 @@ export default function tokenAccountingTest() {
       expect(peak.isPeak).assertEqual(true)
       expect(peak.inputPricePerMillion).assertEqual(10)
       expect(peak.outputPricePerMillion).assertEqual(20)
+      expect(peak.cacheReadPricePerMillion).assertEqual(1)
       expect(offPeak.isPeak).assertEqual(false)
       expect(offPeak.inputPricePerMillion).assertEqual(4)
       expect(offPeak.outputPricePerMillion).assertEqual(8)
+      expect(offPeak.cacheReadPricePerMillion).assertEqual(0.4)
     })
 
     it('supports_peak_periods_that_cross_midnight', 0, () => {
@@ -214,6 +257,8 @@ export default function tokenAccountingTest() {
     it('round_trips_time_of_use_billing_configuration', 0, () => {
       const model = new ModelInfo('billing-model', 'Billing model')
       model.billingTimeOfUseEnabled = true
+      model.billingCacheHitEnabled = true
+      model.cacheReadPricePerMillion = 0.8
       model.billingRestDayOffPeakEnabled = true
       model.billingPeakPeriods = [
         new BillingTimePeriod(7 * 60, 9 * 60),
@@ -222,11 +267,15 @@ export default function tokenAccountingTest() {
       ]
       model.billingPeakInputPricePerMillion = 12.5
       model.billingPeakOutputPricePerMillion = 25
+      model.billingPeakCacheReadPricePerMillion = 1.25
       model.billingOffPeakInputPricePerMillion = 3.25
       model.billingOffPeakOutputPricePerMillion = 6.5
+      model.billingOffPeakCacheReadPricePerMillion = 0.325
 
       const restored = ModelInfo.fromExtendedJson(model.toExtendedJson())
       expect(restored.billingTimeOfUseEnabled).assertEqual(true)
+      expect(restored.billingCacheHitEnabled).assertEqual(true)
+      expect(restored.cacheReadPricePerMillion).assertEqual(0.8)
       expect(restored.billingRestDayOffPeakEnabled).assertEqual(true)
       expect(restored.billingPeakPeriods.length).assertEqual(3)
       expect(restored.billingPeakPeriods[0].startMinutes).assertEqual(7 * 60)
@@ -235,8 +284,10 @@ export default function tokenAccountingTest() {
       expect(restored.billingPeakPeriods[2].endMinutes).assertEqual(7 * 60 + 15)
       expect(restored.billingPeakInputPricePerMillion).assertEqual(12.5)
       expect(restored.billingPeakOutputPricePerMillion).assertEqual(25)
+      expect(restored.billingPeakCacheReadPricePerMillion).assertEqual(1.25)
       expect(restored.billingOffPeakInputPricePerMillion).assertEqual(3.25)
       expect(restored.billingOffPeakOutputPricePerMillion).assertEqual(6.5)
+      expect(restored.billingOffPeakCacheReadPricePerMillion).assertEqual(0.325)
     })
   })
 }

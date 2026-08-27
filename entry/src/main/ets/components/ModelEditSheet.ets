@@ -100,13 +100,17 @@ export struct ModelEditSheet {
   @Local billingCurrencySelectedIndex: number = 0
   @Local inputPriceText: string = ''
   @Local outputPriceText: string = ''
+  @Local billingCacheHitEnabled: boolean = false
+  @Local cacheReadPriceText: string = ''
   @Local billingTimeOfUseEnabled: boolean = false
   @Local billingRestDayOffPeakEnabled: boolean = false
   @Local billingPeakPeriods: BillingTimePeriod[] = [new BillingTimePeriod(8 * 60, 22 * 60)]
   @Local billingPeakInputPriceText: string = ''
   @Local billingPeakOutputPriceText: string = ''
+  @Local billingPeakCacheReadPriceText: string = ''
   @Local billingOffPeakInputPriceText: string = ''
   @Local billingOffPeakOutputPriceText: string = ''
+  @Local billingOffPeakCacheReadPriceText: string = ''
   private billingPickerPeriodIndex: number = -1
   private billingPickerIsStart: boolean = true
   private billingPickerSelectedMinutes: number = 0
@@ -163,14 +167,20 @@ export struct ModelEditSheet {
       this.model.inputPricePerMillion.toString() : ''
     this.outputPriceText = this.model.outputPricePerMillion > 0 ?
       this.model.outputPricePerMillion.toString() : ''
+    this.billingCacheHitEnabled = this.model.billingCacheHitEnabled
+    this.cacheReadPriceText = this.formatBillingPriceForInput(this.model.cacheReadPricePerMillion)
     this.billingTimeOfUseEnabled = this.model.billingTimeOfUseEnabled
     this.billingRestDayOffPeakEnabled = this.model.billingRestDayOffPeakEnabled
     this.billingPeakPeriods = this.copyBillingPeakPeriods(this.model.billingPeakPeriods)
     this.billingEmptyPeriodAnchored = [false, false, false]
     this.billingPeakInputPriceText = this.formatBillingPriceForInput(this.model.billingPeakInputPricePerMillion)
     this.billingPeakOutputPriceText = this.formatBillingPriceForInput(this.model.billingPeakOutputPricePerMillion)
+    this.billingPeakCacheReadPriceText =
+      this.formatBillingPriceForInput(this.model.billingPeakCacheReadPricePerMillion)
     this.billingOffPeakInputPriceText = this.formatBillingPriceForInput(this.model.billingOffPeakInputPricePerMillion)
     this.billingOffPeakOutputPriceText = this.formatBillingPriceForInput(this.model.billingOffPeakOutputPricePerMillion)
+    this.billingOffPeakCacheReadPriceText =
+      this.formatBillingPriceForInput(this.model.billingOffPeakCacheReadPricePerMillion)
   }
 
   private formatBillingPriceForInput(price: number): string {
@@ -409,8 +419,33 @@ export struct ModelEditSheet {
       this.billingOffPeakInputPriceText = this.inputPriceText
       this.billingOffPeakOutputPriceText = this.outputPriceText
     }
+    if (enabled && this.billingCacheHitEnabled) {
+      if (this.billingPeakCacheReadPriceText === '') {
+        this.billingPeakCacheReadPriceText = this.cacheReadPriceText
+      }
+      if (this.billingOffPeakCacheReadPriceText === '') {
+        this.billingOffPeakCacheReadPriceText = this.cacheReadPriceText
+      }
+    }
     this.billingTimeOfUseEnabled = enabled
     this.updateSheetExpansion()
+  }
+
+  private setBillingCacheHitEnabled(enabled: boolean): void {
+    if (enabled) {
+      if (this.cacheReadPriceText === '') {
+        this.cacheReadPriceText = this.inputPriceText
+      }
+      if (this.billingPeakCacheReadPriceText === '') {
+        this.billingPeakCacheReadPriceText = this.billingPeakInputPriceText !== '' ?
+          this.billingPeakInputPriceText : this.inputPriceText
+      }
+      if (this.billingOffPeakCacheReadPriceText === '') {
+        this.billingOffPeakCacheReadPriceText = this.billingOffPeakInputPriceText !== '' ?
+          this.billingOffPeakInputPriceText : this.inputPriceText
+      }
+    }
+    this.billingCacheHitEnabled = enabled
   }
 
   private getBillingCurrencyIndex(currency: string): number {
@@ -449,6 +484,8 @@ export struct ModelEditSheet {
       billingCurrency: this.billingCurrency,
       inputPricePerMillion: parseBillingPrice(this.inputPriceText),
       outputPricePerMillion: parseBillingPrice(this.outputPriceText),
+      billingCacheHitEnabled: this.billingCacheHitEnabled,
+      cacheReadPricePerMillion: parseBillingPrice(this.cacheReadPriceText),
       billingTimeOfUseEnabled: this.billingTimeOfUseEnabled,
       billingRestDayOffPeakEnabled: this.billingRestDayOffPeakEnabled,
       billingPeakPeriods: this.billingPeakPeriods.slice(0, 3).map(
@@ -456,8 +493,10 @@ export struct ModelEditSheet {
       ),
       billingPeakInputPricePerMillion: parseBillingPrice(this.billingPeakInputPriceText),
       billingPeakOutputPricePerMillion: parseBillingPrice(this.billingPeakOutputPriceText),
+      billingPeakCacheReadPricePerMillion: parseBillingPrice(this.billingPeakCacheReadPriceText),
       billingOffPeakInputPricePerMillion: parseBillingPrice(this.billingOffPeakInputPriceText),
       billingOffPeakOutputPricePerMillion: parseBillingPrice(this.billingOffPeakOutputPriceText),
+      billingOffPeakCacheReadPricePerMillion: parseBillingPrice(this.billingOffPeakCacheReadPriceText),
       parameters: {
         temperature: this.paramTemperature,
         topP: this.paramTopP,
@@ -770,6 +809,33 @@ export struct ModelEditSheet {
 
         Row() {
           Column({ space: 3 }) {
+            Text(pickLocalizedText('缓存命中计费', 'Cache-hit billing'))
+              .fontSize(13)
+              .fontColor($r('app.color.text_primary'))
+
+            Text(pickLocalizedText(
+              '输入分为未命中与缓存命中价',
+              'Split input into cache-miss and cache-hit prices'
+            ))
+              .fontSize(11)
+              .fontColor($r('app.color.text_tertiary'))
+          }
+          .layoutWeight(1)
+          .alignItems(HorizontalAlign.Start)
+
+          Toggle({ type: ToggleType.Switch, isOn: this.billingCacheHitEnabled })
+            .selectedColor(this.themePrimary)
+            .systemMaterial(new uiMaterial.Material())
+            .switchPointColor(Color.White)
+            .onChange((value: boolean) => {
+              this.setBillingCacheHitEnabled(value)
+            })
+        }
+        .width('100%')
+        .alignItems(VerticalAlign.Center)
+
+        Row() {
+          Column({ space: 3 }) {
             Text(pickLocalizedText('峰谷计费', 'Time-of-use pricing'))
               .fontSize(13)
               .fontColor($r('app.color.text_primary'))
@@ -861,6 +927,16 @@ export struct ModelEditSheet {
             }
           )
 
+          if (this.billingCacheHitEnabled) {
+            this.BillingCacheReadPriceInput(
+              pickLocalizedText('峰时缓存命中输入', 'Peak cache-hit input'),
+              this.billingPeakCacheReadPriceText,
+              (value: string): void => {
+                this.billingPeakCacheReadPriceText = value
+              }
+            )
+          }
+
           this.BillingPricePair(
             pickLocalizedText('谷时价格', 'Off-peak prices'),
             this.billingOffPeakInputPriceText,
@@ -872,6 +948,16 @@ export struct ModelEditSheet {
               this.billingOffPeakOutputPriceText = value
             }
           )
+
+          if (this.billingCacheHitEnabled) {
+            this.BillingCacheReadPriceInput(
+              pickLocalizedText('谷时缓存命中输入', 'Off-peak cache-hit input'),
+              this.billingOffPeakCacheReadPriceText,
+              (value: string): void => {
+                this.billingOffPeakCacheReadPriceText = value
+              }
+            )
+          }
         } else {
           this.BillingPricePair(
             pickLocalizedText('标准价格', 'Standard prices'),
@@ -884,6 +970,16 @@ export struct ModelEditSheet {
               this.outputPriceText = value
             }
           )
+
+          if (this.billingCacheHitEnabled) {
+            this.BillingCacheReadPriceInput(
+              pickLocalizedText('标准缓存命中输入', 'Standard cache-hit input'),
+              this.cacheReadPriceText,
+              (value: string): void => {
+                this.cacheReadPriceText = value
+              }
+            )
+          }
         }
 
         Text(pickLocalizedText(
@@ -996,7 +1092,9 @@ export struct ModelEditSheet {
 
       Row({ space: 10 }) {
         this.BillingPriceInput(
-          pickLocalizedText('输入', 'Input'),
+          this.billingCacheHitEnabled ?
+            pickLocalizedText('未命中输入', 'Cache-miss input') :
+            pickLocalizedText('输入', 'Input'),
           inputValue,
           onInputChange
         )
@@ -1041,6 +1139,37 @@ export struct ModelEditSheet {
         })
     }
     .layoutWeight(1)
+    .alignItems(HorizontalAlign.Start)
+  }
+
+  @Builder
+  BillingCacheReadPriceInput(title: string, value: string, onChange: (value: string) => void) {
+    Column({ space: 7 }) {
+      Text(title)
+        .fontSize(12)
+        .fontWeight(FontWeight.Medium)
+        .fontColor($r('app.color.text_secondary'))
+        .width('100%')
+
+      TextInput({ text: value, placeholder: '0.00' })
+        .width('100%')
+        .height(42)
+        .fontSize(14)
+        .fontColor($r('app.color.text_primary'))
+        .placeholderColor($r('app.color.text_tertiary'))
+        .backgroundColor(Color.Transparent)
+        .borderRadius(14)
+        .padding({ left: 12, right: 12 })
+        .systemMaterial(new uiMaterial.ImmersiveMaterial({
+          style: uiMaterial.ImmersiveStyle.ULTRA_THIN,
+          materialColor: Color.Transparent,
+          applyShadow: false
+        }))
+        .onChange((text: string) => {
+          onChange(text)
+        })
+    }
+    .width('100%')
     .alignItems(HorizontalAlign.Start)
   }
 
