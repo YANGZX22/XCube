@@ -2009,6 +2009,10 @@
       "value": "Libertinus Serif"
     },
     {
+      "name": "chat_serif_font_cmu",
+      "value": "CMU Serif"
+    },
+    {
       "name": "chat_serif_font_import",
       "value": "Import from device…"
     },

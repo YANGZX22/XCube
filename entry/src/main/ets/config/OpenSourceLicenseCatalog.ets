@@ -89,6 +89,11 @@ export const ASSET_LICENSES: LicenseCatalogItem[] = [
     'Copyright © 2020 The JetBrains Mono Project Authors.'
   ),
   new LicenseCatalogItem(
+    'CMU Serif', '0.7.0', 'SIL Open Font License 1.1',
+    'Computer Modern Unicode 字体；Copyright © 2003-2009 Andrey V. Panov；保留字体族名称 Computer Modern Unicode fonts。',
+    'Computer Modern Unicode font; Copyright © 2003-2009 Andrey V. Panov; Computer Modern Unicode fonts is a Reserved Font Family Name.'
+  ),
+  new LicenseCatalogItem(
     'Source Han Serif SC', '', 'SIL Open Font License 1.1',
     'Copyright © 2017-2022 Adobe；保留字体名称 Source。',
     'Copyright © 2017-2022 Adobe; Source is a Reserved Font Name.'

@@ -1,7 +1,11 @@
 import { webview } from '@kit.ArkWeb'
 import { hilog } from '@kit.PerformanceAnalysisKit'
 import { getPyodideRuntimeService, PyodideHost } from '../services/PyodideRuntimeService'
-import { PYODIDE_HOST_HTML } from '../services/PyodideHostHtml'
+import {
+  PYODIDE_HOST_HTML,
+  PYTHON_CMU_SERIF_FONT_URL,
+  PYTHON_SOURCE_HAN_SERIF_FONT_URL
+} from '../services/PyodideHostHtml'
 
 const DOMAIN = 0x0002
 const TAG = 'PyodideWebHost'
@@ -79,6 +83,21 @@ export struct PyodideWebHost {
     return 'data:text/html;charset=utf-8,' + encodeURIComponent(PYODIDE_HOST_HTML)
   }
 
+  private createFontResponse(resource: Resource, mimeType: string): WebResourceResponse {
+    const response = new WebResourceResponse()
+    response.setResponseData(resource)
+    response.setResponseEncoding('binary')
+    response.setResponseMimeType(mimeType)
+    response.setResponseHeader([
+      { headerKey: 'Access-Control-Allow-Origin', headerValue: '*' },
+      { headerKey: 'Cache-Control', headerValue: 'public, max-age=31536000, immutable' }
+    ])
+    response.setResponseCode(200)
+    response.setReasonMessage('OK')
+    response.setResponseIsReady(true)
+    return response
+  }
+
   aboutToAppear(): void {
     getPyodideRuntimeService().attachHost(this.adapter)
   }
@@ -98,6 +117,22 @@ export struct PyodideWebHost {
       .hitTestBehavior(HitTestMode.None)
       .javaScriptAccess(true)
       .domStorageAccess(false)
+      .onInterceptRequest((event) => {
+        if (!event) {
+          return null
+        }
+        const url = event.request.getRequestUrl()
+        if (url === PYTHON_CMU_SERIF_FONT_URL) {
+          return this.createFontResponse(
+            $rawfile('fonts/cmu-serif/fonts_/CMU Serif Roman.ttf'),
+            'font/ttf'
+          )
+        }
+        if (url === PYTHON_SOURCE_HAN_SERIF_FONT_URL) {
+          return this.createFontResponse($rawfile('fonts/SourceHanSerifSC-Regular.otf'), 'font/otf')
+        }
+        return null
+      })
       .onControllerAttached(() => {
         try {
           this.controller.registerJavaScriptProxy(

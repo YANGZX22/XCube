@@ -35,6 +35,7 @@ import { showToast } from '../utils/ToastUtil'
 import { pickLocalizedText } from '../utils/LocalizedTextUtils'
 import {
   CHAT_SERIF_FONT_CINZEL,
+  CHAT_SERIF_FONT_CMU,
   CHAT_SERIF_FONT_COMMON,
   CHAT_SERIF_FONT_CUSTOM,
   CHAT_SERIF_FONT_DOMINE,
@@ -166,7 +167,7 @@ export struct ThemeAppearanceSettingsView {
     this.markdownRenderer = this.settingsManager.getMarkdownRenderer()
     const savedSerifFont = this.settingsManager.getChatSerifFontFamily()
     if (savedSerifFont === CHAT_SERIF_FONT_CINZEL || savedSerifFont === CHAT_SERIF_FONT_DOMINE ||
-      savedSerifFont === CHAT_SERIF_FONT_LIBERTINUS) {
+      savedSerifFont === CHAT_SERIF_FONT_LIBERTINUS || savedSerifFont === CHAT_SERIF_FONT_CMU) {
       this.chatSerifFontFamily = savedSerifFont
     } else {
       this.chatSerifFontFamily = savedSerifFont === CHAT_SERIF_FONT_CUSTOM && this.customSerifAvailable ?
@@ -399,7 +400,8 @@ export struct ThemeAppearanceSettingsView {
       { value: $r('app.string.chat_serif_font_common') },
       { value: $r('app.string.chat_serif_font_cinzel') },
       { value: $r('app.string.chat_serif_font_domine') },
-      { value: $r('app.string.chat_serif_font_libertinus') }
+      { value: $r('app.string.chat_serif_font_libertinus') },
+      { value: $r('app.string.chat_serif_font_cmu') }
     ]
     if (this.customSerifAvailable) {
       options.push({ value: this.customSerifName !== '' ? this.customSerifName :
@@ -419,11 +421,14 @@ export struct ThemeAppearanceSettingsView {
     if (this.chatSerifFontFamily === CHAT_SERIF_FONT_LIBERTINUS) {
       return 3
     }
-    return this.chatSerifFontFamily === CHAT_SERIF_FONT_CUSTOM && this.customSerifAvailable ? 4 : 0
+    if (this.chatSerifFontFamily === CHAT_SERIF_FONT_CMU) {
+      return 4
+    }
+    return this.chatSerifFontFamily === CHAT_SERIF_FONT_CUSTOM && this.customSerifAvailable ? 5 : 0
   }
 
   private async handleChatSerifFontFamilyChanged(index: number): Promise<void> {
-    const importOptionIndex = this.customSerifAvailable ? 5 : 4
+    const importOptionIndex = this.customSerifAvailable ? 6 : 5
     if (index === importOptionIndex) {
       await this.importCustomSerifFont()
       return
@@ -435,7 +440,9 @@ export struct ThemeAppearanceSettingsView {
       nextFontFamily = CHAT_SERIF_FONT_DOMINE
     } else if (index === 3) {
       nextFontFamily = CHAT_SERIF_FONT_LIBERTINUS
-    } else if (index === 4 && this.customSerifAvailable) {
+    } else if (index === 4) {
+      nextFontFamily = CHAT_SERIF_FONT_CMU
+    } else if (index === 5 && this.customSerifAvailable) {
       nextFontFamily = CHAT_SERIF_FONT_CUSTOM
     }
     const previous = this.chatSerifFontFamily

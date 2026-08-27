@@ -11,6 +11,13 @@ export const PYODIDE_INDEX_URL: string = `https://cdn.jsdelivr.net/pyodide/v${PY
 export const PYODIDE_COMPAT_VERSION: string = '0.29.4'
 export const PYODIDE_COMPAT_INDEX_URL: string =
   `https://cdn.jsdelivr.net/pyodide/v${PYODIDE_COMPAT_VERSION}/full/`
+export const PYTHON_CMU_SERIF_FONT_URL: string =
+  'https://python-fonts.xcube.invalid/CMUSerif-Regular.ttf'
+export const PYTHON_SOURCE_HAN_SERIF_FONT_URL: string =
+  'https://python-fonts.xcube.invalid/SourceHanSerifSC-Regular.otf'
+export const PYTHON_CMU_SERIF_FONT_PATH: string = '/usr/share/fonts/xcube/CMUSerif-Regular.ttf'
+export const PYTHON_SOURCE_HAN_SERIF_FONT_PATH: string =
+  '/usr/share/fonts/xcube/SourceHanSerifSC-Regular.otf'
 
 // The page itself only coordinates ArkTS and a dedicated worker. Python never runs on
 // the WebView main thread, so a timed-out worker can be terminated without freezing the host.
@@ -27,6 +34,15 @@ export const PYODIDE_HOST_HTML: string = `<!DOCTYPE html>
 
   const PYODIDE_INDEX_URL = '${PYODIDE_INDEX_URL}';
   const PACKAGE_NETWORK_HOSTS = new Set(['cdn.jsdelivr.net', 'pypi.org', 'files.pythonhosted.org']);
+  const BUILTIN_FONT_URLS = new Set([
+    '${PYTHON_CMU_SERIF_FONT_URL}',
+    '${PYTHON_SOURCE_HAN_SERIF_FONT_URL}'
+  ]);
+  const BUILTIN_FONTS = [
+    { url: '${PYTHON_CMU_SERIF_FONT_URL}', path: '${PYTHON_CMU_SERIF_FONT_PATH}' },
+    { url: '${PYTHON_SOURCE_HAN_SERIF_FONT_URL}', path: '${PYTHON_SOURCE_HAN_SERIF_FONT_PATH}' }
+  ];
+  const PYTHON_FONT_ROOT = '/usr/share/fonts/xcube';
   const PYTHON_OUTPUT_ROOT = '/tmp/xcube-python-output';
   const MAX_OUTPUT_IMAGES = ${PYTHON_MAX_OUTPUT_IMAGES};
   const MAX_OUTPUT_IMAGE_BYTES = ${PYTHON_MAX_OUTPUT_IMAGE_BYTES};
@@ -37,9 +53,12 @@ export const PYODIDE_HOST_HTML: string = `<!DOCTYPE html>
   const hostPostMessage = self.postMessage.bind(self);
   const nativeFetch = typeof self.fetch === 'function' ? self.fetch.bind(self) : null;
   let packageNetworkAllowed = true;
+  let builtinFontNetworkAllowed = true;
   let controlToken = '';
   let pyodide = null;
   let initialGlobalKeys = null;
+  let builtinFontWarning = '';
+  let matplotlibFontsConfigured = false;
 
   function postHostMessage(message) {
     message.controlToken = controlToken;
@@ -78,9 +97,21 @@ export const PYODIDE_HOST_HTML: string = `<!DOCTYPE html>
     }
   }
 
+  function isAllowedBuiltinFontRequest(input, init) {
+    if (!builtinFontNetworkAllowed) return false;
+    const method = init && init.method ? String(init.method).toUpperCase() : 'GET';
+    if (method !== 'GET' && method !== 'HEAD') return false;
+    try {
+      const rawUrl = typeof input === 'string' ? input : input.url;
+      return BUILTIN_FONT_URLS.has(new URL(rawUrl).href);
+    } catch (e) {
+      return false;
+    }
+  }
+
   if (nativeFetch !== null) {
     self.fetch = function (input, init) {
-      if (!isAllowedPackageRequest(input, init)) {
+      if (!isAllowedPackageRequest(input, init) && !isAllowedBuiltinFontRequest(input, init)) {
         return Promise.reject(new Error('Python 沙箱禁止用户代码直接访问网络'));
       }
       return nativeFetch(input, init);
@@ -338,6 +369,71 @@ export const PYODIDE_HOST_HTML: string = `<!DOCTYPE html>
     }
   }
 
+  async function installBuiltinFonts() {
+    if (nativeFetch === null) {
+      throw new Error('当前 Worker 不支持读取内置字体');
+    }
+    pyodide.FS.mkdirTree(PYTHON_FONT_ROOT);
+    const failures = [];
+    for (const font of BUILTIN_FONTS) {
+      try {
+        const response = await self.fetch(font.url, { method: 'GET', cache: 'force-cache' });
+        if (!response.ok) {
+          throw new Error('HTTP ' + String(response.status));
+        }
+        const bytes = new Uint8Array(await response.arrayBuffer());
+        if (bytes.byteLength === 0) {
+          throw new Error('字体文件为空');
+        }
+        pyodide.FS.writeFile(font.path, bytes);
+      } catch (e) {
+        failures.push(font.path + ': ' + (e && e.message ? e.message : String(e)));
+      }
+    }
+
+    pyodide.globals.set('PYTHON_FONT_DIR', PYTHON_FONT_ROOT);
+    pyodide.globals.set('PYTHON_FONT_EN', '${PYTHON_CMU_SERIF_FONT_PATH}');
+    pyodide.globals.set('PYTHON_FONT_CJK', '${PYTHON_SOURCE_HAN_SERIF_FONT_PATH}');
+    pyodide.runPython([
+      'import os as _xcube_os',
+      "_xcube_os.environ['XCUBE_PYTHON_FONT_DIR'] = '" + PYTHON_FONT_ROOT + "'",
+      "_xcube_os.environ['XCUBE_PYTHON_FONT_EN'] = '${PYTHON_CMU_SERIF_FONT_PATH}'",
+      "_xcube_os.environ['XCUBE_PYTHON_FONT_CJK'] = '${PYTHON_SOURCE_HAN_SERIF_FONT_PATH}'"
+    ].join('\\n'));
+    if (failures.length > 0) {
+      throw new Error(failures.join('; '));
+    }
+  }
+
+  function configureMatplotlibFonts(warnings) {
+    if (matplotlibFontsConfigured) return;
+    let configured = null;
+    try {
+      configured = pyodide.runPython([
+        'import importlib.util as _xcube_importlib_util',
+        'import os as _xcube_os',
+        "_xcube_has_matplotlib = _xcube_importlib_util.find_spec('matplotlib') is not None",
+        'if _xcube_has_matplotlib:',
+        '    import matplotlib as _xcube_matplotlib',
+        '    from matplotlib import font_manager as _xcube_font_manager',
+        "    for _xcube_font_path in ('${PYTHON_CMU_SERIF_FONT_PATH}', '${PYTHON_SOURCE_HAN_SERIF_FONT_PATH}'):",
+        '        if _xcube_os.path.isfile(_xcube_font_path):',
+        '            _xcube_font_manager.fontManager.addfont(_xcube_font_path)',
+        "    _xcube_matplotlib.rcParams['font.family'] = ['CMU Serif', 'Source Han Serif SC', 'DejaVu Serif']",
+        "    _xcube_matplotlib.rcParams['font.serif'] = ['CMU Serif', 'Source Han Serif SC', 'DejaVu Serif']",
+        "    _xcube_matplotlib.rcParams['axes.unicode_minus'] = False",
+        '_xcube_has_matplotlib'
+      ].join('\\n'));
+      matplotlibFontsConfigured = Boolean(configured);
+    } catch (e) {
+      warnings.push('配置 Matplotlib 中英文字体失败: ' + (e && e.message ? e.message : String(e)));
+    } finally {
+      if (configured && typeof configured.destroy === 'function') {
+        try { configured.destroy(); } catch (e) {}
+      }
+    }
+  }
+
   async function runPython(request) {
     const result = {
       ok: true, stdout: [], result: '', variables: {}, warnings: [], error: '', artifacts: []
@@ -347,6 +443,9 @@ export const PYODIDE_HOST_HTML: string = `<!DOCTYPE html>
       result.error = 'Pyodide 尚未就绪';
       postHostMessage({ type: 'result', requestId: request.requestId, result: result });
       return;
+    }
+    if (builtinFontWarning !== '') {
+      result.warnings.push(builtinFontWarning);
     }
 
     const stdout = [];
@@ -366,6 +465,7 @@ export const PYODIDE_HOST_HTML: string = `<!DOCTYPE html>
       } finally {
         packageNetworkAllowed = false;
       }
+      configureMatplotlibFonts(result.warnings);
 
       postHostMessage({ type: 'executionStarted', requestId: request.requestId });
 
@@ -417,6 +517,13 @@ export const PYODIDE_HOST_HTML: string = `<!DOCTYPE html>
       pyodide = await runtimeLoader({ indexURL: PYODIDE_INDEX_URL });
       packageNetworkAllowed = false;
       lockWorkerCapabilities();
+      try {
+        await installBuiltinFonts();
+      } catch (e) {
+        builtinFontWarning = '内置绘图字体加载失败: ' + (e && e.message ? e.message : String(e));
+      } finally {
+        builtinFontNetworkAllowed = false;
+      }
       // Do not report ready until the asynchronous Python/JavaScript bridge itself
       // has executed successfully. A synchronous load alone cannot catch webloop breakage.
       await pyodide.runPythonAsync('import math\\nassert math.sqrt(81) == 9');

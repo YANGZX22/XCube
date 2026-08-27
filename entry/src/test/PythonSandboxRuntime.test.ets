@@ -14,12 +14,17 @@ import {
   PYODIDE_COMPAT_VERSION,
   PYODIDE_HOST_HTML,
   PYODIDE_INDEX_URL,
-  PYODIDE_VERSION
+  PYODIDE_VERSION,
+  PYTHON_CMU_SERIF_FONT_PATH,
+  PYTHON_CMU_SERIF_FONT_URL,
+  PYTHON_SOURCE_HAN_SERIF_FONT_PATH,
+  PYTHON_SOURCE_HAN_SERIF_FONT_URL
 } from '../main/ets/services/PyodideHostHtml'
 import {
   getPythonImageExtension,
   sanitizePythonImageName
 } from '../main/ets/services/PythonSandboxArtifactService'
+import { PYTHON_FONT_USAGE_GUIDANCE } from '../main/ets/config/BuiltinTools'
 
 export default function pythonSandboxRuntimeTest() {
   describe('pythonSandboxRuntimeTest', () => {
@@ -89,6 +94,31 @@ export default function pythonSandboxRuntimeTest() {
         .assertTrue()
       expect(PYODIDE_HOST_HTML.includes('detectImageMime(bytes)')).assertTrue()
       expect(PYODIDE_HOST_HTML.includes('removeOutputDirectory(outputContext.outputDir)')).assertTrue()
+    })
+
+    it('mounts_cmu_and_source_han_fonts_for_python_plotting', 0, () => {
+      expect(PYTHON_CMU_SERIF_FONT_URL).assertEqual(
+        'https://python-fonts.xcube.invalid/CMUSerif-Regular.ttf')
+      expect(PYTHON_SOURCE_HAN_SERIF_FONT_URL).assertEqual(
+        'https://python-fonts.xcube.invalid/SourceHanSerifSC-Regular.otf')
+      expect(PYTHON_CMU_SERIF_FONT_PATH).assertEqual('/usr/share/fonts/xcube/CMUSerif-Regular.ttf')
+      expect(PYTHON_SOURCE_HAN_SERIF_FONT_PATH)
+        .assertEqual('/usr/share/fonts/xcube/SourceHanSerifSC-Regular.otf')
+      expect(PYODIDE_HOST_HTML.includes("pyodide.globals.set('PYTHON_FONT_EN'")).assertTrue()
+      expect(PYODIDE_HOST_HTML.includes("pyodide.globals.set('PYTHON_FONT_CJK'")).assertTrue()
+      expect(PYODIDE_HOST_HTML.includes("['CMU Serif', 'Source Han Serif SC', 'DejaVu Serif']"))
+        .assertTrue()
+      expect(PYODIDE_HOST_HTML.includes('_xcube_font_manager.fontManager.addfont')).assertTrue()
+    })
+
+    it('guides_models_to_use_mixed_script_fonts_without_losing_fallback', 0, () => {
+      expect(PYTHON_FONT_USAGE_GUIDANCE.includes(
+        "font.family=['CMU Serif', 'Source Han Serif SC', 'DejaVu Serif']"
+      )).assertTrue()
+      expect(PYTHON_FONT_USAGE_GUIDANCE.includes('ImageFont.truetype(PYTHON_FONT_EN, size)')).assertTrue()
+      expect(PYTHON_FONT_USAGE_GUIDANCE.includes('ImageFont.truetype(PYTHON_FONT_CJK, size)')).assertTrue()
+      expect(PYTHON_FONT_USAGE_GUIDANCE.includes('Pillow 不会自动回退字体')).assertTrue()
+      expect(PYTHON_FONT_USAGE_GUIDANCE.includes('中英混排须按文字脚本切分')).assertTrue()
     })
 
     it('normalizes_python_image_names_and_mime_extensions_before_persisting', 0, () => {

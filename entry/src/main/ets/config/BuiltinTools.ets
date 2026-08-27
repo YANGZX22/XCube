@@ -97,6 +97,12 @@ export const READ_SCHEDULE_TOOL_ID: string = 'read_schedule'
 export const WRITE_SCHEDULE_TOOL_ID: string = 'write_schedule'
 export const MATH_CHART_TOOL_ID: string = 'math_chart'
 export const PYTHON_SANDBOX_TOOL_ID: string = 'python_sandbox'
+export const PYTHON_FONT_USAGE_GUIDANCE: string =
+  "绘图字体规则：Matplotlib 中英混排须保留 font.family=['CMU Serif', 'Source Han Serif SC', " +
+    "'DejaVu Serif'] 的回退顺序；运行时已预设，若调用样式或重置 rcParams，应在之后恢复该设置，" +
+    "不要把混排文本强制指定为单一字体。Pillow 不会自动回退字体：英文和数字使用 " +
+    'ImageFont.truetype(PYTHON_FONT_EN, size)，中文使用 ImageFont.truetype(PYTHON_FONT_CJK, size)；' +
+    '中英混排须按文字脚本切分，使用 textlength 或 textbbox 累计位置后分别 draw.text，不能把含中文的整段文字交给 CMU Serif。'
 export const CANVAS_DOCUMENT_TOOL_ID: string = 'canvas_document'
 export const CANVAS_DOCUMENT_MAX_WRITE_CHARACTERS: number = 4000
 export const PDF_TO_TEXT_TOOL_ID: string = 'pdf_to_text'
@@ -2625,7 +2631,7 @@ function createPythonSandboxToolDefinition(): ToolDefinition {
     "properties": {
       "code": {
         "type": "string",
-        "description": "要执行的 Python 3 代码。支持完整 Python 语法与标准库；import pandas、numpy、scipy、scikit-learn、matplotlib、Pillow 等 Pyodide 官方包时会在执行前自动加载。可用 print 输出，最后一个表达式的值会作为 result 返回。可用 matplotlib 的 plt.savefig('chart.png') 或 Pillow 的 image.save('image.png') 将 PNG、JPEG、GIF、WebP 保存到本次运行的隔离目录；相对路径会自动落到该目录，也可使用 PYTHON_OUTPUT_DIR。返回结果的 images 含已持久化图片的 attachmentId，模型随后可用 vision_read_image 或 image_to_text 调取。最多保存 4 张，单张不超过 4 MiB、合计不超过 8 MiB。代码不能访问应用或系统文件、直接发起网络请求或运行系统命令。"
+        "description": "要执行的 Python 3 代码。支持完整 Python 语法与标准库；import pandas、numpy、scipy、scikit-learn、matplotlib、Pillow 等 Pyodide 官方包时会在执行前自动加载。Matplotlib 默认使用 CMU Serif 显示英文、思源宋体显示中文；Pillow 可分别通过 PYTHON_FONT_EN、PYTHON_FONT_CJK 获取字体路径。${PYTHON_FONT_USAGE_GUIDANCE}可用 print 输出，最后一个表达式的值会作为 result 返回。可用 matplotlib 的 plt.savefig('chart.png') 或 Pillow 的 image.save('image.png') 将 PNG、JPEG、GIF、WebP 保存到本次运行的隔离目录；相对路径会自动落到该目录，也可使用 PYTHON_OUTPUT_DIR。返回结果的 images 含已持久化图片的 attachmentId，模型随后可用 vision_read_image 或 image_to_text 调取。最多保存 4 张，单张不超过 4 MiB、合计不超过 8 MiB。代码不能访问应用或系统文件、直接发起网络请求或运行系统命令。"
       },
       "variables": {
         "type": "object",
@@ -2648,7 +2654,7 @@ function createPythonSandboxToolDefinition(): ToolDefinition {
 
   const func = new ToolFunction(
     PYTHON_SANDBOX_TOOL_ID,
-    '模型可在隔离的 Web Worker 中运行 Pyodide/CPython，用于数学计算、数据处理、统计分析、算法验证和 Python 生图。import pandas、numpy、scipy、scikit-learn、matplotlib、Pillow 等官方包时会按需加载，也可通过 packages 安装纯 Python 或兼容的 PyEmscripten wheel。用 savefig/save 将 PNG、JPEG、GIF、WebP 写到相对路径后，工具会保存到当前会话附件沙箱，并在 images 返回 attachmentId；随后可用 vision_read_image 或 image_to_text 调取。代码不能访问应用/系统文件、直接联网或运行系统命令；包加载器自身会访问受限的 Pyodide/PyPI 源。',
+    `模型可在隔离的 Web Worker 中运行 Pyodide/CPython，用于数学计算、数据处理、统计分析、算法验证和 Python 生图。import pandas、numpy、scipy、scikit-learn、matplotlib、Pillow 等官方包时会按需加载，也可通过 packages 安装纯 Python 或兼容的 PyEmscripten wheel。Matplotlib 默认使用 CMU Serif 显示英文、思源宋体显示中文；Pillow 可通过 PYTHON_FONT_EN、PYTHON_FONT_CJK 使用同一组字体。${PYTHON_FONT_USAGE_GUIDANCE}用 savefig/save 将 PNG、JPEG、GIF、WebP 写到相对路径后，工具会保存到当前会话附件沙箱，并在 images 返回 attachmentId；随后可用 vision_read_image 或 image_to_text 调取。代码不能访问应用/系统文件、直接联网或运行系统命令；包加载器自身会访问受限的 Pyodide/PyPI 源。`,
     parameters
   )
 
