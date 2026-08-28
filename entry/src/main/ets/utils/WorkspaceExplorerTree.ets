@@ -88,7 +88,29 @@ function collectDirectoryFileCounts(files: PythonWorkspaceFileInfo[]): Map<strin
   return counts
 }
 
-function buildFilteredRows(files: PythonWorkspaceFileInfo[], keyword: string): WorkspaceExplorerRow[] {
+function buildFilteredRows(files: PythonWorkspaceFileInfo[], directories: string[],
+  keyword: string): WorkspaceExplorerRow[] {
+  const rows: WorkspaceExplorerRow[] = []
+  const fileCounts = collectDirectoryFileCounts(files)
+  const matchedDirectories: string[] = []
+  for (let i = 0; i < directories.length; i++) {
+    if (directories[i].toLowerCase().includes(keyword)) {
+      matchedDirectories.push(directories[i])
+    }
+  }
+  matchedDirectories.sort((left: string, right: string): number => compareText(left, right))
+  for (let i = 0; i < matchedDirectories.length; i++) {
+    const row = new WorkspaceExplorerRow()
+    row.key = `dir:${matchedDirectories[i]}`
+    row.name = getWorkspaceFileName(matchedDirectories[i])
+    row.path = matchedDirectories[i]
+    row.isDirectory = true
+    row.expanded = true
+    row.fileCount = fileCounts.get(matchedDirectories[i]) ?? 0
+    row.parentPath = getWorkspaceDirectoryPath(matchedDirectories[i])
+    rows.push(row)
+  }
+
   const matched: PythonWorkspaceFileInfo[] = []
   for (let i = 0; i < files.length; i++) {
     if (files[i].path.toLowerCase().includes(keyword)) {
@@ -98,7 +120,6 @@ function buildFilteredRows(files: PythonWorkspaceFileInfo[], keyword: string): W
   matched.sort((left: PythonWorkspaceFileInfo, right: PythonWorkspaceFileInfo): number =>
     compareText(getWorkspaceFileName(left.path).toLowerCase(), getWorkspaceFileName(right.path).toLowerCase()))
 
-  const rows: WorkspaceExplorerRow[] = []
   for (let i = 0; i < matched.length; i++) {
     const row = new WorkspaceExplorerRow()
     row.key = `file:${matched[i].path}`
@@ -114,17 +135,37 @@ function buildFilteredRows(files: PythonWorkspaceFileInfo[], keyword: string): W
 
 export function buildWorkspaceExplorerRows(
   files: PythonWorkspaceFileInfo[],
+  directories: string[],
   collapsedDirectories: string[],
   filterText: string
 ): WorkspaceExplorerRow[] {
   const keyword = filterText.trim().toLowerCase()
   if (keyword !== '') {
-    return buildFilteredRows(files, keyword)
+    return buildFilteredRows(files, directories, keyword)
   }
 
   const childDirectories = new Map<string, string[]>()
   const directoryFiles = new Map<string, PythonWorkspaceFileInfo[]>()
   const knownDirectories = new Set<string>()
+
+  // 显式登记用户创建的空文件夹；只有文件路径时无法推导出这些目录。
+  for (let i = 0; i < directories.length; i++) {
+    const segments = directories[i].split('/')
+    let parent = ''
+    for (let j = 0; j < segments.length; j++) {
+      const current = parent === '' ? segments[j] : `${parent}/${segments[j]}`
+      if (!knownDirectories.has(current)) {
+        knownDirectories.add(current)
+        const siblings = childDirectories.get(parent)
+        if (siblings === undefined) {
+          childDirectories.set(parent, [current])
+        } else {
+          siblings.push(current)
+        }
+      }
+      parent = current
+    }
+  }
 
   for (let i = 0; i < files.length; i++) {
     const directory = getWorkspaceDirectoryPath(files[i].path)

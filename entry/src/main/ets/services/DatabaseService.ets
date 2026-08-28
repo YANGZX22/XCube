@@ -25,7 +25,7 @@ import { AppStorageKeys } from '../config/AppStorageKeys'
 import { setAppUiStateValue } from '../state/AppUiState'
 import { getAttachmentStorageService } from './AttachmentStorageService'
 import { getDocumentAttachmentRegistryService } from './DocumentAttachmentRegistryService'
-import { getPythonWorkspaceService } from './PythonWorkspaceService'
+import { getPythonWorkspaceService, PythonWorkspaceService } from './PythonWorkspaceService'
 
 // 数据库配置
 const DB_CONFIG: relationalStore.StoreConfig = {
@@ -1969,9 +1969,24 @@ export class DatabaseService {
   async deleteSession(sessionId: string): Promise<boolean> {
     await this.waitForInitialization()
     const store = this.rdbStore
-    if (store === null || sessionId.trim() === '') {
+    const normalizedSessionId = sessionId.trim()
+    if (store === null || normalizedSessionId === '') {
       return false
     }
+    const workspace = getPythonWorkspaceService()
+    try {
+      // 删除与同一会话的 Python 执行、工作区回写和产物注册共用一条队列。
+      // 已经开始的调用先完成；删除提交后 tombstone 会阻止排队中的旧调用重新创建文件。
+      return await workspace.runSessionExclusive(normalizedSessionId, async (): Promise<boolean> =>
+        await this.deleteSessionInsideWorkspaceLock(store, workspace, normalizedSessionId))
+    } catch (error) {
+      console.error('DatabaseService', `Failed to coordinate session deletion: ${JSON.stringify(error)}`)
+      return false
+    }
+  }
+
+  private async deleteSessionInsideWorkspaceLock(store: relationalStore.RdbStore,
+    workspace: PythonWorkspaceService, sessionId: string): Promise<boolean> {
     let candidateFilePaths: string[] = []
     let transactionStarted = false
     try {
@@ -2020,7 +2035,7 @@ export class DatabaseService {
       console.error('DatabaseService', `Failed to clean session attachment files: ${JSON.stringify(error)}`)
     }
     try {
-      getPythonWorkspaceService().deleteSessionWorkspace(sessionId)
+      workspace.completeSessionDeletion(sessionId)
     } catch (error) {
       console.error('DatabaseService', `Failed to clean Python workspace: ${JSON.stringify(error)}`)
     }

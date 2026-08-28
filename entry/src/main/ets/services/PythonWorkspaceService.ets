@@ -3,6 +3,7 @@ import { fileIo } from '@kit.CoreFileKit'
 import { util } from '@kit.ArkTS'
 import { AppStorageKeys } from '../config/AppStorageKeys'
 import { getAppUiState, setAppUiStateValue } from '../state/AppUiState'
+import { PythonWorkspaceSessionCoordinator } from './PythonWorkspaceSessionCoordinator'
 import {
   PYTHON_MAX_WORKSPACE_FILES,
   PYTHON_MAX_WORKSPACE_FILE_BYTES,
@@ -17,6 +18,8 @@ export const PYTHON_WORKSPACE_MAX_TOTAL_BYTES: number = PYTHON_MAX_WORKSPACE_TOT
 export const PYTHON_WORKSPACE_MAX_READ_LINES: number = 400
 export const PYTHON_WORKSPACE_MAX_READ_CHARACTERS: number = 64 * 1024
 export const PYTHON_WORKSPACE_CACHE_GRACE_PERIOD_MS: number = 5 * 60 * 1000
+export const PYTHON_WORKSPACE_MAX_DIRECTORIES: number = 512
+export const PYTHON_WORKSPACE_FILE_CONFLICT: string = 'PYTHON_WORKSPACE_FILE_CONFLICT'
 
 export class PythonWorkspaceFileData {
   path: string = ''
@@ -45,6 +48,7 @@ export class PythonWorkspaceFileInfo {
 export class PythonWorkspaceReadResult {
   path: string = ''
   content: string = ''
+  modifiedAt: number = 0
   startLine: number = 1
   endLine: number = 0
   totalLines: number = 0
@@ -72,8 +76,8 @@ export function normalizePythonWorkspacePath(rawPath: string): string {
   for (let i = 0; i < segments.length; i++) {
     const segment = segments[i]
     if (segment === '' || segment === '.' || segment === '..' ||
-      !/^[A-Za-z0-9._-]+$/.test(segment)) {
-      throw new Error('工作区文件路径仅支持字母、数字、点、下划线、短横线和安全的相对目录')
+      /[\u0000-\u001F\u007F\\/:*?"<>|]/.test(segment)) {
+      throw new Error('工作区路径包含空目录名、上级目录或系统不允许的字符')
     }
   }
   return segments.join('/')
@@ -104,12 +108,37 @@ export function validatePythonWorkspaceReplacement(oldText: string, newText: str
   }
 }
 
+// expectedModifiedAt=0 表示“仅当文件尚不存在时创建”；正数表示调用方基于该版本修改。
+// 省略时保持旧调用的覆盖语义，供单一智能体和运行时快照回写兼容使用。
+export function validatePythonWorkspaceExpectedModifiedAt(path: string, exists: boolean,
+  actualModifiedAt: number, expectedModifiedAt?: number): void {
+  if (expectedModifiedAt === undefined) {
+    return
+  }
+  if (!Number.isFinite(expectedModifiedAt) || expectedModifiedAt < 0) {
+    throw new Error('expected_modified_at 必须是大于等于 0 的有限数字')
+  }
+  if (expectedModifiedAt === 0) {
+    if (exists) {
+      throw new Error(`${PYTHON_WORKSPACE_FILE_CONFLICT}: ${path} 已存在；请重新读取并合并，不能盲目覆盖`)
+    }
+    return
+  }
+  if (!exists || actualModifiedAt !== expectedModifiedAt) {
+    const actual = exists ? `${actualModifiedAt}` : '文件不存在'
+    throw new Error(`${PYTHON_WORKSPACE_FILE_CONFLICT}: ${path} 已被其他智能体修改；` +
+      `期望版本 ${expectedModifiedAt}，当前版本 ${actual}。请重新读取并合并，不能盲目重试`)
+  }
+}
+
 export class PythonWorkspaceService {
   private static instance: PythonWorkspaceService | null = null
   private rootDirectory: string = ''
   private initialized: boolean = false
   private mutationBatchDepth: number = 0
   private mutationNotificationPending: boolean = false
+  private sessionCoordinator: PythonWorkspaceSessionCoordinator = new PythonWorkspaceSessionCoordinator()
+  private fileVersions: Map<string, number> = new Map()
 
   private constructor() {}
 
@@ -135,20 +164,35 @@ export class PythonWorkspaceService {
     return this.initialized && this.rootDirectory !== ''
   }
 
-  writeFile(sessionId: string, rawPath: string, content: string): PythonWorkspaceFileInfo {
+  async runSessionExclusive<T>(sessionId: string, task: () => Promise<T>): Promise<T> {
+    return await this.sessionCoordinator.runExclusive(sessionId, task)
+  }
+
+  assertSessionWritable(sessionId: string): void {
+    this.sessionCoordinator.assertWritable(sessionId)
+  }
+
+  writeFile(sessionId: string, rawPath: string, content: string,
+    expectedModifiedAt?: number): PythonWorkspaceFileInfo {
     this.ensureReady()
+    this.assertSessionWritable(sessionId)
     const path = normalizePythonWorkspacePath(rawPath)
     const contentBytes = this.encodeContent(content)
     this.validateFileSize(contentBytes.byteLength)
     const existing = this.listFiles(sessionId)
     let existingSize = 0
+    let existingModifiedAt = 0
+    let fileAlreadyExists = false
     for (let i = 0; i < existing.length; i++) {
       if (existing[i].path === path) {
         existingSize = existing[i].size
+        existingModifiedAt = existing[i].modifiedAt
+        fileAlreadyExists = true
         break
       }
     }
-    if (existing.length >= PYTHON_WORKSPACE_MAX_FILES && existingSize === 0) {
+    validatePythonWorkspaceExpectedModifiedAt(path, fileAlreadyExists, existingModifiedAt, expectedModifiedAt)
+    if (existing.length >= PYTHON_WORKSPACE_MAX_FILES && !fileAlreadyExists) {
       throw new Error(`Python 工作区最多允许 ${PYTHON_WORKSPACE_MAX_FILES} 个文件`)
     }
     let currentTotal = 0
@@ -176,18 +220,20 @@ export class PythonWorkspaceService {
       fileIo.closeSync(file)
     }
     const stat = fileIo.statSync(filePath)
+    const modifiedAt = this.recordFileMutation(sessionId, path, stat.mtime)
     this.notifyWorkspaceChanged()
-    return new PythonWorkspaceFileInfo(path, stat.size, stat.mtime)
+    return new PythonWorkspaceFileInfo(path, stat.size, modifiedAt)
   }
 
-  appendFile(sessionId: string, rawPath: string, content: string): PythonWorkspaceFileInfo {
+  appendFile(sessionId: string, rawPath: string, content: string,
+    expectedModifiedAt?: number): PythonWorkspaceFileInfo {
     const path = normalizePythonWorkspacePath(rawPath)
     const existing = this.fileExists(sessionId, path) ? this.readWholeFile(sessionId, path) : ''
-    return this.writeFile(sessionId, path, existing + content)
+    return this.writeFile(sessionId, path, existing + content, expectedModifiedAt)
   }
 
   replaceInFile(sessionId: string, rawPath: string, oldText: string,
-    newText: string): PythonWorkspaceFileInfo {
+    newText: string, expectedModifiedAt?: number): PythonWorkspaceFileInfo {
     const path = normalizePythonWorkspacePath(rawPath)
     validatePythonWorkspaceReplacement(oldText, newText)
     const existing = this.readWholeFile(sessionId, path)
@@ -200,7 +246,7 @@ export class PythonWorkspaceService {
     }
     const updated = existing.substring(0, firstIndex) + newText +
       existing.substring(firstIndex + oldText.length)
-    return this.writeFile(sessionId, path, updated)
+    return this.writeFile(sessionId, path, updated, expectedModifiedAt)
   }
 
   readFile(sessionId: string, rawPath: string, requestedStartLine: number = 1,
@@ -221,6 +267,7 @@ export class PythonWorkspaceService {
     const result = new PythonWorkspaceReadResult()
     result.path = path
     result.content = selected
+    result.modifiedAt = this.getFileModifiedAt(sessionId, path)
     result.startLine = startLine
     result.endLine = endLine
     result.totalLines = lines.length
@@ -236,9 +283,54 @@ export class PythonWorkspaceService {
     }
     const files: PythonWorkspaceFileInfo[] = []
     this.collectFileInfo(sessionDirectory, '', 0, files)
+    for (let i = 0; i < files.length; i++) {
+      files[i].modifiedAt = this.observeFileVersion(sessionId, files[i].path, files[i].modifiedAt)
+    }
     files.sort((left: PythonWorkspaceFileInfo, right: PythonWorkspaceFileInfo): number =>
       left.path.localeCompare(right.path))
     return files
+  }
+
+  listDirectories(sessionId: string): string[] {
+    this.ensureReady()
+    const sessionDirectory = this.getSessionDirectory(sessionId)
+    if (!this.pathExists(sessionDirectory)) {
+      return []
+    }
+    const directories: string[] = []
+    this.collectDirectories(sessionDirectory, '', 0, directories)
+    directories.sort((left: string, right: string): number => left.localeCompare(right))
+    return directories
+  }
+
+  createDirectory(sessionId: string, rawPath: string): string {
+    this.ensureReady()
+    this.assertSessionWritable(sessionId)
+    const path = normalizePythonWorkspacePath(rawPath)
+    const directories = this.listDirectories(sessionId)
+    if (directories.includes(path)) {
+      throw new Error(`工作区文件夹已存在: ${path}`)
+    }
+    const sessionDirectory = this.ensureSessionDirectory(sessionId)
+    const segments = path.split('/')
+    let currentDirectory = sessionDirectory
+    let missingDirectories = 0
+    for (let i = 0; i < segments.length; i++) {
+      currentDirectory = `${currentDirectory}/${segments[i]}`
+      if (!this.pathExists(currentDirectory)) {
+        missingDirectories += 1
+      }
+    }
+    if (directories.length + missingDirectories > PYTHON_WORKSPACE_MAX_DIRECTORIES) {
+      throw new Error(`Python 工作区最多允许 ${PYTHON_WORKSPACE_MAX_DIRECTORIES} 个文件夹`)
+    }
+    const targetPath = `${sessionDirectory}/${path}`
+    if (this.pathExists(targetPath)) {
+      throw new Error(`工作区路径已被文件占用: ${path}`)
+    }
+    fileIo.mkdirSync(targetPath, true)
+    this.notifyWorkspaceChanged()
+    return path
   }
 
   snapshot(sessionId: string): PythonWorkspaceFileData[] {
@@ -255,6 +347,7 @@ export class PythonWorkspaceService {
   }
 
   syncSnapshot(sessionId: string, files: PythonWorkspaceFileData[]): void {
+    this.assertSessionWritable(sessionId)
     this.validateSnapshot(files)
     this.mutationBatchDepth += 1
     try {
@@ -289,22 +382,44 @@ export class PythonWorkspaceService {
     }
   }
 
-  deleteFile(sessionId: string, rawPath: string): boolean {
+  deleteFile(sessionId: string, rawPath: string, expectedModifiedAt?: number): boolean {
     this.ensureReady()
+    this.assertSessionWritable(sessionId)
     const path = normalizePythonWorkspacePath(rawPath)
     const sessionDirectory = this.getSessionDirectory(sessionId)
     const filePath = `${sessionDirectory}/${path}`
-    if (!this.pathExists(filePath)) {
+    const exists = this.pathExists(filePath)
+    const modifiedAt = exists
+      ? this.observeFileVersion(sessionId, path, fileIo.statSync(filePath).mtime) : 0
+    validatePythonWorkspaceExpectedModifiedAt(path, exists, modifiedAt, expectedModifiedAt)
+    if (!exists) {
       return false
     }
     fileIo.unlinkSync(filePath)
-    this.pruneEmptyDirectories(filePath.substring(0, filePath.lastIndexOf('/')), sessionDirectory)
+    this.fileVersions.delete(this.buildFileVersionKey(sessionId, path))
     this.notifyWorkspaceChanged()
     return true
   }
 
-  deleteSessionWorkspace(sessionId: string): boolean {
+  deleteDirectory(sessionId: string, rawPath: string): boolean {
     this.ensureReady()
+    this.assertSessionWritable(sessionId)
+    const path = normalizePythonWorkspacePath(rawPath)
+    const sessionDirectory = this.getSessionDirectory(sessionId)
+    const directoryPath = `${sessionDirectory}/${path}`
+    if (!this.pathExists(directoryPath) || !fileIo.statSync(directoryPath).isDirectory()) {
+      return false
+    }
+    this.deleteRecursively(directoryPath)
+    this.clearDirectoryFileVersions(sessionId, path)
+    this.notifyWorkspaceChanged()
+    return true
+  }
+
+  completeSessionDeletion(sessionId: string): boolean {
+    this.ensureReady()
+    this.sessionCoordinator.markDeleted(sessionId)
+    this.clearSessionFileVersions(sessionId)
     const directory = this.getSessionDirectory(sessionId)
     if (!this.pathExists(directory)) {
       return true
@@ -314,12 +429,21 @@ export class PythonWorkspaceService {
     return true
   }
 
+  restoreSessionAfterFailedDeletion(sessionId: string): void {
+    this.sessionCoordinator.restore(sessionId)
+  }
+
   cleanupOrphanedWorkspaces(validSessionIds: string[], cleanupStartedAt: number): PythonWorkspaceCleanupResult {
     this.ensureReady()
     const result = new PythonWorkspaceCleanupResult()
     const validDirectories: string[] = []
     for (let i = 0; i < validSessionIds.length; i++) {
       validDirectories.push(encodePythonWorkspaceSessionDirectory(validSessionIds[i]))
+    }
+    const activeDirectories: string[] = []
+    const activeSessionIds = this.sessionCoordinator.listActiveSessionIds()
+    for (let i = 0; i < activeSessionIds.length; i++) {
+      activeDirectories.push(encodePythonWorkspaceSessionDirectory(activeSessionIds[i]))
     }
     const entries = fileIo.listFileSync(this.rootDirectory)
     for (let i = 0; i < entries.length; i++) {
@@ -330,7 +454,7 @@ export class PythonWorkspaceService {
       }
       const fileCount = this.countFiles(entryPath)
       result.scannedFiles += fileCount
-      if (validDirectories.includes(entries[i]) ||
+      if (validDirectories.includes(entries[i]) || activeDirectories.includes(entries[i]) ||
         this.getLatestModifiedAt(entryPath) > cleanupStartedAt - PYTHON_WORKSPACE_CACHE_GRACE_PERIOD_MS) {
         continue
       }
@@ -409,6 +533,24 @@ export class PythonWorkspaceService {
     }
   }
 
+  private collectDirectories(directory: string, relativeDirectory: string, depth: number,
+    directories: string[]): void {
+    if (depth >= 8 || directories.length >= PYTHON_WORKSPACE_MAX_DIRECTORIES) {
+      return
+    }
+    const entries = fileIo.listFileSync(directory)
+    for (let i = 0; i < entries.length && directories.length < PYTHON_WORKSPACE_MAX_DIRECTORIES; i++) {
+      const fullPath = `${directory}/${entries[i]}`
+      const stat = fileIo.statSync(fullPath)
+      if (!stat.isDirectory()) {
+        continue
+      }
+      const relativePath = relativeDirectory === '' ? entries[i] : `${relativeDirectory}/${entries[i]}`
+      directories.push(relativePath)
+      this.collectDirectories(fullPath, relativePath, depth + 1, directories)
+    }
+  }
+
   private readWholeFile(sessionId: string, path: string): string {
     this.ensureReady()
     const normalizedPath = normalizePythonWorkspacePath(path)
@@ -423,6 +565,57 @@ export class PythonWorkspaceService {
 
   private fileExists(sessionId: string, path: string): boolean {
     return this.pathExists(`${this.getSessionDirectory(sessionId)}/${normalizePythonWorkspacePath(path)}`)
+  }
+
+  private getFileModifiedAt(sessionId: string, path: string): number {
+    const normalizedPath = normalizePythonWorkspacePath(path)
+    const filePath = `${this.getSessionDirectory(sessionId)}/${normalizedPath}`
+    if (!this.pathExists(filePath)) {
+      throw new Error(`工作区文件不存在: ${normalizedPath}`)
+    }
+    return this.observeFileVersion(sessionId, normalizedPath, fileIo.statSync(filePath).mtime)
+  }
+
+  private buildFileVersionKey(sessionId: string, path: string): string {
+    return `${sessionId.trim()}\u0000${path}`
+  }
+
+  private observeFileVersion(sessionId: string, path: string, filesystemModifiedAt: number): number {
+    const key = this.buildFileVersionKey(sessionId, path)
+    const recorded = this.fileVersions.get(key)
+    if (recorded !== undefined && recorded >= filesystemModifiedAt) {
+      return recorded
+    }
+    this.fileVersions.set(key, filesystemModifiedAt)
+    return filesystemModifiedAt
+  }
+
+  private recordFileMutation(sessionId: string, path: string, filesystemModifiedAt: number): number {
+    const key = this.buildFileVersionKey(sessionId, path)
+    const previous = this.fileVersions.get(key) ?? 0
+    const next = Math.max(filesystemModifiedAt, Date.now(), previous + 1)
+    this.fileVersions.set(key, next)
+    return next
+  }
+
+  private clearDirectoryFileVersions(sessionId: string, directory: string): void {
+    const prefix = `${sessionId.trim()}\u0000${directory}/`
+    const keys = Array.from(this.fileVersions.keys())
+    for (let i = 0; i < keys.length; i++) {
+      if (keys[i].startsWith(prefix)) {
+        this.fileVersions.delete(keys[i])
+      }
+    }
+  }
+
+  private clearSessionFileVersions(sessionId: string): void {
+    const prefix = `${sessionId.trim()}\u0000`
+    const keys = Array.from(this.fileVersions.keys())
+    for (let i = 0; i < keys.length; i++) {
+      if (keys[i].startsWith(prefix)) {
+        this.fileVersions.delete(keys[i])
+      }
+    }
   }
 
   private validateFileSize(size: number): void {
@@ -468,17 +661,6 @@ export class PythonWorkspaceService {
       return fileIo.accessSync(path)
     } catch (_error) {
       return false
-    }
-  }
-
-  private pruneEmptyDirectories(directory: string, sessionDirectory: string): void {
-    let current = directory
-    while (current.startsWith(`${sessionDirectory}/`) && current !== sessionDirectory) {
-      if (fileIo.listFileSync(current).length > 0) {
-        return
-      }
-      fileIo.rmdirSync(current)
-      current = current.substring(0, current.lastIndexOf('/'))
     }
   }
 

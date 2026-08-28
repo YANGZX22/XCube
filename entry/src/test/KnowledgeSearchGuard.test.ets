@@ -41,7 +41,10 @@ import {
   SUB_AGENT_RESULT_TOOL_ID,
   SUB_AGENT_TOOL_ID
 } from '../main/ets/services/SubAgentService'
-import { appendSubAgentResultTool } from '../main/ets/config/BuiltinTools'
+import {
+  appendSubAgentResultTool,
+  PYTHON_SANDBOX_TOOL_ID
+} from '../main/ets/config/BuiltinTools'
 
 function createTestToolDefinition(name: string): ToolDefinition {
   return new ToolDefinition(new ToolFunction(name, '', new ToolParameters()))
@@ -297,6 +300,7 @@ export default function knowledgeSearchGuardTest() {
       const tools = [
         createTestToolDefinition('web_search'),
         createTestToolDefinition(KNOWLEDGE_SEARCH_TOOL_ID),
+        createTestToolDefinition(PYTHON_SANDBOX_TOOL_ID),
         createTestToolDefinition(SUB_AGENT_TOOL_ID),
         createTestToolDefinition(SUB_AGENT_RESULT_TOOL_ID),
         createTestToolDefinition(SUB_AGENT_MESSAGE_TOOL_ID)
@@ -307,10 +311,11 @@ export default function knowledgeSearchGuardTest() {
 
       expect(names.includes('web_search')).assertEqual(true)
       expect(names.includes(KNOWLEDGE_SEARCH_TOOL_ID)).assertEqual(true)
+      expect(names.includes(PYTHON_SANDBOX_TOOL_ID)).assertEqual(true)
       expect(names.includes(SUB_AGENT_TOOL_ID)).assertEqual(false)
       expect(names.includes(SUB_AGENT_RESULT_TOOL_ID)).assertEqual(false)
       expect(names.includes(SUB_AGENT_MESSAGE_TOOL_ID)).assertEqual(false)
-      expect(tools.length).assertEqual(5)
+      expect(tools.length).assertEqual(6)
     })
 
     it('exposes_both_sub_agent_conversation_companions_without_duplicates', 0, () => {

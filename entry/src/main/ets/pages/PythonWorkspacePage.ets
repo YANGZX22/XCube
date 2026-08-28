@@ -10,8 +10,10 @@
 
 import {
   PythonWorkspaceFileInfo,
+  PYTHON_WORKSPACE_MAX_FILE_BYTES,
   PythonWorkspaceReadResult,
-  PythonWorkspaceService
+  PythonWorkspaceService,
+  normalizePythonWorkspacePath
 } from '../services/PythonWorkspaceService'
 import { ServiceRegistry } from '../services/ServiceRegistry'
 import { getAppUiState } from '../state/AppUiState'
@@ -19,6 +21,8 @@ import { pickLocalizedText } from '../utils/LocalizedTextUtils'
 import { withColorAlpha } from '../utils/ColorAlphaUtils'
 import { showToast } from '../utils/ToastUtil'
 import { pasteboard } from '@kit.BasicServicesKit'
+import { fileIo, picker } from '@kit.CoreFileKit'
+import { util } from '@kit.ArkTS'
 import {
   buildWorkspaceExplorerRows,
   describeWorkspaceDirectory,
@@ -65,6 +69,16 @@ class WorkspaceCodeLine {
   }
 }
 
+class WorkspaceUploadData {
+  path: string = ''
+  content: string = ''
+
+  constructor(path: string, content: string) {
+    this.path = path
+    this.content = content
+  }
+}
+
 @ComponentV2
 struct PythonWorkspacePageContent {
   @Param sessionId: string = ''
@@ -72,6 +86,7 @@ struct PythonWorkspacePageContent {
   @Event onClose: () => void = (): void => {}
 
   @Local files: PythonWorkspaceFileInfo[] = []
+  @Local directories: string[] = []
   @Local isLoading: boolean = true
   @Local loadError: string = ''
   @Local filterText: string = ''
@@ -83,9 +98,13 @@ struct PythonWorkspacePageContent {
   @Local previewTotalLines: number = 0
   @Local previewTruncated: boolean = false
   @Local previewError: string = ''
+  @Local createItemName: string = ''
+  @Local createItemDirectory: string = ''
+  @Local createItemKind: string = 'file'
 
   private workspaceService: PythonWorkspaceService = ServiceRegistry.pythonWorkspace()
   private previewContent: string = ''
+  private createItemDialogId: number = -1
 
   private get themePrimary(): string {
     return getAppUiState().themePrimary
@@ -129,9 +148,11 @@ struct PythonWorkspacePageContent {
     this.loadError = ''
     try {
       this.files = this.sessionId.trim() === '' ? [] : this.workspaceService.listFiles(this.sessionId)
+      this.directories = this.sessionId.trim() === '' ? [] : this.workspaceService.listDirectories(this.sessionId)
     } catch (error) {
       console.error('PythonWorkspacePage', `Failed to load workspace: ${JSON.stringify(error)}`)
       this.files = []
+      this.directories = []
       this.loadError = this.stringifyError(error)
     } finally {
       this.isLoading = false
@@ -246,7 +267,194 @@ struct PythonWorkspacePageContent {
   }
 
   private getExplorerRows(): WorkspaceExplorerRow[] {
-    return buildWorkspaceExplorerRows(this.files, this.collapsedDirectories, this.filterText)
+    return buildWorkspaceExplorerRows(this.files, this.directories, this.collapsedDirectories, this.filterText)
+  }
+
+  private buildChildPath(directory: string, name: string): string {
+    const trimmedName = name.trim()
+    return normalizePythonWorkspacePath(directory === '' ? trimmedName : `${directory}/${trimmedName}`)
+  }
+
+  private openCreateItemDialog(directory: string, kind: string): void {
+    if (this.sessionId.trim() === '') {
+      return
+    }
+    this.createItemDirectory = directory
+    this.createItemKind = kind
+    this.createItemName = ''
+    this.getUIContext().getPromptAction().openCustomDialog({
+      builder: (): void => {
+        this.CreateWorkspaceItemDialog()
+      },
+      autoCancel: true,
+      alignment: DialogAlignment.Center,
+      cornerRadius: 24,
+      backgroundColor: this.getSurfaceColor()
+    }).then((dialogId: number): void => {
+      this.createItemDialogId = dialogId
+    }).catch((error: Object): void => {
+      console.error('PythonWorkspacePage', `Failed to open create dialog: ${JSON.stringify(error)}`)
+    })
+  }
+
+  private closeCreateItemDialog(): void {
+    if (this.createItemDialogId < 0) {
+      return
+    }
+    this.getUIContext().getPromptAction().closeCustomDialog(this.createItemDialogId)
+    this.createItemDialogId = -1
+  }
+
+  private createWorkspaceItem(): void {
+    this.performCreateWorkspaceItem().catch((error: Object): void => {
+      showToast(this.getUIContext(), this.stringifyError(error))
+    })
+  }
+
+  private async performCreateWorkspaceItem(): Promise<void> {
+    const path = this.buildChildPath(this.createItemDirectory, this.createItemName)
+    await this.workspaceService.runSessionExclusive(this.sessionId, async (): Promise<void> => {
+      this.workspaceService.assertSessionWritable(this.sessionId)
+      if (this.createItemKind === 'directory') {
+        this.workspaceService.createDirectory(this.sessionId, path)
+      } else {
+        this.workspaceService.writeFile(this.sessionId, path, '', 0)
+      }
+    })
+    this.closeCreateItemDialog()
+    this.loadWorkspace()
+    showToast(this.getUIContext(), this.createItemKind === 'directory'
+      ? pickLocalizedText('文件夹已创建', 'Folder created')
+      : pickLocalizedText('文件已创建', 'File created'))
+  }
+
+  private chooseWorkspaceFiles(directory: string): void {
+    this.performChooseWorkspaceFiles(directory).catch((error: Object): void => {
+      console.error('PythonWorkspacePage', `Workspace upload failed: ${JSON.stringify(error)}`)
+      showToast(this.getUIContext(), this.stringifyError(error))
+    })
+  }
+
+  private async performChooseWorkspaceFiles(directory: string): Promise<void> {
+    const context = this.getUIContext().getHostContext()
+    if (context === undefined) {
+      throw new Error(pickLocalizedText('当前页面上下文不可用', 'The current page context is unavailable'))
+    }
+    const options = new picker.DocumentSelectOptions()
+    options.maxSelectNumber = 10
+    const uris = await new picker.DocumentViewPicker(context).select(options)
+    if (uris.length === 0) {
+      return
+    }
+    const uploads: WorkspaceUploadData[] = []
+    for (let i = 0; i < uris.length; i++) {
+      uploads.push(this.readWorkspaceUpload(uris[i], directory))
+    }
+    await this.workspaceService.runSessionExclusive(this.sessionId, async (): Promise<void> => {
+      this.workspaceService.assertSessionWritable(this.sessionId)
+      const existing = this.workspaceService.listFiles(this.sessionId)
+      const pendingPaths: string[] = []
+      for (let i = 0; i < uploads.length; i++) {
+        const path = uploads[i].path
+        if (pendingPaths.includes(path)) {
+          throw new Error(`选择的文件包含重复名称: ${path}`)
+        }
+        pendingPaths.push(path)
+        for (let j = 0; j < existing.length; j++) {
+          if (existing[j].path === path) {
+            throw new Error(`工作区文件已存在: ${path}`)
+          }
+        }
+      }
+      for (let i = 0; i < uploads.length; i++) {
+        this.workspaceService.writeFile(this.sessionId, uploads[i].path, uploads[i].content, 0)
+      }
+    })
+    this.loadWorkspace()
+    showToast(this.getUIContext(), pickLocalizedText(
+      `已上传 ${uploads.length} 个文件`, `Uploaded ${uploads.length} file(s)`))
+  }
+
+  private readWorkspaceUpload(uri: string, directory: string): WorkspaceUploadData {
+    const fileName = this.getFileNameFromUri(uri)
+    const path = this.buildChildPath(directory, fileName)
+    const file = fileIo.openSync(uri, fileIo.OpenMode.READ_ONLY)
+    try {
+      const stat = fileIo.statSync(file.fd)
+      if (stat.size > PYTHON_WORKSPACE_MAX_FILE_BYTES) {
+        throw new Error(`${fileName} 超过工作区单文件大小限制`)
+      }
+      const buffer = new ArrayBuffer(stat.size)
+      fileIo.readSync(file.fd, buffer)
+      const content = util.TextDecoder.create('utf-8')
+        .decodeToString(new Uint8Array(buffer), { stream: false })
+      if (content.includes('\uFFFD')) {
+        throw new Error(`${fileName} 不是有效的 UTF-8 文本，无法加入 Python 文本工作区`)
+      }
+      return new WorkspaceUploadData(path, content)
+    } finally {
+      fileIo.closeSync(file)
+    }
+  }
+
+  private getFileNameFromUri(uri: string): string {
+    const parts = uri.split('/')
+    const encodedName = (parts[parts.length - 1] || 'workspace-file').split('?')[0].split('#')[0]
+    try {
+      return decodeURIComponent(encodedName)
+    } catch (_error) {
+      return encodedName
+    }
+  }
+
+  private requestDeleteWorkspaceItem(row: WorkspaceExplorerRow): void {
+    const itemKind = row.isDirectory
+      ? pickLocalizedText('文件夹', 'folder') : pickLocalizedText('文件', 'file')
+    this.getUIContext().showAlertDialog({
+      title: row.isDirectory
+        ? pickLocalizedText('删除文件夹', 'Delete folder')
+        : pickLocalizedText('删除文件', 'Delete file'),
+      message: row.isDirectory
+        ? pickLocalizedText(`将递归删除${itemKind}“${row.path}”及其中全部内容。`,
+          `This recursively deletes ${itemKind} “${row.path}” and all of its contents.`)
+        : pickLocalizedText(`将删除${itemKind}“${row.path}”。`, `This deletes ${itemKind} “${row.path}”.`),
+      primaryButton: {
+        value: $r('app.string.cancel'),
+        action: () => {}
+      },
+      secondaryButton: {
+        value: $r('app.string.delete'),
+        fontColor: Color.Red,
+        action: () => {
+          this.deleteWorkspaceItem(row)
+        }
+      }
+    })
+  }
+
+  private deleteWorkspaceItem(row: WorkspaceExplorerRow): void {
+    this.performDeleteWorkspaceItem(row).catch((error: Object): void => {
+      showToast(this.getUIContext(), this.stringifyError(error))
+      this.loadWorkspace()
+    })
+  }
+
+  private async performDeleteWorkspaceItem(row: WorkspaceExplorerRow): Promise<void> {
+    await this.workspaceService.runSessionExclusive(this.sessionId, async (): Promise<void> => {
+      this.workspaceService.assertSessionWritable(this.sessionId)
+      const deleted = row.isDirectory
+        ? this.workspaceService.deleteDirectory(this.sessionId, row.path)
+        : this.workspaceService.deleteFile(this.sessionId, row.path, row.modifiedAt)
+      if (!deleted) {
+        throw new Error(`${row.path} 已不存在`)
+      }
+    })
+    if (this.selectedPath === row.path ||
+      (row.isDirectory && this.selectedPath.startsWith(`${row.path}/`))) {
+      this.closeFile()
+    }
+    this.loadWorkspace()
+    showToast(this.getUIContext(), pickLocalizedText('已删除', 'Deleted'))
   }
 
   private getDisplaySessionTitle(): string {
@@ -316,6 +524,128 @@ struct PythonWorkspacePageContent {
   }
 
   @Builder
+  private CreateWorkspaceItemDialog() {
+    Column({ space: 16 }) {
+      Text(this.createItemKind === 'directory'
+        ? pickLocalizedText('新建文件夹', 'New folder')
+        : pickLocalizedText('新建文件', 'New file'))
+        .width('100%')
+        .fontSize(18)
+        .fontWeight(FontWeight.Bold)
+        .fontColor($r('app.color.text_primary'))
+
+      Text(pickLocalizedText(
+        `位置：${describeWorkspaceDirectory(this.createItemDirectory)}`,
+        `Location: ${describeWorkspaceDirectory(this.createItemDirectory)}`))
+        .width('100%')
+        .fontSize(11)
+        .fontColor($r('app.color.text_tertiary'))
+        .maxLines(2)
+
+      TextInput({
+        text: this.createItemName,
+        placeholder: this.createItemKind === 'directory'
+          ? pickLocalizedText('文件夹名称', 'Folder name')
+          : pickLocalizedText('文件名，例如 main.py', 'File name, e.g. main.py')
+      })
+        .width('100%')
+        .height(44)
+        .fontSize(14)
+        .caretColor(this.themePrimary)
+        .onChange((value: string): void => {
+          this.createItemName = value
+        })
+
+      Row({ space: 12 }) {
+        Button($r('app.string.cancel'))
+          .layoutWeight(1)
+          .height(40)
+          .fontColor($r('app.color.text_secondary'))
+          .backgroundColor(Color.Transparent)
+          .onClick((): void => {
+            this.closeCreateItemDialog()
+          })
+
+        Button(pickLocalizedText('创建', 'Create'))
+          .layoutWeight(1)
+          .height(40)
+          .fontColor(Color.White)
+          .backgroundColor(this.themePrimary)
+          .enabled(this.createItemName.trim() !== '')
+          .opacity(this.createItemName.trim() !== '' ? 1 : 0.45)
+          .onClick((): void => {
+            this.createWorkspaceItem()
+          })
+      }
+      .width('100%')
+    }
+    .width('100%')
+    .padding(20)
+    .alignItems(HorizontalAlign.Start)
+  }
+
+  @Builder
+  private WorkspaceDirectoryContextMenu(directory: string) {
+    Menu() {
+      MenuItem({
+        startIcon: $r('sys.symbol.paperclip'),
+        content: pickLocalizedText('上传文件', 'Upload files')
+      })
+        .onClick((): void => {
+          this.chooseWorkspaceFiles(directory)
+        })
+      MenuItem({
+        startIcon: $r('sys.symbol.doc'),
+        content: pickLocalizedText('新建文件', 'New file')
+      })
+        .onClick((): void => {
+          this.openCreateItemDialog(directory, 'file')
+        })
+      MenuItem({
+        startIcon: $r('sys.symbol.folder'),
+        content: pickLocalizedText('新建文件夹', 'New folder')
+      })
+        .onClick((): void => {
+          this.openCreateItemDialog(directory, 'directory')
+        })
+    }
+  }
+
+  @Builder
+  private WorkspaceItemContextMenu(row: WorkspaceExplorerRow) {
+    Menu() {
+      if (row.isDirectory) {
+        MenuItem({
+          startIcon: $r('sys.symbol.paperclip'),
+          content: pickLocalizedText('上传到此文件夹', 'Upload to this folder')
+        })
+          .onClick((): void => {
+            this.chooseWorkspaceFiles(row.path)
+          })
+        MenuItem({
+          startIcon: $r('sys.symbol.doc'),
+          content: pickLocalizedText('在此新建文件', 'New file here')
+        })
+          .onClick((): void => {
+            this.openCreateItemDialog(row.path, 'file')
+          })
+        MenuItem({
+          startIcon: $r('sys.symbol.folder'),
+          content: pickLocalizedText('在此新建文件夹', 'New folder here')
+        })
+          .onClick((): void => {
+            this.openCreateItemDialog(row.path, 'directory')
+          })
+      }
+      MenuItem({ startIcon: $r('sys.symbol.trash'), content: $r('app.string.delete') })
+        .contentFontColor(Color.Red)
+        .onClick((): void => {
+          this.requestDeleteWorkspaceItem(row)
+        })
+    }
+  }
+
+  @Builder
   private TopBar() {
     Row({ space: 4 }) {
       this.IconButton($r('sys.symbol.chevron_left'), (): void => {
@@ -362,7 +692,7 @@ struct PythonWorkspacePageContent {
 
       Blank().layoutWeight(1)
 
-      Text(`${this.files.length} · ${formatWorkspaceFileSize(this.getTotalSize())}`)
+      Text(`${this.files.length} / ${this.directories.length} · ${formatWorkspaceFileSize(this.getTotalSize())}`)
         .fontSize(10)
         .fontColor($r('app.color.text_tertiary'))
     }
@@ -485,6 +815,7 @@ struct PythonWorkspacePageContent {
       }
       this.openFile(row.path)
     })
+    .bindContextMenu(this.WorkspaceItemContextMenu(row), ResponseType.LongPress)
   }
 
   @Builder
@@ -526,7 +857,7 @@ struct PythonWorkspacePageContent {
     Column() {
       this.ExplorerHeader()
 
-      if (this.files.length > 0 || this.filterText !== '') {
+      if (this.files.length > 0 || this.directories.length > 0 || this.filterText !== '') {
         this.FilterField()
       }
 
@@ -557,12 +888,12 @@ struct PythonWorkspacePageContent {
           pickLocalizedText('工作区读取失败', 'Unable to load workspace'),
           this.loadError
         )
-      } else if (this.files.length === 0) {
+      } else if (this.files.length === 0 && this.directories.length === 0) {
         this.EmptyState(
           $r('sys.symbol.folder'),
           pickLocalizedText('工作区暂无文件', 'Workspace is empty'),
-          pickLocalizedText('模型在 Python 工作区创建的文件会显示在这里。',
-            'Files created by the model in the Python workspace will appear here.')
+          pickLocalizedText('模型创建的内容会显示在这里；长按空白处可上传或新建。',
+            'Model-created content appears here; long-press empty space to upload or create.')
         )
       } else if (this.getExplorerRows().length === 0) {
         this.EmptyState(
@@ -590,6 +921,7 @@ struct PythonWorkspacePageContent {
     }
     .width('100%')
     .height('100%')
+    .bindContextMenu(this.WorkspaceDirectoryContextMenu(''), ResponseType.LongPress)
   }
 
   @Builder

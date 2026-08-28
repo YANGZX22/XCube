@@ -12,6 +12,7 @@ import { getAppStateManager, AppStateManager } from './AppStateManager'
 import { getAITaskService, AITaskService } from '../services/AITaskService'
 import { getAttachmentStorageService, AttachmentStorageService } from '../services/AttachmentStorageService'
 import { getToolExecutionService, ToolExecutionService } from '../services/ToolExecutionService'
+import { ToolExecutionContext } from '../services/ToolRegistry'
 import {
   getSubAgentService,
   SubAgentRuntimeConfig,
@@ -3247,10 +3248,12 @@ ${knowledgeSearchLimitRule}`
       reasoningLevel,
       requestTools,
       currentTime,
+      new ToolExecutionContext(snapshotSessionId, requestId, 'main'),
       async (
         toolCall: ToolCall,
         allowedFunctionNames: string[],
-        budgetKey: string
+        budgetKey: string,
+        executionContext: ToolExecutionContext
       ): Promise<ToolResult> => {
         let budgetMessage = subAgentBudgetMessages.get(budgetKey)
         if (budgetMessage === undefined) {
@@ -3270,6 +3273,7 @@ ${knowledgeSearchLimitRule}`
           allowedFunctionNames,
           webSearchCallLimit,
           knowledgeSearchCallLimit,
+          executionContext,
           true
         )
         const subToolResult = subToolResults[0]
@@ -3550,6 +3554,7 @@ ${preview}`
     allowedFunctionNames: string[],
     webSearchCallLimit: number,
     knowledgeSearchCallLimit: number,
+    executionContext: ToolExecutionContext,
     includeSubAgentCalls: boolean = false
   ): Promise<ToolResult[]> {
     const results: ToolResult[] = []
@@ -3570,7 +3575,7 @@ ${preview}`
           ))
           continue
         }
-        const result = await this.runToolCallGuarded(toolCall, allowedFunctionNames)
+        const result = await this.runToolCallGuarded(toolCall, allowedFunctionNames, executionContext)
         results.push(result)
         if (!this.isWebSearchBudgetResult(result)) {
           executedSearchesInBatch += 1
@@ -3588,13 +3593,13 @@ ${preview}`
           ))
           continue
         }
-        const result = await this.runToolCallGuarded(toolCall, allowedFunctionNames)
+        const result = await this.runToolCallGuarded(toolCall, allowedFunctionNames, executionContext)
         executedKnowledgeQueriesInBatch += 1
         this.decorateKnowledgeSearchResult(result, usedKnowledgeQueryCount + 1, knowledgeSearchCallLimit)
         results.push(result)
         continue
       }
-      results.push(await this.runToolCallGuarded(toolCall, allowedFunctionNames))
+      results.push(await this.runToolCallGuarded(toolCall, allowedFunctionNames, executionContext))
     }
     return results
   }
@@ -3614,13 +3619,18 @@ ${preview}`
 
   private async runToolCallGuarded(
     toolCall: ToolCall,
-    allowedFunctionNames: string[]
+    allowedFunctionNames: string[],
+    executionContext: ToolExecutionContext
   ): Promise<ToolResult> {
     if (this.isNonExclusiveToolFunction(toolCall.functionName)) {
-      return await this.toolExecutionService.executeToolCall(toolCall, allowedFunctionNames)
+      return await this.toolExecutionService.executeToolCall(toolCall, allowedFunctionNames, executionContext)
     }
     return await this.toolExecutionService.runExclusively<ToolResult>(
-      (): Promise<ToolResult> => this.toolExecutionService.executeToolCall(toolCall, allowedFunctionNames)
+      (): Promise<ToolResult> => this.toolExecutionService.executeToolCall(
+        toolCall,
+        allowedFunctionNames,
+        executionContext
+      )
     )
   }
 
@@ -4588,7 +4598,8 @@ ${preview}`
             aiMessage,
             this.buildAllowedToolFunctionNames(toolsForThisRound),
             webSearchCallLimit,
-            knowledgeSearchCallLimit
+            knowledgeSearchCallLimit,
+            new ToolExecutionContext(snapshotSessionId, requestId, 'main')
           )
           if (isCancelledFn()) {
             return

@@ -231,7 +231,7 @@ export class PyodideRuntimeService {
     }
     if (this.pending.size > 0) {
       return this.failureResult('Python 运行时已有正在执行或加载包的请求；' +
-        '同一会话的 python_sandbox 必须串行调用')
+        '请等待当前请求完成后重试')
     }
 
     this.requestSeq += 1

@@ -9,6 +9,7 @@ export class PythonSandboxRequest {
   content?: string
   old_text?: string
   new_text?: string
+  expected_modified_at?: number | string
   start_line?: number | string
   end_line?: number | string
 }

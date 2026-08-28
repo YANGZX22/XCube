@@ -548,14 +548,13 @@ export struct ChatToolbar {
       .width(this.getWorkspaceChipWidth())
       .height(this.getToolbarChipBarHeight())
       .padding(0)
-      .backgroundColor(this.workspaceActive ? this.themePrimaryLight : Color.Transparent)
+      .backgroundColor(Color.Transparent)
       .borderRadius(Math.min(this.getWorkspaceChipWidth(), this.getToolbarChipBarHeight()) / 2)
       .onClick(() => {
         this.onOpenWorkspace()
       })
       .systemMaterial(new uiMaterial.ImmersiveMaterial({
         style: uiMaterial.ImmersiveStyle.REGULAR,
-        materialColor: this.workspaceActive ? this.themePrimaryLight : Color.Transparent,
         applyShadow: false,
         interactive: true,
         lightEffect: { color: undefined }

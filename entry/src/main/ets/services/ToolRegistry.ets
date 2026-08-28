@@ -1,8 +1,25 @@
 import { ToolDefinition, ToolConfig, ToolSourceType } from '../models/ChatModels'
 
+// 工具调用必须绑定请求开始时的会话，而不能在执行中途重新读取当前 UI 页面。
+export class ToolExecutionContext {
+  sessionId: string = ''
+  requestId: string = ''
+  actorId: string = 'main'
+
+  constructor(sessionId: string = '', requestId: string = '', actorId: string = 'main') {
+    this.sessionId = sessionId.trim()
+    this.requestId = requestId.trim()
+    this.actorId = actorId.trim() !== '' ? actorId.trim() : 'main'
+  }
+
+  withActor(actorId: string): ToolExecutionContext {
+    return new ToolExecutionContext(this.sessionId, this.requestId, actorId)
+  }
+}
+
 // 工具执行器接口
 export interface ToolExecutor {
-  execute(args: string): Promise<string>
+  execute(args: string, context?: ToolExecutionContext): Promise<string>
 }
 
 // 已注册工具

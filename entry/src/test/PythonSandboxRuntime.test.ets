@@ -62,13 +62,22 @@ import {
 import {
   encodePythonWorkspaceSessionDirectory,
   normalizePythonWorkspacePath,
+  PYTHON_WORKSPACE_FILE_CONFLICT,
+  PythonWorkspaceFileInfo,
+  validatePythonWorkspaceExpectedModifiedAt,
   validatePythonWorkspaceReplacement
 } from '../main/ets/services/PythonWorkspaceService'
+import { PythonWorkspaceSessionCoordinator } from '../main/ets/services/PythonWorkspaceSessionCoordinator'
 import {
   parsePythonSandboxRequestArguments,
   repairTruncatedPythonToolArguments
 } from '../main/ets/services/PythonSandboxService'
 import { resolvePythonSandboxAction } from '../main/ets/utils/ToolDisplayTextUtils'
+import { ToolExecutionContext } from '../main/ets/services/ToolRegistry'
+import {
+  buildWorkspaceExplorerRows,
+  WorkspaceExplorerRow
+} from '../main/ets/utils/WorkspaceExplorerTree'
 import {
   PyodideHost,
   PyodideRuntimeService,
@@ -238,6 +247,7 @@ export default function pythonSandboxRuntimeTest() {
       expect(normalizePythonWorkspacePath('src/main.py')).assertEqual('src/main.py')
       expect(normalizePythonWorkspacePath('data/input.txt')).assertEqual('data/input.txt')
       expect(normalizePythonWorkspacePath('./notes\\readme.md')).assertEqual('notes/readme.md')
+      expect(normalizePythonWorkspacePath('资料/输入数据.csv')).assertEqual('资料/输入数据.csv')
       expect(encodePythonWorkspaceSessionDirectory('abc')).assertEqual('session_616263')
 
       let rejectedParentPath = false
@@ -382,10 +392,12 @@ export default function pythonSandboxRuntimeTest() {
       expect(PYTHON_PLOTTING_USAGE_GUIDANCE.includes('不得假设先前调用安装的包或导入状态')).assertTrue()
     })
 
-    it('guides_models_to_serialize_workspace_edits_and_verify_deliverables', 0, () => {
-      expect(PYTHON_WORKSPACE_USAGE_GUIDANCE.includes('python_sandbox 调用必须逐个串行'))
+    it('guides_models_to_coordinate_shared_workspace_edits_and_verify_deliverables', 0, () => {
+      expect(PYTHON_WORKSPACE_USAGE_GUIDANCE.includes('所有子智能体共享当前会话的同一个持久化工作区'))
         .assertTrue()
-      expect(PYTHON_WORKSPACE_USAGE_GUIDANCE.includes('不得并行修改同一文件')).assertTrue()
+      expect(PYTHON_WORKSPACE_USAGE_GUIDANCE.includes('分配互不重叠的文件')).assertTrue()
+      expect(PYTHON_WORKSPACE_USAGE_GUIDANCE.includes('expected_modified_at')).assertTrue()
+      expect(PYTHON_WORKSPACE_USAGE_GUIDANCE.includes(PYTHON_WORKSPACE_FILE_CONFLICT)).assertTrue()
       expect(PYTHON_WORKSPACE_USAGE_GUIDANCE.includes('new_text 必须与 old_text 不同')).assertTrue()
       expect(PYTHON_WORKSPACE_USAGE_GUIDANCE.includes('read_file 读取相关行复验')).assertTrue()
       expect(PYTHON_WORKSPACE_USAGE_GUIDANCE.includes('action=run 的当前目录是当次 PYTHON_OUTPUT_DIR'))
@@ -414,12 +426,86 @@ export default function pythonSandboxRuntimeTest() {
       validatePythonWorkspaceReplacement('{N_PATH}', '{N_PATHS}')
     })
 
+    it('detects_stale_or_conflicting_workspace_file_versions', 0, () => {
+      validatePythonWorkspaceExpectedModifiedAt('new.py', false, 0, 0)
+      validatePythonWorkspaceExpectedModifiedAt('main.py', true, 1234, 1234)
+
+      let existingConflict = ''
+      try {
+        validatePythonWorkspaceExpectedModifiedAt('main.py', true, 1234, 0)
+      } catch (error) {
+        existingConflict = error instanceof Error ? error.message : `${error}`
+      }
+      expect(existingConflict.includes(PYTHON_WORKSPACE_FILE_CONFLICT)).assertTrue()
+
+      let staleConflict = ''
+      try {
+        validatePythonWorkspaceExpectedModifiedAt('main.py', true, 5678, 1234)
+      } catch (error) {
+        staleConflict = error instanceof Error ? error.message : `${error}`
+      }
+      expect(staleConflict.includes('重新读取并合并')).assertTrue()
+    })
+
+    it('serializes_same_session_work_and_blocks_writes_after_deletion', 0, async () => {
+      const coordinator = new PythonWorkspaceSessionCoordinator()
+      const order: string[] = []
+      let releaseFirst: () => void = (): void => {}
+      const firstGate = new Promise<void>((resolve) => {
+        releaseFirst = resolve
+      })
+      const first = coordinator.runExclusive('session-a', async (): Promise<void> => {
+        order.push('first-start')
+        await firstGate
+        order.push('first-end')
+      })
+      const second = coordinator.runExclusive('session-a', async (): Promise<void> => {
+        order.push('second')
+      })
+
+      await Promise.resolve()
+      expect(order.join(',')).assertEqual('first-start')
+      expect(coordinator.listActiveSessionIds().includes('session-a')).assertTrue()
+      releaseFirst()
+      await Promise.all([first, second])
+      expect(order.join(',')).assertEqual('first-start,first-end,second')
+      expect(coordinator.listActiveSessionIds().length).assertEqual(0)
+
+      coordinator.markDeleted('session-a')
+      let tombstoneError = ''
+      try {
+        coordinator.assertWritable('session-a')
+      } catch (error) {
+        tombstoneError = error instanceof Error ? error.message : `${error}`
+      }
+      expect(tombstoneError.includes('会话已删除')).assertTrue()
+    })
+
+    it('keeps_the_fixed_request_session_when_a_sub_agent_changes_actor', 0, () => {
+      const mainContext = new ToolExecutionContext('session-fixed', 'request-1', 'main')
+      const childContext = mainContext.withActor('sub-agent-2')
+      expect(childContext.sessionId).assertEqual('session-fixed')
+      expect(childContext.requestId).assertEqual('request-1')
+      expect(childContext.actorId).assertEqual('sub-agent-2')
+    })
+
+    it('keeps_explicit_empty_folders_visible_in_the_workspace_tree', 0, () => {
+      const files: PythonWorkspaceFileInfo[] = [new PythonWorkspaceFileInfo('src/main.py', 10, 1234)]
+      const rows: WorkspaceExplorerRow[] = buildWorkspaceExplorerRows(files, ['empty', 'src'], [], '')
+      const paths: string[] = rows.map((row: WorkspaceExplorerRow): string =>
+        `${row.isDirectory ? 'dir' : 'file'}:${row.path}`)
+      expect(paths.includes('dir:empty')).assertTrue()
+      expect(paths.includes('dir:src')).assertTrue()
+      expect(paths.includes('file:src/main.py')).assertTrue()
+    })
+
     it('builds_python_tool_schema_with_quoted_package_examples', 0, () => {
       const schemaJson: string = JSON.stringify(buildPythonSandboxRawSchema())
       expect(schemaJson.includes('packages')).assertTrue()
       expect(schemaJson.includes('seaborn')).assertTrue()
       expect(schemaJson.includes("matplotlib.use('Agg')")).assertTrue()
-      expect(schemaJson.includes('同一会话的 Python 调用必须串行')).assertTrue()
+      expect(schemaJson.includes('expected_modified_at')).assertTrue()
+      expect(schemaJson.includes(PYTHON_WORKSPACE_FILE_CONFLICT)).assertTrue()
       expect(schemaJson.includes('不能与 old_text 相同')).assertTrue()
       expect(schemaJson.includes('read_file 复验')).assertTrue()
     })

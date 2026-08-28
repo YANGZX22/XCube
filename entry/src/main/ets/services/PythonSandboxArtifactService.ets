@@ -1,5 +1,4 @@
 import { AttachmentType, MessageAttachment } from '../models/ChatModels'
-import { getAppUiState } from '../state/AppUiState'
 import { getAttachmentStorageService } from './AttachmentStorageService'
 import { getDocumentAttachmentRegistryService } from './DocumentAttachmentRegistryService'
 import {
@@ -173,15 +172,16 @@ export class PythonSandboxArtifactService {
     return PythonSandboxArtifactService.instance
   }
 
-  async saveForCurrentSession(artifacts: PyodideOutputArtifact[]): Promise<PythonSandboxArtifactSaveResult> {
+  async saveForSession(sessionId: string,
+    artifacts: PyodideOutputArtifact[]): Promise<PythonSandboxArtifactSaveResult> {
     const result = new PythonSandboxArtifactSaveResult()
     if (artifacts.length === 0) {
       return result
     }
 
-    const sessionId = getAppUiState().activeChatSessionId.trim()
-    if (sessionId === '') {
-      result.warnings.push('Python 已生成文件，但当前没有活动会话，无法保存为模型可调取的附件')
+    const normalizedSessionId = sessionId.trim()
+    if (normalizedSessionId === '') {
+      result.warnings.push('Python 已生成文件，但当前请求没有绑定会话，无法保存为模型可调取的附件')
       return result
     }
 
@@ -265,7 +265,7 @@ export class PythonSandboxArtifactService {
       }
 
       attachment.filePath = filePath
-      getDocumentAttachmentRegistryService().registerAttachments(sessionId, [attachment])
+      getDocumentAttachmentRegistryService().registerAttachments(normalizedSessionId, [attachment])
       if (isImage) {
         result.images.push(new PythonSandboxImageReference(
           attachment.id,

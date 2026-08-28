@@ -1,6 +1,6 @@
 import { ToolCall, ToolConfig, ToolPermissionLevel, ToolResult } from '../models/ChatModels'
 import { ASK_USER_TOOL_ID } from '../config/BuiltinTools'
-import { getToolRegistry, RegisteredTool, ToolRegistry } from './ToolRegistry'
+import { getToolRegistry, RegisteredTool, ToolExecutionContext, ToolRegistry } from './ToolRegistry'
 
 interface ToolExecutionErrorLike {
   code?: number | string
@@ -475,7 +475,8 @@ export class ToolExecutionService {
   }
 
   // 执行单个工具调用
-  async executeToolCall(toolCall: ToolCall, allowedFunctionNames: string[]): Promise<ToolResult> {
+  async executeToolCall(toolCall: ToolCall, allowedFunctionNames: string[],
+    context: ToolExecutionContext = new ToolExecutionContext()): Promise<ToolResult> {
     console.info('ToolExecutionService', `Executing tool call: ${toolCall.functionName} (${toolCall.id})`)
 
     // 检查是否已取消
@@ -552,7 +553,7 @@ export class ToolExecutionService {
     try {
       // 执行工具
       const startTime = Date.now()
-      const result = await executor.execute(toolCall.arguments)
+      const result = await executor.execute(toolCall.arguments, context)
 
       // 执行完成后再次检查是否取消（避免返回已取消的结果）
       if (this.isCancelled()) {
@@ -593,7 +594,8 @@ export class ToolExecutionService {
   }
 
   // 批量执行工具调用（串行，避免多个确认框并发弹出）
-  async executeToolCalls(toolCalls: ToolCall[], allowedFunctionNames: string[]): Promise<ToolResult[]> {
+  async executeToolCalls(toolCalls: ToolCall[], allowedFunctionNames: string[],
+    context: ToolExecutionContext = new ToolExecutionContext()): Promise<ToolResult[]> {
     console.info('ToolExecutionService', `Executing ${toolCalls.length} tool calls`)
 
     // 检查是否已取消
@@ -610,7 +612,7 @@ export class ToolExecutionService {
 
     const results: ToolResult[] = []
     for (let i = 0; i < toolCalls.length; i++) {
-      results.push(await this.executeToolCall(toolCalls[i], allowedFunctionNames))
+      results.push(await this.executeToolCall(toolCalls[i], allowedFunctionNames, context))
     }
     return results
   }

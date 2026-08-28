@@ -8,7 +8,7 @@ import {
   ToolSourceType
 } from '../models/ChatModels'
 import { util } from '@kit.ArkTS'
-import { ToolExecutor, RegisteredTool, getToolRegistry } from '../services/ToolRegistry'
+import { ToolExecutionContext, ToolExecutor, RegisteredTool, getToolRegistry } from '../services/ToolRegistry'
 import { getWebSearchService, SearchResult, WebSearchResult } from '../services/WebSearchService'
 import { cleanSearchQuery } from '../utils/SearchQueryUtils'
 import { getCalendarWriteService, ReadScheduleRequest, WriteScheduleRequest } from '../services/CalendarWriteService'
@@ -129,9 +129,11 @@ export const PYTHON_PLOTTING_USAGE_GUIDANCE: string =
     'Seaborn 等非 Pyodide 官方自动加载包必须在该次调用的 packages 中明确列出（例如 packages: ["seaborn"]），' +
     '包括重复、并行或重试调用；不得假设先前调用安装的包或导入状态会被后续调用继承。'
 export const PYTHON_WORKSPACE_USAGE_GUIDANCE: string =
-  'Python 工作区规则：同一会话的 python_sandbox 调用必须逐个串行，每次等待上一次返回后再调用；' +
-    '不得在同一批次并行发出多个 run、run_files、write_file、append_file、replace_in_file、' +
-    'read_file 或 list_files，尤其不得并行修改同一文件，否则会丢失活动会话、产生竞态或被旧版本覆盖。' +
+  'Python 工作区规则：主智能体和它派出的所有子智能体共享当前会话的同一个持久化工作区；' +
+    '多个子智能体协作时应预先分配互不重叠的文件，避免同时修改同一路径。应用会按会话串行执行 Python 调用，' +
+    '但智能体仍不得依赖并行调用的先后顺序。覆盖、追加、替换或删除已有文件前，必须先用 list_files 或 ' +
+    'read_file 取得 modifiedAt，并在修改调用中原样传入 expected_modified_at；新建文件传 0。' +
+    '若返回 PYTHON_WORKSPACE_FILE_CONFLICT，必须重新读取最新内容、合并双方改动后再提交，不能盲目重试或省略版本。' +
     'replace_in_file 的 old_text 必须在文件中恰好出现一次，new_text 必须与 old_text 不同；修改后必须串行调用 ' +
     'read_file 读取相关行复验最终内容，不能仅依赖修改调用的成功返回。' +
     'action=run 的当前目录是当次 PYTHON_OUTPUT_DIR，它不会同步或展示持久化工作区；' +
@@ -795,26 +797,22 @@ class OfficeToTextExecutor implements ToolExecutor {
 }
 
 class PythonSandboxExecutor implements ToolExecutor {
-  async execute(args: string): Promise<string> {
+  async execute(args: string, context?: ToolExecutionContext): Promise<string> {
     try {
       const params = parsePythonSandboxRequestArguments(args)
       const action = this.resolveAction(params)
-      if (action !== 'run') {
-        return await this.executeWorkspaceAction(action, params)
+      const sessionId = this.resolveExecutionSessionId(context)
+      if (sessionId === '') {
+        if (action !== 'run') {
+          throw new Error('当前请求没有绑定会话，无法使用 Python 工作区')
+        }
+        return await this.executeResolvedAction(action, params, sessionId)
       }
-      const code = params.code ?? ''
-      const packages = normalizePythonPackageSpecs(params.packages)
-      // 优先走 Pyodide（真正的 CPython 运行时）
-      const pyResult = await getPyodideRuntimeService().run(code, params.variables, packages)
-      if (!pyResult.fallback) {
-        return JSON.stringify(await this.buildRunOutput(pyResult, 'run', []))
-      }
-      // 运行时未就绪/加载失败/超时：降级到本地受限解释器
-      const fallback = getPythonSandboxService().run(params)
-      fallback.warnings.unshift(`Python 运行时未就绪（${pyResult.error}），已用受限子集执行；` +
-        '请按括号内的具体错误处理。下载、HTTP、CDN、Downloading 或包加载长时间无进展' +
-          '都表示依赖获取链路可能受网络或缓存影响。')
-      return JSON.stringify(fallback)
+      const workspace = getPythonWorkspaceService()
+      return await workspace.runSessionExclusive(sessionId, async (): Promise<string> => {
+        workspace.assertSessionWritable(sessionId)
+        return await this.executeResolvedAction(action, params, sessionId)
+      })
     } catch (error) {
       const detail = this.stringifyError(error)
       const jsonHint = detail.includes('JSON') || detail.includes('Unexpected end') ||
@@ -825,6 +823,34 @@ class PythonSandboxExecutor implements ToolExecutor {
     }
   }
 
+  private async executeResolvedAction(action: string, params: PythonSandboxRequest,
+    sessionId: string): Promise<string> {
+    if (action !== 'run') {
+      return await this.executeWorkspaceAction(action, params, sessionId)
+    }
+    const code = params.code ?? ''
+    const packages = normalizePythonPackageSpecs(params.packages)
+    // 优先走 Pyodide（真正的 CPython 运行时）
+    const pyResult = await getPyodideRuntimeService().run(code, params.variables, packages)
+    if (!pyResult.fallback) {
+      return JSON.stringify(await this.buildRunOutput(pyResult, 'run', [], [], sessionId))
+    }
+    // 运行时未就绪/加载失败/超时：降级到本地受限解释器
+    const fallback = getPythonSandboxService().run(params)
+    fallback.warnings.unshift(`Python 运行时未就绪（${pyResult.error}），已用受限子集执行；` +
+      '请按括号内的具体错误处理。下载、HTTP、CDN、Downloading 或包加载长时间无进展' +
+        '都表示依赖获取链路可能受网络或缓存影响。')
+    return JSON.stringify(fallback)
+  }
+
+  private resolveExecutionSessionId(context?: ToolExecutionContext): string {
+    if (context !== undefined && context.sessionId.trim() !== '') {
+      return context.sessionId.trim()
+    }
+    // 仅供旧调用入口兼容；正常主/子智能体请求始终携带固定 ToolExecutionContext。
+    return getAppUiState().activeChatSessionId.trim()
+  }
+
   private resolveAction(params: PythonSandboxRequest): string {
     const action = (params.action ?? '').trim().toLowerCase()
     if (action !== '') {
@@ -833,18 +859,16 @@ class PythonSandboxExecutor implements ToolExecutor {
     return params.code !== undefined ? 'run' : ''
   }
 
-  private async executeWorkspaceAction(action: string, params: PythonSandboxRequest): Promise<string> {
-    const sessionId = getAppUiState().activeChatSessionId.trim()
-    if (sessionId === '') {
-      throw new Error('当前没有活动会话，无法使用 Python 工作区')
-    }
+  private async executeWorkspaceAction(action: string, params: PythonSandboxRequest,
+    sessionId: string): Promise<string> {
     const workspace = getPythonWorkspaceService()
     const path = params.path ?? ''
     if (action === 'write_file') {
       if (params.content === undefined) {
         throw new Error('write_file 缺少 content')
       }
-      const info = workspace.writeFile(sessionId, path, params.content)
+      const info = workspace.writeFile(sessionId, path, params.content,
+        this.resolveOptionalNumber(params.expected_modified_at))
       return JSON.stringify(this.buildWorkspaceOutput(action, info.path,
         `已创建或覆盖 ${info.path}`, workspace.listFiles(sessionId)))
     }
@@ -852,7 +876,8 @@ class PythonSandboxExecutor implements ToolExecutor {
       if (params.content === undefined) {
         throw new Error('append_file 缺少 content')
       }
-      const info = workspace.appendFile(sessionId, path, params.content)
+      const info = workspace.appendFile(sessionId, path, params.content,
+        this.resolveOptionalNumber(params.expected_modified_at))
       return JSON.stringify(this.buildWorkspaceOutput(action, info.path,
         `已追加写入 ${info.path}`, workspace.listFiles(sessionId)))
     }
@@ -860,7 +885,8 @@ class PythonSandboxExecutor implements ToolExecutor {
       if (params.old_text === undefined || params.new_text === undefined) {
         throw new Error('replace_in_file 需要 old_text 和 new_text')
       }
-      const info = workspace.replaceInFile(sessionId, path, params.old_text, params.new_text)
+      const info = workspace.replaceInFile(sessionId, path, params.old_text, params.new_text,
+        this.resolveOptionalNumber(params.expected_modified_at))
       return JSON.stringify(this.buildWorkspaceOutput(action, info.path,
         `已精确替换 ${info.path}；请继续使用 read_file 复验相关行`, workspace.listFiles(sessionId)))
     }
@@ -883,7 +909,8 @@ class PythonSandboxExecutor implements ToolExecutor {
     }
     if (action === 'delete_file') {
       const normalizedPath = normalizePythonWorkspacePath(path)
-      if (!workspace.deleteFile(sessionId, normalizedPath)) {
+      if (!workspace.deleteFile(sessionId, normalizedPath,
+        this.resolveOptionalNumber(params.expected_modified_at))) {
         throw new Error(`工作区文件不存在: ${normalizedPath}`)
       }
       return JSON.stringify(this.buildWorkspaceOutput(action, normalizedPath,
@@ -924,7 +951,7 @@ class PythonSandboxExecutor implements ToolExecutor {
       }
     }
     return JSON.stringify(await this.buildRunOutput(pyResult, 'run_files', runFiles,
-      workspace.listFiles(sessionId)))
+      workspace.listFiles(sessionId), sessionId))
   }
 
   private resolveRunFiles(params: PythonSandboxRequest, availablePaths: string[]): string[] {
@@ -977,8 +1004,9 @@ class PythonSandboxExecutor implements ToolExecutor {
   }
 
   private async buildRunOutput(pyResult: PyodideRunResult, action: string,
-    executedFiles: string[], workspaceFiles: PythonWorkspaceFileInfo[] = []): Promise<PythonSandboxToolOutput> {
-    const savedArtifacts = await getPythonSandboxArtifactService().saveForCurrentSession(pyResult.artifacts)
+    executedFiles: string[], workspaceFiles: PythonWorkspaceFileInfo[] = [],
+    sessionId: string = ''): Promise<PythonSandboxToolOutput> {
+    const savedArtifacts = await getPythonSandboxArtifactService().saveForSession(sessionId, pyResult.artifacts)
     for (let i = 0; i < savedArtifacts.warnings.length; i++) {
       pyResult.warnings.push(savedArtifacts.warnings[i])
     }
@@ -1022,6 +1050,7 @@ class PythonSandboxExecutor implements ToolExecutor {
     output.action = 'read_file'
     output.path = readResult.path
     output.content = readResult.content
+    output.modifiedAt = readResult.modifiedAt
     output.startLine = readResult.startLine
     output.endLine = readResult.endLine
     output.totalLines = readResult.totalLines
@@ -1039,6 +1068,19 @@ class PythonSandboxExecutor implements ToolExecutor {
       return Number.isNaN(parsed) ? fallback : parsed
     }
     return fallback
+  }
+
+  private resolveOptionalNumber(value: number | string | undefined): number | undefined {
+    if (value === undefined || value === null) {
+      return undefined
+    }
+    if (typeof value === 'number') {
+      return value
+    }
+    if (value.trim() === '') {
+      return undefined
+    }
+    return Number(value)
   }
 
   private stringifyError(error: Object): string {
@@ -1071,6 +1113,7 @@ class PythonWorkspaceToolOutput {
   path: string = ''
   message: string = ''
   content: string = ''
+  modifiedAt: number = 0
   startLine: number = 1
   endLine: number = 0
   totalLines: number = 0
@@ -2945,7 +2988,7 @@ export function buildPythonSandboxRawSchema(): object {
       "action": {
         "type": "string",
         "enum": ["run", "write_file", "append_file", "replace_in_file", "read_file", "list_files", "delete_file", "run_files"],
-        "description": "操作类型。省略时兼容为 run。可用 write_file 创建 .py 源码及 txt、md、json、csv、yaml、toml、xml、html、sql 等 UTF-8 文本；长代码再用 run_files 运行 .py 入口。长文件不要放在一次 code/content JSON 中，应先 write_file 写首段、再用 append_file 分段追加；修改已有内容优先用 replace_in_file。同一会话的 Python 调用必须串行，不得在一个并行批次中调用多次。"
+        "description": "操作类型。省略时兼容为 run。可用 write_file 创建 .py 源码及 txt、md、json、csv、yaml、toml、xml、html、sql 等 UTF-8 文本；长代码再用 run_files 运行 .py 入口。长文件不要放在一次 code/content JSON 中，应先 write_file 写首段、再用 append_file 分段追加；修改已有内容优先用 replace_in_file。应用会按会话排队执行 Python 调用；多个智能体不得依赖完成顺序，协作修改同一文件时必须使用 expected_modified_at 检测冲突。"
       },
       "code": {
         "type": "string",
@@ -2972,6 +3015,11 @@ export function buildPythonSandboxRawSchema(): object {
       "new_text": {
         "type": "string",
         "description": "replace_in_file 的替换文本，可以为空字符串，但不能与 old_text 相同。替换成功后必须用 read_file 复验。"
+      },
+      "expected_modified_at": {
+        "type": "number",
+        "minimum": 0,
+        "description": "并发写入保护。覆盖、追加、替换或删除已有文件时，传入最近一次 list_files/read_file 返回的 modifiedAt；仅当文件不存在时新建传 0。版本不一致会返回 PYTHON_WORKSPACE_FILE_CONFLICT，必须重新读取并合并，不能盲目覆盖。"
       },
       "start_line": {
         "type": "number",

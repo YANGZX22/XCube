@@ -13,6 +13,7 @@ import {
   SubAgentDispatchArguments,
   SubAgentTaskArguments
 } from './SubAgentArgumentParser'
+import { ToolExecutionContext } from './ToolRegistry'
 
 export const SUB_AGENT_TOOL_ID: string = 'sub_agent'
 
@@ -52,7 +53,8 @@ export function buildSubAgentToolSet(tools: ToolDefinition[]): ToolDefinition[] 
 export type SubAgentToolRunner = (
   toolCall: ToolCall,
   allowedFunctionNames: string[],
-  budgetKey: string
+  budgetKey: string,
+  executionContext: ToolExecutionContext
 ) => Promise<ToolResult>
 
 // 子智能体工具调用镜像回调：把子智能体的工具调用/结果同步进主对话的 AI 消息，
@@ -76,6 +78,7 @@ export class SubAgentRuntimeConfig {
   reasoningLevel: ReasoningLevel
   tools: ToolDefinition[]
   timeContext: string
+  toolExecutionContext: ToolExecutionContext
   toolRunner: SubAgentToolRunner
   onToolCallStarted: SubAgentToolCallStarted
   onToolCallCompleted: SubAgentToolCallCompleted
@@ -93,6 +96,7 @@ export class SubAgentRuntimeConfig {
     reasoningLevel: ReasoningLevel,
     tools: ToolDefinition[],
     timeContext: string,
+    toolExecutionContext: ToolExecutionContext,
     toolRunner: SubAgentToolRunner,
     onToolCallStarted: SubAgentToolCallStarted,
     onToolCallCompleted: SubAgentToolCallCompleted,
@@ -109,6 +113,7 @@ export class SubAgentRuntimeConfig {
     this.reasoningLevel = reasoningLevel
     this.tools = tools
     this.timeContext = timeContext
+    this.toolExecutionContext = toolExecutionContext
     this.toolRunner = toolRunner
     this.onToolCallStarted = onToolCallStarted
     this.onToolCallCompleted = onToolCallCompleted
@@ -943,7 +948,8 @@ export class SubAgentService {
           runtime,
           toolCall,
           session.allowedFunctionNames,
-          session.budgetKey
+          session.budgetKey,
+          runtime.toolExecutionContext.withActor(session.id)
         )
 
         // executeToolCall 会把注册表里的显示名回填到 toolCall 上
@@ -1116,10 +1122,11 @@ ${knowledgeSearchRule}
     runtime: SubAgentRuntimeConfig,
     toolCall: ToolCall,
     allowedFunctionNames: string[],
-    budgetKey: string
+    budgetKey: string,
+    executionContext: ToolExecutionContext
   ): Promise<ToolResult> {
     try {
-      return await runtime.toolRunner(toolCall, allowedFunctionNames, budgetKey)
+      return await runtime.toolRunner(toolCall, allowedFunctionNames, budgetKey, executionContext)
     } catch (error) {
       console.error('SubAgentService', `Sub-agent tool execution failed: ${JSON.stringify(error)}`)
       return new ToolResult(
