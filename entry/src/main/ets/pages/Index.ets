@@ -353,6 +353,7 @@ struct Index {
   private static readonly CHAT_DETAIL_EMPTY_ROUTE: string = 'ChatDetailEmpty'
   private static readonly CHAT_PAGE_ROUTE: string = 'ChatPage'
   private static readonly MAP_ROUTE_PAGE_ROUTE: string = 'MapRoutePage'
+  private static readonly PYTHON_WORKSPACE_PAGE_ROUTE: string = 'PythonWorkspacePage'
   private settingsReturnTabIndex: number = Index.TAB_SETTINGS
   @Local currentSettingsRouteName: string = ''
   // 返回键退出控制
@@ -581,7 +582,8 @@ struct Index {
 
   private isChatFullScreenDestinationActive(): boolean {
     return this.currentChatRouteName === Index.CHAT_PAGE_ROUTE ||
-      this.currentChatRouteName === Index.MAP_ROUTE_PAGE_ROUTE
+      this.currentChatRouteName === Index.MAP_ROUTE_PAGE_ROUTE ||
+      this.currentChatRouteName === Index.PYTHON_WORKSPACE_PAGE_ROUTE
   }
 
   private openSettingsDestination(routeName: SettingsRouteName, param: Object | null = null): void {

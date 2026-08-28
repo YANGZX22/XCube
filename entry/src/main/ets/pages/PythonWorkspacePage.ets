@@ -23,6 +23,7 @@ import { showToast } from '../utils/ToastUtil'
 import { pasteboard } from '@kit.BasicServicesKit'
 import { fileIo, picker } from '@kit.CoreFileKit'
 import { util } from '@kit.ArkTS'
+import { uiMaterial } from '@kit.ArkUI'
 import {
   buildWorkspaceExplorerRows,
   describeWorkspaceDirectory,
@@ -122,10 +123,6 @@ struct PythonWorkspacePageContent {
 
   private get topInsetVp(): number {
     return this.px2vp(getAppUiState().topAvoidHeight)
-  }
-
-  private get bottomInsetVp(): number {
-    return this.px2vp(getAppUiState().bottomAvoidHeight)
   }
 
   private isWideLayout(): boolean {
@@ -815,7 +812,11 @@ struct PythonWorkspacePageContent {
       }
       this.openFile(row.path)
     })
-    .bindContextMenu(this.WorkspaceItemContextMenu(row), ResponseType.LongPress)
+    .bindContextMenu(this.WorkspaceItemContextMenu(row), ResponseType.LongPress, {
+      systemMaterial: new uiMaterial.ImmersiveMaterial({
+        style: uiMaterial.ImmersiveStyle.THICK
+      })
+    })
   }
 
   @Builder
@@ -921,7 +922,11 @@ struct PythonWorkspacePageContent {
     }
     .width('100%')
     .height('100%')
-    .bindContextMenu(this.WorkspaceDirectoryContextMenu(''), ResponseType.LongPress)
+    .bindContextMenu(this.WorkspaceDirectoryContextMenu(''), ResponseType.LongPress, {
+      systemMaterial: new uiMaterial.ImmersiveMaterial({
+        style: uiMaterial.ImmersiveStyle.THICK
+      })
+    })
   }
 
   @Builder
@@ -1124,7 +1129,9 @@ struct PythonWorkspacePageContent {
     }
     .width('100%')
     .height('100%')
-    .padding({ top: this.topInsetVp, bottom: this.bottomInsetVp })
+    // NavDestination 已处理底部系统安全区；再次注入 bottomAvoidHeight 会在
+    // 代码预览下方形成一条额外空白。这里只为自绘顶栏保留状态栏避让。
+    .padding({ top: this.topInsetVp })
     .backgroundColor(getAppUiState().themeBackground)
   }
 }
