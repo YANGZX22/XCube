@@ -14,6 +14,7 @@ import { HtmlPreviewCard } from './HtmlPreviewCard'
 import { VChartCard } from './VChartCard'
 import { MapResultCard } from './map/MapResultCard'
 import { TypingDots } from './TypingDots'
+import { ThinkingStatusIndicator } from './ThinkingStatusIndicator'
 import { ChatMarkdownRenderer } from './ChatMarkdownRenderer'
 import { AssistantAvatarView } from './AssistantAvatar'
 import { hilog } from '@kit.PerformanceAnalysisKit'
@@ -2647,18 +2648,7 @@ export struct MessageBubble {
   private TimelineReasoningBarBody(segment: AssistantResponseSegment) {
     Column() {
       Row() {
-        SymbolGlyph($r('sys.symbol.AI_deep_thinking'))
-          .fontSize(14)
-          .fontColor([this.isManuscriptMode || this.isActiveTimelineSegment(segment)
-            ? this.themePrimary : $r('app.color.text_secondary')])
-
-        Text(this.isActiveTimelineSegment(segment) ?
-          $r('app.string.reasoning_thinking') : $r('app.string.reasoning_process'))
-          .fontSize(13)
-          .fontWeight(FontWeight.Medium)
-          .fontColor(this.isManuscriptMode || this.isActiveTimelineSegment(segment)
-            ? this.themePrimary : $r('app.color.text_secondary'))
-          .margin({ left: 6 })
+        ThinkingStatusIndicator({ isActive: this.isActiveTimelineSegment(segment) })
 
         Blank().layoutWeight(1)
 
@@ -3253,17 +3243,7 @@ export struct MessageBubble {
   ReasoningSection() {
     Column() {
       Row() {
-        SymbolGlyph($r('sys.symbol.AI_deep_thinking'))
-          .fontSize(14)
-          .fontColor([this.isManuscriptMode || this.message.isGenerating
-            ? this.themePrimary : $r('app.color.text_secondary')])
-
-        Text(this.message.isGenerating ? $r('app.string.reasoning_thinking') : $r('app.string.reasoning_process'))
-          .fontSize(13)
-          .fontWeight(FontWeight.Medium)
-          .fontColor(this.isManuscriptMode || this.message.isGenerating
-            ? this.themePrimary : $r('app.color.text_secondary'))
-          .margin({ left: 6 })
+        ThinkingStatusIndicator({ isActive: this.message.isGenerating })
 
         Blank()
           .layoutWeight(1)
