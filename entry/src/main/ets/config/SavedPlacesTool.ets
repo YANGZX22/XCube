@@ -57,8 +57,9 @@ export class SavedPlacesExecutor implements ToolExecutor {
       result.count = result.places.length
       result.message = place !== null ? `已找到常用地点“${place.label}”` : `未找到常用地点“${label}”`
       result.mapUsageHint = '后续调用地图/导航工具时，不要把 label 直接传给 query、origin 或 destination。' +
-        '路线/导航请把本结果中的 latitude/longitude 复制到对应的 origin_location 或 ' +
-        'destination_location；围绕该地点搜索请复制到 center，并把 coordinateType 复制到 coordinate_type。'
+        '路线/导航请把本结果中的 latitude/longitude 分别复制到对应的 origin_latitude/origin_longitude 或 ' +
+        'destination_latitude/destination_longitude；围绕该地点搜索请复制到 center_latitude/center_longitude，' +
+        '并把 coordinateType 复制到 coordinate_type。'
       return JSON.stringify(result)
     }
     const savedPlaces = await getSavedPlacesService().loadPlaces()
@@ -96,8 +97,8 @@ export function createSavedPlacesToolDefinition(): ToolDefinition {
       '标签由用户自定义，按原文逐字匹配，不做模糊匹配，也不一定等于用户口语里的说法' +
       '（用户说“回我家”，保存的标签可能就叫“家”）。因此在使用任何标签之前，若不确定它的确切写法，先调用一次 list。\n' +
       '【地图调用硬规则】用户提到常用地点时，先用 list 确认标签原文，再用 resolve 经用户授权取得 place，然后使用结构化坐标：' +
-      '路线/导航时把 latitude/longitude 填入地图工具的 origin_location 或 destination_location，' +
-      '围绕该地点搜索时填入 center，' +
+      '路线/导航时把 latitude/longitude 分别填入地图工具的 origin_latitude/origin_longitude 或 ' +
+      'destination_latitude/destination_longitude，围绕该地点搜索时填入 center_latitude/center_longitude，' +
       '把 coordinateType 填入 coordinate_type。不要丢弃这些字段后只把 label（如“家”“公司”）传给地图工具；' +
       'label 不是公开地点搜索词，禁止放入 query、origin 或 destination。',
     parameters

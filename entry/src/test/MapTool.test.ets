@@ -21,6 +21,15 @@ import {
   OPEN_MAP_ROUTE_TOOL_ID,
   SAVED_PLACES_TOOL_ID
 } from '../main/ets/config/BuiltinTools'
+import {
+  createMapSearchRouteToolDefinition,
+  createOpenMapRouteToolDefinition
+} from '../main/ets/config/MapTool'
+import {
+  parseMapSearchRouteToolArguments,
+  parseOpenMapRouteToolArguments,
+  repairTruncatedMapToolArguments
+} from '../main/ets/services/MapToolArgumentParser'
 
 // 旧版工具结果的载荷形状：只有当时存在的字段，没有 visualToken / destination 等后加的字段。
 // ArkTS 不允许无类型的对象字面量，这里显式声明以保持 JSON 与线上旧数据一致。
@@ -90,6 +99,72 @@ export default function mapToolTest() {
       expect(ids.includes(MAP_SEARCH_ROUTE_TOOL_ID)).assertTrue()
       expect(ids.includes(OPEN_MAP_ROUTE_TOOL_ID)).assertTrue()
       expect(ids.includes(SAVED_PLACES_TOOL_ID)).assertTrue()
+    })
+
+    it('uses_provider_safe_flat_coordinate_fields_in_map_schemas', 0, () => {
+      const searchDefinition = createMapSearchRouteToolDefinition()
+      const openDefinition = createOpenMapRouteToolDefinition()
+      const searchSchema = JSON.stringify(searchDefinition.function.parameters.toJsonObject())
+      const openSchema = JSON.stringify(openDefinition.function.parameters.toJsonObject())
+      expect(searchSchema.includes('center_latitude')).assertTrue()
+      expect(searchSchema.includes('origin_latitude')).assertTrue()
+      expect(searchSchema.includes('destination_longitude')).assertTrue()
+      expect(searchSchema.includes('"center":{"type":"object"')).assertFalse()
+      expect(openSchema.includes('destination_latitude')).assertTrue()
+      expect(openSchema.includes('origin_longitude')).assertTrue()
+      expect(openSchema.includes('"destination_location":{"type":"object"')).assertFalse()
+      expect(searchDefinition.function.description.includes('{"action":"search_places"')).assertTrue()
+      expect(searchDefinition.function.description.includes('{action:')).assertFalse()
+      expect(searchDefinition.function.description.includes('<家.')).assertFalse()
+      expect(openDefinition.function.description.includes('{"action":"navigation"')).assertTrue()
+      expect(openDefinition.function.description.includes('<返回值>')).assertFalse()
+    })
+
+    it('parses_flat_double_encoded_and_legacy_nested_map_coordinates', 0, () => {
+      const flat = parseMapSearchRouteToolArguments(
+        '{"action":"plan_route","use_current_location":true,' +
+          '"destination_latitude":31.2,"destination_longitude":121.4,"coordinate_type":"gcj02"}'
+      )
+      expect(flat.destination_location?.latitude).assertEqual(31.2)
+      expect(flat.destination_location?.longitude).assertEqual(121.4)
+
+      const nestedJson = '{"action":"search_places","query":"咖啡店",' +
+        '"center":{"latitude":30.6,"longitude":104.1}}'
+      const doubleEncoded = parseMapSearchRouteToolArguments(JSON.stringify(nestedJson))
+      expect(doubleEncoded.center?.latitude).assertEqual(30.6)
+      expect(doubleEncoded.center?.longitude).assertEqual(104.1)
+
+      const stringCoordinate = parseOpenMapRouteToolArguments(
+        '{"action":"navigation","destination_location":' +
+          '"{\\"latitude\\":22.5,\\"longitude\\":114.1}"}'
+      )
+      expect(stringCoordinate.destination_location?.latitude).assertEqual(22.5)
+      expect(stringCoordinate.destination_location?.longitude).assertEqual(114.1)
+    })
+
+    it('recovers_fenced_trailing_and_repeated_map_argument_snapshots', 0, () => {
+      const fenced = parseMapSearchRouteToolArguments(
+        '```json\n{"action":"search_places","query":"博物馆"}\n```'
+      )
+      expect(fenced.query).assertEqual('博物馆')
+
+      const truncated = '{"action":"plan_route","destination":"上海博物馆"'
+      expect(repairTruncatedMapToolArguments(truncated)).assertEqual(`${truncated}}`)
+      expect(parseMapSearchRouteToolArguments(truncated).destination).assertEqual('上海博物馆')
+
+      const snapshots = '{"action":"search_places","query":"旧地点"}' +
+        '{"action":"search_places","query":"新地点"}'
+      expect(parseMapSearchRouteToolArguments(snapshots).query).assertEqual('新地点')
+    })
+
+    it('rejects_map_arguments_cut_off_inside_a_string', 0, () => {
+      let rejected = false
+      try {
+        parseMapSearchRouteToolArguments('{"action":"search_places","query":"半截地点')
+      } catch (_error) {
+        rejected = true
+      }
+      expect(rejected).assertTrue()
     })
 
     it('requires_approval_only_when_resolving_saved_place_coordinates', 0, () => {
