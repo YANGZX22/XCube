@@ -1,11 +1,11 @@
 import { uiMaterial } from '@kit.ArkUI'
-import { COMPACT_TOOL_ID, PLAN_MODE_TOOL_ID } from '../../config/BuiltinTools'
 import { ToolConfig, ToolPermissionLevel, ToolSourceType } from '../../models/ChatModels'
 import { getAppUiState } from '../../state/AppUiState'
 import { withColorAlpha } from '../../utils/ColorAlphaUtils'
 import { pickLocalizedText } from '../../utils/LocalizedTextUtils'
 import { getLocalizedBuiltinToolDescription, getLocalizedBuiltinToolName } from '../../utils/ToolDisplayTextUtils'
 import { ImmersiveSheetHeader } from '../ImmersiveSheetHeader'
+import { resolveToolSymbolResource } from '../../utils/ToolIconUtils'
 
 class McpToolGroup {
   sourceId: string = ''
@@ -191,64 +191,7 @@ export struct ChatToolPickerSheetContent {
   }
 
   private getToolSymbolResource(toolId: string): Resource {
-    if (toolId === 'web_search') {
-      return $r('sys.symbol.worldclock_fill_2')
-    }
-    if (toolId === 'ask_user') {
-      return $r('sys.symbol.ellipsis_message')
-    }
-    if (toolId === 'sub_agent') {
-      return $r('sys.symbol.protein')
-    }
-    if (toolId === 'python_sandbox') {
-      return $r('sys.symbol.doc_text')
-    }
-    if (toolId === 'canvas_document') {
-      return $r('sys.symbol.paintbrush_pointed_waveform')
-    }
-    if (toolId === 'pdf_to_text') {
-      return $r('sys.symbol.pdf_doc')
-    }
-    if (toolId === 'image_to_text') {
-      return $r('sys.symbol.picture')
-    }
-    if (toolId === 'vision_read_image') {
-      return $r('sys.symbol.hi_vison')
-    }
-    if (toolId === 'use_skill') {
-      return $r('sys.symbol.more')
-    }
-    if (toolId === 'math_chart') {
-      return $r('sys.symbol.histogram')
-    }
-    if (toolId === 'read_schedule') {
-      return $r('sys.symbol.calendar')
-    }
-    if (toolId === 'write_schedule') {
-      return $r('sys.symbol.calendar_badge_plus')
-    }
-    if (toolId === 'map_search_route') {
-      return $r('sys.symbol.map')
-    }
-    if (toolId === 'saved_places') {
-      return $r('sys.symbol.location_north_up_right')
-    }
-    if (toolId === 'open_map_route') {
-      return $r('sys.symbol.navigation')
-    }
-    if (toolId === 'email_send') {
-      return $r('sys.symbol.envelope_badge_arrowshape_turn_up_right')
-    }
-    if (toolId === 'email_read') {
-      return $r('sys.symbol.envelope_on_envelope_badge_arrow_left')
-    }
-    if (toolId === PLAN_MODE_TOOL_ID) {
-      return $r('sys.symbol.list_checkmark')
-    }
-    if (toolId === COMPACT_TOOL_ID) {
-      return $r('sys.symbol.doc_zipper')
-    }
-    return $r('sys.symbol.wrench_and_screwdriver')
+    return resolveToolSymbolResource(toolId)
   }
 
   @Builder

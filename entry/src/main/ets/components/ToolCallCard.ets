@@ -10,6 +10,16 @@ import {
   getLocalizedToolSourceLabel
 } from '../utils/ToolDisplayTextUtils'
 import { pickLocalizedText } from '../utils/LocalizedTextUtils'
+import {
+  buildTimelineBarExpandTransition,
+  getTimelineBarExpandAnimation
+} from '../utils/TimelineBarTransitionUtils'
+import {
+  resolveToolIconImageKind,
+  resolveToolSymbolResource,
+  TOOL_ICON_IMAGE_DOCX,
+  TOOL_ICON_IMAGE_XLSX
+} from '../utils/ToolIconUtils'
 
 // 同一工具的单次调用（调用 + 对应结果），多次调用合并进同一张卡片
 export class ToolCallCardEntry {
@@ -43,6 +53,8 @@ function getToolDisplayName(toolCall: ToolCall): string | Resource {
 export struct ToolCallCard {
   @Param entries: ToolCallCardEntry[] = []
   @Param isExecuting: boolean = false
+  // 合并进条目块时由外层统一提供边框、材质与投影，卡片自身只出内容
+  @Param embedded: boolean = false
   // 子智能体卡片点击“实时预览”时触发（由宿主打开 bindSheet）
   @Event onSubAgentPreview: () => void = (): void => {}
   @Local isExpanded: boolean = false
@@ -141,18 +153,50 @@ export struct ToolCallCard {
     }
   }
 
+  // 图标按工具身份解析：函数名优先，缺失时回落到工具 ID
+  private getToolIconId(): string {
+    const primaryCall = this.getPrimaryCall()
+    const raw = primaryCall.functionName as string | null | undefined
+    if (raw !== undefined && raw !== null && raw.trim() !== '') {
+      return raw
+    }
+    return primaryCall.toolId
+  }
+
+  private getToolIconColor(): ResourceColor {
+    return this.isManuscriptMode || this.isExecuting ? this.themePrimary : $r('app.color.text_secondary')
+  }
+
+  @Builder
+  private ToolIcon() {
+    if (resolveToolIconImageKind(this.getToolIconId()) === TOOL_ICON_IMAGE_DOCX) {
+      Image($r('app.media.doc_docx'))
+        .width(14)
+        .height(14)
+        .fillColor(this.getToolIconColor())
+        .flexShrink(0)
+    } else if (resolveToolIconImageKind(this.getToolIconId()) === TOOL_ICON_IMAGE_XLSX) {
+      Image($r('app.media.doc_xlsx'))
+        .width(14)
+        .height(14)
+        .fillColor(this.getToolIconColor())
+        .flexShrink(0)
+    } else {
+      SymbolGlyph(resolveToolSymbolResource(this.getToolIconId()))
+        .fontSize(14)
+        .fontColor([this.getToolIconColor()])
+        .flexShrink(0)
+    }
+  }
+
   build() {
     Column() {
       // 标题栏
       Row() {
         // 左侧信息区只使用扣除右侧操作后的剩余宽度，避免长名称挤出操作按钮。
         Flex({ direction: FlexDirection.Row, alignItems: ItemAlign.Center }) {
-          // 工具图标
-          SymbolGlyph($r('sys.symbol.gearshape'))
-            .fontSize(14)
-            .fontColor([this.isManuscriptMode || this.isExecuting
-              ? this.themePrimary : $r('app.color.text_secondary')])
-            .flexShrink(0)
+          // 工具图标：与工具中心、工具选择面板取同一套图标
+          this.ToolIcon()
 
           // 工具名称
           Text(getToolDisplayName(this.getPrimaryCall()))
@@ -263,13 +307,13 @@ export struct ToolCallCard {
               .fontSize(12)
               .fontColor([this.isManuscriptMode ? this.themePrimary : $r('app.color.text_tertiary')])
               .rotate({ angle: this.isExpanded ? 180 : 0 })
-              .animation({ duration: 200, curve: Curve.EaseOut })
+              .animation(getTimelineBarExpandAnimation())
               .margin({ left: 2 })
           }
           .justifyContent(FlexAlign.End)
           .margin({ left: 8 })
           .onClick(() => {
-            this.getUIContext().animateTo({ duration: 200, curve: Curve.EaseOut }, () => {
+            this.getUIContext().animateTo(getTimelineBarExpandAnimation(), () => {
               if (this.isExpanded) {
                 this.rawArgumentIndices = []
                 this.rawResultIndices = []
@@ -292,18 +336,18 @@ export struct ToolCallCard {
         }
         .width('100%')
         .padding({ left: 10, right: 10, bottom: 8 })
-        .transition(TransitionEffect.OPACITY.animation({ duration: 200 }))
+        .transition(buildTimelineBarExpandTransition())
       }
     }
     .width('100%')
     .backgroundColor(Color.Transparent)
-    .borderRadius(this.isManuscriptMode ? 0 : 12)
+    .borderRadius(this.embedded || this.isManuscriptMode ? 0 : 12)
     .border({
-      width: this.isManuscriptMode ? { top: 1, bottom: 1 } : 0.5,
+      width: this.embedded ? 0 : (this.isManuscriptMode ? { top: 1, bottom: 1 } : 0.5),
       color: this.isManuscriptMode ? getAppUiState().themeDivider : this.getTimelineRailColor()
     })
     .clip(false)
-    .systemMaterial(this.isManuscriptMode ? undefined : new uiMaterial.ImmersiveMaterial({
+    .systemMaterial(this.embedded || this.isManuscriptMode ? undefined : new uiMaterial.ImmersiveMaterial({
       style: uiMaterial.ImmersiveStyle.REGULAR,
       materialColor: this.themeAiBubble,
       applyShadow: false,
@@ -311,8 +355,8 @@ export struct ToolCallCard {
       lightEffect: { color: undefined }
     }))
     .shadow({
-      radius: this.isManuscriptMode ? 0 : 12,
-      color: this.isManuscriptMode ? Color.Transparent :
+      radius: this.embedded || this.isManuscriptMode ? 0 : 12,
+      color: this.embedded || this.isManuscriptMode ? Color.Transparent :
         (this.isDarkMode ? 'rgba(0, 0, 0, 0.32)' : 'rgba(15, 23, 42, 0.14)'),
       offsetX: 0,
       offsetY: 0

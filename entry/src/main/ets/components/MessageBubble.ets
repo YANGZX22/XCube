@@ -32,6 +32,25 @@ import {
 } from '../utils/ManuscriptVisualUtils'
 import { pickLocalizedText } from '../utils/LocalizedTextUtils'
 import {
+  appendTimelineBar,
+  finalizeTimelineBlocks,
+  MessageMapPayload,
+  MessageVChartPayload,
+  TimelineBar,
+  TimelineBarKind,
+  TimelineBlock,
+  TimelineBlockKind,
+  TIMELINE_BLOCK_LIST_ORDERED,
+  TIMELINE_BLOCK_LIST_PRE_CONTENT,
+  ToolCallRenderGroup
+} from './MessageTimelineBlocks'
+import {
+  buildTimelineBarExpandTransition,
+  buildTimelineBarTransition,
+  buildTimelineBlockTransition,
+  getTimelineBarExpandAnimation
+} from '../utils/TimelineBarTransitionUtils'
+import {
   buildPythonSandboxImageUrl,
   isPythonSandboxFileAttachmentId,
   isPythonSandboxImageAttachmentId,
@@ -74,39 +93,6 @@ interface PythonSandboxInlineImageReference {
 
 interface PythonSandboxInlineImagePayload {
   images?: PythonSandboxInlineImageReference[]
-}
-
-// 工具调用渲染分组：同一工具（同名 + 同来源）的多次调用合并成一张卡片
-class ToolCallRenderGroup {
-  key: string = ''
-  isAskUser: boolean = false
-  askUserCalls: ToolCall[] = []
-  entries: ToolCallCardEntry[] = []
-  anyExecuting: boolean = false
-}
-
-class MessageVChartPayload {
-  id: string = ''
-  specJson: string = ''
-  summary: string = ''
-  chartType: string = ''
-
-  constructor(id: string, specJson: string, summary: string, chartType: string) {
-    this.id = id
-    this.specJson = specJson
-    this.summary = summary
-    this.chartType = chartType
-  }
-}
-
-class MessageMapPayload {
-  id: string = ''
-  resultContent: string = ''
-
-  constructor(id: string, resultContent: string) {
-    this.id = id
-    this.resultContent = resultContent
-  }
 }
 
 // @Local 数组要整体替换才会触发刷新，这两个 helper 统一返回新数组
@@ -2455,12 +2441,14 @@ export struct MessageBubble {
   // 以当前实际展示状态为准取反，保证一次点击就有可见变化
   private toggleTimelineReasoning(segment: AssistantResponseSegment): void {
     const shouldExpand = !this.isTimelineReasoningExpanded(segment)
-    this.expandedTimelineReasoningIds =
-      shouldExpand ? appendUniqueId(this.expandedTimelineReasoningIds, segment.id)
-        : removeId(this.expandedTimelineReasoningIds, segment.id)
-    this.collapsedTimelineReasoningIds =
-      shouldExpand ? removeId(this.collapsedTimelineReasoningIds, segment.id)
-        : appendUniqueId(this.collapsedTimelineReasoningIds, segment.id)
+    this.getUIContext().animateTo(getTimelineBarExpandAnimation(), () => {
+      this.expandedTimelineReasoningIds =
+        shouldExpand ? appendUniqueId(this.expandedTimelineReasoningIds, segment.id)
+          : removeId(this.expandedTimelineReasoningIds, segment.id)
+      this.collapsedTimelineReasoningIds =
+        shouldExpand ? removeId(this.collapsedTimelineReasoningIds, segment.id)
+          : appendUniqueId(this.collapsedTimelineReasoningIds, segment.id)
+    })
   }
 
   private shouldShowTimelineSearchReferences(segment: AssistantResponseSegment): boolean {
@@ -2474,6 +2462,152 @@ export struct MessageBubble {
       }
     }
     return lastWebSearchCallId !== '' && this.containsToolCallId(segment.toolCallIds, lastWebSearchCallId)
+  }
+
+  // ========== 展示块编排 ==========
+  // 相邻的工具结果条 / 思考条 / 搜索结果条并进同一个 BARS 块，块内用分割线相隔；
+  // 追问、图表、地图、附件这类富卡片各自成块，并把前面攒着的条收口。
+  private getTimelineBlocks(listId: string): TimelineBlock[] {
+    return listId === TIMELINE_BLOCK_LIST_ORDERED
+      ? this.buildOrderedTimelineBlocks()
+      : this.buildPreContentBlocks()
+  }
+
+  // 块本身的 key 只认位置，块内条目要靠这里重新取一次，流式追加才只重建新增的那条
+  private getTimelineBarsForBlock(block: TimelineBlock): TimelineBar[] {
+    const blocks = this.getTimelineBlocks(block.listId)
+    for (let i = 0; i < blocks.length; i++) {
+      if (blocks[i].key === block.key) {
+        return blocks[i].bars
+      }
+    }
+    return []
+  }
+
+  // 同一工具在不同段里可能凑出完全相同的分组 key，按段落作用域加前缀避免块内撞键
+  private appendToolCallBlocks(blocks: TimelineBlock[], toolCallIds: string[], keyScope: string): void {
+    const groups = this.getToolCallRenderGroups(toolCallIds)
+    for (let i = 0; i < groups.length; i++) {
+      const group = groups[i]
+      const identity = keyScope + '_' + group.key
+      const signature = this.buildToolCallRenderGroupKey(group, i)
+      if (group.isAskUser) {
+        const askBlock = new TimelineBlock(TimelineBlockKind.ASK_USER, identity + '_' + signature)
+        askBlock.askUserCalls = group.askUserCalls
+        blocks.push(askBlock)
+        continue
+      }
+      appendTimelineBar(blocks, TimelineBar.tool(group, identity, signature))
+    }
+  }
+
+  private appendChartAndMapBlocks(blocks: TimelineBlock[], toolCallIds: string[]): void {
+    const charts = this.getVChartPayloads(toolCallIds)
+    for (let i = 0; i < charts.length; i++) {
+      const chartBlock = new TimelineBlock(TimelineBlockKind.VCHART, charts[i].id)
+      chartBlock.vchart = charts[i]
+      blocks.push(chartBlock)
+    }
+    const maps = this.getMapPayloads(toolCallIds)
+    for (let i = 0; i < maps.length; i++) {
+      const mapBlock = new TimelineBlock(TimelineBlockKind.MAP, maps[i].id)
+      mapBlock.map = maps[i]
+      blocks.push(mapBlock)
+    }
+  }
+
+  // 搜索条的入参同样来自本次重算，引用条数 / 引擎 / 关键词变化时才需要重建
+  private buildSearchBarSignature(): string {
+    return this.message.searchReferences.length.toString() + '_' +
+      this.message.searchEngine + '_' + this.message.searchQuery
+  }
+
+  private buildOrderedTimelineBlocks(): TimelineBlock[] {
+    const blocks: TimelineBlock[] = []
+    const segments = this.getOrderedResponseSegments()
+    for (let i = 0; i < segments.length; i++) {
+      const segment = segments[i]
+      if (segment.type === AssistantResponseSegmentType.REASONING) {
+        if (segment.content.trim().length > 0) {
+          appendTimelineBar(blocks, TimelineBar.reasoning(segment))
+        }
+      } else if (segment.type === AssistantResponseSegmentType.TOOL_CALLS) {
+        this.appendToolCallBlocks(blocks, segment.toolCallIds, segment.id)
+        if (this.shouldShowTimelineSearchReferences(segment)) {
+          appendTimelineBar(blocks,
+            TimelineBar.search('search_' + segment.id, this.buildSearchBarSignature()))
+        }
+        this.appendChartAndMapBlocks(blocks, segment.toolCallIds)
+      } else if (segment.type === AssistantResponseSegmentType.CONTEXT_COMPACTION) {
+        blocks.push(new TimelineBlock(TimelineBlockKind.COMPACTION, segment.content))
+      } else if (segment.type === AssistantResponseSegmentType.USER_GUIDANCE) {
+        if (segment.content.trim().length > 0) {
+          const guidanceBlock = new TimelineBlock(TimelineBlockKind.GUIDANCE, segment.id)
+          guidanceBlock.segment = segment
+          blocks.push(guidanceBlock)
+        }
+      } else if (segment.type === AssistantResponseSegmentType.CONTENT) {
+        if (segment.content.trim().length > 0) {
+          const contentBlock = new TimelineBlock(TimelineBlockKind.CONTENT, segment.id)
+          contentBlock.segment = segment
+          blocks.push(contentBlock)
+        }
+      }
+    }
+    return finalizeTimelineBlocks(blocks, TIMELINE_BLOCK_LIST_ORDERED)
+  }
+
+  // 正文之前的展示块。关闭"按生成顺序展示"时这里承载全部工具/搜索/思考展示，
+  // 打开时只剩附件，其余交给有序时间线。
+  private buildPreContentBlocks(): TimelineBlock[] {
+    const blocks: TimelineBlock[] = []
+    const orderedHistory = getAppUiState().chatOrderedResponseHistory
+    if (!orderedHistory) {
+      if (this.message.hasToolCalls()) {
+        this.appendToolCallBlocks(blocks, [], this.message.id)
+      }
+      this.appendChartAndMapBlocks(blocks, [])
+      if (this.message.hasSearchReferences()) {
+        appendTimelineBar(blocks,
+          TimelineBar.search('search_' + this.message.id, this.buildSearchBarSignature()))
+      }
+    }
+    if (this.hasRenderableAttachments(this.message.attachments)) {
+      blocks.push(new TimelineBlock(TimelineBlockKind.ATTACHMENTS, 'attachments'))
+    }
+    if (!orderedHistory) {
+      if (this.message.contextCompactionState !== ContextCompactionUiState.NONE) {
+        blocks.push(new TimelineBlock(TimelineBlockKind.COMPACTION, this.message.contextCompactionState))
+      }
+      const guidanceSegments = this.getUserGuidanceSegments()
+      for (let i = 0; i < guidanceSegments.length; i++) {
+        const guidanceBlock = new TimelineBlock(TimelineBlockKind.GUIDANCE, guidanceSegments[i].id)
+        guidanceBlock.segment = guidanceSegments[i]
+        blocks.push(guidanceBlock)
+      }
+      if (this.message.hasReasoningContent()) {
+        appendTimelineBar(blocks, TimelineBar.legacyReasoning(this.message.id))
+      }
+    }
+    return finalizeTimelineBlocks(blocks, TIMELINE_BLOCK_LIST_PRE_CONTENT)
+  }
+
+  // 条目外壳按身份保留，内容按签名重建：结果回来时卡片会刷新，但不会重播增删动效
+  private getTimelineBarRenderStates(bar: TimelineBar): TimelineBar[] {
+    const blocks = this.getTimelineBlocks(bar.listId)
+    for (let i = 0; i < blocks.length; i++) {
+      const bars = blocks[i].bars
+      for (let j = 0; j < bars.length; j++) {
+        if (bars[j].key === bar.key) {
+          return [bars[j]]
+        }
+      }
+    }
+    return []
+  }
+
+  private getTimelineDividerColor(): string {
+    return this.themePrimaryLight
   }
 
   @Builder
@@ -2510,8 +2644,9 @@ export struct MessageBubble {
       .backgroundColor(Color.Transparent)
   }
 
+  // 思考条正文。外层条目块统一提供边框、材质与投影，这里只画内容。
   @Builder
-  private TimelineReasoningSection(segment: AssistantResponseSegment) {
+  private TimelineReasoningBarBody(segment: AssistantResponseSegment) {
     Column() {
       Row() {
         SymbolGlyph($r('sys.symbol.AI_deep_thinking'))
@@ -2539,6 +2674,7 @@ export struct MessageBubble {
             .fontSize(12)
             .fontColor([this.isManuscriptMode ? this.themePrimary : $r('app.color.text_tertiary')])
             .rotate({ angle: this.isTimelineReasoningExpanded(segment) ? 180 : 0 })
+            .animation(getTimelineBarExpandAnimation())
             .margin({ left: 2 })
         }
       }
@@ -2556,7 +2692,30 @@ export struct MessageBubble {
         }
         .width('100%')
         .padding({ left: 10, right: 10, bottom: 8 })
+        .transition(buildTimelineBarExpandTransition())
       }
+    }
+    .width('100%')
+    .backgroundColor(Color.Transparent)
+  }
+
+
+  // 一个条目块：多条工具结果 / 思考 / 搜索结果共用一层边框与材质，块内用分割线相隔
+  @Builder
+  private TimelineBarGroupBlock(block: TimelineBlock) {
+    Column() {
+      ForEach(this.getTimelineBarsForBlock(block), (bar: TimelineBar) => {
+        Column() {
+          if (!bar.isFirst) {
+            this.TimelineBarSeparator()
+          }
+          ForEach(this.getTimelineBarRenderStates(bar), (state: TimelineBar) => {
+            this.TimelineBarBody(state)
+          }, (state: TimelineBar) => state.contentKey)
+        }
+        .width('100%')
+        .transition(buildTimelineBarTransition())
+      }, (bar: TimelineBar) => bar.key)
     }
     .width('100%')
     .backgroundColor(Color.Transparent)
@@ -2581,73 +2740,97 @@ export struct MessageBubble {
       offsetY: 0
     })
     .margin({ bottom: 8 })
+    .transition(buildTimelineBlockTransition())
+  }
+
+  // 块内分割线：普通模式两侧内缩对齐条目内容，手稿模式沿用整幅线条语言
+  @Builder
+  private TimelineBarSeparator() {
+    Row() {
+      Row()
+        .layoutWeight(1)
+        .height(this.isManuscriptMode ? 1 : 0.5)
+        .backgroundColor(this.isManuscriptMode ? getAppUiState().themeDivider : this.getTimelineDividerColor())
+    }
+    .width('100%')
+    .padding({
+      left: this.isManuscriptMode ? 0 : 10,
+      right: this.isManuscriptMode ? 0 : 10
+    })
   }
 
   @Builder
-  private TimelineToolSection(segment: AssistantResponseSegment) {
-    Column() {
-      ForEach(this.getToolCallRenderGroups(segment.toolCallIds), (group: ToolCallRenderGroup) => {
-        if (group.isAskUser) {
-          AskUserCard({
-            toolCall: group.askUserCalls.length > 0 ? group.askUserCalls[0] : new ToolCall(),
-            toolCalls: group.askUserCalls,
-            isAnswered: this.areAllAskUserCallsAnswered(group.askUserCalls),
-            compactMode: true,
-            resultContents: this.getAskUserResultContents(group.askUserCalls),
-            onAnswer: (toolCallId: string, answerJson: string): void => {
-              this.onAskUserAnswer(toolCallId, answerJson)
-            },
-            onRequestAnswer: (toolCallId: string): void => {
-              this.onAskUserOpen(toolCallId)
-            }
-          })
-            .margin({ bottom: 6 })
-        } else {
-          ToolCallCard({
-            entries: group.entries,
-            isExecuting: group.anyExecuting,
-            onSubAgentPreview: (): void => {
-              this.showSubAgentPreviewSheet = true
-            }
-          })
-            .margin({ bottom: 6 })
+  private TimelineBarBody(bar: TimelineBar) {
+    if (bar.kind === TimelineBarKind.REASONING) {
+      this.TimelineReasoningBarBody(bar.segment)
+    } else if (bar.kind === TimelineBarKind.LEGACY_REASONING) {
+      this.ReasoningSection()
+    } else if (bar.kind === TimelineBarKind.SEARCH) {
+      SearchReferenceCard({
+        query: this.extractSearchQuery(),
+        searchEngine: this.message.searchEngine || 'Web',
+        references: this.message.searchReferences,
+        sourceLabel: this.getSearchSourceLabel(),
+        embedded: true
+      })
+    } else {
+      ToolCallCard({
+        entries: bar.toolGroup.entries,
+        isExecuting: bar.toolGroup.anyExecuting,
+        embedded: true,
+        onSubAgentPreview: (): void => {
+          this.showSubAgentPreviewSheet = true
         }
-      }, (group: ToolCallRenderGroup, index: number) => this.buildToolCallRenderGroupKey(group, index))
+      })
+    }
+  }
 
-      if (this.shouldShowTimelineSearchReferences(segment)) {
-        SearchReferenceCard({
-          query: this.extractSearchQuery(),
-          searchEngine: this.message.searchEngine || 'Web',
-          references: this.message.searchReferences,
-          sourceLabel: this.getSearchSourceLabel()
+  // 一条展示块列表。BARS 之外的富卡片各自独立成块，保持原有间距与刷新方式。
+  @Builder
+  private TimelineBlocks(listId: string) {
+    ForEach(this.getTimelineBlocks(listId), (block: TimelineBlock) => {
+      if (block.kind === TimelineBlockKind.BARS) {
+        this.TimelineBarGroupBlock(block)
+      } else if (block.kind === TimelineBlockKind.ASK_USER) {
+        AskUserCard({
+          toolCall: block.askUserCalls.length > 0 ? block.askUserCalls[0] : new ToolCall(),
+          toolCalls: block.askUserCalls,
+          isAnswered: this.areAllAskUserCallsAnswered(block.askUserCalls),
+          compactMode: true,
+          resultContents: this.getAskUserResultContents(block.askUserCalls),
+          onAnswer: (toolCallId: string, answerJson: string): void => {
+            this.onAskUserAnswer(toolCallId, answerJson)
+          },
+          onRequestAnswer: (toolCallId: string): void => {
+            this.onAskUserOpen(toolCallId)
+          }
         })
           .margin({ bottom: 6 })
+      } else if (block.kind === TimelineBlockKind.VCHART) {
+        VChartCard({
+          specJson: block.vchart.specJson,
+          summary: block.vchart.summary,
+          chartType: block.vchart.chartType
+        })
+          .margin({ bottom: 6 })
+      } else if (block.kind === TimelineBlockKind.MAP) {
+        MapResultCard({
+          toolResultContent: block.map.resultContent,
+          onOpenMap: (visualizationJson: string): void => {
+            this.onOpenMap(visualizationJson)
+          }
+        })
+          .margin({ bottom: 6 })
+      } else if (block.kind === TimelineBlockKind.ATTACHMENTS) {
+        this.AssistantAttachments()
+      } else if (block.kind === TimelineBlockKind.COMPACTION) {
+        this.ContextCompactionStatusBar(block.contentKey)
+      } else if (block.kind === TimelineBlockKind.GUIDANCE) {
+        this.UserGuidanceSection(block.segment)
+      } else if (block.kind === TimelineBlockKind.CONTENT) {
+        this.TimelineContentSection(block.segment)
       }
-
-      if (this.getVChartPayloads(segment.toolCallIds).length > 0) {
-        ForEach(this.getVChartPayloads(segment.toolCallIds), (payload: MessageVChartPayload) => {
-          VChartCard({
-            specJson: payload.specJson,
-            summary: payload.summary,
-            chartType: payload.chartType
-          })
-            .margin({ bottom: 6 })
-        }, (payload: MessageVChartPayload) => payload.id)
-      }
-
-      if (this.getMapPayloads(segment.toolCallIds).length > 0) {
-        ForEach(this.getMapPayloads(segment.toolCallIds), (payload: MessageMapPayload) => {
-          MapResultCard({
-            toolResultContent: payload.resultContent,
-            onOpenMap: (visualizationJson: string): void => {
-              this.onOpenMap(visualizationJson)
-            }
-          })
-            .margin({ bottom: 6 })
-        }, (payload: MessageMapPayload) => payload.id)
-      }
-    }
-    .width('100%')
+    }, (block: TimelineBlock) => block.key)
   }
 
   @Builder
@@ -2678,19 +2861,7 @@ export struct MessageBubble {
   @Builder
   private OrderedResponseTimeline() {
     Column() {
-      ForEach(this.getOrderedResponseSegments(), (segment: AssistantResponseSegment) => {
-        if (segment.type === AssistantResponseSegmentType.REASONING && segment.content.trim().length > 0) {
-          this.TimelineReasoningSection(segment)
-        } else if (segment.type === AssistantResponseSegmentType.TOOL_CALLS) {
-          this.TimelineToolSection(segment)
-        } else if (segment.type === AssistantResponseSegmentType.CONTEXT_COMPACTION) {
-          this.ContextCompactionStatusBar(segment.content)
-        } else if (segment.type === AssistantResponseSegmentType.USER_GUIDANCE && segment.content.trim().length > 0) {
-          this.UserGuidanceSection(segment)
-        } else if (segment.type === AssistantResponseSegmentType.CONTENT && segment.content.trim().length > 0) {
-          this.TimelineContentSection(segment)
-        }
-      }, (segment: AssistantResponseSegment) => segment.id)
+      this.TimelineBlocks(TIMELINE_BLOCK_LIST_ORDERED)
     }
     .width('100%')
   }
@@ -2760,93 +2931,9 @@ export struct MessageBubble {
           }
 
           Column() {
-            // ========== 工具调用区域 ==========
-            if (!getAppUiState().chatOrderedResponseHistory && this.message.hasToolCalls()) {
-              ForEach(this.getToolCallRenderGroups(), (group: ToolCallRenderGroup) => {
-                if (group.isAskUser) {
-                  AskUserCard({
-                    toolCall: group.askUserCalls.length > 0 ? group.askUserCalls[0] : new ToolCall(),
-                    toolCalls: group.askUserCalls,
-                    isAnswered: this.areAllAskUserCallsAnswered(group.askUserCalls),
-                    compactMode: true,
-                    resultContents: this.getAskUserResultContents(group.askUserCalls),
-                    onAnswer: (toolCallId: string, answerJson: string): void => {
-                      this.onAskUserAnswer(toolCallId, answerJson)
-                    },
-                    onRequestAnswer: (toolCallId: string): void => {
-                      this.onAskUserOpen(toolCallId)
-                    }
-                  })
-                    .margin({ bottom: 6 })
-                } else {
-                  ToolCallCard({
-                    entries: group.entries,
-                    isExecuting: group.anyExecuting,
-                    onSubAgentPreview: (): void => {
-                      this.showSubAgentPreviewSheet = true
-                    }
-                  })
-                    .margin({ bottom: 6 })
-                }
-              }, (group: ToolCallRenderGroup, index: number) => this.buildToolCallRenderGroupKey(group, index))
-            }
-
-            if (!getAppUiState().chatOrderedResponseHistory && this.getVChartPayloads().length > 0) {
-              ForEach(this.getVChartPayloads(), (payload: MessageVChartPayload) => {
-                VChartCard({
-                  specJson: payload.specJson,
-                  summary: payload.summary,
-                  chartType: payload.chartType
-                })
-                  .margin({ bottom: 6 })
-              }, (payload: MessageVChartPayload) => payload.id)
-            }
-
-
-            if (!getAppUiState().chatOrderedResponseHistory && this.getMapPayloads().length > 0) {
-              ForEach(this.getMapPayloads(), (payload: MessageMapPayload) => {
-                MapResultCard({
-                  toolResultContent: payload.resultContent,
-                  onOpenMap: (visualizationJson: string): void => {
-                    this.onOpenMap(visualizationJson)
-                  }
-                })
-                  .margin({ bottom: 6 })
-              }, (payload: MessageMapPayload) => payload.id)
-            }
-
-            // ========== 搜索引用区域 ==========
-            if (!getAppUiState().chatOrderedResponseHistory && this.message.hasSearchReferences()) {
-              SearchReferenceCard({
-                query: this.extractSearchQuery(),
-                searchEngine: this.message.searchEngine || 'Web',
-                references: this.message.searchReferences,
-                sourceLabel: this.getSearchSourceLabel()
-              })
-                .margin({ bottom: 6 })
-            }
-
-            // ========== 附件区域（AI 生成的图片） ==========
-            if (this.hasRenderableAttachments(this.message.attachments)) {
-              this.AssistantAttachments()
-            }
-
-            // ========== 应用侧上下文压缩状态/结果栏 ==========
-            if (!getAppUiState().chatOrderedResponseHistory &&
-              this.message.contextCompactionState !== ContextCompactionUiState.NONE) {
-              this.ContextCompactionStatusBar(this.message.contextCompactionState)
-            }
-
-            if (!getAppUiState().chatOrderedResponseHistory && this.getUserGuidanceSegments().length > 0) {
-              ForEach(this.getUserGuidanceSegments(), (segment: AssistantResponseSegment) => {
-                this.UserGuidanceSection(segment)
-              }, (segment: AssistantResponseSegment) => segment.id)
-            }
-
-            // ========== 推理内容区域（可折叠） ==========
-            if (!getAppUiState().chatOrderedResponseHistory && this.message.hasReasoningContent()) {
-              this.ReasoningSection()
-            }
+            // ========== 工具 / 图表 / 地图 / 搜索 / 附件 / 思考展示块 ==========
+            // 相邻的工具结果条、思考条、搜索结果条会并进同一个块，块内用分割线相隔
+            this.TimelineBlocks(TIMELINE_BLOCK_LIST_PRE_CONTENT)
 
             // ========== 加载状态或主要内容区域 ==========
             if (getAppUiState().chatOrderedResponseHistory) {
@@ -3157,12 +3244,13 @@ export struct MessageBubble {
   }
 
   private toggleReasoningExpansion(): void {
-    this.getUIContext().animateTo({ duration: 200, curve: Curve.EaseInOut }, () => {
+    this.getUIContext().animateTo(getTimelineBarExpandAnimation(), () => {
       this.isReasoningExpanded = !this.isReasoningExpanded
     })
   }
 
   // 推理内容区域：标题栏与工具结果栏使用同一套披露式结构。
+  // 旧版（非有序时间线）思考条正文。外壳同样交给条目块。
   @Builder
   ReasoningSection() {
     Column() {
@@ -3191,7 +3279,7 @@ export struct MessageBubble {
             .fontSize(12)
             .fontColor([this.isManuscriptMode ? this.themePrimary : $r('app.color.text_tertiary')])
             .rotate({ angle: this.isReasoningExpanded ? 180 : 0 })
-            .animation({ duration: 200, curve: Curve.EaseOut })
+            .animation(getTimelineBarExpandAnimation())
             .margin({ left: 2 })
         }
       }
@@ -3209,31 +3297,11 @@ export struct MessageBubble {
         }
         .width('100%')
         .padding({ left: 10, right: 10, bottom: 8 })
-        .transition(TransitionEffect.OPACITY.animation({ duration: 200 }))
+        .transition(buildTimelineBarExpandTransition())
       }
     }
     .width('100%')
     .backgroundColor(Color.Transparent)
-    .borderRadius(this.isManuscriptMode ? 0 : 12)
-    .border({
-      width: this.isManuscriptMode ? { top: 1, bottom: 1 } : 0.5,
-      color: this.isManuscriptMode ? getAppUiState().themeDivider : this.getTimelineRailColor()
-    })
-    .systemMaterial(this.isManuscriptMode ? undefined : new uiMaterial.ImmersiveMaterial({
-      style: uiMaterial.ImmersiveStyle.REGULAR,
-      materialColor: this.getTimelineBackgroundColor(),
-      applyShadow: false,
-      interactive: false,
-      lightEffect: { color: undefined }
-    }))
-    .shadow({
-      radius: this.isManuscriptMode ? 0 : 12,
-      color: this.isManuscriptMode ? Color.Transparent :
-        (this.isDarkMode ? 'rgba(0, 0, 0, 0.32)' : 'rgba(15, 23, 42, 0.14)'),
-      offsetX: 0,
-      offsetY: 0
-    })
-    .margin({ bottom: 8 })
   }
 
   /**

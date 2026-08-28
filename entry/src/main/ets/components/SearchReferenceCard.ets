@@ -5,6 +5,10 @@ import { withColorAlpha } from '../utils/ColorAlphaUtils'
 import { uiMaterial } from '@kit.ArkUI'
 import { ImmersiveSheetHeader } from './ImmersiveSheetHeader'
 import { VisualEffectsMode } from '../models/ThemeColors'
+import {
+  buildTimelineBarExpandTransition,
+  getTimelineBarExpandAnimation
+} from '../utils/TimelineBarTransitionUtils'
 
 @ComponentV2
 export struct SearchReferenceCard {
@@ -12,6 +16,8 @@ export struct SearchReferenceCard {
   @Param searchEngine: string = ''
   @Param references: SearchReference[] = []
   @Param sourceLabel: string = ''
+  // 合并进条目块时由外层统一提供边框、材质与投影，卡片自身只出内容
+  @Param embedded: boolean = false
   @Local isExpanded: boolean = false
   @Local showWebSheet: boolean = false
   @Local sheetUrl: string = ''
@@ -134,7 +140,7 @@ export struct SearchReferenceCard {
         }
       })
       .onClick(() => {
-        this.getUIContext().animateTo({ duration: 200, curve: Curve.EaseInOut }, () => {
+        this.getUIContext().animateTo(getTimelineBarExpandAnimation(), () => {
           this.isExpanded = !this.isExpanded
         })
       })
@@ -148,18 +154,18 @@ export struct SearchReferenceCard {
         }
         .width('100%')
         .padding({ left: 10, right: 10, top: 4, bottom: 4 })
-        .transition(TransitionEffect.OPACITY.animation({ duration: 200 }))
+        .transition(buildTimelineBarExpandTransition())
       }
     }
     .width('100%')
     .backgroundColor(Color.Transparent)
-    .borderRadius(this.isManuscriptMode ? 0 : 12)
+    .borderRadius(this.embedded || this.isManuscriptMode ? 0 : 12)
     .border({
-      width: this.isManuscriptMode ? { top: 1, bottom: 1 } : 0.5,
+      width: this.embedded ? 0 : (this.isManuscriptMode ? { top: 1, bottom: 1 } : 0.5),
       color: this.isManuscriptMode ? getAppUiState().themeDivider : this.getTimelineRailColor()
     })
     .clip(false)
-    .systemMaterial(this.isManuscriptMode ? undefined : new uiMaterial.ImmersiveMaterial({
+    .systemMaterial(this.embedded || this.isManuscriptMode ? undefined : new uiMaterial.ImmersiveMaterial({
       style: uiMaterial.ImmersiveStyle.REGULAR,
       materialColor: this.themeAiBubble,
       applyShadow: false,
@@ -167,8 +173,8 @@ export struct SearchReferenceCard {
       lightEffect: { color: undefined }
     }))
     .shadow({
-      radius: this.isManuscriptMode ? 0 : 12,
-      color: this.isManuscriptMode ? Color.Transparent :
+      radius: this.embedded || this.isManuscriptMode ? 0 : 12,
+      color: this.embedded || this.isManuscriptMode ? Color.Transparent :
         (this.isDarkMode ? 'rgba(0, 0, 0, 0.32)' : 'rgba(15, 23, 42, 0.14)'),
       offsetX: 0,
       offsetY: 0
