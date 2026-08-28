@@ -68,6 +68,7 @@ import {
   parsePythonSandboxRequestArguments,
   repairTruncatedPythonToolArguments
 } from '../main/ets/services/PythonSandboxService'
+import { resolvePythonSandboxAction } from '../main/ets/utils/ToolDisplayTextUtils'
 import {
   PyodideHost,
   PyodideRuntimeService,
@@ -96,6 +97,13 @@ export default function pythonSandboxRuntimeTest() {
       expect(PYODIDE_COMPAT_INDEX_URL).assertEqual('https://cdn.jsdelivr.net/pyodide/v0.29.4/full/')
       expect(PYODIDE_HOST_HTML.includes('loadPackagesFromImports')).assertTrue()
       expect(PYODIDE_HOST_HTML.includes("pyodide.loadPackage('micropip'")).assertTrue()
+    })
+
+    it('describes_python_tool_actions_from_arguments_or_results', 0, () => {
+      expect(resolvePythonSandboxAction('{"action":"write_file","path":"main.py"}')).assertEqual('write_file')
+      expect(resolvePythonSandboxAction('{"code":"print(1)"}')).assertEqual('run')
+      expect(resolvePythonSandboxAction('{"action":"run_files"', '')).assertEqual('run_files')
+      expect(resolvePythonSandboxAction('{}', '{"ok":true,"action":"list_files"}')).assertEqual('list_files')
     })
 
     it('runs_python_in_a_restartable_worker_with_separate_timeout_phases', 0, () => {

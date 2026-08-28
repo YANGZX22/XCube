@@ -7,6 +7,8 @@ import { VisualEffectsMode } from '../models/ThemeColors'
 import { MANUSCRIPT_COMPACT_BAR_HEIGHT } from '../utils/ManuscriptVisualUtils'
 import {
   getLocalizedBuiltinToolName,
+  getLocalizedPythonSandboxActionLabel,
+  resolvePythonSandboxAction,
   getLocalizedToolSourceLabel
 } from '../utils/ToolDisplayTextUtils'
 import { pickLocalizedText } from '../utils/LocalizedTextUtils'
@@ -88,6 +90,54 @@ export struct ToolCallCard {
 
   private getPrimaryCall(): ToolCall {
     return this.entries.length > 0 ? this.entries[0].toolCall : new ToolCall()
+  }
+
+  private isPythonSandboxCard(): boolean {
+    return this.getToolIconId().trim().toLowerCase().replace(/[\s\-]+/g, '_') === 'python_sandbox'
+  }
+
+  private getPythonEntryAction(entry: ToolCallCardEntry): string {
+    return resolvePythonSandboxAction(
+      entry.toolCall.arguments,
+      entry.toolResult !== null ? entry.toolResult.content : ''
+    )
+  }
+
+  private getPythonOperationLabel(): string {
+    if (!this.isPythonSandboxCard()) {
+      return ''
+    }
+    if (this.isExecuting) {
+      for (let i = this.entries.length - 1; i >= 0; i--) {
+        if (this.entries[i].toolResult === null) {
+          return getLocalizedPythonSandboxActionLabel(this.getPythonEntryAction(this.entries[i]))
+        }
+      }
+    }
+    const actions: string[] = []
+    for (let i = 0; i < this.entries.length; i++) {
+      const action = this.getPythonEntryAction(this.entries[i])
+      if (action !== '' && !actions.includes(action)) {
+        actions.push(action)
+      }
+    }
+    const labels: string[] = []
+    for (let i = 0; i < actions.length; i++) {
+      const label = getLocalizedPythonSandboxActionLabel(actions[i])
+      if (label !== '') {
+        labels.push(label)
+      }
+    }
+    return labels.join(' / ')
+  }
+
+  private getToolHeaderText(): string | Resource {
+    const toolName = getToolDisplayName(this.getPrimaryCall())
+    const operationLabel = this.getPythonOperationLabel()
+    if (operationLabel === '') {
+      return toolName
+    }
+    return `Python · ${operationLabel}`
   }
 
   private hasAnyResult(): boolean {
@@ -199,7 +249,7 @@ export struct ToolCallCard {
           this.ToolIcon()
 
           // 工具名称
-          Text(getToolDisplayName(this.getPrimaryCall()))
+          Text(this.getToolHeaderText())
             .fontSize(13)
             .fontWeight(FontWeight.Medium)
             .fontColor(this.isManuscriptMode || this.isExecuting
@@ -604,7 +654,7 @@ export struct ToolCallCard {
 
   // Python 工具不展示成功/失败状态图标（按产品要求）
   private shouldHideStatusIcon(): boolean {
-    return this.getPrimaryCall().functionName === 'python_sandbox'
+    return this.isPythonSandboxCard()
   }
 
   private isSubAgentCard(): boolean {

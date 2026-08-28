@@ -339,6 +339,7 @@ export struct ChatPage {
   @Local webSearchConversationEnabled: boolean = false
   // 聊天输入区的独立持久化开关；不会预检索或把知识片段拼入提示词。
   @Local knowledgeConversationEnabled: boolean = false
+  @Local workspaceActive: boolean = false
   @Local selectedToolIds: string[] = []
   @Local availableChatTools: ToolConfig[] = []
   @Local isRefreshingMcpToolAvailability: boolean = false
@@ -824,6 +825,7 @@ export struct ChatPage {
     )
 
     this.applyLoadedSessionData(loadResult)
+    this.refreshWorkspaceActive()
     await this.loadCanvasDocumentState()
     await this.loadPlanState()
     await this.applyLoadedProviders(loadResult.providers)
@@ -1735,6 +1737,23 @@ export struct ChatPage {
     })
   }
 
+  private onPythonWorkspaceRefreshChanged(): void {
+    if (this.isPageVisible) {
+      this.refreshWorkspaceActive()
+    }
+  }
+
+  private refreshWorkspaceActive(): void {
+    try {
+      const workspace = ServiceRegistry.pythonWorkspace()
+      this.workspaceActive = this.sessionId.trim() !== '' && workspace.isReady() &&
+        workspace.listFiles(this.sessionId).length > 0
+    } catch (error) {
+      console.warn('ChatPage', `Failed to refresh Python workspace state: ${JSON.stringify(error)}`)
+      this.workspaceActive = false
+    }
+  }
+
   private registerAppUiStateObservers(): void {
     if (this.appUiStateDisposers.length > 0) {
       return
@@ -1745,6 +1764,8 @@ export struct ChatPage {
       observeAppUiState(AppStorageKeys.TASK_EVENT_TICK, (): void => this.onTaskEventTickChanged()),
       observeAppUiState(AppStorageKeys.CANVAS_DOCUMENT_REFRESH_AT, (): void => this.onCanvasDocumentRefreshChanged()),
       observeAppUiState(AppStorageKeys.PLAN_REFRESH_AT, (): void => this.onPlanRefreshChanged()),
+      observeAppUiState(AppStorageKeys.PYTHON_WORKSPACE_REFRESH_AT,
+        (): void => this.onPythonWorkspaceRefreshChanged()),
       observeAppUiState(AppStorageKeys.ASSISTANT_AVATAR_REFRESH_AT, (): void => this.onAssistantAvatarRefreshChanged()),
       observeAppUiState(AppStorageKeys.APP_IN_BACKGROUND, (): void => this.onAppBackgroundChanged())
     ]
@@ -1802,6 +1823,7 @@ export struct ChatPage {
   private handlePageShown(): void {
     this.isPageVisible = true
     this.syncActiveSessionBinding()
+    this.refreshWorkspaceActive()
     if (this.isLoading || this.sessionId === '') {
       return
     }
@@ -4244,6 +4266,7 @@ export struct ChatPage {
               },
               knowledgeEnabled: this.knowledgeConversationEnabled,
               knowledgeAvailable: this.isKnowledgeConversationAvailable(),
+              workspaceActive: this.workspaceActive,
               onKnowledgeToggle: (enabled: boolean): void => {
                 this.updateKnowledgeConversationEnabled(enabled)
               },

@@ -11,6 +11,7 @@ export class AppStorageKeys {
   static readonly RUNNING_CHAT_TASK_COUNT: string = 'running_chat_task_count'
   static readonly CANVAS_DOCUMENT_REFRESH_AT: string = 'canvas_document_refresh_at'
   static readonly PLAN_REFRESH_AT: string = 'plan_refresh_at'
+  static readonly PYTHON_WORKSPACE_REFRESH_AT: string = 'python_workspace_refresh_at'
 
   // 系统状态键
   static readonly APP_IN_BACKGROUND: string = 'appInBackground'

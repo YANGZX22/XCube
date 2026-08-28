@@ -4,6 +4,42 @@ function normalizeToolId(value: string): string {
   return value.trim().toLowerCase().replace(/[\s\-]+/g, '_')
 }
 
+function extractPythonSandboxAction(payload: string): string {
+  const actionMatch = payload.match(/["']action["']\s*:\s*["']([A-Za-z0-9_-]+)["']/i)
+  if (actionMatch !== null && actionMatch.length > 1) {
+    return normalizeToolId(actionMatch[1])
+  }
+  return /["']code["']\s*:/.test(payload) ? 'run' : ''
+}
+
+export function resolvePythonSandboxAction(argumentsJson: string, resultContent: string = ''): string {
+  const argumentAction = extractPythonSandboxAction(argumentsJson)
+  return argumentAction !== '' ? argumentAction : extractPythonSandboxAction(resultContent)
+}
+
+export function getLocalizedPythonSandboxActionLabel(action: string): string {
+  switch (normalizeToolId(action)) {
+    case 'run':
+      return pickLocalizedText('运行代码', 'Run Code')
+    case 'write_file':
+      return pickLocalizedText('写入文件', 'Write File')
+    case 'append_file':
+      return pickLocalizedText('追加文件', 'Append File')
+    case 'replace_in_file':
+      return pickLocalizedText('修改文件', 'Edit File')
+    case 'read_file':
+      return pickLocalizedText('读取文件', 'Read File')
+    case 'list_files':
+      return pickLocalizedText('列举文件', 'List Files')
+    case 'delete_file':
+      return pickLocalizedText('删除文件', 'Delete File')
+    case 'run_files':
+      return pickLocalizedText('运行文件', 'Run Files')
+    default:
+      return ''
+  }
+}
+
 export function getLocalizedBuiltinToolName(toolId: string, fallback: string = ''): string {
   switch (normalizeToolId(toolId)) {
     case 'web_search':

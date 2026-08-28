@@ -1,6 +1,8 @@
 import { Context } from '@kit.AbilityKit'
 import { fileIo } from '@kit.CoreFileKit'
 import { util } from '@kit.ArkTS'
+import { AppStorageKeys } from '../config/AppStorageKeys'
+import { getAppUiState, setAppUiStateValue } from '../state/AppUiState'
 import {
   PYTHON_MAX_WORKSPACE_FILES,
   PYTHON_MAX_WORKSPACE_FILE_BYTES,
@@ -106,6 +108,8 @@ export class PythonWorkspaceService {
   private static instance: PythonWorkspaceService | null = null
   private rootDirectory: string = ''
   private initialized: boolean = false
+  private mutationBatchDepth: number = 0
+  private mutationNotificationPending: boolean = false
 
   private constructor() {}
 
@@ -172,6 +176,7 @@ export class PythonWorkspaceService {
       fileIo.closeSync(file)
     }
     const stat = fileIo.statSync(filePath)
+    this.notifyWorkspaceChanged()
     return new PythonWorkspaceFileInfo(path, stat.size, stat.mtime)
   }
 
@@ -251,31 +256,36 @@ export class PythonWorkspaceService {
 
   syncSnapshot(sessionId: string, files: PythonWorkspaceFileData[]): void {
     this.validateSnapshot(files)
-    const existing = this.listFiles(sessionId)
-    const incomingPaths: string[] = []
-    const incomingSizes: number[] = []
-    for (let i = 0; i < files.length; i++) {
-      incomingPaths.push(normalizePythonWorkspacePath(files[i].path))
-      incomingSizes.push(this.encodeContent(files[i].content).byteLength)
-    }
-    for (let i = 0; i < existing.length; i++) {
-      if (!incomingPaths.includes(existing[i].path)) {
-        this.deleteFile(sessionId, existing[i].path)
+    this.mutationBatchDepth += 1
+    try {
+      const existing = this.listFiles(sessionId)
+      const incomingPaths: string[] = []
+      const incomingSizes: number[] = []
+      for (let i = 0; i < files.length; i++) {
+        incomingPaths.push(normalizePythonWorkspacePath(files[i].path))
+        incomingSizes.push(this.encodeContent(files[i].content).byteLength)
       }
-    }
+      for (let i = 0; i < existing.length; i++) {
+        if (!incomingPaths.includes(existing[i].path)) {
+          this.deleteFile(sessionId, existing[i].path)
+        }
+      }
 
-    // 先写入体积缩小的文件，再写入新增或增长的文件。这样即使最终快照在总量限制内，
-    // 也不会因回写顺序造成短暂超限，同时避免先清空整个工作区带来的数据丢失窗口。
-    const writeOrder: number[] = []
-    for (let i = 0; i < files.length; i++) {
-      writeOrder.push(i)
-    }
-    writeOrder.sort((left: number, right: number): number =>
-      this.fileSizeDelta(incomingPaths[left], incomingSizes[left], existing) -
-        this.fileSizeDelta(incomingPaths[right], incomingSizes[right], existing))
-    for (let i = 0; i < writeOrder.length; i++) {
-      const index = writeOrder[i]
-      this.writeFile(sessionId, incomingPaths[index], files[index].content)
+      // 先写入体积缩小的文件，再写入新增或增长的文件。这样即使最终快照在总量限制内，
+      // 也不会因回写顺序造成短暂超限，同时避免先清空整个工作区带来的数据丢失窗口。
+      const writeOrder: number[] = []
+      for (let i = 0; i < files.length; i++) {
+        writeOrder.push(i)
+      }
+      writeOrder.sort((left: number, right: number): number =>
+        this.fileSizeDelta(incomingPaths[left], incomingSizes[left], existing) -
+          this.fileSizeDelta(incomingPaths[right], incomingSizes[right], existing))
+      for (let i = 0; i < writeOrder.length; i++) {
+        const index = writeOrder[i]
+        this.writeFile(sessionId, incomingPaths[index], files[index].content)
+      }
+    } finally {
+      this.finishMutationBatch()
     }
   }
 
@@ -289,6 +299,7 @@ export class PythonWorkspaceService {
     }
     fileIo.unlinkSync(filePath)
     this.pruneEmptyDirectories(filePath.substring(0, filePath.lastIndexOf('/')), sessionDirectory)
+    this.notifyWorkspaceChanged()
     return true
   }
 
@@ -299,6 +310,7 @@ export class PythonWorkspaceService {
       return true
     }
     this.deleteRecursively(directory)
+    this.notifyWorkspaceChanged()
     return true
   }
 
@@ -330,7 +342,32 @@ export class PythonWorkspaceService {
         result.failedFiles += Math.max(1, fileCount)
       }
     }
+    if (result.deletedFiles > 0) {
+      this.notifyWorkspaceChanged()
+    }
     return result
+  }
+
+  private notifyWorkspaceChanged(): void {
+    if (this.mutationBatchDepth > 0) {
+      this.mutationNotificationPending = true
+      return
+    }
+    this.publishWorkspaceChanged()
+  }
+
+  private finishMutationBatch(): void {
+    this.mutationBatchDepth = Math.max(0, this.mutationBatchDepth - 1)
+    if (this.mutationBatchDepth === 0 && this.mutationNotificationPending) {
+      this.mutationNotificationPending = false
+      this.publishWorkspaceChanged()
+    }
+  }
+
+  private publishWorkspaceChanged(): void {
+    const current = getAppUiState().pythonWorkspaceRefreshAt
+    const now = Date.now()
+    setAppUiStateValue(AppStorageKeys.PYTHON_WORKSPACE_REFRESH_AT, now > current ? now : current + 1)
   }
 
   private validateSnapshot(files: PythonWorkspaceFileData[]): void {

@@ -31,6 +31,7 @@ export struct ChatToolbar {
   @Param knowledgeAvailable: boolean = false
   @Event onKnowledgeToggle: (enabled: boolean) => void =
     (_enabled: boolean): void => {}
+  @Param workspaceActive: boolean = false
   @Param showScrollTopAction: boolean = false
   @Param showScrollBottomAction: boolean = false
   @Param scrollBottomActionLoading: boolean = false
@@ -146,6 +147,9 @@ export struct ChatToolbar {
   }
 
   private getWorkspaceChipForegroundColor(): ResourceColor {
+    if (this.workspaceActive) {
+      return this.themePrimary
+    }
     return this.isManuscriptMode ? getAppUiState().themeTextSecondary : $r('app.color.text_secondary')
   }
 
@@ -535,7 +539,7 @@ export struct ChatToolbar {
       .borderRadius(this.getToolbarChipBarHeight() / 2)
       .border({
         width: { bottom: 1 },
-        color: this.manuscriptAccent
+        color: this.workspaceActive ? this.manuscriptAccentDeep : this.manuscriptAccent
       })
     } else {
       Button({ type: ButtonType.Normal, stateEffect: false }) {
@@ -544,13 +548,14 @@ export struct ChatToolbar {
       .width(this.getWorkspaceChipWidth())
       .height(this.getToolbarChipBarHeight())
       .padding(0)
-      .backgroundColor(Color.Transparent)
+      .backgroundColor(this.workspaceActive ? this.themePrimaryLight : Color.Transparent)
       .borderRadius(Math.min(this.getWorkspaceChipWidth(), this.getToolbarChipBarHeight()) / 2)
       .onClick(() => {
         this.onOpenWorkspace()
       })
       .systemMaterial(new uiMaterial.ImmersiveMaterial({
         style: uiMaterial.ImmersiveStyle.REGULAR,
+        materialColor: this.workspaceActive ? this.themePrimaryLight : Color.Transparent,
         applyShadow: false,
         interactive: true,
         lightEffect: { color: undefined }
@@ -570,7 +575,7 @@ export struct ChatToolbar {
         .fontSize(this.isManuscriptMode ? 11.5 : 14)
         .letterSpacing(this.isManuscriptMode ? (isChineseAppLanguage() ? 1.3 : 0.2) : 0)
         .fontColor(this.getWorkspaceChipForegroundColor())
-        .fontWeight(FontWeight.Regular)
+        .fontWeight(this.workspaceActive ? FontWeight.Medium : FontWeight.Regular)
         .maxLines(1)
         .textOverflow({ overflow: TextOverflow.Ellipsis })
         .margin({ left: 4 })

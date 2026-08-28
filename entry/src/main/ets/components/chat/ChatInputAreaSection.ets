@@ -46,6 +46,7 @@ export struct ChatInputAreaSection {
   @Param knowledgeAvailable: boolean = false
   @Event onKnowledgeToggle: (enabled: boolean) => void =
     (_enabled: boolean): void => {}
+  @Param workspaceActive: boolean = false
   @Param hasRecentScreenshot: boolean = false
   @Param bottomAvoidHeight: number = 0
   @Param contentMaxWidth: number = 99999
@@ -147,6 +148,7 @@ export struct ChatInputAreaSection {
           onKnowledgeToggle: (enabled: boolean): void => {
             this.onKnowledgeToggle(enabled)
           },
+          workspaceActive: this.workspaceActive,
           showScrollTopAction: this.showManuscriptScrollTop,
           showScrollBottomAction: this.showManuscriptScrollBottom,
           scrollBottomActionLoading: this.manuscriptScrollBottomLoading,
