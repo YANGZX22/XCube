@@ -22,6 +22,9 @@ import {
 import { KnowledgeDocument, KnowledgeDocumentStatus } from '../services/KnowledgeDocumentService'
 import { ImmersiveSheetHeader } from './ImmersiveSheetHeader'
 
+const EMAIL_CATEGORY_COLLAPSED_VISIBLE_COUNT: number = 1
+const EMAIL_CATEGORY_STACK_LIMIT: number = 3
+
 /** Email is presented as one knowledge-source category beside PDF, Word, spreadsheets, and images. */
 @ComponentV2
 export struct EmailKnowledgeCategory {
@@ -46,6 +49,7 @@ export struct EmailKnowledgeCategory {
   @Local previewError: string = ''
   @Local importStatusMessage: string = ''
   @Local importStatusError: boolean = false
+  @Local isCategoryExpanded: boolean = false
 
   private service: EmailService = ServiceRegistry.email()
 
@@ -271,6 +275,54 @@ export struct EmailKnowledgeCategory {
     showSnackBar(this.getUIContext(), options)
   }
 
+  private getVisibleImportedDocuments(): KnowledgeDocument[] {
+    if (this.isCategoryExpanded ||
+      this.importedDocuments.length <= EMAIL_CATEGORY_COLLAPSED_VISIBLE_COUNT) {
+      return this.importedDocuments
+    }
+    return this.importedDocuments.slice(0, EMAIL_CATEGORY_COLLAPSED_VISIBLE_COUNT)
+  }
+
+  private getCollapsedStackCount(): number {
+    if (this.isCategoryExpanded) {
+      return 0
+    }
+    return Math.min(
+      EMAIL_CATEGORY_STACK_LIMIT,
+      Math.max(0, this.importedDocuments.length - EMAIL_CATEGORY_COLLAPSED_VISIBLE_COUNT)
+    )
+  }
+
+  private toggleCategoryExpanded(): void {
+    if (this.importedDocuments.length <= EMAIL_CATEGORY_COLLAPSED_VISIBLE_COUNT) {
+      return
+    }
+    this.closeAllSwipeActions()
+    this.getUIContext().animateTo({ duration: 240, curve: Curve.EaseInOut }, (): void => {
+      this.isCategoryExpanded = !this.isCategoryExpanded
+    })
+  }
+
+  private getCategorySummary(): string {
+    if (!this.account.configured) {
+      return pickLocalizedText('在设置 → 工具中配置', 'Configure under Settings → Tools')
+    }
+    const count = this.importedDocuments.length
+    if (count === 0) {
+      return pickLocalizedText(
+        `已授权 ${this.account.emailAddress}`,
+        `Authorized ${this.account.emailAddress}`
+      )
+    }
+    if (count > EMAIL_CATEGORY_COLLAPSED_VISIBLE_COUNT && this.isCategoryExpanded) {
+      return pickLocalizedText(`${count} 个知识文件 · 已展开全部`, `${count} knowledge files · Showing all`)
+    }
+    if (count > EMAIL_CATEGORY_COLLAPSED_VISIBLE_COUNT) {
+      return pickLocalizedText(`${count} 个知识文件 · 显示最新 1 个`, `${count} knowledge files · Latest 1`)
+    }
+    return pickLocalizedText('已导入 1 个知识文件', '1 knowledge file imported')
+  }
+
   @Builder
   private CategoryHeader() {
     Row({ space: 10 }) {
@@ -293,14 +345,7 @@ export struct EmailKnowledgeCategory {
           .fontSize(this.isManuscriptMode ? 18 : 14)
           .fontWeight(this.isManuscriptMode ? 600 : FontWeight.Bold)
           .fontColor($r('app.color.text_primary'))
-        Text(this.account.configured
-          ? pickLocalizedText(
-            this.importedDocuments.length > 0 ? `已导入 ${this.importedDocuments.length} 个知识文件` :
-              `已授权 ${this.account.emailAddress}`,
-            this.importedDocuments.length > 0 ? `${this.importedDocuments.length} knowledge files imported` :
-              `Authorized ${this.account.emailAddress}`
-          )
-          : pickLocalizedText('在设置 → 工具中配置', 'Configure under Settings → Tools'))
+        Text(this.getCategorySummary())
           .fontFamily(this.isManuscriptMode ? MANUSCRIPT_BODY_FONT : undefined)
           .fontSize(this.isManuscriptMode ? 11.5 : 10.5)
           .fontColor($r('app.color.text_tertiary'))
@@ -309,6 +354,39 @@ export struct EmailKnowledgeCategory {
       }
       .layoutWeight(1)
       .alignItems(HorizontalAlign.Start)
+
+      if (this.importedDocuments.length > EMAIL_CATEGORY_COLLAPSED_VISIBLE_COUNT) {
+        Row({ space: 4 }) {
+          Text(this.isCategoryExpanded
+            ? pickLocalizedText('收起', 'Collapse')
+            : pickLocalizedText('展开', 'Expand'))
+            .fontSize(11)
+            .fontWeight(FontWeight.Medium)
+            .fontColor('#C97936')
+
+          SymbolGlyph($r('sys.symbol.chevron_down'))
+            .renderingStrategy(SymbolRenderingStrategy.SINGLE)
+            .fontSize(12)
+            .fontColor(['#C97936'])
+            .rotate({ angle: this.isCategoryExpanded ? 180 : 0 })
+            .animation({ duration: 220, curve: Curve.EaseOut })
+        }
+        .height(32)
+        .padding({ left: 9, right: 9 })
+        .borderRadius(999)
+        .backgroundColor(withColorAlpha('#C97936', this.isDarkMode ? '24' : '10'))
+        .stateStyles({
+          normal: {
+            .opacity(1)
+          },
+          pressed: {
+            .opacity(0.62)
+          }
+        })
+        .onClick((): void => {
+          this.toggleCategoryExpanded()
+        })
+      }
 
       Button({ type: ButtonType.Circle, stateEffect: false }) {
         if (this.isWorking) {
@@ -331,12 +409,18 @@ export struct EmailKnowledgeCategory {
     .padding({ left: this.isManuscriptMode ? 4 : 12, right: this.isManuscriptMode ? 4 : 10 })
     .margin({ bottom: this.isManuscriptMode ? 0 : 8 })
     .borderRadius(this.isManuscriptMode ? 0 : 14)
-    .backgroundColor(this.isManuscriptMode ? Color.Transparent :
-      withColorAlpha(this.themePrimary, this.isDarkMode ? '12' : '08'))
+    .backgroundColor(this.isManuscriptMode ? Color.Transparent : getAppUiState().themePrimaryLight)
     .border({
       width: this.isManuscriptMode ? { bottom: 1 } : 0.5,
       color: this.isManuscriptMode ? getAppUiState().themeDivider : getAppUiState().themePrimaryLight
     })
+    .systemMaterial(new uiMaterial.ImmersiveMaterial({
+      style: uiMaterial.ImmersiveStyle.REGULAR,
+      materialColor: this.isManuscriptMode ? Color.Transparent : getAppUiState().themePrimaryLight,
+      applyShadow: !this.isManuscriptMode,
+      interactive: false,
+      lightEffect: this.isManuscriptMode ? undefined : { color: undefined }
+    }))
   }
 
   @Builder
@@ -700,6 +784,91 @@ export struct EmailKnowledgeCategory {
   }
 
   @Builder
+  private ImmersiveCollapsedStackLayer(layer: number) {
+    Row()
+      .width(`${100 - layer * 4}%`)
+      .height(12)
+      .borderRadius({ bottomLeft: 12, bottomRight: 12 })
+      .backgroundColor(getAppUiState().themePrimaryLight)
+      .border({ width: 0.5, color: getAppUiState().themeDivider })
+      .opacity(1 - layer * 0.12)
+      .translate({ y: -8 + (layer - 1) * 4 })
+      .systemMaterial(new uiMaterial.ImmersiveMaterial({
+        style: uiMaterial.ImmersiveStyle.REGULAR,
+        materialColor: getAppUiState().themePrimaryLight,
+        applyShadow: true,
+        interactive: false,
+        lightEffect: { color: undefined }
+      }))
+  }
+
+  @Builder
+  private GaussianCollapsedStackLayer(layer: number) {
+    Row()
+      .width(`${100 - layer * 4}%`)
+      .height(12)
+      .borderRadius({ bottomLeft: 12, bottomRight: 12 })
+      .clip(true)
+      .backgroundColor(getAppUiState().themePrimaryLight)
+      .backgroundBlurStyle(BlurStyle.COMPONENT_REGULAR)
+      .border({ width: 0.5, color: getAppUiState().themeDivider })
+      .opacity(1 - layer * 0.12)
+      .translate({ y: -8 + (layer - 1) * 4 })
+  }
+
+  @Builder
+  private CollapsedCategoryStack() {
+    if (!this.isManuscriptMode && this.getCollapsedStackCount() > 0) {
+      ListItem({ style: ListItemStyle.NONE }) {
+        Stack({ alignContent: Alignment.Top }) {
+          if (this.getCollapsedStackCount() >= 3) {
+            if (this.knowledgeListImmersiveMaterial) {
+              this.ImmersiveCollapsedStackLayer(3)
+            } else {
+              this.GaussianCollapsedStackLayer(3)
+            }
+          }
+          if (this.getCollapsedStackCount() >= 2) {
+            if (this.knowledgeListImmersiveMaterial) {
+              this.ImmersiveCollapsedStackLayer(2)
+            } else {
+              this.GaussianCollapsedStackLayer(2)
+            }
+          }
+          if (this.getCollapsedStackCount() >= 1) {
+            if (this.knowledgeListImmersiveMaterial) {
+              this.ImmersiveCollapsedStackLayer(1)
+            } else {
+              this.GaussianCollapsedStackLayer(1)
+            }
+          }
+        }
+        .width('100%')
+        .height(8 + this.getCollapsedStackCount() * 4)
+        .clip(false)
+        .onClick((): void => {
+          this.toggleCategoryExpanded()
+        })
+      }
+      .clip(false)
+      .transition(TransitionEffect.asymmetric(
+        TransitionEffect.OPACITY.combine(TransitionEffect.scale({
+          x: 0.96,
+          y: 0.72,
+          centerX: '50%',
+          centerY: '0%'
+        })).animation({ duration: 220, curve: Curve.EaseOut }),
+        TransitionEffect.OPACITY.combine(TransitionEffect.scale({
+          x: 0.98,
+          y: 0.6,
+          centerX: '50%',
+          centerY: '0%'
+        })).animation({ duration: 140, curve: Curve.EaseIn })
+      ))
+    }
+  }
+
+  @Builder
   private RebuildSwipePanel(document: KnowledgeDocument) {
     Row() {
       Button({ type: ButtonType.Circle, stateEffect: false }) {
@@ -940,9 +1109,11 @@ export struct EmailKnowledgeCategory {
         ListItem() { this.AccountHint() }
       }
       if (this.importedDocuments.length > 0) {
-        ForEach(this.importedDocuments, (document: KnowledgeDocument) => {
+        ForEach(this.getVisibleImportedDocuments(), (document: KnowledgeDocument) => {
           ListItem({ style: ListItemStyle.NONE }) { this.ImportedDocumentRow(document) }
-            .margin({ bottom: this.isManuscriptMode ? 0 : 8 })
+            .margin({
+              bottom: this.isManuscriptMode ? 0 : (this.getCollapsedStackCount() > 0 ? 0 : 8)
+            })
             .swipeAction({
               start: this.RebuildSwipePanel(document),
               end: this.DeleteSwipePanel(document)
@@ -956,6 +1127,8 @@ export struct EmailKnowledgeCategory {
                 .animation({ duration: 140, curve: Curve.EaseIn })
             ))
         }, (document: KnowledgeDocument): string => `email_document_${document.id}`)
+
+        this.CollapsedCategoryStack()
       }
     }
     .divider(null)

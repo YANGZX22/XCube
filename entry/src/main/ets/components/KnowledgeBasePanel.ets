@@ -23,7 +23,8 @@ import { ImmersiveSheetHeader } from './ImmersiveSheetHeader'
 import { EmailKnowledgeCategory } from './EmailKnowledgeCategory'
 import { ManuscriptPageTitle } from './index/ManuscriptPageTitle'
 
-const KNOWLEDGE_CATEGORY_PREVIEW_LIMIT: number = 3
+const KNOWLEDGE_CATEGORY_COLLAPSED_VISIBLE_COUNT: number = 1
+const KNOWLEDGE_CATEGORY_STACK_LIMIT: number = 3
 const KNOWLEDGE_CATEGORY_PDF: string = 'pdf'
 const KNOWLEDGE_CATEGORY_WORD: string = 'word'
 const KNOWLEDGE_CATEGORY_SPREADSHEET: string = 'spreadsheet'
@@ -610,14 +611,25 @@ export struct KnowledgeBasePanel {
   private getVisibleCategoryDocuments(categoryKey: string): KnowledgeDocument[] {
     const categoryDocuments = this.getDocumentsForCategory(categoryKey)
     if (this.isCategoryExpanded(categoryKey) ||
-      categoryDocuments.length <= KNOWLEDGE_CATEGORY_PREVIEW_LIMIT) {
+      categoryDocuments.length <= KNOWLEDGE_CATEGORY_COLLAPSED_VISIBLE_COUNT) {
       return categoryDocuments
     }
-    return categoryDocuments.slice(0, KNOWLEDGE_CATEGORY_PREVIEW_LIMIT)
+    return categoryDocuments.slice(0, KNOWLEDGE_CATEGORY_COLLAPSED_VISIBLE_COUNT)
+  }
+
+  private getCollapsedStackCount(categoryKey: string): number {
+    if (this.isCategoryExpanded(categoryKey)) {
+      return 0
+    }
+    return Math.min(
+      KNOWLEDGE_CATEGORY_STACK_LIMIT,
+      Math.max(0, this.getDocumentsForCategory(categoryKey).length -
+        KNOWLEDGE_CATEGORY_COLLAPSED_VISIBLE_COUNT)
+    )
   }
 
   private toggleCategoryExpanded(categoryKey: string): void {
-    if (this.getDocumentsForCategory(categoryKey).length <= KNOWLEDGE_CATEGORY_PREVIEW_LIMIT) {
+    if (this.getDocumentsForCategory(categoryKey).length <= KNOWLEDGE_CATEGORY_COLLAPSED_VISIBLE_COUNT) {
       return
     }
     this.closeAllSwipeActions()
@@ -653,13 +665,13 @@ export struct KnowledgeBasePanel {
 
   private getCategorySummary(categoryKey: string): string {
     const count = this.getDocumentsForCategory(categoryKey).length
-    if (this.isCategoryExpanded(categoryKey)) {
+    if (count > KNOWLEDGE_CATEGORY_COLLAPSED_VISIBLE_COUNT && this.isCategoryExpanded(categoryKey)) {
       return pickLocalizedText(`${count} 个文档 · 已展开全部`, `${count} documents · Showing all`)
     }
-    if (count > KNOWLEDGE_CATEGORY_PREVIEW_LIMIT) {
+    if (count > KNOWLEDGE_CATEGORY_COLLAPSED_VISIBLE_COUNT) {
       return pickLocalizedText(
-        `${count} 个文档 · 显示最新 ${KNOWLEDGE_CATEGORY_PREVIEW_LIMIT} 个`,
-        `${count} documents · Latest ${KNOWLEDGE_CATEGORY_PREVIEW_LIMIT}`
+        `${count} 个文档 · 显示最新 1 个`,
+        `${count} documents · Latest 1`
       )
     }
     return pickLocalizedText(`${count} 个文档`, `${count} document${count === 1 ? '' : 's'}`)
@@ -1019,75 +1031,80 @@ export struct KnowledgeBasePanel {
   }
 
   @Builder
+  private DocumentCategoryHeaderContent(categoryKey: string) {
+    Column() {
+      this.DocumentCategoryIcon(categoryKey)
+    }
+    .width(36)
+    .height(36)
+    .borderRadius(this.isManuscriptMode ? 0 : 12)
+    .backgroundColor(this.isManuscriptMode
+      ? Color.Transparent
+      : withColorAlpha(this.getCategoryColor(categoryKey), this.isDarkMode ? '26' : '14'))
+    .justifyContent(FlexAlign.Center)
+    .alignItems(HorizontalAlign.Center)
+
+    Column({ space: 2 }) {
+      Text(this.getCategoryTitle(categoryKey))
+        .fontFamily(this.isManuscriptMode ? MANUSCRIPT_HEADING_FONT : undefined)
+        .fontSize(this.isManuscriptMode ? 18 : 14)
+        .fontWeight(this.isManuscriptMode ? 600 : FontWeight.Bold)
+        .fontColor($r('app.color.text_primary'))
+        .maxLines(1)
+        .textOverflow({ overflow: TextOverflow.Ellipsis })
+
+      Text(this.getCategorySummary(categoryKey))
+        .fontFamily(this.isManuscriptMode ? MANUSCRIPT_BODY_FONT : undefined)
+        .fontSize(this.isManuscriptMode ? 11.5 : 10.5)
+        .fontStyle(this.isManuscriptMode ? FontStyle.Italic : FontStyle.Normal)
+        .fontColor($r('app.color.text_tertiary'))
+        .maxLines(1)
+        .textOverflow({ overflow: TextOverflow.Ellipsis })
+    }
+    .layoutWeight(1)
+    .alignItems(HorizontalAlign.Start)
+
+    if (this.getDocumentsForCategory(categoryKey).length > KNOWLEDGE_CATEGORY_COLLAPSED_VISIBLE_COUNT) {
+      Row({ space: 4 }) {
+        Text(this.isCategoryExpanded(categoryKey)
+          ? pickLocalizedText('收起', 'Collapse')
+          : pickLocalizedText('展开', 'Expand'))
+          .fontSize(11)
+          .fontWeight(FontWeight.Medium)
+          .fontColor(this.getCategoryColor(categoryKey))
+
+        SymbolGlyph($r('sys.symbol.chevron_down'))
+          .renderingStrategy(SymbolRenderingStrategy.SINGLE)
+          .fontSize(12)
+          .fontColor([this.getCategoryColor(categoryKey)])
+          .rotate({ angle: this.isCategoryExpanded(categoryKey) ? 180 : 0 })
+          .animation({ duration: 220, curve: Curve.EaseOut })
+      }
+      .height(32)
+      .padding({ left: 10, right: 10 })
+      .borderRadius(999)
+      .backgroundColor(withColorAlpha(
+        this.getCategoryColor(categoryKey),
+        this.isDarkMode ? '24' : '10'
+      ))
+      .stateStyles({
+        normal: {
+          .opacity(1)
+        },
+        pressed: {
+          .opacity(0.62)
+        }
+      })
+      .onClick((): void => {
+        this.toggleCategoryExpanded(categoryKey)
+      })
+    }
+  }
+
+  @Builder
   private DocumentCategoryHeader(categoryKey: string) {
     Row({ space: 10 }) {
-      Column() {
-        this.DocumentCategoryIcon(categoryKey)
-      }
-      .width(36)
-      .height(36)
-      .borderRadius(this.isManuscriptMode ? 0 : 12)
-      .backgroundColor(this.isManuscriptMode
-        ? Color.Transparent
-        : withColorAlpha(this.getCategoryColor(categoryKey), this.isDarkMode ? '26' : '14'))
-      .justifyContent(FlexAlign.Center)
-      .alignItems(HorizontalAlign.Center)
-
-      Column({ space: 2 }) {
-        Text(this.getCategoryTitle(categoryKey))
-          .fontFamily(this.isManuscriptMode ? MANUSCRIPT_HEADING_FONT : undefined)
-          .fontSize(this.isManuscriptMode ? 18 : 14)
-          .fontWeight(this.isManuscriptMode ? 600 : FontWeight.Bold)
-          .fontColor($r('app.color.text_primary'))
-          .maxLines(1)
-          .textOverflow({ overflow: TextOverflow.Ellipsis })
-
-        Text(this.getCategorySummary(categoryKey))
-          .fontFamily(this.isManuscriptMode ? MANUSCRIPT_BODY_FONT : undefined)
-          .fontSize(this.isManuscriptMode ? 11.5 : 10.5)
-          .fontStyle(this.isManuscriptMode ? FontStyle.Italic : FontStyle.Normal)
-          .fontColor($r('app.color.text_tertiary'))
-          .maxLines(1)
-          .textOverflow({ overflow: TextOverflow.Ellipsis })
-      }
-      .layoutWeight(1)
-      .alignItems(HorizontalAlign.Start)
-
-      if (this.getDocumentsForCategory(categoryKey).length > KNOWLEDGE_CATEGORY_PREVIEW_LIMIT) {
-        Row({ space: 4 }) {
-          Text(this.isCategoryExpanded(categoryKey)
-            ? pickLocalizedText('收起', 'Collapse')
-            : pickLocalizedText('展开', 'Expand'))
-            .fontSize(11)
-            .fontWeight(FontWeight.Medium)
-            .fontColor(this.getCategoryColor(categoryKey))
-
-          SymbolGlyph($r('sys.symbol.chevron_down'))
-            .renderingStrategy(SymbolRenderingStrategy.SINGLE)
-            .fontSize(12)
-            .fontColor([this.getCategoryColor(categoryKey)])
-            .rotate({ angle: this.isCategoryExpanded(categoryKey) ? 180 : 0 })
-            .animation({ duration: 220, curve: Curve.EaseOut })
-        }
-        .height(32)
-        .padding({ left: 10, right: 10 })
-        .borderRadius(999)
-        .backgroundColor(withColorAlpha(
-          this.getCategoryColor(categoryKey),
-          this.isDarkMode ? '24' : '10'
-        ))
-        .stateStyles({
-          normal: {
-            .opacity(1)
-          },
-          pressed: {
-            .opacity(0.62)
-          }
-        })
-        .onClick((): void => {
-          this.toggleCategoryExpanded(categoryKey)
-        })
-      }
+      this.DocumentCategoryHeaderContent(categoryKey)
     }
     .width('100%')
     .height(this.isManuscriptMode ? 64 : 60)
@@ -1098,11 +1115,103 @@ export struct KnowledgeBasePanel {
     .borderRadius(this.isManuscriptMode ? 0 : 14)
     .backgroundColor(this.isManuscriptMode
       ? Color.Transparent
-      : withColorAlpha(this.themePrimary, this.isDarkMode ? '12' : '08'))
+      : getAppUiState().themePrimaryLight)
     .border({
       width: this.isManuscriptMode ? { bottom: 1 } : 0.5,
       color: this.isManuscriptMode ? getAppUiState().themeDivider : getAppUiState().themePrimaryLight
     })
+    .systemMaterial(new uiMaterial.ImmersiveMaterial({
+      style: uiMaterial.ImmersiveStyle.REGULAR,
+      materialColor: this.isManuscriptMode ? Color.Transparent : getAppUiState().themePrimaryLight,
+      applyShadow: !this.isManuscriptMode,
+      interactive: false,
+      lightEffect: this.isManuscriptMode ? undefined : { color: undefined }
+    }))
+  }
+
+  @Builder
+  private ImmersiveCollapsedStackLayer(layer: number) {
+    Row()
+      .width(`${100 - layer * 4}%`)
+      .height(12)
+      .borderRadius({ bottomLeft: 12, bottomRight: 12 })
+      .backgroundColor(getAppUiState().themePrimaryLight)
+      .border({ width: 0.5, color: getAppUiState().themeDivider })
+      .opacity(1 - layer * 0.12)
+      .translate({ y: -8 + (layer - 1) * 4 })
+      .systemMaterial(new uiMaterial.ImmersiveMaterial({
+        style: uiMaterial.ImmersiveStyle.REGULAR,
+        materialColor: getAppUiState().themePrimaryLight,
+        applyShadow: true,
+        interactive: false,
+        lightEffect: { color: undefined }
+      }))
+  }
+
+  @Builder
+  private GaussianCollapsedStackLayer(layer: number) {
+    Row()
+      .width(`${100 - layer * 4}%`)
+      .height(12)
+      .borderRadius({ bottomLeft: 12, bottomRight: 12 })
+      .clip(true)
+      .backgroundColor(getAppUiState().themePrimaryLight)
+      .backgroundBlurStyle(BlurStyle.COMPONENT_REGULAR)
+      .border({ width: 0.5, color: getAppUiState().themeDivider })
+      .opacity(1 - layer * 0.12)
+      .translate({ y: -8 + (layer - 1) * 4 })
+  }
+
+  @Builder
+  private CollapsedCategoryStack(categoryKey: string) {
+    if (!this.isManuscriptMode && this.getCollapsedStackCount(categoryKey) > 0) {
+      ListItem({ style: ListItemStyle.NONE }) {
+        Stack({ alignContent: Alignment.Top }) {
+          if (this.getCollapsedStackCount(categoryKey) >= 3) {
+            if (this.knowledgeListImmersiveMaterial) {
+              this.ImmersiveCollapsedStackLayer(3)
+            } else {
+              this.GaussianCollapsedStackLayer(3)
+            }
+          }
+          if (this.getCollapsedStackCount(categoryKey) >= 2) {
+            if (this.knowledgeListImmersiveMaterial) {
+              this.ImmersiveCollapsedStackLayer(2)
+            } else {
+              this.GaussianCollapsedStackLayer(2)
+            }
+          }
+          if (this.getCollapsedStackCount(categoryKey) >= 1) {
+            if (this.knowledgeListImmersiveMaterial) {
+              this.ImmersiveCollapsedStackLayer(1)
+            } else {
+              this.GaussianCollapsedStackLayer(1)
+            }
+          }
+        }
+        .width('100%')
+        .height(8 + this.getCollapsedStackCount(categoryKey) * 4)
+        .clip(false)
+        .onClick((): void => {
+          this.toggleCategoryExpanded(categoryKey)
+        })
+      }
+      .clip(false)
+      .transition(TransitionEffect.asymmetric(
+        TransitionEffect.OPACITY.combine(TransitionEffect.scale({
+          x: 0.96,
+          y: 0.72,
+          centerX: '50%',
+          centerY: '0%'
+        })).animation({ duration: 220, curve: Curve.EaseOut }),
+        TransitionEffect.OPACITY.combine(TransitionEffect.scale({
+          x: 0.98,
+          y: 0.6,
+          centerX: '50%',
+          centerY: '0%'
+        })).animation({ duration: 140, curve: Curve.EaseIn })
+      ))
+    }
   }
 
   @Builder
@@ -1117,7 +1226,8 @@ export struct KnowledgeBasePanel {
           }
           .margin({
             top: 0,
-            bottom: this.isManuscriptMode ? 0 : 8
+            bottom: this.isManuscriptMode ? 0 :
+              (this.getCollapsedStackCount(categoryKey) > 0 ? 0 : 8)
           })
           .swipeAction({
             start: this.UpdateSwipePanel(document),
@@ -1134,6 +1244,8 @@ export struct KnowledgeBasePanel {
         },
         (document: KnowledgeDocument): string => `${categoryKey}_${document.id}`
       )
+
+      this.CollapsedCategoryStack(categoryKey)
     }
     .divider(null)
     .margin({
