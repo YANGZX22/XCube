@@ -25,6 +25,7 @@ import { ManuscriptPageTitle } from './index/ManuscriptPageTitle'
 
 const KNOWLEDGE_CATEGORY_COLLAPSED_VISIBLE_COUNT: number = 1
 const KNOWLEDGE_CATEGORY_STACK_LIMIT: number = 3
+const KNOWLEDGE_CATEGORY_STACK_LAYER_HEIGHT: number = 11
 const KNOWLEDGE_CATEGORY_PDF: string = 'pdf'
 const KNOWLEDGE_CATEGORY_WORD: string = 'word'
 const KNOWLEDGE_CATEGORY_SPREADSHEET: string = 'spreadsheet'
@@ -693,6 +694,68 @@ export struct KnowledgeBasePanel {
     return this.themePrimary
   }
 
+  private getDocumentCategoryColor(document: KnowledgeDocument): string {
+    return this.getCategoryColor(this.getDocumentCategoryKey(document))
+  }
+
+  private getCategoryCardTint(categoryKey: string): string {
+    return withColorAlpha(this.getCategoryColor(categoryKey), this.isDarkMode ? '26' : '16')
+  }
+
+  private getCategoryCardBorderColor(categoryKey: string): string {
+    return withColorAlpha(this.getCategoryColor(categoryKey), this.isDarkMode ? '40' : '2E')
+  }
+
+  private getCollapsedStackLayers(categoryKey: string): number[] {
+    const layers: number[] = []
+    const stackCount = this.getCollapsedStackCount(categoryKey)
+    for (let layer = 1; layer <= stackCount; layer++) {
+      layers.push(layer)
+    }
+    return layers
+  }
+
+  private getStackLayerWidth(layer: number): string {
+    return `${100 - layer * 4}%`
+  }
+
+  private getStackLayerHeight(layer: number): number {
+    return KNOWLEDGE_CATEGORY_STACK_LAYER_HEIGHT - (layer - 1) * 2
+  }
+
+  private getStackLayerOpacity(layer: number): number {
+    return 1 - (layer - 1) * 0.16
+  }
+
+  private buildDocumentCardTransition(document: KnowledgeDocument): TransitionEffect {
+    const order = Math.min(Math.max(this.getDocumentOrdinal(document) - 1, 0), 5)
+    return TransitionEffect.asymmetric(
+      TransitionEffect.OPACITY
+        .combine(TransitionEffect.translate({ y: -10 }))
+        .combine(TransitionEffect.scale({ x: 0.96, y: 0.94, centerX: '50%', centerY: '0%' }))
+        .animation({ duration: 260, delay: order * 45, curve: Curve.EaseOut }),
+      TransitionEffect.OPACITY
+        .combine(TransitionEffect.translate({ y: -6 }))
+        .combine(TransitionEffect.scale({ x: 0.96, y: 0.94, centerX: '50%', centerY: '0%' }))
+        .animation({ duration: 160, delay: (5 - order) * 15, curve: Curve.EaseIn })
+    )
+  }
+
+  private buildStackLayerTransition(layer: number): TransitionEffect {
+    return TransitionEffect.asymmetric(
+      TransitionEffect.OPACITY
+        .combine(TransitionEffect.scale({ x: 0.94, y: 0.05, centerX: '50%', centerY: '0%' }))
+        .animation({ duration: 260, delay: (layer - 1) * 60, curve: Curve.EaseOut }),
+      TransitionEffect.OPACITY
+        .combine(TransitionEffect.scale({ x: 0.94, y: 0.05, centerX: '50%', centerY: '0%' }))
+        .animation({
+          duration: 170,
+          delay: (KNOWLEDGE_CATEGORY_STACK_LIMIT - layer) * 45,
+          curve: Curve.EaseIn
+        })
+    )
+  }
+
   @Builder
   private DocumentCategoryIcon(categoryKey: string) {
     if (categoryKey === KNOWLEDGE_CATEGORY_WORD) {
@@ -928,12 +991,15 @@ export struct KnowledgeBasePanel {
   @Builder
   private DocumentCardContent(document: KnowledgeDocument) {
     Column() {
-      this.DocumentIcon(document, 18, this.themePrimary)
+      this.DocumentIcon(document, 18, this.getDocumentCategoryColor(document))
     }
     .width(38)
     .height(38)
     .borderRadius(12)
-    .backgroundColor(withColorAlpha(this.themePrimary, this.isDarkMode ? '24' : '12'))
+    .backgroundColor(withColorAlpha(
+      this.getDocumentCategoryColor(document),
+      this.isDarkMode ? '2E' : '1A'
+    ))
     .justifyContent(FlexAlign.Center)
 
     Column({ space: 4 }) {
@@ -991,12 +1057,16 @@ export struct KnowledgeBasePanel {
     .width('100%')
     .padding({ left: 12, right: 12, top: 10, bottom: 10 })
     .borderRadius(12)
-    .border({ width: 0.5, color: getAppUiState().themeDivider })
+    .border({
+      width: 0.5,
+      color: this.getCategoryCardBorderColor(this.getDocumentCategoryKey(document))
+    })
     .onClick(() => {
       this.handleDocumentTap(document)
     })
     .systemMaterial(new uiMaterial.ImmersiveMaterial({
       style: uiMaterial.ImmersiveStyle.REGULAR,
+      materialColor: this.getCategoryCardTint(this.getDocumentCategoryKey(document)),
       interactive: false,
       lightEffect: { color: undefined }
     }))
@@ -1011,8 +1081,11 @@ export struct KnowledgeBasePanel {
     .padding({ left: 12, right: 12, top: 10, bottom: 10 })
     .borderRadius(12)
     .clip(true)
-    .border({ width: 0.5, color: getAppUiState().themeDivider })
-    .backgroundColor(Color.Transparent)
+    .border({
+      width: 0.5,
+      color: this.getCategoryCardBorderColor(this.getDocumentCategoryKey(document))
+    })
+    .backgroundColor(this.getCategoryCardTint(this.getDocumentCategoryKey(document)))
     .backgroundBlurStyle(BlurStyle.COMPONENT_REGULAR)
     .onClick(() => {
       this.handleDocumentTap(document)
@@ -1130,18 +1203,19 @@ export struct KnowledgeBasePanel {
   }
 
   @Builder
-  private ImmersiveCollapsedStackLayer(layer: number) {
+  private ImmersiveCollapsedStackLayer(categoryKey: string, layer: number) {
     Row()
-      .width(`${100 - layer * 4}%`)
-      .height(12)
+      .width(this.getStackLayerWidth(layer))
+      .height(this.getStackLayerHeight(layer))
       .borderRadius({ bottomLeft: 12, bottomRight: 12 })
-      .backgroundColor(getAppUiState().themePrimaryLight)
-      .border({ width: 0.5, color: getAppUiState().themeDivider })
-      .opacity(1 - layer * 0.12)
-      .translate({ y: -8 + (layer - 1) * 4 })
+      .border({
+        width: { left: 0.5, right: 0.5, bottom: 0.5 },
+        color: this.getCategoryCardBorderColor(categoryKey)
+      })
+      .opacity(this.getStackLayerOpacity(layer))
       .systemMaterial(new uiMaterial.ImmersiveMaterial({
         style: uiMaterial.ImmersiveStyle.REGULAR,
-        materialColor: getAppUiState().themePrimaryLight,
+        materialColor: this.getCategoryCardTint(categoryKey),
         applyShadow: true,
         interactive: false,
         lightEffect: { color: undefined }
@@ -1149,68 +1223,47 @@ export struct KnowledgeBasePanel {
   }
 
   @Builder
-  private GaussianCollapsedStackLayer(layer: number) {
+  private GaussianCollapsedStackLayer(categoryKey: string, layer: number) {
     Row()
-      .width(`${100 - layer * 4}%`)
-      .height(12)
+      .width(this.getStackLayerWidth(layer))
+      .height(this.getStackLayerHeight(layer))
       .borderRadius({ bottomLeft: 12, bottomRight: 12 })
       .clip(true)
-      .backgroundColor(getAppUiState().themePrimaryLight)
+      .backgroundColor(this.getCategoryCardTint(categoryKey))
       .backgroundBlurStyle(BlurStyle.COMPONENT_REGULAR)
-      .border({ width: 0.5, color: getAppUiState().themeDivider })
-      .opacity(1 - layer * 0.12)
-      .translate({ y: -8 + (layer - 1) * 4 })
+      .border({
+        width: { left: 0.5, right: 0.5, bottom: 0.5 },
+        color: this.getCategoryCardBorderColor(categoryKey)
+      })
+      .opacity(this.getStackLayerOpacity(layer))
   }
 
   @Builder
   private CollapsedCategoryStack(categoryKey: string) {
-    if (!this.isManuscriptMode && this.getCollapsedStackCount(categoryKey) > 0) {
+    if (!this.isManuscriptMode) {
       ListItem({ style: ListItemStyle.NONE }) {
-        Stack({ alignContent: Alignment.Top }) {
-          if (this.getCollapsedStackCount(categoryKey) >= 3) {
-            if (this.knowledgeListImmersiveMaterial) {
-              this.ImmersiveCollapsedStackLayer(3)
-            } else {
-              this.GaussianCollapsedStackLayer(3)
+        Column() {
+          ForEach(this.getCollapsedStackLayers(categoryKey), (layer: number) => {
+            Column() {
+              if (this.knowledgeListImmersiveMaterial) {
+                this.ImmersiveCollapsedStackLayer(categoryKey, layer)
+              } else {
+                this.GaussianCollapsedStackLayer(categoryKey, layer)
+              }
             }
-          }
-          if (this.getCollapsedStackCount(categoryKey) >= 2) {
-            if (this.knowledgeListImmersiveMaterial) {
-              this.ImmersiveCollapsedStackLayer(2)
-            } else {
-              this.GaussianCollapsedStackLayer(2)
-            }
-          }
-          if (this.getCollapsedStackCount(categoryKey) >= 1) {
-            if (this.knowledgeListImmersiveMaterial) {
-              this.ImmersiveCollapsedStackLayer(1)
-            } else {
-              this.GaussianCollapsedStackLayer(1)
-            }
-          }
+            .width('100%')
+            .alignItems(HorizontalAlign.Center)
+            .transition(this.buildStackLayerTransition(layer))
+          }, (layer: number): string => `${categoryKey}_stack_${layer}`)
         }
         .width('100%')
-        .height(8 + this.getCollapsedStackCount(categoryKey) * 4)
-        .clip(false)
+        .alignItems(HorizontalAlign.Center)
         .onClick((): void => {
           this.toggleCategoryExpanded(categoryKey)
         })
       }
       .clip(false)
-      .transition(TransitionEffect.asymmetric(
-        TransitionEffect.OPACITY.combine(TransitionEffect.scale({
-          x: 0.96,
-          y: 0.72,
-          centerX: '50%',
-          centerY: '0%'
-        })).animation({ duration: 220, curve: Curve.EaseOut }),
-        TransitionEffect.OPACITY.combine(TransitionEffect.scale({
-          x: 0.98,
-          y: 0.6,
-          centerX: '50%',
-          centerY: '0%'
-        })).animation({ duration: 140, curve: Curve.EaseIn })
-      ))
+      .margin({ bottom: this.getCollapsedStackCount(categoryKey) > 0 ? 8 : 0 })
     }
   }
 
@@ -1235,12 +1288,7 @@ export struct KnowledgeBasePanel {
           })
           .borderRadius(this.isManuscriptMode ? 0 : 12)
           .clip(false)
-          .transition(TransitionEffect.asymmetric(
-            TransitionEffect.OPACITY.combine(TransitionEffect.translate({ y: -8 }))
-              .animation({ duration: 220, curve: Curve.EaseOut }),
-            TransitionEffect.OPACITY.combine(TransitionEffect.translate({ y: -5 }))
-              .animation({ duration: 140, curve: Curve.EaseIn })
-          ))
+          .transition(this.buildDocumentCardTransition(document))
         },
         (document: KnowledgeDocument): string => `${categoryKey}_${document.id}`
       )
