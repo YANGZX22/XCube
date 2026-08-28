@@ -245,6 +245,16 @@ export struct MessageBubble {
   private cachedReadonlyTranslatedText: string = ''
   private cachedHasHtmlSegments: boolean = false
   private cachedContentSegments: ContentSegment[] = []
+  private cachedToolResultIndexKey: string = ''
+  private cachedToolResultIndex: Map<string, ToolResult> = new Map()
+  private cachedPreContentBlockSignature: string = ''
+  private cachedPreContentBlocks: TimelineBlock[] = []
+  private cachedPreContentBlockIndex: Map<string, TimelineBlock> = new Map()
+  private cachedPreContentBarIndex: Map<string, TimelineBar> = new Map()
+  private cachedOrderedBlockSignature: string = ''
+  private cachedOrderedBlocks: TimelineBlock[] = []
+  private cachedOrderedBlockIndex: Map<string, TimelineBlock> = new Map()
+  private cachedOrderedBarIndex: Map<string, TimelineBar> = new Map()
   private cachedPreviewImageEntries: ImageAttachmentEntry[] = []
   private cachedMessageImageEntries: ImageAttachmentEntry[] = []
   private cachedMessageFileAttachments: MessageAttachment[] = []
@@ -1391,13 +1401,24 @@ export struct MessageBubble {
       (group.anyExecuting ? '_e' : '_d') + '_' + index.toString()
   }
 
+  // 结果表按 toolCallId 建索引：分组、分组键、图表/地图载荷都要按 id 找结果，
+  // 逐次线性扫描会让工具多的消息变成 O(调用数 × 结果数)
   private findToolResultForCall(toolCallId: string): ToolResult | null {
-    for (let i = 0; i < this.message.toolResults.length; i++) {
-      if (this.message.toolResults[i].toolCallId === toolCallId) {
-        return this.message.toolResults[i]
+    const indexKey = this.message.id + '_' + this.message.toolResults.length.toString()
+    if (indexKey !== this.cachedToolResultIndexKey) {
+      const index = new Map<string, ToolResult>()
+      for (let i = 0; i < this.message.toolResults.length; i++) {
+        const result = this.message.toolResults[i]
+        // 保留首个匹配，与原先的线性查找语义一致
+        if (!index.has(result.toolCallId)) {
+          index.set(result.toolCallId, result)
+        }
       }
+      this.cachedToolResultIndex = index
+      this.cachedToolResultIndexKey = indexKey
     }
-    return null
+    const found = this.cachedToolResultIndex.get(toolCallId)
+    return found === undefined ? null : found
   }
 
   private getToolResultContentForCall(toolCallId: string): string {
@@ -2468,21 +2489,70 @@ export struct MessageBubble {
   // ========== 展示块编排 ==========
   // 相邻的工具结果条 / 思考条 / 搜索结果条并进同一个 BARS 块，块内用分割线相隔；
   // 追问、图表、地图、附件这类富卡片各自成块，并把前面攒着的条收口。
+  //
+  // 外层块列表、块内条目、条目内容三处 ForEach 都要取一次编排结果，条目多时
+  // 每次渲染会重算 N+2 遍（每遍都要重新分组、解析图表载荷）。这里按结构签名缓存：
+  // 签名只覆盖"会改变结构的量"，其余字段仍挂在可观察的模型对象上照常刷新。
+  private buildTimelineStructureSignature(listId: string): string {
+    const message = this.message
+    let signature = listId + '|' + message.id +
+      '|' + message.toolCalls.length.toString() +
+      '|' + message.toolResults.length.toString() +
+      '|' + message.searchReferences.length.toString() +
+      '|' + message.attachments.length.toString() +
+      '|' + message.responseSegments.length.toString() +
+      '|' + (message.isGenerating ? '1' : '0') +
+      '|' + message.contextCompactionState +
+      '|' + (message.reasoningContent.length > 0 ? '1' : '0') +
+      '|' + (getAppUiState().chatOrderedResponseHistory ? '1' : '0') + '|'
+    // 段落只看类型与"是否已有内容"：内容继续增长不会改变块结构，
+    // 正文流式期间因此不会反复重算。
+    for (let i = 0; i < message.responseSegments.length; i++) {
+      const segment = message.responseSegments[i]
+      signature += segment.type.charAt(0) + (segment.content.length > 0 ? '1' : '0')
+    }
+    return signature
+  }
+
   private getTimelineBlocks(listId: string): TimelineBlock[] {
-    return listId === TIMELINE_BLOCK_LIST_ORDERED
-      ? this.buildOrderedTimelineBlocks()
-      : this.buildPreContentBlocks()
+    const ordered = listId === TIMELINE_BLOCK_LIST_ORDERED
+    const signature = this.buildTimelineStructureSignature(listId)
+    if (signature === (ordered ? this.cachedOrderedBlockSignature : this.cachedPreContentBlockSignature)) {
+      return ordered ? this.cachedOrderedBlocks : this.cachedPreContentBlocks
+    }
+
+    const blocks = ordered ? this.buildOrderedTimelineBlocks() : this.buildPreContentBlocks()
+    const barIndex = new Map<string, TimelineBar>()
+    const blockIndex = new Map<string, TimelineBlock>()
+    for (let i = 0; i < blocks.length; i++) {
+      blockIndex.set(blocks[i].key, blocks[i])
+      const bars = blocks[i].bars
+      for (let j = 0; j < bars.length; j++) {
+        barIndex.set(bars[j].key, bars[j])
+      }
+    }
+
+    if (ordered) {
+      this.cachedOrderedBlocks = blocks
+      this.cachedOrderedBlockIndex = blockIndex
+      this.cachedOrderedBarIndex = barIndex
+      this.cachedOrderedBlockSignature = signature
+    } else {
+      this.cachedPreContentBlocks = blocks
+      this.cachedPreContentBlockIndex = blockIndex
+      this.cachedPreContentBarIndex = barIndex
+      this.cachedPreContentBlockSignature = signature
+    }
+    return blocks
   }
 
   // 块本身的 key 只认位置，块内条目要靠这里重新取一次，流式追加才只重建新增的那条
   private getTimelineBarsForBlock(block: TimelineBlock): TimelineBar[] {
-    const blocks = this.getTimelineBlocks(block.listId)
-    for (let i = 0; i < blocks.length; i++) {
-      if (blocks[i].key === block.key) {
-        return blocks[i].bars
-      }
-    }
-    return []
+    const ordered = block.listId === TIMELINE_BLOCK_LIST_ORDERED
+    this.getTimelineBlocks(block.listId)
+    const index = ordered ? this.cachedOrderedBlockIndex : this.cachedPreContentBlockIndex
+    const found = index.get(block.key)
+    return found === undefined ? [] : found.bars
   }
 
   // 同一工具在不同段里可能凑出完全相同的分组 key，按段落作用域加前缀避免块内撞键
@@ -2593,16 +2663,11 @@ export struct MessageBubble {
 
   // 条目外壳按身份保留，内容按签名重建：结果回来时卡片会刷新，但不会重播增删动效
   private getTimelineBarRenderStates(bar: TimelineBar): TimelineBar[] {
-    const blocks = this.getTimelineBlocks(bar.listId)
-    for (let i = 0; i < blocks.length; i++) {
-      const bars = blocks[i].bars
-      for (let j = 0; j < bars.length; j++) {
-        if (bars[j].key === bar.key) {
-          return [bars[j]]
-        }
-      }
-    }
-    return []
+    const ordered = bar.listId === TIMELINE_BLOCK_LIST_ORDERED
+    this.getTimelineBlocks(bar.listId)
+    const index = ordered ? this.cachedOrderedBarIndex : this.cachedPreContentBarIndex
+    const found = index.get(bar.key)
+    return found === undefined ? [] : [found]
   }
 
   private getTimelineDividerColor(): string {
