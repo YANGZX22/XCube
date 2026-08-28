@@ -37,11 +37,14 @@
     <td align="center"><img src="docs/screenshots/multi-tools.png" width="220" /><br/><sub>多工具组合工作</sub></td>
     <td align="center"><img src="docs/screenshots/new-python.png" width="220" /><br/><sub>使用各种 Python 包</sub></td>
     <td align="center"><img src="docs/screenshots/answer-using-knowledge-base.png" width="220" /><br/><sub>RAG 智能问答</sub></td>
+    <td align="center"><img src="docs/screenshots/work-with-sub-agents.png" width="220" /><br/><sub>和子智能体协调工作</sub></td>
   </tr>
   <tr>
-    <td align="center"><img src="docs/screenshots/work-with-sub-agents.png" width="220" /><br/><sub>和子智能体协调工作</sub></td>
     <td align="center"><img src="docs/screenshots/map.png" width="220" /><br/><sub>集成地图与导航</sub></td>
     <td align="center"><img src="docs/screenshots/modlens.png" width="220" /><br/><sub>更好视觉支持</sub></td>
+    <td align="center"><img src="docs/screenshots/complicated-projects.png" width="220" /><br/><sub>复杂工程处理能力</sub></td>
+    <td align="center"><img src="docs/screenshots/workspace.png" width="220" /><br/><sub>工作区</sub></td>
+  </tr>
 </table>
 
 ## 项目概览

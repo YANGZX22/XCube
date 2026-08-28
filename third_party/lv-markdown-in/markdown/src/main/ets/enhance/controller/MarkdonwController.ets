@@ -73,6 +73,10 @@ export class MarkdownController {
   @Trace private codeBlockTheme: CodeTheme = "light"
   // 代码块-字体族（自定义字体）
   @Trace private codeBlockFontFamily: ResourceStr = ""
+  // 代码块-字号
+  @Trace private codeBlockFontSize: ResourceStr | number = 14.8
+  // 代码块-行高
+  @Trace private codeBlockLineHeight: ResourceStr | number = 22
   // 代码块-索引控制
   @Trace private codeBlockIdxState: boolean = false
   // 代码块-圆角
@@ -527,6 +531,28 @@ export class MarkdownController {
 
   getCodeBlockFontFamily(): ResourceStr {
     return this.codeBlockFontFamily
+  }
+
+  /**
+   * 设置代码块字号与行高。
+   * 两项一起更新，避免动态调整字号时先以旧行高重排一次。
+   */
+  setCodeBlockTextStyle(fontSize: ResourceStr | number, lineHeight: ResourceStr | number) {
+    if (this.codeBlockFontSize == fontSize && this.codeBlockLineHeight == lineHeight) {
+      return this
+    }
+    this.codeBlockFontSize = fontSize
+    this.codeBlockLineHeight = lineHeight
+    CodeBlockImpl.handleTextStyleChange(this.union)
+    return this
+  }
+
+  getCodeBlockFontSize(): ResourceStr | number {
+    return this.codeBlockFontSize
+  }
+
+  getCodeBlockLineHeight(): ResourceStr | number {
+    return this.codeBlockLineHeight
   }
 
   /**

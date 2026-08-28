@@ -17,10 +17,12 @@ export struct CodeSourceRender {
   @Prop contentBottomPadding: number = 12
   @State highlightNode: HighlightNode[] = []
   @State MAX_ROWS: number = 10
+  @State codeTextStyleVersion: number = 0
   BASE_ROWS: number = 10
   private highlightVersion: number = 0
   private highlightDebounceTimer: number = 0
   private codeThemeListener: (() => void) | null = null
+  private codeTextStyleListener: (() => void) | null = null
 
   aboutToAppear(): void {
     this.refreshHighlight()
@@ -28,12 +30,26 @@ export struct CodeSourceRender {
       this.refreshHighlight()
     }
     getContext().eventHub.on(markdownCodeThemeChangeEventName, this.codeThemeListener)
+    this.codeTextStyleListener = (): void => {
+      this.codeTextStyleVersion++
+    }
+    getContext().eventHub.on(
+      CodeBlockImpl.getTextStyleChangeEventName(this.markdownUnion),
+      this.codeTextStyleListener
+    )
   }
 
   aboutToDisappear(): void {
     if (this.codeThemeListener) {
       getContext().eventHub.off(markdownCodeThemeChangeEventName, this.codeThemeListener)
       this.codeThemeListener = null
+    }
+    if (this.codeTextStyleListener) {
+      getContext().eventHub.off(
+        CodeBlockImpl.getTextStyleChangeEventName(this.markdownUnion),
+        this.codeTextStyleListener
+      )
+      this.codeTextStyleListener = null
     }
     if (this.highlightDebounceTimer) {
       clearTimeout(this.highlightDebounceTimer)
@@ -118,6 +134,18 @@ export struct CodeSourceRender {
     return MDBaseController.getMarkdownController(this.markdownUnion).getCodeBlockFontFamily()
   }
 
+  private getCodeFontSize(): ResourceStr | number {
+    // 建立对样式版本的依赖，保证控制器动态更新时现有代码行同步重绘。
+    if (this.codeTextStyleVersion < 0) {
+      return 14.8
+    }
+    return MDBaseController.getMarkdownController(this.markdownUnion).getCodeBlockFontSize()
+  }
+
+  private getCodeLineHeight(): ResourceStr | number {
+    return MDBaseController.getMarkdownController(this.markdownUnion).getCodeBlockLineHeight()
+  }
+
   build() {
     Column() {
       Row() {
@@ -126,14 +154,14 @@ export struct CodeSourceRender {
             ForEach(this.visibleRows(), (_row: HighlightNode, idx: number) => {
               Row() {
                 Text(idx + 1 + '')
-                  .lineHeight(22)
-                  .fontSize(14)
+                  .lineHeight(this.getCodeLineHeight())
+                  .fontSize(this.getCodeFontSize())
                   .fontFamily(this.getCodeFontFamily())
                   .fontColor(this.isDarkTheme() ? '#ff6d7273' : '#606366')
               }
               .justifyContent(FlexAlign.End)
               .padding({ right: 6 })
-              .height(22)
+              .height(this.getCodeLineHeight())
               .border({
                 width: {
                   top: 0,
@@ -164,8 +192,8 @@ export struct CodeSourceRender {
                     }
                   })
                 }
-                .lineHeight(22)
-                .fontSize(14.8)
+                .lineHeight(this.getCodeLineHeight())
+                .fontSize(this.getCodeFontSize())
                 .fontFamily(this.getCodeFontFamily())
                 .copyOption(CopyOptions.LocalDevice)
                 .textSelectable(TextSelectableMode.SELECTABLE_FOCUSABLE)
@@ -179,11 +207,11 @@ export struct CodeSourceRender {
                         .fontColor(code.color)
                     })
                   }
-                  .lineHeight(22)
-                  .fontSize(14.8)
+                  .lineHeight(this.getCodeLineHeight())
+                  .fontSize(this.getCodeFontSize())
                   .fontFamily(this.getCodeFontFamily())
                 }
-                .height(22)
+                .height(this.getCodeLineHeight())
               })
             }
           }

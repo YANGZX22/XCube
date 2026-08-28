@@ -36,11 +36,13 @@
     <td align="center"><img src="docs/screenshots/multi-tools.png" width="220" /><br/><sub>Work using Multiple Tools</sub></td>
     <td align="center"><img src="docs/screenshots/new-python.png" width="220" /><br/><sub>Work with Python Packages</sub></td>
     <td align="center"><img src="docs/screenshots/answer-using-knowledge-base.png" width="220" /><br/><sub>Work in RAG</sub></td>
+    <td align="center"><img src="docs/screenshots/work-with-sub-agents.png" width="220" /><br/><sub>Work with Subagents</sub></td>
   </tr>
   <tr>
-    <td align="center"><img src="docs/screenshots/work-with-sub-agents.png" width="220" /><br/><sub>Work with Subagents</sub></td>
     <td align="center"><img src="docs/screenshots/map.png" width="220" /><br/><sub>Map Integration</sub></td>
     <td align="center"><img src="docs/screenshots/modlens.png" width="220" /><br/><sub>Better Vision Support</sub></td>
+    <td align="center"><img src="docs/screenshots/complicated-projects.png" width="220" /><br/><sub>Engineering Processing Capacity</sub></td>
+    <td align="center"><img src="docs/screenshots/workspace.png" width="220" /><br/><sub>Workspace</sub></td>
   </tr>
 </table>
 

@@ -295,7 +295,7 @@ export struct EmailKnowledgeCategory {
   }
 
   private getCategoryColor(): string {
-    return this.themePrimary
+    return '#C97936'
   }
 
   private getCategoryCardTint(): string {
@@ -481,14 +481,14 @@ export struct EmailKnowledgeCategory {
     .padding({ left: this.isManuscriptMode ? 4 : 12, right: this.isManuscriptMode ? 4 : 10 })
     .margin({ bottom: this.isManuscriptMode ? 0 : 8 })
     .borderRadius(this.isManuscriptMode ? 0 : 14)
-    .backgroundColor(this.isManuscriptMode ? Color.Transparent : getAppUiState().themePrimaryLight)
+    .backgroundColor(this.isManuscriptMode ? Color.Transparent : this.getCategoryCardTint())
     .border({
       width: this.isManuscriptMode ? { bottom: 1 } : 0.5,
-      color: this.isManuscriptMode ? getAppUiState().themeDivider : getAppUiState().themePrimaryLight
+      color: this.isManuscriptMode ? getAppUiState().themeDivider : this.getCategoryCardBorderColor()
     })
     .systemMaterial(new uiMaterial.ImmersiveMaterial({
       style: uiMaterial.ImmersiveStyle.REGULAR,
-      materialColor: this.isManuscriptMode ? Color.Transparent : getAppUiState().themePrimaryLight,
+      materialColor: this.isManuscriptMode ? Color.Transparent : this.getCategoryCardTint(),
       applyShadow: !this.isManuscriptMode,
       interactive: false,
       lightEffect: this.isManuscriptMode ? undefined : { color: undefined }
@@ -769,11 +769,11 @@ export struct EmailKnowledgeCategory {
       .width('100%')
       .padding({ left: 12, right: 12, top: 10, bottom: 10 })
       .borderRadius(12)
-      .border({ width: 0.5, color: this.getCategoryCardBorderColor() })
+      .border({ width: 0.5, color: getAppUiState().themeDivider })
       .onClick(() => this.handleDocumentTap(document))
       .systemMaterial(new uiMaterial.ImmersiveMaterial({
         style: uiMaterial.ImmersiveStyle.REGULAR,
-        materialColor: this.getCategoryCardTint(),
+        materialColor: Color.Transparent,
         interactive: false,
         lightEffect: { color: undefined }
       }))
@@ -786,8 +786,8 @@ export struct EmailKnowledgeCategory {
       .padding({ left: 12, right: 12, top: 10, bottom: 10 })
       .borderRadius(12)
       .clip(true)
-      .border({ width: 0.5, color: this.getCategoryCardBorderColor() })
-      .backgroundColor(this.getCategoryCardTint())
+      .border({ width: 0.5, color: getAppUiState().themeDivider })
+      .backgroundColor(Color.Transparent)
       .backgroundBlurStyle(BlurStyle.COMPONENT_REGULAR)
       .onClick(() => this.handleDocumentTap(document))
   }
@@ -864,12 +864,12 @@ export struct EmailKnowledgeCategory {
       .borderRadius({ bottomLeft: 12, bottomRight: 12 })
       .border({
         width: { left: 0.5, right: 0.5, bottom: 0.5 },
-        color: this.getCategoryCardBorderColor()
+        color: getAppUiState().themeDivider
       })
       .opacity(this.getStackLayerOpacity(layer))
       .systemMaterial(new uiMaterial.ImmersiveMaterial({
         style: uiMaterial.ImmersiveStyle.REGULAR,
-        materialColor: this.getCategoryCardTint(),
+        materialColor: Color.Transparent,
         applyShadow: true,
         interactive: false,
         lightEffect: { color: undefined }
@@ -883,11 +883,11 @@ export struct EmailKnowledgeCategory {
       .height(this.getStackLayerHeight(layer))
       .borderRadius({ bottomLeft: 12, bottomRight: 12 })
       .clip(true)
-      .backgroundColor(this.getCategoryCardTint())
+      .backgroundColor(Color.Transparent)
       .backgroundBlurStyle(BlurStyle.COMPONENT_REGULAR)
       .border({
         width: { left: 0.5, right: 0.5, bottom: 0.5 },
-        color: this.getCategoryCardBorderColor()
+        color: getAppUiState().themeDivider
       })
       .opacity(this.getStackLayerOpacity(layer))
   }

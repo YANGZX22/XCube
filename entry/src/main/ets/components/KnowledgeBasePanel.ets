@@ -1059,14 +1059,14 @@ export struct KnowledgeBasePanel {
     .borderRadius(12)
     .border({
       width: 0.5,
-      color: this.getCategoryCardBorderColor(this.getDocumentCategoryKey(document))
+      color: getAppUiState().themeDivider
     })
     .onClick(() => {
       this.handleDocumentTap(document)
     })
     .systemMaterial(new uiMaterial.ImmersiveMaterial({
       style: uiMaterial.ImmersiveStyle.REGULAR,
-      materialColor: this.getCategoryCardTint(this.getDocumentCategoryKey(document)),
+      materialColor: Color.Transparent,
       interactive: false,
       lightEffect: { color: undefined }
     }))
@@ -1083,9 +1083,9 @@ export struct KnowledgeBasePanel {
     .clip(true)
     .border({
       width: 0.5,
-      color: this.getCategoryCardBorderColor(this.getDocumentCategoryKey(document))
+      color: getAppUiState().themeDivider
     })
-    .backgroundColor(this.getCategoryCardTint(this.getDocumentCategoryKey(document)))
+    .backgroundColor(Color.Transparent)
     .backgroundBlurStyle(BlurStyle.COMPONENT_REGULAR)
     .onClick(() => {
       this.handleDocumentTap(document)
@@ -1188,14 +1188,16 @@ export struct KnowledgeBasePanel {
     .borderRadius(this.isManuscriptMode ? 0 : 14)
     .backgroundColor(this.isManuscriptMode
       ? Color.Transparent
-      : getAppUiState().themePrimaryLight)
+      : this.getCategoryCardTint(categoryKey))
     .border({
       width: this.isManuscriptMode ? { bottom: 1 } : 0.5,
-      color: this.isManuscriptMode ? getAppUiState().themeDivider : getAppUiState().themePrimaryLight
+      color: this.isManuscriptMode
+        ? getAppUiState().themeDivider
+        : this.getCategoryCardBorderColor(categoryKey)
     })
     .systemMaterial(new uiMaterial.ImmersiveMaterial({
       style: uiMaterial.ImmersiveStyle.REGULAR,
-      materialColor: this.isManuscriptMode ? Color.Transparent : getAppUiState().themePrimaryLight,
+      materialColor: this.isManuscriptMode ? Color.Transparent : this.getCategoryCardTint(categoryKey),
       applyShadow: !this.isManuscriptMode,
       interactive: false,
       lightEffect: this.isManuscriptMode ? undefined : { color: undefined }
@@ -1210,12 +1212,12 @@ export struct KnowledgeBasePanel {
       .borderRadius({ bottomLeft: 12, bottomRight: 12 })
       .border({
         width: { left: 0.5, right: 0.5, bottom: 0.5 },
-        color: this.getCategoryCardBorderColor(categoryKey)
+        color: getAppUiState().themeDivider
       })
       .opacity(this.getStackLayerOpacity(layer))
       .systemMaterial(new uiMaterial.ImmersiveMaterial({
         style: uiMaterial.ImmersiveStyle.REGULAR,
-        materialColor: this.getCategoryCardTint(categoryKey),
+        materialColor: Color.Transparent,
         applyShadow: true,
         interactive: false,
         lightEffect: { color: undefined }
@@ -1229,11 +1231,11 @@ export struct KnowledgeBasePanel {
       .height(this.getStackLayerHeight(layer))
       .borderRadius({ bottomLeft: 12, bottomRight: 12 })
       .clip(true)
-      .backgroundColor(this.getCategoryCardTint(categoryKey))
+      .backgroundColor(Color.Transparent)
       .backgroundBlurStyle(BlurStyle.COMPONENT_REGULAR)
       .border({
         width: { left: 0.5, right: 0.5, bottom: 0.5 },
-        color: this.getCategoryCardBorderColor(categoryKey)
+        color: getAppUiState().themeDivider
       })
       .opacity(this.getStackLayerOpacity(layer))
   }

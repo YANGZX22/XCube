@@ -5,6 +5,8 @@ import { TreeNode } from '../model/TreeNode';
 import { Logger } from '../utils/Logger';
 
 export namespace CodeBlockImpl {
+  const CODE_TEXT_STYLE_EVENT_PREFIX: string = "markdown_code_text_style_change_"
+
   export function handleBackgroundColor(them: CodeTheme) {
     if (them == "dark") {
       return "#181A1F"
@@ -17,6 +19,14 @@ export namespace CodeBlockImpl {
     Logger.info("markdownUnion > " + markdownUnion)
     handleCodeHighlight(markdownUnion, them)
     getContext().eventHub.emit(markdownCodeThemeChangeEventName)
+  }
+
+  export function getTextStyleChangeEventName(markdownUnion: string): string {
+    return CODE_TEXT_STYLE_EVENT_PREFIX + markdownUnion
+  }
+
+  export function handleTextStyleChange(markdownUnion: string) {
+    getContext().eventHub.emit(getTextStyleChangeEventName(markdownUnion))
   }
 
   export async function copyText(markdownUnion: string, text: string) {

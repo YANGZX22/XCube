@@ -1,4 +1,5 @@
 import { IntactImpl } from '../impl/IntactImpl'
+import { MDBaseController } from '../controller/BaseController'
 import { CodeBlockNode, PluginNode, TableNode, TreeNode } from '../model/TreeNode'
 import { BlockquoteRender } from './BlockquoteRender'
 import { CodeRender } from './CodeRender'
@@ -119,7 +120,10 @@ struct LazyBlockGroupRender {
       return Math.max(72, this.estimateChildCount(node) * 72)
     }
     if (node.type == 'codeBlock') {
-      return Math.max(72, (node as CodeBlockNode).text.split('\n').length * 22 + 36)
+      const configuredLineHeight =
+        MDBaseController.getMarkdownController(this.markdownUnion).getCodeBlockLineHeight()
+      const lineHeight = typeof configuredLineHeight == 'number' ? configuredLineHeight : 22
+      return Math.max(72, (node as CodeBlockNode).text.split('\n').length * lineHeight + 36)
     }
     if (node.type == 'table') {
       return Math.max(96, ((node as TableNode).rows.length + 1) * 44)

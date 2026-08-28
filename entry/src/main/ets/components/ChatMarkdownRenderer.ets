@@ -122,6 +122,7 @@ struct ChatLvMarkdownRenderer {
 
     const uiState = getAppUiState()
     const textSize = Math.max(this.chatFontSize - (this.compact ? 2 : 1), 10)
+    const codeTextSize = Math.max(textSize - 1, 10)
     const titleSizes = getMarkdownTitleSizes(textSize, this.compact)
     const textColor = this.textColorOverride !== '' ? this.textColorOverride : uiState.themeMarkdownText
     const titleColor = this.titleColorOverride !== '' ? this.titleColorOverride : uiState.themeMarkdownTitle
@@ -149,6 +150,10 @@ struct ChatLvMarkdownRenderer {
       .setInlineCodeColor(uiState.themeMarkdownCodeText)
       .setInlineCodeBackgroundColor(uiState.themeMarkdownCodeBg)
       .setCodeBlockFontFamily(this.codeFontFamily)
+      .setCodeBlockTextStyle(
+        codeTextSize,
+        getMarkdownTextLineHeight(codeTextSize, this.compact)
+      )
       .setCodeBlockAutoCollapseEnable(false)
       .setLatexMathTextColor(latexColor)
       .setLatexMathTextSize(this.latexFontSize > 0 ? this.latexFontSize : this.chatFontSize + (this.compact ? 0 : 2))

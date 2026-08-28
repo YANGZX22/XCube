@@ -15,18 +15,33 @@ export struct CodeSourceBlockRender {
   @Prop contentBottomPadding: number = 12
   @State themeVersion: number = 0
   private codeThemeListener: (() => void) | null = null
+  private codeTextStyleListener: (() => void) | null = null
 
   aboutToAppear(): void {
     this.codeThemeListener = (): void => {
       this.themeVersion++
     }
     getContext().eventHub.on(markdownCodeThemeChangeEventName, this.codeThemeListener)
+    this.codeTextStyleListener = (): void => {
+      this.themeVersion++
+    }
+    getContext().eventHub.on(
+      CodeBlockImpl.getTextStyleChangeEventName(this.markdownUnion),
+      this.codeTextStyleListener
+    )
   }
 
   aboutToDisappear(): void {
     if (this.codeThemeListener) {
       getContext().eventHub.off(markdownCodeThemeChangeEventName, this.codeThemeListener)
       this.codeThemeListener = null
+    }
+    if (this.codeTextStyleListener) {
+      getContext().eventHub.off(
+        CodeBlockImpl.getTextStyleChangeEventName(this.markdownUnion),
+        this.codeTextStyleListener
+      )
+      this.codeTextStyleListener = null
     }
   }
 
@@ -38,6 +53,10 @@ export struct CodeSourceBlockRender {
     return MDBaseController.getMarkdownController(this.markdownUnion).getCodeBlockFontFamily()
   }
 
+  private getCodeFontSize(): ResourceStr | number {
+    return MDBaseController.getMarkdownController(this.markdownUnion).getCodeBlockFontSize()
+  }
+
   private openCodeDialog() {
     CodeDialogController.getInstance().openBindSheet(this.markdownUnion, this.lang || 'code', this.text || '')
   }
@@ -46,7 +65,7 @@ export struct CodeSourceBlockRender {
     Column() {
       Row() {
         Text(this.lang || 'code')
-          .fontSize(15)
+          .fontSize(this.getCodeFontSize())
           .fontFamily(this.getCodeFontFamily())
           .fontColor(this.isDarkTheme() ? '#F9FAFB' : '#cd000000')
           .fontWeight(FontWeight.Medium)
