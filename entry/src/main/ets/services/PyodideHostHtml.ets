@@ -116,6 +116,7 @@ export const PYODIDE_HOST_HTML: string = `<!DOCTYPE html>
   const hostPostMessage = self.postMessage.bind(self);
   const nativeFetch = typeof self.fetch === 'function' ? self.fetch.bind(self) : null;
   let packageNetworkAllowed = true;
+  let activePackageRequestId = '';
   let builtinFontNetworkAllowed = true;
   let controlToken = '';
   let pyodide = null;
@@ -226,12 +227,90 @@ export const PYODIDE_HOST_HTML: string = `<!DOCTYPE html>
     }
   }
 
+  function packageRequestName(input) {
+    try {
+      const rawUrl = typeof input === 'string' ? input : input.url;
+      const url = new URL(rawUrl, PYODIDE_INDEX_URL);
+      const segments = url.pathname.split('/');
+      return segments.length > 0 && segments[segments.length - 1] !== '' ?
+        segments[segments.length - 1] : url.hostname;
+    } catch (e) {
+      return 'package';
+    }
+  }
+
+  function postPackageProgress(requestId, message) {
+    if (requestId === '') return;
+    postHostMessage({
+      type: 'packageMessage', requestId: requestId, message: String(message)
+    });
+  }
+
+  function monitorPackageResponse(response, requestId, name) {
+    if (!response || !response.ok || !response.body || typeof ReadableStream !== 'function') {
+      postPackageProgress(requestId,
+        'Package response ' + name + ': HTTP ' + String(response ? response.status : 'unknown'));
+      return response;
+    }
+    const reader = response.body.getReader();
+    let receivedBytes = 0;
+    let lastReportedBytes = 0;
+    let lastReportedAt = Date.now();
+    const monitoredBody = new ReadableStream({
+      pull(controller) {
+        return reader.read().then((chunk) => {
+          if (chunk.done) {
+            postPackageProgress(requestId,
+              'Downloaded ' + name + ' (' + String(receivedBytes) + ' bytes)');
+            controller.close();
+            return;
+          }
+          const value = chunk.value;
+          receivedBytes += value && typeof value.byteLength === 'number' ? value.byteLength : 0;
+          const now = Date.now();
+          if (receivedBytes - lastReportedBytes >= 1024 * 1024 || now - lastReportedAt >= 2000) {
+            lastReportedBytes = receivedBytes;
+            lastReportedAt = now;
+            postPackageProgress(requestId,
+              'Downloading ' + name + ' (' + String(receivedBytes) + ' bytes)');
+          }
+          controller.enqueue(value);
+        }).catch((error) => {
+          postPackageProgress(requestId, 'Download failed ' + name + ': ' +
+            (error && error.message ? error.message : String(error)));
+          controller.error(error);
+        });
+      },
+      cancel(reason) {
+        return reader.cancel(reason);
+      }
+    });
+    return new Response(monitoredBody, {
+      status: response.status,
+      statusText: response.statusText,
+      headers: response.headers
+    });
+  }
+
   if (nativeFetch !== null) {
     self.fetch = function (input, init) {
-      if (!isAllowedPackageRequest(input, init) && !isAllowedBuiltinFontRequest(input, init)) {
+      const isPackageRequest = isAllowedPackageRequest(input, init);
+      if (!isPackageRequest && !isAllowedBuiltinFontRequest(input, init)) {
         return Promise.reject(new Error('Python 沙箱禁止用户代码直接访问网络'));
       }
-      return nativeFetch(input, init);
+      if (!isPackageRequest || activePackageRequestId === '') {
+        return nativeFetch(input, init);
+      }
+      const requestId = activePackageRequestId;
+      const name = packageRequestName(input);
+      postPackageProgress(requestId, 'Downloading ' + name);
+      return nativeFetch(input, init).then((response) =>
+        monitorPackageResponse(response, requestId, name)
+      ).catch((error) => {
+        postPackageProgress(requestId, 'Download failed ' + name + ': ' +
+          (error && error.message ? error.message : String(error)));
+        throw error;
+      });
     };
   }
 
@@ -350,7 +429,48 @@ export const PYODIDE_HOST_HTML: string = `<!DOCTYPE html>
     try { pyodide.FS.rmdir(path); } catch (e) {}
   }
 
+  function clearWorkspaceModuleCache() {
+    if (!pyodide) return;
+    pyodide.runPython([
+      'import importlib as _xcube_cache_importlib',
+      'import linecache as _xcube_cache_linecache',
+      'import os as _xcube_cache_os',
+      'import sys as _xcube_cache_sys',
+      '_xcube_cache_root = _xcube_cache_os.path.realpath("' + PYTHON_WORKSPACE_ROOT + '")',
+      '_xcube_cache_prefix = _xcube_cache_root + _xcube_cache_os.sep',
+      'def _xcube_cache_is_workspace_path(value):',
+      '    if not isinstance(value, str) or not value:',
+      '        return False',
+      '    try:',
+      '        resolved = _xcube_cache_os.path.realpath(value)',
+      '        return resolved == _xcube_cache_root or resolved.startswith(_xcube_cache_prefix)',
+      '    except Exception:',
+      '        return False',
+      'for _xcube_cache_name, _xcube_cache_module in list(_xcube_cache_sys.modules.items()):',
+      '    _xcube_cache_remove = _xcube_cache_is_workspace_path(',
+      '        getattr(_xcube_cache_module, "__file__", None))',
+      '    if not _xcube_cache_remove:',
+      '        _xcube_cache_paths = getattr(_xcube_cache_module, "__path__", ()) or ()',
+      '        try:',
+      '            _xcube_cache_remove = any(',
+      '                _xcube_cache_is_workspace_path(path) for path in _xcube_cache_paths)',
+      '        except TypeError:',
+      '            _xcube_cache_remove = False',
+      '    if _xcube_cache_remove:',
+      '        _xcube_cache_sys.modules.pop(_xcube_cache_name, None)',
+      'for _xcube_cache_path in list(_xcube_cache_sys.path_importer_cache):',
+      '    if _xcube_cache_is_workspace_path(_xcube_cache_path):',
+      '        _xcube_cache_sys.path_importer_cache.pop(_xcube_cache_path, None)',
+      '_xcube_cache_linecache.clearcache()',
+      '_xcube_cache_importlib.invalidate_caches()',
+      'del _xcube_cache_is_workspace_path'
+    ].join('\\n'));
+  }
+
   function prepareWorkspace(payload) {
+    // 工作区文件会在同一 Pyodide 会话中被覆盖，但 Python 会持久缓存已 import 的模块。
+    // 先移除上一次从工作区加载的模块，避免新源码与旧模块对象混用。
+    clearWorkspaceModuleCache();
     removeOutputDirectory(PYTHON_WORKSPACE_ROOT);
     pyodide.FS.mkdirTree(PYTHON_WORKSPACE_ROOT);
     for (const file of payload.files) {
@@ -659,10 +779,11 @@ export const PYODIDE_HOST_HTML: string = `<!DOCTYPE html>
 
   function packageCallbacks(requestId, warnings) {
     return {
-      messageCallback: (message) => postHostMessage({
-        type: 'packageMessage', requestId: requestId, message: String(message)
-      }),
-      errorCallback: (message) => warnings.push(String(message))
+      messageCallback: (message) => postPackageProgress(requestId, message),
+      errorCallback: (message) => {
+        warnings.push(String(message));
+        postPackageProgress(requestId, 'Package error: ' + String(message));
+      }
     };
   }
 
@@ -834,6 +955,7 @@ export const PYODIDE_HOST_HTML: string = `<!DOCTYPE html>
       const packagesToInstall = resolveAutoPackages(importScanCode, requestedPackages, result.warnings);
 
       packageNetworkAllowed = true;
+      activePackageRequestId = request.requestId;
       try {
         await pyodide.loadPackagesFromImports(
           importScanCode,
@@ -841,6 +963,7 @@ export const PYODIDE_HOST_HTML: string = `<!DOCTYPE html>
         );
         await installRequestedPackages(request.requestId, packagesToInstall, result.warnings);
       } finally {
+        activePackageRequestId = '';
         packageNetworkAllowed = false;
       }
       configureMatplotlibFonts(result.warnings);
@@ -872,6 +995,7 @@ export const PYODIDE_HOST_HTML: string = `<!DOCTYPE html>
       }
       result.variables = collectVariables();
     } catch (e) {
+      activePackageRequestId = '';
       packageNetworkAllowed = false;
       result.ok = false;
       result.stdout = stdout;
@@ -1012,7 +1136,10 @@ export const PYODIDE_HOST_HTML: string = `<!DOCTYPE html>
       } else if (message.type === 'executionStarted') {
         window.PyodideBridge.onExecutionStart(String(message.requestId || ''));
       } else if (message.type === 'packageMessage') {
-        console.log('[pyhost] ' + String(message.message || ''));
+        const packageMessage = String(message.message || '');
+        console.log('[pyhost] ' + packageMessage);
+        window.PyodideBridge.onPackageProgress(
+          String(message.requestId || ''), packageMessage);
       } else if (message.type === 'result') {
         window.PyodideBridge.onResult(String(message.requestId || ''), JSON.stringify(message.result));
       } else if (message.type === 'fatalError') {

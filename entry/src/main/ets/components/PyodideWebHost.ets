@@ -26,6 +26,10 @@ class PyodideBridge {
     getPyodideRuntimeService().onExecutionStart(requestId)
   }
 
+  onPackageProgress(requestId: string, message: string): void {
+    getPyodideRuntimeService().onPackageProgress(requestId, message)
+  }
+
   onResult(requestId: string, json: string): void {
     getPyodideRuntimeService().onResult(requestId, json)
   }
@@ -173,7 +177,7 @@ export struct PyodideWebHost {
           this.controller.registerJavaScriptProxy(
             this.bridge,
             'PyodideBridge',
-            ['onReady', 'onExecutionStart', 'onResult', 'onError']
+            ['onReady', 'onExecutionStart', 'onPackageProgress', 'onResult', 'onError']
           )
           this.adapter.setController(this.controller)
           hilog.info(DOMAIN, TAG, 'Pyodide web controller attached & proxy registered')

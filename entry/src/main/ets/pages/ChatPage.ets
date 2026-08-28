@@ -76,7 +76,6 @@ import { ImmersiveTaskAlertBanner } from '../components/ImmersiveTaskAlertBanner
 import { ChatToolPickerSheetContent } from '../components/chat/ChatToolPickerSheetContent'
 import { ChatToolExecutionApprovalSheetContent } from '../components/chat/ChatToolExecutionApprovalSheetContent'
 import { VoiceInputSheet } from '../components/VoiceInputSheet'
-import { PyodideWebHost } from '../components/PyodideWebHost'
 import { ChatMarkdownRenderer } from '../components/ChatMarkdownRenderer'
 import {
   ChatNavigationTitleContent,
@@ -4560,8 +4559,6 @@ export struct ChatPage {
           this.AskUserPromptOverlayBuilder()
         }
 
-        // 隐藏的 Pyodide 运行时宿主（在 WebView 内运行真正的 CPython，供 python 工具使用）
-        PyodideWebHost()
       }
       .width('100%')
       .height('100%')

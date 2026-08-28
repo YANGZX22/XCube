@@ -71,6 +71,7 @@ class PendingRequest {
   resolve: (result: PyodideRunResult) => void
   timerId: number = -1
   phase: PythonRunPhase = PythonRunPhase.PACKAGE_LOADING
+  lastPackageProgress: string = ''
 
   constructor(resolve: (result: PyodideRunResult) => void) {
     this.resolve = resolve
@@ -100,6 +101,10 @@ export class PyodideRuntimeService {
   // ---- UI 宿主生命周期 ----
 
   attachHost(host: PyodideHost): void {
+    if (this.host !== null && this.host !== host) {
+      this.resolveReadyWaiters(false)
+      this.failPendingRequests('Python 运行时宿主已替换')
+    }
     this.host = host
     this.state = PyodideState.LOADING
     this.lastError = ''
@@ -109,6 +114,10 @@ export class PyodideRuntimeService {
   detachHost(host: PyodideHost): void {
     if (this.host === host) {
       this.host = null
+      this.state = PyodideState.UNINITIALIZED
+      this.lastError = 'Python 运行时宿主已分离'
+      this.resolveReadyWaiters(false)
+      this.failPendingRequests(this.lastError)
       hilog.info(DOMAIN, TAG, 'Pyodide host detached')
     }
   }
@@ -122,22 +131,14 @@ export class PyodideRuntimeService {
   onReady(): void {
     this.state = PyodideState.READY
     hilog.info(DOMAIN, TAG, 'Pyodide ready')
-    const waiters = this.readyWaiters
-    this.readyWaiters = []
-    for (let i = 0; i < waiters.length; i++) {
-      waiters[i](true)
-    }
+    this.resolveReadyWaiters(true)
   }
 
   onError(message: string): void {
     hilog.error(DOMAIN, TAG, `Pyodide error: ${message}`)
     this.lastError = message
     this.state = PyodideState.FAILED
-    const waiters = this.readyWaiters
-    this.readyWaiters = []
-    for (let i = 0; i < waiters.length; i++) {
-      waiters[i](false)
-    }
+    this.resolveReadyWaiters(false)
     this.failPendingRequests(`Python 运行时错误：${message}`)
   }
 
@@ -147,6 +148,16 @@ export class PyodideRuntimeService {
       return
     }
     this.armTimeout(requestId, entry, PythonRunPhase.EXECUTING, PYTHON_EXECUTION_TIMEOUT_MS)
+  }
+
+  onPackageProgress(requestId: string, message: string): void {
+    const entry = this.pending.get(requestId)
+    if (entry === undefined || entry.phase !== PythonRunPhase.PACKAGE_LOADING) {
+      return
+    }
+    entry.lastPackageProgress = message.trim().substring(0, 240)
+    // 包加载限制的是“无进展”时长，而不是科学计算包首次下载的总时长。
+    this.armTimeout(requestId, entry, PythonRunPhase.PACKAGE_LOADING, PYTHON_PACKAGE_LOAD_TIMEOUT_MS)
   }
 
   onResult(requestId: string, json: string): void {
@@ -218,6 +229,10 @@ export class PyodideRuntimeService {
     if (host === null) {
       return this.fallbackResult('Python 运行时宿主已分离')
     }
+    if (this.pending.size > 0) {
+      return this.failureResult('Python 运行时已有正在执行或加载包的请求；' +
+        '同一会话的 python_sandbox 必须串行调用')
+    }
 
     this.requestSeq += 1
     const requestId = `py-${this.requestSeq}`
@@ -264,8 +279,10 @@ export class PyodideRuntimeService {
     }
 
     const wasPackageLoading = entry.phase === PythonRunPhase.PACKAGE_LOADING
+    const progressDetail = entry.lastPackageProgress === '' ? '' :
+      `；最后进度：${entry.lastPackageProgress}`
     const result = wasPackageLoading ?
-      this.fallbackResult(`Python 包加载超时（${timeoutMs}ms）`) :
+      this.fallbackResult(`Python 包加载连续 ${timeoutMs}ms 无进展${progressDetail}`) :
       this.failureResult(`Python 执行超时（${timeoutMs}ms），已强制终止并重建运行时`)
     this.restartRuntime()
     entry.resolve(result)
@@ -311,20 +328,36 @@ export class PyodideRuntimeService {
     }
     return new Promise<boolean>((resolve) => {
       let settled = false
+      let timerId = -1
       const waiter = (ready: boolean): void => {
         if (!settled) {
           settled = true
+          if (timerId !== -1) {
+            clearTimeout(timerId)
+          }
           resolve(ready)
         }
       }
       this.readyWaiters.push(waiter)
-      setTimeout(() => {
+      timerId = setTimeout(() => {
         if (!settled) {
           settled = true
+          const index = this.readyWaiters.indexOf(waiter)
+          if (index >= 0) {
+            this.readyWaiters.splice(index, 1)
+          }
           resolve(this.state === PyodideState.READY)
         }
       }, this.readyTimeoutMs)
     })
+  }
+
+  private resolveReadyWaiters(ready: boolean): void {
+    const waiters = this.readyWaiters
+    this.readyWaiters = []
+    for (let i = 0; i < waiters.length; i++) {
+      waiters[i](ready)
+    }
   }
 
   private fallbackResult(reason: string): PyodideRunResult {

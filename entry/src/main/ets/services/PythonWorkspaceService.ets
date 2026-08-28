@@ -93,6 +93,15 @@ export function encodePythonWorkspaceSessionDirectory(sessionId: string): string
   return `${PYTHON_WORKSPACE_DIRECTORY_PREFIX}${encoded}`
 }
 
+export function validatePythonWorkspaceReplacement(oldText: string, newText: string): void {
+  if (oldText === '') {
+    throw new Error('old_text 不能为空')
+  }
+  if (oldText === newText) {
+    throw new Error('new_text 与 old_text 相同，未执行任何修改')
+  }
+}
+
 export class PythonWorkspaceService {
   private static instance: PythonWorkspaceService | null = null
   private rootDirectory: string = ''
@@ -175,9 +184,7 @@ export class PythonWorkspaceService {
   replaceInFile(sessionId: string, rawPath: string, oldText: string,
     newText: string): PythonWorkspaceFileInfo {
     const path = normalizePythonWorkspacePath(rawPath)
-    if (oldText === '') {
-      throw new Error('old_text 不能为空')
-    }
+    validatePythonWorkspaceReplacement(oldText, newText)
     const existing = this.readWholeFile(sessionId, path)
     const firstIndex = existing.indexOf(oldText)
     if (firstIndex < 0) {

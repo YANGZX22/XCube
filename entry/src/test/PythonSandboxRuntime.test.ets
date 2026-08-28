@@ -56,16 +56,36 @@ import {
   buildPythonSandboxRawSchema,
   PYTHON_FONT_USAGE_GUIDANCE,
   PYTHON_PDF_USAGE_GUIDANCE,
-  PYTHON_PLOTTING_USAGE_GUIDANCE
+  PYTHON_PLOTTING_USAGE_GUIDANCE,
+  PYTHON_WORKSPACE_USAGE_GUIDANCE
 } from '../main/ets/config/BuiltinTools'
 import {
   encodePythonWorkspaceSessionDirectory,
-  normalizePythonWorkspacePath
+  normalizePythonWorkspacePath,
+  validatePythonWorkspaceReplacement
 } from '../main/ets/services/PythonWorkspaceService'
 import {
   parsePythonSandboxRequestArguments,
   repairTruncatedPythonToolArguments
 } from '../main/ets/services/PythonSandboxService'
+import {
+  PyodideHost,
+  PyodideRuntimeService,
+  PyodideState
+} from '../main/ets/services/PyodideRuntimeService'
+
+class DetachedRuntimeTestHost implements PyodideHost {
+  runCount: number = 0
+
+  runPython(_requestId: string, _codeB64: string, _varsB64: string, _packagesB64: string,
+    _workspaceB64: string): void {
+    this.runCount += 1
+  }
+
+  resetPython(): boolean {
+    return true
+  }
+}
 
 export default function pythonSandboxRuntimeTest() {
   describe('pythonSandboxRuntimeTest', () => {
@@ -86,12 +106,50 @@ export default function pythonSandboxRuntimeTest() {
       expect(PYODIDE_HOST_HTML.includes('pythonWorker.terminate()')).assertTrue()
       expect(PYODIDE_HOST_HTML.includes('PYODIDE_COMPAT_SCRIPT_URL')).assertTrue()
       expect(PYODIDE_HOST_HTML.includes("type: 'executionStarted'")).assertTrue()
+      expect(PYODIDE_HOST_HTML.includes('onPackageProgress')).assertTrue()
+      expect(PYODIDE_HOST_HTML.includes('monitorPackageResponse')).assertTrue()
+      expect(PYODIDE_HOST_HTML.includes('Downloading ')).assertTrue()
+      expect(PYODIDE_HOST_HTML.includes('Downloaded ')).assertTrue()
       expect(PYODIDE_HOST_HTML.includes("runPythonAsync('import math")).assertTrue()
       expect(PYODIDE_HOST_HTML.includes('Never call toJs() blindly')).assertTrue()
       expect(PYODIDE_HOST_HTML.includes('len(value) > 200')).assertTrue()
       expect(PYTHON_RUNTIME_READY_TIMEOUT_MS).assertEqual(60000)
       expect(PYTHON_PACKAGE_LOAD_TIMEOUT_MS).assertEqual(90000)
       expect(PYTHON_EXECUTION_TIMEOUT_MS).assertEqual(20000)
+    })
+
+    it('fails_pending_python_requests_immediately_when_the_web_host_detaches', 0, async () => {
+      const runtime = new PyodideRuntimeService()
+      const host = new DetachedRuntimeTestHost()
+      runtime.attachHost(host)
+      runtime.onReady()
+      const pending = runtime.run('import numpy', undefined, [])
+
+      runtime.detachHost(host)
+      const result = await pending
+
+      expect(host.runCount).assertEqual(1)
+      expect(runtime.getState()).assertEqual(PyodideState.UNINITIALIZED)
+      expect(result.fallback).assertTrue()
+      expect(result.error.includes('宿主已分离')).assertTrue()
+    })
+
+    it('rejects_parallel_requests_before_they_enter_the_shared_python_worker', 0, async () => {
+      const runtime = new PyodideRuntimeService()
+      const host = new DetachedRuntimeTestHost()
+      runtime.attachHost(host)
+      runtime.onReady()
+
+      const first = runtime.run('print(1)', undefined, [])
+      const second = await runtime.run('print(2)', undefined, [])
+
+      expect(host.runCount).assertEqual(1)
+      expect(second.ok).assertFalse()
+      expect(second.fallback).assertFalse()
+      expect(second.error.includes('python_sandbox 必须串行调用')).assertTrue()
+
+      runtime.detachHost(host)
+      await first
     })
 
     it('limits_user_network_and_persistent_browser_capabilities', 0, () => {
@@ -201,6 +259,18 @@ export default function pythonSandboxRuntimeTest() {
         .assertTrue()
     })
 
+    it('evicts_only_workspace_modules_before_each_run_files_execution', 0, () => {
+      expect(PYODIDE_HOST_HTML.includes('clearWorkspaceModuleCache')).assertTrue()
+      expect(PYODIDE_HOST_HTML.includes('_xcube_cache_sys.modules.pop')).assertTrue()
+      expect(PYODIDE_HOST_HTML.includes('getattr(_xcube_cache_module, "__file__", None)'))
+        .assertTrue()
+      expect(PYODIDE_HOST_HTML.includes('getattr(_xcube_cache_module, "__path__", ())'))
+        .assertTrue()
+      expect(PYODIDE_HOST_HTML.includes('_xcube_cache_sys.path_importer_cache.pop')).assertTrue()
+      expect(PYODIDE_HOST_HTML.includes('_xcube_cache_linecache.clearcache()')).assertTrue()
+      expect(PYODIDE_HOST_HTML.includes('_xcube_cache_importlib.invalidate_caches()')).assertTrue()
+    })
+
     it('repairs_only_structurally_truncated_python_tool_json', 0, () => {
       const missingContainerClose =
         '{"action":"write_file","path":"notes.md","content":"完整内容"'
@@ -304,11 +374,46 @@ export default function pythonSandboxRuntimeTest() {
       expect(PYTHON_PLOTTING_USAGE_GUIDANCE.includes('不得假设先前调用安装的包或导入状态')).assertTrue()
     })
 
+    it('guides_models_to_serialize_workspace_edits_and_verify_deliverables', 0, () => {
+      expect(PYTHON_WORKSPACE_USAGE_GUIDANCE.includes('python_sandbox 调用必须逐个串行'))
+        .assertTrue()
+      expect(PYTHON_WORKSPACE_USAGE_GUIDANCE.includes('不得并行修改同一文件')).assertTrue()
+      expect(PYTHON_WORKSPACE_USAGE_GUIDANCE.includes('new_text 必须与 old_text 不同')).assertTrue()
+      expect(PYTHON_WORKSPACE_USAGE_GUIDANCE.includes('read_file 读取相关行复验')).assertTrue()
+      expect(PYTHON_WORKSPACE_USAGE_GUIDANCE.includes('action=run 的当前目录是当次 PYTHON_OUTPUT_DIR'))
+        .assertTrue()
+      expect(PYTHON_WORKSPACE_USAGE_GUIDANCE.includes("listdir('.') 为空不代表工作区为空"))
+        .assertTrue()
+      expect(PYTHON_WORKSPACE_USAGE_GUIDANCE.includes('action=run_files 才会把工作区文本文件同步进 Pyodide'))
+        .assertTrue()
+      expect(PYTHON_WORKSPACE_USAGE_GUIDANCE.includes('自动刷新上一次从工作区 import 的模块'))
+        .assertTrue()
+      expect(PYTHON_WORKSPACE_USAGE_GUIDANCE.includes('不要为清理 sys.modules 额外创建 reset.py'))
+        .assertTrue()
+      expect(PYTHON_WORKSPACE_USAGE_GUIDANCE.includes('不会自动进入 files 下载列表'))
+        .assertTrue()
+      expect(PYTHON_WORKSPACE_USAGE_GUIDANCE.includes('明确写入 PYTHON_OUTPUT_DIR')).assertTrue()
+    })
+
+    it('rejects_workspace_replacements_that_would_not_change_the_file', 0, () => {
+      let message: string = ''
+      try {
+        validatePythonWorkspaceReplacement('{N_PATH}', '{N_PATH}')
+      } catch (error) {
+        message = error instanceof Error ? error.message : `${error}`
+      }
+      expect(message).assertEqual('new_text 与 old_text 相同，未执行任何修改')
+      validatePythonWorkspaceReplacement('{N_PATH}', '{N_PATHS}')
+    })
+
     it('builds_python_tool_schema_with_quoted_package_examples', 0, () => {
       const schemaJson: string = JSON.stringify(buildPythonSandboxRawSchema())
       expect(schemaJson.includes('packages')).assertTrue()
       expect(schemaJson.includes('seaborn')).assertTrue()
       expect(schemaJson.includes("matplotlib.use('Agg')")).assertTrue()
+      expect(schemaJson.includes('同一会话的 Python 调用必须串行')).assertTrue()
+      expect(schemaJson.includes('不能与 old_text 相同')).assertTrue()
+      expect(schemaJson.includes('read_file 复验')).assertTrue()
     })
 
     it('normalizes_python_image_names_and_mime_extensions_before_persisting', 0, () => {

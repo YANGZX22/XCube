@@ -128,6 +128,19 @@ export const PYTHON_PLOTTING_USAGE_GUIDANCE: string =
     "否则会出现 cannot import name 'document' from 'js'。每次 action=run 或 run_files 调用都必须自包含依赖声明：" +
     'Seaborn 等非 Pyodide 官方自动加载包必须在该次调用的 packages 中明确列出（例如 packages: ["seaborn"]），' +
     '包括重复、并行或重试调用；不得假设先前调用安装的包或导入状态会被后续调用继承。'
+export const PYTHON_WORKSPACE_USAGE_GUIDANCE: string =
+  'Python 工作区规则：同一会话的 python_sandbox 调用必须逐个串行，每次等待上一次返回后再调用；' +
+    '不得在同一批次并行发出多个 run、run_files、write_file、append_file、replace_in_file、' +
+    'read_file 或 list_files，尤其不得并行修改同一文件，否则会丢失活动会话、产生竞态或被旧版本覆盖。' +
+    'replace_in_file 的 old_text 必须在文件中恰好出现一次，new_text 必须与 old_text 不同；修改后必须串行调用 ' +
+    'read_file 读取相关行复验最终内容，不能仅依赖修改调用的成功返回。' +
+    'action=run 的当前目录是当次 PYTHON_OUTPUT_DIR，它不会同步或展示持久化工作区；' +
+    "run 中 listdir('.') 为空不代表工作区为空。检查工作区只能使用 list_files 或 read_file。" +
+    'action=run_files 才会把工作区文本文件同步进 Pyodide，并以工作区为当前目录运行。' +
+    '每次 run_files 会自动刷新上一次从工作区 import 的模块与源码行缓存；修改 .py 后可直接重跑，' +
+    '不要为清理 sys.modules 额外创建 reset.py。第三方包不会因此卸载或重新下载。' +
+    '工作区内的 txt、md、CSV 等文本只供后续复用，不会自动进入 files 下载列表；' +
+    '交付用户下载的任何文件都必须由 run 或 run_files 中的代码明确写入 PYTHON_OUTPUT_DIR。'
 export const PYTHON_PDF_USAGE_GUIDANCE: string =
   'PDF 生成规则：from fpdf import FPDF 会自动安装 fpdf2，无需填写 packages。Pyodide 若在导入时提示 ' +
     'urllib.request 缺少 HTTPSHandler 或 http.client 缺少 HTTPSConnection，应先导入 urllib.request 与 ' +
@@ -799,7 +812,8 @@ class PythonSandboxExecutor implements ToolExecutor {
       // 运行时未就绪/加载失败/超时：降级到本地受限解释器
       const fallback = getPythonSandboxService().run(params)
       fallback.warnings.unshift(`Python 运行时未就绪（${pyResult.error}），已用受限子集执行；` +
-        '请按括号内的具体错误处理，只有错误明确提到下载或 HTTP 时才需要检查网络。')
+        '请按括号内的具体错误处理。下载、HTTP、CDN、Downloading 或包加载长时间无进展' +
+          '都表示依赖获取链路可能受网络或缓存影响。')
       return JSON.stringify(fallback)
     } catch (error) {
       const detail = this.stringifyError(error)
@@ -848,7 +862,7 @@ class PythonSandboxExecutor implements ToolExecutor {
       }
       const info = workspace.replaceInFile(sessionId, path, params.old_text, params.new_text)
       return JSON.stringify(this.buildWorkspaceOutput(action, info.path,
-        `已修改 ${info.path}`, workspace.listFiles(sessionId)))
+        `已精确替换 ${info.path}；请继续使用 read_file 复验相关行`, workspace.listFiles(sessionId)))
     }
     if (action === 'read_file') {
       const readResult = workspace.readFile(
@@ -2911,7 +2925,7 @@ export function buildPythonSandboxRawSchema(): object {
       `scikit-learn、matplotlib、Pillow 等 Pyodide 官方包时会在执行前自动加载，import fpdf 时会自动安装 ` +
       `fpdf2。${PYTHON_PLOTTING_USAGE_GUIDANCE}沙箱内置 CMU Serif 英文与思源宋体中文的 Regular、Bold、` +
       `Italic、Bold Italic 四套字形；Pillow 可通过 PYTHON_FONT_EN_*、PYTHON_FONT_CJK_* 获取对应路径。` +
-      `${PYTHON_FONT_USAGE_GUIDANCE}${PYTHON_PDF_USAGE_GUIDANCE}可用 print 输出，最后一个表达式的值会作为 ` +
+      `${PYTHON_FONT_USAGE_GUIDANCE}${PYTHON_PDF_USAGE_GUIDANCE}${PYTHON_WORKSPACE_USAGE_GUIDANCE}可用 print 输出，最后一个表达式的值会作为 ` +
       `result 返回。写入相对路径或 PYTHON_OUTPUT_DIR 的 PNG、JPEG、GIF、WebP 会在 images 中返回；PDF、` +
       `CSV、JSON、Office、ZIP 等任意其他文件会在 files 中返回。要在气泡中交付普通文件，必须在最终回复` +
       `原样输出 files 中的 markdown 字段，即 [文件名](xcube-file://attachmentId)；不要臆造 attachmentId 或` +
@@ -2931,7 +2945,7 @@ export function buildPythonSandboxRawSchema(): object {
       "action": {
         "type": "string",
         "enum": ["run", "write_file", "append_file", "replace_in_file", "read_file", "list_files", "delete_file", "run_files"],
-        "description": "操作类型。省略时兼容为 run。可用 write_file 创建 .py 源码及 txt、md、json、csv、yaml、toml、xml、html、sql 等 UTF-8 文本；长代码再用 run_files 运行 .py 入口。长文件不要放在一次 code/content JSON 中，应先 write_file 写首段、再用 append_file 分段追加；修改已有内容优先用 replace_in_file。"
+        "description": "操作类型。省略时兼容为 run。可用 write_file 创建 .py 源码及 txt、md、json、csv、yaml、toml、xml、html、sql 等 UTF-8 文本；长代码再用 run_files 运行 .py 入口。长文件不要放在一次 code/content JSON 中，应先 write_file 写首段、再用 append_file 分段追加；修改已有内容优先用 replace_in_file。同一会话的 Python 调用必须串行，不得在一个并行批次中调用多次。"
       },
       "code": {
         "type": "string",
@@ -2953,11 +2967,11 @@ export function buildPythonSandboxRawSchema(): object {
       },
       "old_text": {
         "type": "string",
-        "description": "replace_in_file 要精确替换且在文件中只出现一次的原文本。"
+        "description": "replace_in_file 要精确替换且在文件中只出现一次的原文本；未找到或多处匹配都会失败。"
       },
       "new_text": {
         "type": "string",
-        "description": "replace_in_file 的替换文本，可以为空字符串。"
+        "description": "replace_in_file 的替换文本，可以为空字符串，但不能与 old_text 相同。替换成功后必须用 read_file 复验。"
       },
       "start_line": {
         "type": "number",
@@ -2992,7 +3006,7 @@ function createPythonSandboxToolDefinition(): ToolDefinition {
 
   const func = new ToolFunction(
     PYTHON_SANDBOX_TOOL_ID,
-    `模型可在隔离的 Web Worker 中运行 Pyodide/CPython，也可在当前会话的持久化文本工作区内创建、覆盖、追加、精确修改、分段读取、列出和删除安全相对路径下的 UTF-8 文件，包括 .py、txt、md、json、csv、yaml、toml、xml、html、sql 等，再按顺序运行一个或多个 .py 文件。长代码优先拆成多个文件并使用 write_file、replace_in_file 与 run_files，避免单次工具 JSON 过长；工作区最多 64 个文件、单文件 256 KiB、总计 2 MiB。run_files 会把全部文本文件同步进 Pyodide，Python 可直接读取数据文件，并自动扫描 .py 源码加载 pandas、numpy、scipy、scikit-learn、matplotlib、Pillow 等官方包；import fpdf 会自动安装 fpdf2，也可通过 packages 安装其他纯 Python 或兼容的 PyEmscripten wheel。${PYTHON_PLOTTING_USAGE_GUIDANCE}生成图片、PDF 或其他二进制交付文件必须写入 PYTHON_OUTPUT_DIR；脚本创建或修改的有效 UTF-8 文本文件会同步回当前会话工作区。沙箱内置 CMU Serif 英文与思源宋体中文的 Regular、Bold、Italic、Bold Italic 四套字形，并向 Matplotlib、Pillow 和 fpdf2 暴露对应样式。${PYTHON_FONT_USAGE_GUIDANCE}${PYTHON_PDF_USAGE_GUIDANCE}图片可用 vision_read_image 或 image_to_text 调取；展示图片时必须把 images 中的 markdown 原样放在最终回复的目标位置，图片不会作为气泡顶部附件自动展示；files 中的 markdown 也应在最终回复原样输出。代码不能访问应用/系统文件、直接联网或运行系统命令；包加载器自身只访问受限的 Pyodide/PyPI 源。`,
+    `模型可在隔离的 Web Worker 中运行 Pyodide/CPython，也可在当前会话的持久化文本工作区内创建、覆盖、追加、精确修改、分段读取、列出和删除安全相对路径下的 UTF-8 文件，包括 .py、txt、md、json、csv、yaml、toml、xml、html、sql 等，再按顺序运行一个或多个 .py 文件。长代码优先拆成多个文件并使用 write_file、replace_in_file 与 run_files，避免单次工具 JSON 过长；工作区最多 64 个文件、单文件 256 KiB、总计 2 MiB。run_files 会把全部文本文件同步进 Pyodide，Python 可直接读取数据文件，并自动扫描 .py 源码加载 pandas、numpy、scipy、scikit-learn、matplotlib、Pillow 等官方包；import fpdf 会自动安装 fpdf2，也可通过 packages 安装其他纯 Python 或兼容的 PyEmscripten wheel。${PYTHON_PLOTTING_USAGE_GUIDANCE}${PYTHON_WORKSPACE_USAGE_GUIDANCE}生成图片、PDF 或其他二进制交付文件必须写入 PYTHON_OUTPUT_DIR；脚本创建或修改的有效 UTF-8 文本文件会同步回当前会话工作区。沙箱内置 CMU Serif 英文与思源宋体中文的 Regular、Bold、Italic、Bold Italic 四套字形，并向 Matplotlib、Pillow 和 fpdf2 暴露对应样式。${PYTHON_FONT_USAGE_GUIDANCE}${PYTHON_PDF_USAGE_GUIDANCE}图片可用 vision_read_image 或 image_to_text 调取；展示图片时必须把 images 中的 markdown 原样放在最终回复的目标位置，图片不会作为气泡顶部附件自动展示；files 中的 markdown 也应在最终回复原样输出。代码不能访问应用/系统文件、直接联网或运行系统命令；包加载器自身只访问受限的 Pyodide/PyPI 源。`,
     parameters
   )
 
