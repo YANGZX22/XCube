@@ -637,18 +637,18 @@ export struct KnowledgeBasePanel {
       return 'PDF'
     }
     if (categoryKey === KNOWLEDGE_CATEGORY_WORD) {
-      return pickLocalizedText('Word 文档', 'Word documents')
+      return 'Word'
     }
     if (categoryKey === KNOWLEDGE_CATEGORY_SPREADSHEET) {
       return pickLocalizedText('表格', 'Spreadsheets')
     }
     if (categoryKey === KNOWLEDGE_CATEGORY_TEXT) {
-      return pickLocalizedText('文本与 Markdown', 'Text & Markdown')
+      return pickLocalizedText('文本文档', 'Texts')
     }
     if (categoryKey === KNOWLEDGE_CATEGORY_IMAGE) {
       return pickLocalizedText('图片', 'Images')
     }
-    return pickLocalizedText('其他文档', 'Other documents')
+    return pickLocalizedText('其他文档', 'Others')
   }
 
   private getCategorySummary(categoryKey: string): string {

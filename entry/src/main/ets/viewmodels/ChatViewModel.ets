@@ -315,7 +315,7 @@ export class ChatViewModel {
 
   // 压缩状态既保留聚合字段（“仅展示最后回复”模式固定显示在顶部），也写入响应时间线，
   // 让“按生成顺序展示”模式能够把状态栏放在真正发生中断的位置。
-  private beginAutomaticCompactionUi(message: ChatMessage): void {
+  private beginContextCompactionUi(message: ChatMessage): void {
     message.contextCompactionState = ContextCompactionUiState.COMPACTING
     for (let i = 0; i < message.responseSegments.length; i++) {
       if (message.responseSegments[i].type === AssistantResponseSegmentType.CONTEXT_COMPACTION &&
@@ -330,41 +330,66 @@ export class ChatViewModel {
     ))
   }
 
-  private finishAutomaticCompactionUi(message: ChatMessage, applied: boolean): void {
-    message.contextCompactionState = applied ?
-      ContextCompactionUiState.COMPLETED : ContextCompactionUiState.NONE
+  private finishContextCompactionUi(message: ChatMessage, applied: boolean): void {
+    if (!applied) {
+      this.clearContextCompactionUi(message)
+      return
+    }
+    message.contextCompactionState = ContextCompactionUiState.COMPLETED
     for (let i = message.responseSegments.length - 1; i >= 0; i--) {
       const segment = message.responseSegments[i]
       if (segment.type !== AssistantResponseSegmentType.CONTEXT_COMPACTION ||
         segment.content !== ContextCompactionUiState.COMPACTING) {
         continue
       }
-      if (applied) {
-        segment.content = ContextCompactionUiState.COMPLETED
-      } else {
-        message.responseSegments.splice(i, 1)
-      }
+      segment.content = ContextCompactionUiState.COMPLETED
       return
     }
-    if (applied) {
-      message.responseSegments.push(new AssistantResponseSegment(
-        `${message.id}_${message.responseSegments.length}_${AssistantResponseSegmentType.CONTEXT_COMPACTION}`,
-        AssistantResponseSegmentType.CONTEXT_COMPACTION,
-        ContextCompactionUiState.COMPLETED
-      ))
-    }
+    message.responseSegments.push(new AssistantResponseSegment(
+      `${message.id}_${message.responseSegments.length}_${AssistantResponseSegmentType.CONTEXT_COMPACTION}`,
+      AssistantResponseSegmentType.CONTEXT_COMPACTION,
+      ContextCompactionUiState.COMPLETED
+    ))
   }
 
-  private clearAutomaticCompactionUi(message: ChatMessage): void {
-    if (message.contextCompactionState === ContextCompactionUiState.COMPACTING) {
-      message.contextCompactionState = ContextCompactionUiState.NONE
-    }
+  private clearContextCompactionUi(message: ChatMessage): void {
     for (let i = message.responseSegments.length - 1; i >= 0; i--) {
       if (message.responseSegments[i].type === AssistantResponseSegmentType.CONTEXT_COMPACTION &&
         message.responseSegments[i].content === ContextCompactionUiState.COMPACTING) {
         message.responseSegments.splice(i, 1)
       }
     }
+    // 同一条气泡可能已经记录过一次成功压缩。新一次手动压缩失败时，恢复之前的完成状态，
+    // 不能把原有结果栏一并抹掉。
+    message.contextCompactionState = ContextCompactionUiState.NONE
+    for (let i = message.responseSegments.length - 1; i >= 0; i--) {
+      if (message.responseSegments[i].type === AssistantResponseSegmentType.CONTEXT_COMPACTION &&
+        message.responseSegments[i].content === ContextCompactionUiState.COMPLETED) {
+        message.contextCompactionState = ContextCompactionUiState.COMPLETED
+        break
+      }
+    }
+  }
+
+  // 手动 /compact 没有新建 AI 回复，状态栏挂到当前活跃路径最近的一条助手气泡上，
+  // 因而与自动压缩共用“按生成顺序展示”的位置规则。
+  beginManualContextCompactionUi(messages: ChatMessage[]): ChatMessage | null {
+    for (let i = messages.length - 1; i >= 0; i--) {
+      if (messages[i].role !== MessageRole.ASSISTANT) {
+        continue
+      }
+      this.beginContextCompactionUi(messages[i])
+      return messages[i]
+    }
+    return null
+  }
+
+  async finishManualContextCompactionUi(message: ChatMessage, applied: boolean): Promise<void> {
+    this.finishContextCompactionUi(message, applied)
+    if (!applied) {
+      return
+    }
+    await this.databaseService.updateMessageContextCompactionUi(message)
   }
 
 	  private async getRenderedSystemPrompt(): Promise<string> {
@@ -1194,7 +1219,7 @@ export class ChatViewModel {
 
   // 用户在输入框执行 /compact：单独向当前模型请求一段摘要，
   // 成功后把摘要与锚点写入会话，之后的请求即按压缩后的历史发送。
-  // 与工具链路不同，这里不产生任何聊天消息，界面上的记录也不受影响。
+  // 与工具链路不同，这里不产生新的聊天消息；ChatPage 会把状态写入最近的助手气泡。
   async compactContextManually(
     providerId: string,
     modelId: string,
@@ -1514,7 +1539,7 @@ export class ChatViewModel {
       // stop 后持久化的消息应结束生成/搜索状态
       info.message.isGenerating = false
       info.message.isSearching = false
-      this.clearAutomaticCompactionUi(info.message)
+      this.clearContextCompactionUi(info.message)
       entries.push(info)
     })
 
@@ -3139,7 +3164,7 @@ ${knowledgeSearchLimitRule}`
       userCancelled = true
       toolExecutionCancelled = true
       if (aiMessage.contextCompactionState === ContextCompactionUiState.COMPACTING) {
-        this.clearAutomaticCompactionUi(aiMessage)
+        this.clearContextCompactionUi(aiMessage)
         onAIMessageUpdated(aiMessage)
       }
       localFirstChunkThrottle.reset()
@@ -3164,7 +3189,7 @@ ${knowledgeSearchLimitRule}`
     const automaticCompactionState = new AutomaticCompactionState()
     if (compactionService.isEnabled() && initialContextUsage.overThreshold) {
       automaticCompactionState.attempted = true
-      this.beginAutomaticCompactionUi(aiMessage)
+      this.beginContextCompactionUi(aiMessage)
       onAIMessageUpdated(aiMessage)
       const automaticResult = await this.compactContextAutomaticallyForRequest(
         apiConfig,
@@ -3178,7 +3203,7 @@ ${knowledgeSearchLimitRule}`
       if (cancelled || this.isCancelled(cancelSnapshot)) {
         return
       }
-      this.finishAutomaticCompactionUi(aiMessage, automaticResult.applied)
+      this.finishContextCompactionUi(aiMessage, automaticResult.applied)
       onAIMessageUpdated(aiMessage)
       if (automaticResult.applied) {
         automaticCompactionState.applied = true
@@ -3499,7 +3524,7 @@ ${preview}`
     this.fillEmptyAIContentPlaceholder(aiMessage)
     aiMessage.isGenerating = false
     aiMessage.isSearching = false
-    this.clearAutomaticCompactionUi(aiMessage)
+    this.clearContextCompactionUi(aiMessage)
     onAIMessageUpdated(aiMessage)
 
     if (snapshotSession !== null) {
@@ -3941,7 +3966,7 @@ ${preview}`
       )
       if (roundContextUsage.overThreshold) {
         automaticCompactionState.attempted = true
-        this.beginAutomaticCompactionUi(aiMessage)
+        this.beginContextCompactionUi(aiMessage)
         onAIMessageUpdated(aiMessage)
         const automaticResult = await this.compactContextAutomaticallyForRequest(
           apiConfig,
@@ -3955,7 +3980,7 @@ ${preview}`
         if (isCancelledFn()) {
           return
         }
-        this.finishAutomaticCompactionUi(aiMessage, automaticResult.applied)
+        this.finishContextCompactionUi(aiMessage, automaticResult.applied)
         onAIMessageUpdated(aiMessage)
         if (automaticResult.applied) {
           automaticCompactionState.applied = true
@@ -4264,7 +4289,7 @@ ${preview}`
       automaticCompactionState.attempted = true
       roundCompactionResumeStarted = true
       roundInterruptedForCompaction = true
-      this.beginAutomaticCompactionUi(aiMessage)
+      this.beginContextCompactionUi(aiMessage)
       localFirstChunkThrottle.reset()
       localContentThrottle.reset()
       localReasoningThrottle.reset()
@@ -4294,7 +4319,7 @@ ${preview}`
         if (automaticResult.applied) {
           automaticCompactionState.applied = true
         }
-        this.finishAutomaticCompactionUi(aiMessage, automaticResult.applied)
+        this.finishContextCompactionUi(aiMessage, automaticResult.applied)
         onAIMessageUpdated(aiMessage)
         if (partialContent !== '') {
           requestMessages.push(new RequestMessage('assistant', partialContent))
@@ -4357,7 +4382,7 @@ ${preview}`
         }
         const message = error instanceof Error ? error.message : JSON.stringify(error)
         console.error('ChatViewModel', `Failed to resume after automatic compaction: ${message}`)
-        this.clearAutomaticCompactionUi(aiMessage)
+        this.clearContextCompactionUi(aiMessage)
         this.fillEmptyAIContentPlaceholder(aiMessage, message)
         aiMessage.isGenerating = false
         aiMessage.isSearching = false

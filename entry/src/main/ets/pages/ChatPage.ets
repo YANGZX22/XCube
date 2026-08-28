@@ -6044,7 +6044,15 @@ export struct ChatPage {
     }
 
     this.isCompactingContext = true
-    this.showChatSnack(pickLocalizedText('正在压缩上下文…', 'Compacting context…'), 2000)
+    const compactionUiMessage = this.chatViewModel.beginManualContextCompactionUi(this.messages)
+    let keepCompletedCompactionUi = false
+    if (compactionUiMessage !== null) {
+      this.markMessageListChanged()
+      this.getScrollUiFlow().alignToBottomIfPinned()
+    } else {
+      // 极端的纯用户消息导入会话没有助手气泡可承载结果栏，仍保留文字反馈。
+      this.showChatSnack(pickLocalizedText('正在压缩上下文…', 'Compacting context…'), 2000)
+    }
     try {
       const result = await this.chatViewModel.compactContextManually(
         this.currentProvider.id,
@@ -6052,6 +6060,11 @@ export struct ChatPage {
         this.messages
       )
       if (result.applied) {
+        keepCompletedCompactionUi = true
+        if (compactionUiMessage !== null) {
+          await this.chatViewModel.finishManualContextCompactionUi(compactionUiMessage, true)
+          this.markMessageListChanged()
+        }
         this.refreshContextUsage()
         this.showChatSnack(pickLocalizedText(
           `上下文已压缩，约节省 ${formatTokenCount(result.savedTokens)} tokens`,
@@ -6070,6 +6083,10 @@ export struct ChatPage {
       this.showChatSnack(pickLocalizedText('压缩失败，请稍后重试', 'Compaction failed, try again'), 3000,
         SnackBarTone.ERROR)
     } finally {
+      if (!keepCompletedCompactionUi && compactionUiMessage !== null) {
+        await this.chatViewModel.finishManualContextCompactionUi(compactionUiMessage, false)
+        this.markMessageListChanged()
+      }
       this.isCompactingContext = false
     }
   }

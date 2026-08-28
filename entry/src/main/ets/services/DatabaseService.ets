@@ -2332,6 +2332,25 @@ export class DatabaseService {
     }
   }
 
+  // 手动 /compact 复用已有助手气泡，只更新结果栏相关字段，不改正文、会话摘要或更新时间。
+  async updateMessageContextCompactionUi(message: ChatMessage): Promise<void> {
+    await this.waitForInitialization()
+    if (this.rdbStore === null || message.id === '') {
+      return
+    }
+    const valueBucket: relationalStore.ValuesBucket = {
+      response_timeline_json: this.serializeResponseTimeline(message),
+      context_compaction_state: message.contextCompactionState
+    }
+    const predicates = new relationalStore.RdbPredicates(TableNames.MESSAGES)
+    predicates.equalTo('id', message.id)
+    try {
+      await this.rdbStore.update(valueBucket, predicates)
+    } catch (error) {
+      console.error('DatabaseService', `Failed to update message compaction UI: ${JSON.stringify(error)}`)
+    }
+  }
+
   private serializeResponseTimeline(message: ChatMessage): string {
     if (message.responseSegments.length === 0) {
       return ''
