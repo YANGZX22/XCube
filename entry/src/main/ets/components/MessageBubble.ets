@@ -2773,7 +2773,6 @@ export struct MessageBubble {
         query: this.extractSearchQuery(),
         searchEngine: this.message.searchEngine || 'Web',
         references: this.message.searchReferences,
-        sourceLabel: this.getSearchSourceLabel(),
         embedded: true
       })
     } else {
@@ -3400,18 +3399,6 @@ export struct MessageBubble {
       normalizedName === 'search_web' ||
       normalizedName === 'internet_search' ||
       normalizedName === 'web_search_exa'
-  }
-
-  private getSearchSourceLabel(): string {
-    const source = this.message.searchSource.trim()
-    if (source === 'tool') {
-      return pickLocalizedText('工具调用', 'Tool Call')
-    }
-    if (source === 'manual') {
-      return ''
-    }
-    // 兼容旧数据：没有持久化 searchSource 时，只展示工具调用，不暴露手动执行链路。
-    return this.message.hasToolCalls() ? pickLocalizedText('工具调用', 'Tool Call') : ''
   }
 
   private getSearchingIndicatorText(): string {

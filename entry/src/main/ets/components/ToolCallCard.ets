@@ -263,14 +263,22 @@ export struct ToolCallCard {
 
           // 子智能体卡片：实时预览入口（bindSheet 由宿主 MessageBubble 承载）
           if (this.isSubAgentCard()) {
-            Text(pickLocalizedText('实时预览', 'Live Preview'))
-              .fontSize(10)
-              .fontWeight(FontWeight.Medium)
-              .fontColor(this.themePrimary)
-              .padding({ left: 7, right: 7, top: 2, bottom: 2 })
-              .borderRadius(this.isManuscriptMode ? 0 : 9)
-              .backgroundColor(this.isManuscriptMode ? Color.Transparent : this.themePrimaryLight)
-              .border({ width: 0, color: this.themePrimary })
+            Row({ space: 3 }) {
+              Row()
+                .width(1)
+                .height(10)
+                .backgroundColor($r('app.color.divider'))
+                .margin({ right: 3 })
+
+              Text(pickLocalizedText('预览', 'Preview'))
+                .fontSize(10)
+                .fontWeight(FontWeight.Medium)
+                .fontColor(this.themePrimary)
+
+              SymbolGlyph($r('sys.symbol.arrow_up_left_and_arrow_down_right'))
+                .fontSize(10)
+                .fontColor([this.themePrimary])
+            }
               .flexShrink(0)
               .margin({ left: 8 })
               .onClick(() => {

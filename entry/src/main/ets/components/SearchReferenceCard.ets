@@ -15,7 +15,6 @@ export struct SearchReferenceCard {
   @Param query: string = ''
   @Param searchEngine: string = ''
   @Param references: SearchReference[] = []
-  @Param sourceLabel: string = ''
   // 合并进条目块时由外层统一提供边框、材质与投影，卡片自身只出内容
   @Param embedded: boolean = false
   @Local isExpanded: boolean = false
@@ -53,6 +52,14 @@ export struct SearchReferenceCard {
     return trimmed.replace(/\s+/g, ' ')
   }
 
+  private getDisplaySearchEngine(): string {
+    const engine = this.searchEngine.trim()
+    if (engine.toLowerCase() === 'deepseek web search') {
+      return 'DeepSeek'
+    }
+    return engine
+  }
+
   private getTimelineRailColor(): string {
     return withColorAlpha(this.themePrimary, this.isDarkMode ? '88' : '55')
   }
@@ -64,27 +71,19 @@ export struct SearchReferenceCard {
       Row() {
         // 联网搜索图标
         SymbolGlyph($r('sys.symbol.worldclock_fill_2'))
-          .fontSize(13)
+          .fontSize(14)
           .fontColor([this.isManuscriptMode ? this.themePrimary : $r('app.color.text_secondary')])
 
         // 标题文本
         Text($r('app.string.web_search'))
-          .fontSize(12)
+          .fontSize(13)
           .fontWeight(FontWeight.Medium)
           .fontColor(this.isManuscriptMode ? this.themePrimary : $r('app.color.text_secondary'))
-          .margin({ left: 4 })
+          .margin({ left: 6 })
 
-        // 来源标签（区分：Function Calling vs 手动搜索链路）
-        if (this.sourceLabel.trim() !== '') {
-          Text(this.sourceLabel.trim())
-            .fontSize(11)
-            .fontColor($r('app.color.text_tertiary'))
-            .margin({ left: 6 })
-        }
-
-        if (this.searchEngine.trim() !== '') {
-          Text(this.searchEngine.trim())
-            .fontSize(11)
+        if (this.getDisplaySearchEngine() !== '') {
+          Text(this.getDisplaySearchEngine())
+            .fontSize(10)
             .fontColor($r('app.color.text_secondary'))
             .maxLines(1)
             .textOverflow({ overflow: TextOverflow.MARQUEE })
@@ -96,7 +95,7 @@ export struct SearchReferenceCard {
               delay: 600,
               fadeout: true
             })
-            .constraintSize({ maxWidth: 88 })
+            .constraintSize({ maxWidth: 72 })
             .padding({ left: 6, right: 6, top: 1, bottom: 1 })
             .borderRadius(this.isManuscriptMode ? 0 : 8)
             .backgroundColor(this.isManuscriptMode ? Color.Transparent : this.themePrimaryLight)
@@ -107,11 +106,19 @@ export struct SearchReferenceCard {
         // 实际搜索关键词（占据剩余空间，便于排查“关键词优化”是否跑偏）
         if (this.getDisplayQuery() !== '') {
           Text(this.getDisplayQuery())
-            .fontSize(12)
+            .fontSize(11)
             .fontColor($r('app.color.text_tertiary'))
             .margin({ left: 8 })
             .maxLines(1)
-            .textOverflow({ overflow: TextOverflow.Ellipsis })
+            .textOverflow({ overflow: TextOverflow.MARQUEE })
+            .marqueeOptions({
+              start: true,
+              step: 3,
+              loop: -1,
+              fromStart: true,
+              delay: 1200,
+              fadeout: true
+            })
             .layoutWeight(1)
         } else {
           Text('')
@@ -127,7 +134,7 @@ export struct SearchReferenceCard {
 
         // 引用数量
         Text(this.getReferenceCountText())
-          .fontSize(12)
+          .fontSize(11)
           .fontColor($r('app.color.text_secondary'))
 
         // 展开/折叠箭头
@@ -140,7 +147,7 @@ export struct SearchReferenceCard {
       }
       .width('100%')
       .height(36)
-      .padding({ left: 10, right: 8 })
+      .padding({ left: 10, right: 10 })
       .borderRadius(this.isManuscriptMode ? 0 : 12)
       .stateStyles({
         normal: {
