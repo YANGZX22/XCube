@@ -86,6 +86,17 @@ export struct SearchReferenceCard {
           Text(this.searchEngine.trim())
             .fontSize(11)
             .fontColor($r('app.color.text_secondary'))
+            .maxLines(1)
+            .textOverflow({ overflow: TextOverflow.MARQUEE })
+            .marqueeOptions({
+              start: true,
+              step: 3,
+              loop: -1,
+              fromStart: true,
+              delay: 600,
+              fadeout: true
+            })
+            .constraintSize({ maxWidth: 88 })
             .padding({ left: 6, right: 6, top: 1, bottom: 1 })
             .borderRadius(this.isManuscriptMode ? 0 : 8)
             .backgroundColor(this.isManuscriptMode ? Color.Transparent : this.themePrimaryLight)

@@ -13,14 +13,15 @@ import { getDatabaseService, ProviderConfig } from './DatabaseService'
 import { getEffectiveApiKey } from '../config/PresetProviders'
 import {
   buildDeepSeekWebSearchEndpoint,
+  DeepSeekProviderCredential,
   DEEPSEEK_WEB_SEARCH_DEFAULT_BASE_URL,
   DEEPSEEK_WEB_SEARCH_DEFAULT_MODEL,
   DEEPSEEK_WEB_SEARCH_MAX_TOKENS,
   DEEPSEEK_WEB_SEARCH_MAX_USES,
   DEEPSEEK_WEB_SEARCH_TIMEOUT_MS,
   extractDeepSeekWebSearchError,
-  isDeepSeekProvider,
-  parseDeepSeekWebSearchResponse
+  parseDeepSeekWebSearchResponse,
+  resolveConfiguredDeepSeekApiKey
 } from '../utils/DeepSeekWebSearchUtils'
 
 // 搜索结果类（用于返回给业务层）
@@ -417,7 +418,7 @@ export class WebSearchService {
     snapshot.bochaBaseUrl = this.normalizeBaseUrl(bochaBaseUrl, 'https://api.bochaai.com')
     snapshot.deepseekUseCurrentProvider = deepseekUseCurrentProvider
     snapshot.deepseekApiKey = deepseekUseCurrentProvider
-      ? (snapshot.searchEngine === SearchEngine.DEEPSEEK ? await this.resolveCurrentDeepSeekProviderApiKey() : '')
+      ? (snapshot.searchEngine === SearchEngine.DEEPSEEK ? await this.resolveConfiguredDeepSeekProviderApiKey() : '')
       : deepseekApiKey.trim()
     snapshot.deepseekBaseUrl = deepseekUseCurrentProvider
       ? DEEPSEEK_WEB_SEARCH_DEFAULT_BASE_URL
@@ -447,19 +448,21 @@ export class WebSearchService {
     return 'Bing(local)'
   }
 
-  private async resolveCurrentDeepSeekProviderApiKey(): Promise<string> {
+  private async resolveConfiguredDeepSeekProviderApiKey(): Promise<string> {
     const providerId = await getPreferencesService().getCurrentProviderId()
-    if (providerId === '') {
-      return ''
-    }
     const providers = await getDatabaseService().getAllProviders()
+    const credentials: DeepSeekProviderCredential[] = []
     for (let i = 0; i < providers.length; i++) {
       const provider: ProviderConfig = providers[i]
-      if (provider.id === providerId && isDeepSeekProvider(provider.id, provider.type, provider.baseUrl)) {
-        return getEffectiveApiKey(provider.id, provider.apiKey).trim()
-      }
+      credentials.push(new DeepSeekProviderCredential(
+        provider.id,
+        provider.type,
+        provider.baseUrl,
+        getEffectiveApiKey(provider.id, provider.apiKey),
+        provider.isEnabled
+      ))
     }
-    return ''
+    return resolveConfiguredDeepSeekApiKey(providerId, credentials)
   }
 
   async getPreferredEngineName(runtimeConfig?: SearchRuntimeConfigSnapshot): Promise<string> {
@@ -992,7 +995,7 @@ export class WebSearchService {
   ): Promise<SearchResult> {
     if (runtime.deepseekApiKey === '') {
       const message = runtime.deepseekUseCurrentProvider
-        ? '当前聊天未选择已配置 API Key 的 DeepSeek 服务商；请切换到 DeepSeek 服务商，或在搜索设置中改为手动配置'
+        ? '未找到已启用且配置 API Key 的 DeepSeek 服务商；请先配置 DeepSeek 服务商，或在搜索设置中改为手动配置'
         : 'DeepSeek Web Search API Key 未配置'
       return new SearchResult(false, query, 'DeepSeek Web Search', [], '', message)
     }

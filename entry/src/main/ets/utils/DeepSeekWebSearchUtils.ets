@@ -21,6 +21,22 @@ export class DeepSeekWebSearchParseResult {
   sources: DeepSeekWebSearchSource[] = []
 }
 
+export class DeepSeekProviderCredential {
+  providerId: string
+  providerType: string
+  baseUrl: string
+  apiKey: string
+  isEnabled: boolean
+
+  constructor(providerId: string, providerType: string, baseUrl: string, apiKey: string, isEnabled: boolean) {
+    this.providerId = providerId
+    this.providerType = providerType
+    this.baseUrl = baseUrl
+    this.apiKey = apiKey
+    this.isEnabled = isEnabled
+  }
+}
+
 function readString(value: Record<string, Object>, key: string): string {
   const field = value[key]
   return typeof field === 'string' ? field : ''
@@ -162,10 +178,65 @@ export function isDeepSeekProvider(providerId: string, providerType: string, bas
   if (providerType.trim().toLowerCase() === 'deepseek' || providerId.trim().toLowerCase() === 'deepseek') {
     return true
   }
+  return isOfficialDeepSeekBaseUrl(baseUrl)
+}
+
+export function isOfficialDeepSeekBaseUrl(baseUrl: string): boolean {
   let normalizedBaseUrl = baseUrl.trim().toLowerCase()
   while (normalizedBaseUrl.endsWith('/')) {
     normalizedBaseUrl = normalizedBaseUrl.substring(0, normalizedBaseUrl.length - 1)
   }
   return normalizedBaseUrl === 'https://api.deepseek.com' ||
     normalizedBaseUrl.startsWith('https://api.deepseek.com/')
+}
+
+/**
+ * Resolves an already configured DeepSeek credential without copying it into search settings.
+ * The selected provider wins; otherwise the built-in DeepSeek provider and then other enabled
+ * DeepSeek providers are considered. This keeps session restoration from depending on a stale
+ * global provider preference.
+ */
+export function resolveConfiguredDeepSeekApiKey(
+  currentProviderId: string,
+  providers: DeepSeekProviderCredential[]
+): string {
+  const normalizedCurrentId = currentProviderId.trim()
+  if (normalizedCurrentId !== '') {
+    for (let i = 0; i < providers.length; i++) {
+      const provider = providers[i]
+      if (provider.providerId === normalizedCurrentId) {
+        const key = resolveDeepSeekCredentialKey(provider)
+        if (key !== '') {
+          return key
+        }
+        break
+      }
+    }
+  }
+
+  for (let i = 0; i < providers.length; i++) {
+    const provider = providers[i]
+    if (provider.providerId.trim().toLowerCase() === 'deepseek') {
+      const key = resolveDeepSeekCredentialKey(provider)
+      if (key !== '') {
+        return key
+      }
+    }
+  }
+
+  for (let i = 0; i < providers.length; i++) {
+    const key = resolveDeepSeekCredentialKey(providers[i])
+    if (key !== '') {
+      return key
+    }
+  }
+  return ''
+}
+
+function resolveDeepSeekCredentialKey(provider: DeepSeekProviderCredential): string {
+  // 自动模式固定请求 DeepSeek 官方端点，不能把第三方代理的 Key 转发给官方域名。
+  if (!provider.isEnabled || !isOfficialDeepSeekBaseUrl(provider.baseUrl)) {
+    return ''
+  }
+  return provider.apiKey.trim()
 }

@@ -1880,14 +1880,14 @@ export struct ToolsCenterPanel {
             if (this.searchEngine === SearchEngine.DEEPSEEK) {
               Row() {
                 Column() {
-                  Text(pickLocalizedText('自动使用当前 DeepSeek 服务商', 'Use current DeepSeek provider'))
+                  Text(pickLocalizedText('自动匹配 DeepSeek 服务商', 'Auto-match DeepSeek provider'))
                     .fontSize(12)
                     .fontColor($r('app.color.text_secondary'))
                     .width('100%')
 
                   Text(pickLocalizedText(
-                    '每次搜索时读取当前已选 DeepSeek 服务商的 API Key，不复制到搜索设置。',
-                    'Read the selected DeepSeek provider API key for each search without copying it into search settings.'
+                    '优先读取当前 DeepSeek 服务商的 API Key，否则匹配其他已配置的 DeepSeek 服务商。',
+                    'Prefer the current DeepSeek provider API key, then match another configured DeepSeek provider.'
                   ))
                     .fontSize(11)
                     .lineHeight(16)
@@ -1910,8 +1910,8 @@ export struct ToolsCenterPanel {
 
               if (this.searchDeepSeekUseCurrentProvider) {
                 Text(pickLocalizedText(
-                  '自动模式只请求 DeepSeek 官方 Anthropic 端点；当前服务商必须为 DeepSeek 且已配置 API Key。',
-                  'Auto mode only calls the official DeepSeek Anthropic endpoint; the selected provider must be DeepSeek with an API key.'
+                  '自动模式只请求 DeepSeek 官方 Anthropic 端点，API Key 不会复制到搜索设置。',
+                  'Auto mode only calls the official DeepSeek Anthropic endpoint and does not copy the API key into search settings.'
                 ))
                   .fontSize(11)
                   .lineHeight(16)
