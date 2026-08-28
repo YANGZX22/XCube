@@ -35,10 +35,9 @@ export class MessageMapPayload {
 }
 
 // AI 消息正文之前的展示单元。相邻的"条"会被并进同一个 BARS 块，
-// 其余富卡片（追问、图表、地图、附件）各自成块，并把前面的条收口。
+// 其余富卡片（图表、地图、附件）各自成块，并把前面的条收口。
 export enum TimelineBlockKind {
   BARS = 'bars',
-  ASK_USER = 'ask_user',
   VCHART = 'vchart',
   MAP = 'map',
   ATTACHMENTS = 'attachments',
@@ -47,11 +46,12 @@ export enum TimelineBlockKind {
   CONTENT = 'content'
 }
 
-// 能并进同一个块的三种"条"
+// 能并进同一个块的"条"：工具结果、追问、思考、搜索结果
 export enum TimelineBarKind {
   REASONING = 'reasoning',
   LEGACY_REASONING = 'legacy_reasoning',
   TOOL = 'tool',
+  ASK_USER = 'ask_user',
   SEARCH = 'search'
 }
 
@@ -77,6 +77,7 @@ export class TimelineBar {
   isFirst: boolean = false
   segment: AssistantResponseSegment = EMPTY_SEGMENT
   toolGroup: ToolCallRenderGroup = EMPTY_TOOL_GROUP
+  askUserCalls: ToolCall[] = []
 
   constructor(kind: TimelineBarKind, identity: string, contentKey: string) {
     this.kind = kind
@@ -103,6 +104,13 @@ export class TimelineBar {
     return bar
   }
 
+  // 追问条在 compactMode 下与工具结果条同形（36 高标题栏 + 可展开正文），一并并块
+  static askUser(askUserCalls: ToolCall[], identity: string, signature: string): TimelineBar {
+    const bar = new TimelineBar(TimelineBarKind.ASK_USER, identity, identity + '_' + signature)
+    bar.askUserCalls = askUserCalls
+    return bar
+  }
+
   static search(identity: string, signature: string): TimelineBar {
     return new TimelineBar(TimelineBarKind.SEARCH, identity, identity + '_' + signature)
   }
@@ -116,7 +124,6 @@ export class TimelineBlock {
   contentKey: string = ''
   bars: TimelineBar[] = []
   segment: AssistantResponseSegment = EMPTY_SEGMENT
-  askUserCalls: ToolCall[] = []
   vchart: MessageVChartPayload = EMPTY_VCHART_PAYLOAD
   map: MessageMapPayload = EMPTY_MAP_PAYLOAD
 

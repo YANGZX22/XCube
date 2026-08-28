@@ -4,6 +4,10 @@ import { withColorAlpha } from '../utils/ColorAlphaUtils'
 import { uiMaterial } from '@kit.ArkUI'
 import { VisualEffectsMode } from '../models/ThemeColors'
 import { MANUSCRIPT_COMPACT_BAR_HEIGHT } from '../utils/ManuscriptVisualUtils'
+import {
+  buildTimelineBarExpandTransition,
+  getTimelineBarExpandAnimation
+} from '../utils/TimelineBarTransitionUtils'
 import { pickLocalizedText } from '../utils/LocalizedTextUtils'
 
 interface AskUserQuestion {
@@ -39,6 +43,8 @@ export struct AskUserCard {
   @Param toolCalls: ToolCall[] = []
   @Param isAnswered: boolean = false
   @Param compactMode: boolean = false
+  // 合并进条目块时由外层统一提供边框、材质与投影，卡片自身只出内容
+  @Param embedded: boolean = false
   @Param resultContent: string = ''
   @Param resultContents: string[] = []
   @Param pendingCount: number = 1
@@ -325,7 +331,7 @@ export struct AskUserCard {
   }
 
   private toggleExpanded(): void {
-    this.getUIContext().animateTo({ duration: 180, curve: Curve.EaseOut }, () => {
+    this.getUIContext().animateTo(getTimelineBarExpandAnimation(), () => {
       this.isExpanded = !this.isExpanded
     })
   }
@@ -415,7 +421,7 @@ export struct AskUserCard {
               .fontSize(12)
               .fontColor([this.isManuscriptMode ? this.themePrimary : $r('app.color.text_tertiary')])
               .rotate({ angle: this.isExpanded ? 180 : 0 })
-              .animation({ duration: 180, curve: Curve.EaseOut })
+              .animation(getTimelineBarExpandAnimation())
               .margin({ left: 2 })
           }
             .onClick(() => {
@@ -460,7 +466,7 @@ export struct AskUserCard {
         }
         .width('100%')
         .padding({ left: 10, right: 10, bottom: 8 })
-        .transition(TransitionEffect.OPACITY.animation({ duration: 180 }))
+        .transition(buildTimelineBarExpandTransition())
       }
 
       if (!this.isAnswered && !this.compactMode) {
@@ -500,13 +506,14 @@ export struct AskUserCard {
     .width('100%')
     .padding(this.compactMode ? 0 : 12)
     .backgroundColor(this.isManuscriptMode && !this.compactMode ? this.themeSurface : Color.Transparent)
-    .borderRadius(this.isManuscriptMode ? 0 : (this.compactMode ? 12 : 16))
+    .borderRadius(this.embedded || this.isManuscriptMode ? 0 : (this.compactMode ? 12 : 16))
     .border({
-      width: this.isManuscriptMode ? { top: 1, bottom: 1 } : (this.compactMode ? 0.5 : 1),
+      width: this.embedded ? 0 :
+        (this.isManuscriptMode ? { top: 1, bottom: 1 } : (this.compactMode ? 0.5 : 1)),
       color: this.isManuscriptMode ? getAppUiState().themeDivider :
         (this.compactMode ? this.getCompactRailColor() : this.themePrimaryLight)
     })
-    .systemMaterial(this.isManuscriptMode ? undefined : new uiMaterial.ImmersiveMaterial({
+    .systemMaterial(this.embedded || this.isManuscriptMode ? undefined : new uiMaterial.ImmersiveMaterial({
       style: uiMaterial.ImmersiveStyle.REGULAR,
       materialColor: this.compactMode ? this.themeAiBubble : Color.Transparent,
       applyShadow: !this.compactMode,
@@ -514,8 +521,8 @@ export struct AskUserCard {
       lightEffect: { color: this.compactMode ? undefined : Color.White }
     }))
     .shadow({
-      radius: this.isManuscriptMode ? 0 : (this.compactMode ? 12 : 24),
-      color: this.isManuscriptMode ? Color.Transparent : (this.compactMode
+      radius: this.embedded || this.isManuscriptMode ? 0 : (this.compactMode ? 12 : 24),
+      color: this.embedded || this.isManuscriptMode ? Color.Transparent : (this.compactMode
         ? (this.isDarkMode ? 'rgba(0, 0, 0, 0.32)' : 'rgba(15, 23, 42, 0.14)')
         : (this.isDarkMode ? 'rgba(0, 0, 0, 0.48)' : 'rgba(15, 23, 42, 0.22)')),
       offsetX: 0,

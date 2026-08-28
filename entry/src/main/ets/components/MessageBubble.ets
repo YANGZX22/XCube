@@ -2492,9 +2492,7 @@ export struct MessageBubble {
       const identity = keyScope + '_' + group.key
       const signature = this.buildToolCallRenderGroupKey(group, i)
       if (group.isAskUser) {
-        const askBlock = new TimelineBlock(TimelineBlockKind.ASK_USER, identity + '_' + signature)
-        askBlock.askUserCalls = group.askUserCalls
-        blocks.push(askBlock)
+        appendTimelineBar(blocks, TimelineBar.askUser(group.askUserCalls, identity, signature))
         continue
       }
       appendTimelineBar(blocks, TimelineBar.tool(group, identity, signature))
@@ -2765,6 +2763,21 @@ export struct MessageBubble {
       this.TimelineReasoningBarBody(bar.segment)
     } else if (bar.kind === TimelineBarKind.LEGACY_REASONING) {
       this.ReasoningSection()
+    } else if (bar.kind === TimelineBarKind.ASK_USER) {
+      AskUserCard({
+        toolCall: bar.askUserCalls.length > 0 ? bar.askUserCalls[0] : new ToolCall(),
+        toolCalls: bar.askUserCalls,
+        isAnswered: this.areAllAskUserCallsAnswered(bar.askUserCalls),
+        compactMode: true,
+        embedded: true,
+        resultContents: this.getAskUserResultContents(bar.askUserCalls),
+        onAnswer: (toolCallId: string, answerJson: string): void => {
+          this.onAskUserAnswer(toolCallId, answerJson)
+        },
+        onRequestAnswer: (toolCallId: string): void => {
+          this.onAskUserOpen(toolCallId)
+        }
+      })
     } else if (bar.kind === TimelineBarKind.SEARCH) {
       SearchReferenceCard({
         query: this.extractSearchQuery(),
@@ -2791,21 +2804,6 @@ export struct MessageBubble {
     ForEach(this.getTimelineBlocks(listId), (block: TimelineBlock) => {
       if (block.kind === TimelineBlockKind.BARS) {
         this.TimelineBarGroupBlock(block)
-      } else if (block.kind === TimelineBlockKind.ASK_USER) {
-        AskUserCard({
-          toolCall: block.askUserCalls.length > 0 ? block.askUserCalls[0] : new ToolCall(),
-          toolCalls: block.askUserCalls,
-          isAnswered: this.areAllAskUserCallsAnswered(block.askUserCalls),
-          compactMode: true,
-          resultContents: this.getAskUserResultContents(block.askUserCalls),
-          onAnswer: (toolCallId: string, answerJson: string): void => {
-            this.onAskUserAnswer(toolCallId, answerJson)
-          },
-          onRequestAnswer: (toolCallId: string): void => {
-            this.onAskUserOpen(toolCallId)
-          }
-        })
-          .margin({ bottom: 6 })
       } else if (block.kind === TimelineBlockKind.VCHART) {
         VChartCard({
           specJson: block.vchart.specJson,
