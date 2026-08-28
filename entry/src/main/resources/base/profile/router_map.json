@@ -6,6 +6,11 @@
       "buildFunction": "ChatPageBuilder"
     },
     {
+      "name": "PythonWorkspacePage",
+      "pageSourceFile": "src/main/ets/pages/PythonWorkspacePage.ets",
+      "buildFunction": "PythonWorkspacePageBuilder"
+    },
+    {
       "name": "MapRoutePage",
       "pageSourceFile": "src/main/ets/pages/MapRoutePage.ets",
       "buildFunction": "MapRoutePageBuilder"

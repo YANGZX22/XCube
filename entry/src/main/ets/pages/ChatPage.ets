@@ -175,6 +175,7 @@ import { ManuscriptWorkingMark } from '../components/chat/ManuscriptWorkingIndic
 import { ImmersiveSheetHeader } from '../components/ImmersiveSheetHeader'
 import { AskUserCard } from '../components/AskUserCard'
 import { MapRoutePageParams } from './MapRoutePage'
+import { PythonWorkspacePageParams } from './PythonWorkspacePage'
 import {
   ChatInFlightMessage,
   InFlightMessageDelivery
@@ -2012,6 +2013,18 @@ export struct ChatPage {
       fileIo.closeSync(sourceFile)
     }
     this.showChatSnack(pickLocalizedText('文件已保存', 'File saved'), 2000, SnackBarTone.SUCCESS)
+  }
+
+  // 工作区是独立页面，压到当前聊天的导航栈上，返回即回到会话
+  private handleWorkspaceOpen(): void {
+    this.safeStopInputSession()
+    this.navPathStack.pushPath({
+      name: 'PythonWorkspacePage',
+      param: {
+        sessionId: this.sessionId,
+        sessionTitle: this.sessionTitle
+      } as PythonWorkspacePageParams
+    })
   }
 
   private handleMapOpen(visualizationJson: string): void {
@@ -4235,8 +4248,9 @@ export struct ChatPage {
               onKnowledgeToggle: (enabled: boolean): void => {
                 this.updateKnowledgeConversationEnabled(enabled)
               },
-              workspaceSessionId: this.sessionId,
-              workspaceSessionTitle: this.sessionTitle,
+              onOpenWorkspace: (): void => {
+                this.handleWorkspaceOpen()
+              },
               hasRecentScreenshot: this.hasRecentScreenshot,
               bottomAvoidHeight: this.getComposerBottomAvoidHeightVp(),
               contentMaxWidth: this.getChatContentMaxWidth(),

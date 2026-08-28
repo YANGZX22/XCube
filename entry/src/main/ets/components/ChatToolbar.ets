@@ -11,7 +11,6 @@ import { ImmersiveSheetHeader } from './ImmersiveSheetHeader'
 import { VisualEffectsMode } from '../models/ThemeColors'
 import { MANUSCRIPT_BODY_FONT, MANUSCRIPT_COMPOSER_TOOLBAR_HEIGHT } from '../utils/ManuscriptVisualUtils'
 import { isChineseAppLanguage } from '../utils/LocalizedTextUtils'
-import { PythonWorkspaceSheetContent } from './chat/PythonWorkspaceSheetContent'
 
 @ComponentV2
 export struct ChatToolbar {
@@ -32,8 +31,6 @@ export struct ChatToolbar {
   @Param knowledgeAvailable: boolean = false
   @Event onKnowledgeToggle: (enabled: boolean) => void =
     (_enabled: boolean): void => {}
-  @Param workspaceSessionId: string = ''
-  @Param workspaceSessionTitle: string = ''
   @Param showScrollTopAction: boolean = false
   @Param showScrollBottomAction: boolean = false
   @Param scrollBottomActionLoading: boolean = false
@@ -44,10 +41,11 @@ export struct ChatToolbar {
   @Event onScrollBottomAction: () => void = (): void => {}
   @Event onHistoryAction: () => void = (): void => {}
   @Event onCanvasAction: () => void = (): void => {}
+  // 工作区改成独立页面，由 ChatPage 压栈打开
+  @Event onOpenWorkspace: () => void = (): void => {}
   @Event onPlanAction: () => void = (): void => {}
   // 推理强度滑块面板是否展开
   @Local showReasoningPanel: boolean = false
-  @Local showWorkspacePanel: boolean = false
   private handledReasoningPanelOpenRequestTick: number = 0
 
   @Monitor('reasoningPanelOpenRequestTick')
@@ -148,9 +146,6 @@ export struct ChatToolbar {
   }
 
   private getWorkspaceChipForegroundColor(): ResourceColor {
-    if (this.showWorkspacePanel) {
-      return this.themePrimary
-    }
     return this.isManuscriptMode ? getAppUiState().themeTextSecondary : $r('app.color.text_secondary')
   }
 
@@ -207,20 +202,6 @@ export struct ChatToolbar {
     }).offset({ x: 0, y: this.isManuscriptMode ? 0 : -12 }))
     .clip(false)
     .margin({ bottom: this.isManuscriptMode ? 6 : 4 })
-    .bindSheet($$this.showWorkspacePanel, this.WorkspaceSheetContent(), {
-      height: SheetSize.LARGE,
-      detents: [SheetSize.LARGE],
-      dragBar: true,
-      showClose: false,
-      backgroundColor: Color.Transparent,
-      systemMaterial: new uiMaterial.ImmersiveMaterial({
-        style: uiMaterial.ImmersiveStyle.REGULAR
-      }),
-      preferType: SheetType.BOTTOM,
-      onDisappear: (): void => {
-        this.showWorkspacePanel = false
-      }
-    })
   }
 
   @Builder
@@ -545,7 +526,7 @@ export struct ChatToolbar {
         .borderRadius(0)
         .border({ width: 0, color: Color.Transparent })
         .onClick(() => {
-          this.showWorkspacePanel = true
+          this.onOpenWorkspace()
         })
       }
       .width(this.getWorkspaceChipWidth())
@@ -554,7 +535,7 @@ export struct ChatToolbar {
       .borderRadius(this.getToolbarChipBarHeight() / 2)
       .border({
         width: { bottom: 1 },
-        color: this.showWorkspacePanel ? this.manuscriptAccentDeep : this.manuscriptAccent
+        color: this.manuscriptAccent
       })
     } else {
       Button({ type: ButtonType.Normal, stateEffect: false }) {
@@ -566,7 +547,7 @@ export struct ChatToolbar {
       .backgroundColor(Color.Transparent)
       .borderRadius(Math.min(this.getWorkspaceChipWidth(), this.getToolbarChipBarHeight()) / 2)
       .onClick(() => {
-        this.showWorkspacePanel = true
+        this.onOpenWorkspace()
       })
       .systemMaterial(new uiMaterial.ImmersiveMaterial({
         style: uiMaterial.ImmersiveStyle.REGULAR,
@@ -589,7 +570,7 @@ export struct ChatToolbar {
         .fontSize(this.isManuscriptMode ? 11.5 : 14)
         .letterSpacing(this.isManuscriptMode ? (isChineseAppLanguage() ? 1.3 : 0.2) : 0)
         .fontColor(this.getWorkspaceChipForegroundColor())
-        .fontWeight(this.showWorkspacePanel ? FontWeight.Medium : FontWeight.Regular)
+        .fontWeight(FontWeight.Regular)
         .maxLines(1)
         .textOverflow({ overflow: TextOverflow.Ellipsis })
         .margin({ left: 4 })
@@ -599,17 +580,6 @@ export struct ChatToolbar {
     .padding({ left: 8, right: 8 })
     .alignItems(VerticalAlign.Center)
     .justifyContent(FlexAlign.Center)
-  }
-
-  @Builder
-  private WorkspaceSheetContent() {
-    PythonWorkspaceSheetContent({
-      sessionId: this.workspaceSessionId,
-      sessionTitle: this.workspaceSessionTitle,
-      onClose: (): void => {
-        this.showWorkspacePanel = false
-      }
-    })
   }
 
   private isReasoningEnabled(): boolean {
