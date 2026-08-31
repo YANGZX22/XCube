@@ -66,7 +66,7 @@ const APPEARANCE_FLOATING_TAB_BAR_BOTTOM_MARGIN = 12
 const APPEARANCE_FLOATING_TAB_BAR_SAFE_BOTTOM_MARGIN = 24
 const PREVIEW_FLOATING_TAB_BAR_HEIGHT = 52
 const PREVIEW_FLOATING_TAB_CONTAINER_HEIGHT = 76
-const PREVIEW_FLOATING_TAB_BOTTOM_MARGIN = 12
+const PREVIEW_FLOATING_TAB_BOTTOM_MARGIN = 8
 const PREVIEW_FLOATING_TAB_MAX_CONTAINER_WIDTH = 320
 const PREVIEW_FLOATING_TAB_HORIZONTAL_PADDING = 16
 const PREVIEW_FLOATING_TAB_ITEM_GAP = 8
@@ -1092,7 +1092,7 @@ export struct ThemeAppearanceSettingsView {
 
   @Builder
   private MiniFloatingBottomNavigation() {
-    Row({ space: 8 }) {
+    Row() {
       HdsTabs({ barPosition: BarPosition.End, index: this.previewTabIndex }) {
         TabContent() {
           Column()
@@ -1131,6 +1131,10 @@ export struct ThemeAppearanceSettingsView {
         this.previewTabIndex = index
       })
 
+      Blank()
+        .layoutWeight(1)
+        .constraintSize({ minWidth: PREVIEW_FLOATING_TAB_ITEM_GAP })
+
       Button({ type: ButtonType.Circle, stateEffect: false }) {
         SymbolGlyph($r('sys.symbol.plus'))
           .fontSize(23)
@@ -1150,11 +1154,10 @@ export struct ThemeAppearanceSettingsView {
       }))
       .margin({ bottom: PREVIEW_FLOATING_TAB_BOTTOM_MARGIN })
     }
-    .width(this.getPreviewBottomNavigationWidth())
+    .width('100%')
     .height(PREVIEW_FLOATING_TAB_CONTAINER_HEIGHT)
     .padding({ left: 8, right: 8 })
     .alignItems(VerticalAlign.Bottom)
-    .alignSelf(ItemAlign.Center)
     .clip(false)
   }
 
@@ -1460,12 +1463,18 @@ export struct ThemeAppearanceSettingsView {
     Column() {
       this.CurrentPreviewHeader()
 
-      Row() {
+      Scroll() {
         this.CurrentMessagePreview()
       }
       .width('100%')
       .layoutWeight(1)
-      .alignItems(VerticalAlign.Top)
+      .scrollBar(BarState.Off)
+      .edgeEffect(EdgeEffect.None)
+      .nestedScroll({
+        scrollForward: NestedScrollMode.SELF_FIRST,
+        scrollBackward: NestedScrollMode.SELF_FIRST
+      })
+      .clip(true)
 
       if (showBottomNavigation) {
         this.MiniCurrentBottomNavigation()

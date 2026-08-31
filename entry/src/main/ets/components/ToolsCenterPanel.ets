@@ -3974,13 +3974,17 @@ struct BuiltinToolCardItem {
         Blank()
 
         if (this.configurable) {
-          Button(pickLocalizedText('配置', 'Configure'))
-            .height(28)
-            .fontSize(11)
-            .type(ButtonType.Capsule)
-            .stateEffect(false)
-            .fontColor(this.themePrimary)
-            .backgroundColor(this.themePrimaryLight)
+          Row({ space: 4 }) {
+            Text(pickLocalizedText('配置', 'Configure'))
+              .fontSize(11)
+              .fontWeight(FontWeight.Medium)
+              .fontColor(this.themePrimary)
+
+            SymbolGlyph($r('sys.symbol.chevron_right'))
+              .renderingStrategy(SymbolRenderingStrategy.SINGLE)
+              .fontSize(12)
+              .fontColor([this.themePrimary])
+          }
             .onClick(() => {
               this.onConfigure()
             })

@@ -205,7 +205,7 @@ const LAVENDER_THEME: ThemeInfo = {
     userBubbleText: '#F7F4FF',
     aiBubble: '#FDFCFF',
     textPrimary: '#221E38',
-    textSecondary: '#645E7C',
+    textSecondary: '#666666',
     textTertiary: '#8A8A8A',
     markdownTitle: '#221E38',
     markdownText: '#3B3554',
