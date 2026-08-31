@@ -21,7 +21,7 @@
 ## Latest Information
 
 > [!IMPORTANT]
-> **Immersive Light compatibility issue (as of 29 August 2026):** on HarmonyOS `7.0.0.105` (API 26), Immersive Light currently fails on all non-HDS components even though DevEco Studio compilation succeeds; HDS components remain unaffected. The likely cause is a compatibility difference between the API 26 Beta2 SDK (`26.0.0.32`) used by the project and the official system runtime (`26.0.0.105`). If the issue remains unresolved for an extended period, the project may fall back to a reduced Immersive Light effect.
+> **Immersive Light compatibility issue (from 28 August 2026):** on HarmonyOS `7.0.0.105` (API 26), Immersive Light currently fails on all HarmonyOS 7 material interfaces even though DevEco Studio compilation succeeds; origin HarmonyOS 6 materials interfaces remain unaffected. The likely cause is a compatibility difference between the API 26 Beta2 SDK (`26.0.0.32`) used by the project and the official system runtime (`26.0.0.105`).
 
 > [!NOTE]
 > As the official release of HarmonyOS 7 approaches, updates to this repository will be put on hold. Once the official version is released, this app may be made available via the Huawei AppGallery’s invitation-only testing feature, at which point installation will be more convenient. Please note, however, that this app may NEVER be officially listed on the Huawei AppGallery.
