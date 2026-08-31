@@ -47,10 +47,6 @@ import {
   ProviderTextIconDisplayMode,
   resolveProviderTextIconDisplayMode
 } from '../main/ets/components/ProviderIcon'
-import {
-  getProviderDetailPaneBottomInset,
-  ProviderDetailPresentationMode
-} from '../main/ets/components/ProviderDetailSheet'
 import { AppError, AppErrorCode, Result, toErrorDetail } from '../main/ets/models/AppError'
 import {
   setAllModelsEnabled,
@@ -425,12 +421,6 @@ export default function refactorGuardTest() {
       expect(isRemoteSvgImagePath('https://example.com/ICON.SVG?raw=1#logo')).assertEqual(true)
       expect(isRemoteSvgImagePath('https://example.com/icon.png')).assertEqual(false)
       expect(isRemoteSvgImagePath('file:///data/icon.svg')).assertEqual(false)
-    })
-
-    it('getProviderDetailPaneBottomInset_should_only_apply_in_detail_pane_mode', 0, () => {
-      expect(getProviderDetailPaneBottomInset(0, ProviderDetailPresentationMode.PAGE)).assertEqual(0)
-      expect(getProviderDetailPaneBottomInset(18, ProviderDetailPresentationMode.SHEET)).assertEqual(0)
-      expect(getProviderDetailPaneBottomInset(18, ProviderDetailPresentationMode.DETAIL_PANE)).assertEqual(90)
     })
 
     it('result_should_wrap_app_error', 0, () => {

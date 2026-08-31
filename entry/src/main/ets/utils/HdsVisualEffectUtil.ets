@@ -12,8 +12,8 @@ import { withColorAlpha } from './ColorAlphaUtils'
 
 const STATUS_BAR_CONTENT_LIGHT: string = '#1F2329'
 const STATUS_BAR_CONTENT_DARK: string = '#F5F7FA'
-const TITLE_BAR_BLUR_EFFECTIVE_START_OFFSET: number = 1e5
-const TITLE_BAR_BLUR_EFFECTIVE_END_OFFSET: number = 2e5
+const TITLE_BAR_BLUR_EFFECTIVE_START_OFFSET: number = 0
+const TITLE_BAR_BLUR_EFFECTIVE_END_OFFSET: number = 20
 
 export function buildPointLightBorderEffect(sourceBright: boolean = false): uiEffect.VisualEffect {
   return new hdsEffect.HdsEffectBuilder()
@@ -117,7 +117,7 @@ export function buildHdsTopNavigationTitleBarOptions(
     },
     style: {
       scrollEffectOpts: {
-        enableScrollEffect: false,
+        enableScrollEffect: true,
         scrollEffectType: getHdsTopNavigationScrollEffectType(options.materialType),
         blurEffectiveStartOffset: LengthMetrics.vp(TITLE_BAR_BLUR_EFFECTIVE_START_OFFSET),
         blurEffectiveEndOffset: LengthMetrics.vp(options.blurEffectiveEndOffsetVp)
@@ -136,26 +136,26 @@ export function buildHdsTopNavigationTitleBarOptions(
             mainTitleColor: $r('sys.color.font_primary')
           },
           menuStyle: {
-            backgroundColor: $r('sys.color.comp_background_primary'),
+            backgroundColor: $r('sys.color.ohos_id_color_background_transparent'),
             iconColor: $r('sys.color.icon_primary')
           },
           backIconStyle: {
-            backgroundColor: $r('sys.color.comp_background_primary'),
+            backgroundColor: $r('sys.color.ohos_id_color_background_transparent'),
             iconColor: $r('sys.color.icon_primary')
           }
         }
       },
       originalStyle: {
-        backgroundStyle: {
-          backgroundColor: $r('sys.color.ohos_id_color_background_transparent'),
-          maskExtraHeight: options.maskExtraHeightVp
-        },
         contentStyle: {
           titleStyle: {
             mainTitleColor: Color.Black
           },
           menuStyle: {
-            backgroundColor: $r('sys.color.comp_background_tertiary'),
+            backgroundColor: $r('sys.color.ohos_id_color_background_transparent'),
+            iconColor: $r('sys.color.icon_primary')
+          },
+          backIconStyle: {
+            backgroundColor: $r('sys.color.ohos_id_color_background_transparent'),
             iconColor: $r('sys.color.icon_primary')
           }
         }

@@ -16,7 +16,9 @@ import {
   HdsNavigation,
   HdsNavigationMenuItemOptions,
   HdsNavigationTitleBarOptions,
-  HdsNavigationTitleMode
+  HdsNavigationTitleMode,
+  HdsTabs,
+  hdsMaterial
 } from '@kit.UIDesignKit'
 import {
   buildHdsTopNavigationTitleBarOptionsForPage,
@@ -37,6 +39,13 @@ import {
 } from '../config/ProviderOrderUtils'
 import { withColorAlpha } from '../utils/ColorAlphaUtils'
 
+const MODEL_MANAGE_FLOATING_TAB_BAR_HEIGHT = 60
+const MODEL_MANAGE_FLOATING_TAB_BAR_WIDTH = 280
+const MODEL_MANAGE_FLOATING_TAB_BAR_SIDE_MARGIN = 20
+const MODEL_MANAGE_FLOATING_TAB_BAR_BOTTOM_MARGIN = 12
+const MODEL_MANAGE_FLOATING_TAB_BAR_SAFE_BOTTOM_MARGIN = 24
+const MODEL_MANAGE_FLOATING_TAB_CONTENT_SPACING = 12
+
 let modelManagePagePathStack: NavPathStack | null = null
 let modelManageInternalBackHandler: (() => boolean) | null = null
 let modelManageRefreshHandler: (() => void) | null = null
@@ -52,6 +61,9 @@ export function notifyModelManageRefresh(): void {
 struct ModelManagePage {
   private get topAvoidHeight(): number {
     return getAppUiState().topAvoidHeight
+  }
+  private get bottomAvoidHeight(): number {
+    return getAppUiState().bottomAvoidHeight
   }
   @Local allProviders: ModelProvider[] = []
   @Local isLoading: boolean = false
@@ -91,6 +103,8 @@ struct ModelManagePage {
   private providerViewModel: ProviderViewModel = ServiceRegistry.provider()
   private layoutObserverDisposer: (() => void) | null = null
   private providerListScroller: ListScroller = new ListScroller()
+  private enabledProviderListScroller: ListScroller = new ListScroller()
+  private disabledProviderListScroller: ListScroller = new ListScroller()
 
   private px2vp(px: number): number {
     return px / (this.getUIContext().getHostContext()?.resourceManager.getDeviceCapabilitySync().screenDensity ?? 3) * 160
@@ -145,6 +159,38 @@ struct ModelManagePage {
   private isExpandedLayout(): boolean {
     return isSettingsPageExpandedLayout(this.layoutSizeClass, this.settingsDetailPresentationMode, this.windowWidthVp,
       this.windowHeightVp)
+  }
+
+  private shouldUseFloatingStatusTabs(): boolean {
+    if (this.windowWidthVp <= 0 || this.windowHeightVp <= 0) {
+      return false
+    }
+    if (this.layoutSizeClass !== LayoutSizeClass.COMPACT) {
+      return true
+    }
+    return this.windowHeightVp >= this.windowWidthVp
+  }
+
+  private getFloatingTabBottomMargin(): number {
+    return this.px2vp(this.bottomAvoidHeight) > 0 ? MODEL_MANAGE_FLOATING_TAB_BAR_SAFE_BOTTOM_MARGIN :
+      MODEL_MANAGE_FLOATING_TAB_BAR_BOTTOM_MARGIN
+  }
+
+  private getFloatingTabBottomInset(): number {
+    return MODEL_MANAGE_FLOATING_TAB_BAR_HEIGHT + this.getFloatingTabBottomMargin() +
+      MODEL_MANAGE_FLOATING_TAB_CONTENT_SPACING
+  }
+
+  private getFloatingListTopSpacerHeight(): number {
+    return this.isEmbeddedSettingsDetailPane() ? 0 : this.getCompactContentTopPadding()
+  }
+
+  private getCurrentTabIndex(): number {
+    return this.currentTabKey === ProviderManageTabKey.ENABLED ? 0 : 1
+  }
+
+  private getTabKeyByIndex(index: number): ProviderManageTabKey {
+    return index === 0 ? ProviderManageTabKey.ENABLED : ProviderManageTabKey.DISABLED
   }
 
   private getCompactTitleBarMaskExtraHeight(): number {
@@ -396,7 +442,11 @@ struct ModelManagePage {
 
   // 获取过滤后的所有供应商
   private getFilteredProviders(): ModelProvider[] {
-    const tabProviders = filterProvidersByTab(this.allProviders, this.currentTabKey)
+    return this.getFilteredProvidersByTab(this.currentTabKey)
+  }
+
+  private getFilteredProvidersByTab(tabKey: ProviderManageTabKey): ModelProvider[] {
+    const tabProviders = filterProvidersByTab(this.allProviders, tabKey)
     if (this.searchKeywords.trim() === '') {
       return tabProviders
     }
@@ -413,8 +463,23 @@ struct ModelManagePage {
     return this.getFilteredProviders()
   }
 
+  private getProviderListDataSourceByTab(tabKey: ProviderManageTabKey): ModelProvider[] {
+    return this.getFilteredProvidersByTab(tabKey)
+  }
+
   private getProviderListCachedCount(): number {
     const providerCount = this.getProviderListDataSource().length
+    if (providerCount >= 60) {
+      return 2
+    }
+    if (providerCount >= 20) {
+      return 3
+    }
+    return 4
+  }
+
+  private getProviderListCachedCountByTab(tabKey: ProviderManageTabKey): number {
+    const providerCount = this.getProviderListDataSourceByTab(tabKey).length
     if (providerCount >= 60) {
       return 2
     }
@@ -427,14 +492,36 @@ struct ModelManagePage {
   build() {
     Column() {
       if (this.showEmbeddedProviderDetailPage()) {
+        Column()
+          .width('100%')
+          .height(this.px2vp(this.topAvoidHeight))
+
         this.EmbeddedProviderDetailPage()
       } else if (this.isEmbeddedSettingsDetailPane()) {
-        Column() {
-          this.DetailPaneHeader()
-          this.CompactManageBody()
+        HdsNavigation() {
+          Column() {
+            Blank()
+              .width('100%')
+              .height(this.getCompactContentTopPadding())
+
+            this.CompactManageBody()
+          }
+          .width('100%')
+          .height('100%')
         }
         .width('100%')
-        .layoutWeight(1)
+        .height('100%')
+        .backgroundColor(getAppUiState().themeBackground)
+        .titleBar(this.getCompactTitleBarOptions())
+        .titleMode(HdsNavigationTitleMode.MINI)
+        .systemBarStyle(
+          { statusBarContentColor: getHdsStatusBarContentColor() },
+          { statusBarContentColor: getHdsStatusBarContentColor() }
+        )
+        .hideBackButton(false)
+        .hideToolBar(true)
+        .mode(NavigationMode.Stack)
+        .ignoreLayoutSafeArea([LayoutSafeAreaType.SYSTEM], [LayoutSafeAreaEdge.TOP])
       } else {
         HdsNavigation() {
           this.CompactManageBody()
@@ -443,7 +530,6 @@ struct ModelManagePage {
         .height('100%')
         .backgroundColor(getAppUiState().themeBackground)
         .titleBar(this.getCompactTitleBarOptions())
-        .bindToScrollable([this.providerListScroller])
         .titleMode(HdsNavigationTitleMode.MINI)
         .systemBarStyle(
           { statusBarContentColor: getHdsStatusBarContentColor() },
@@ -596,10 +682,197 @@ struct ModelManagePage {
   @Builder
   CompactManageBody() {
     Column() {
-      this.ProviderListPane(false)
+      if (this.shouldUseFloatingStatusTabs()) {
+        this.FloatingManageTabs()
+      } else {
+        this.ProviderListPane(false)
+      }
     }
     .width('100%')
     .layoutWeight(1)
+    .backgroundColor(getAppUiState().themeBackground)
+  }
+
+  @Builder
+  private FloatingManageTabs() {
+    HdsTabs({ barPosition: BarPosition.End, index: this.getCurrentTabIndex() }) {
+      TabContent() {
+        this.FloatingProviderList(ProviderManageTabKey.ENABLED, this.enabledProviderListScroller)
+      }
+      .tabBar(this.FloatingStatusTabBuilder(ProviderManageTabKey.ENABLED, $r('sys.symbol.checkmark_circle'),
+        $r('app.string.provider_tab_enabled')))
+
+      TabContent() {
+        this.FloatingProviderList(ProviderManageTabKey.DISABLED, this.disabledProviderListScroller)
+      }
+      .tabBar(this.FloatingStatusTabBuilder(ProviderManageTabKey.DISABLED, $r('sys.symbol.xmark_circle'),
+        $r('app.string.provider_tab_disabled')))
+    }
+    .width('100%')
+    .height('100%')
+    .barMode(BarMode.Fixed)
+    .barHeight(MODEL_MANAGE_FLOATING_TAB_BAR_HEIGHT)
+    .barOverlap(true)
+    .barPosition(BarPosition.End)
+    .vertical(false)
+    .scrollable(false)
+    .animationDuration(300)
+    .barBackgroundColor(Color.Transparent)
+    .barFloatingStyle({
+      barBottomMargin: this.getFloatingTabBottomMargin(),
+      barSideMargin: MODEL_MANAGE_FLOATING_TAB_BAR_SIDE_MARGIN,
+      barWidth: {
+        smallWidth: MODEL_MANAGE_FLOATING_TAB_BAR_WIDTH,
+        mediumWidth: MODEL_MANAGE_FLOATING_TAB_BAR_WIDTH,
+        largeWidth: MODEL_MANAGE_FLOATING_TAB_BAR_WIDTH
+      },
+      gradientMask: { maskColor: Color.Transparent },
+      lightColor: Color.White,
+      systemMaterialEffect: {
+        materialType: hdsMaterial.MaterialType.IMMERSIVE,
+        materialLevel: hdsMaterial.MaterialLevel.ADAPTIVE
+      }
+    })
+    .onChange((index: number) => {
+      this.currentTabKey = this.getTabKeyByIndex(index)
+    })
+  }
+
+  @Builder
+  private FloatingStatusTabBuilder(tabKey: ProviderManageTabKey, icon: Resource, title: Resource) {
+    Column({ space: 2 }) {
+      SymbolGlyph(icon)
+        .fontSize(22)
+        .fontColor([this.currentTabKey === tabKey ? this.themePrimary : $r('app.color.text_secondary')])
+
+      Text(title)
+        .fontSize(10)
+        .fontWeight(this.currentTabKey === tabKey ? FontWeight.Bold : FontWeight.Medium)
+        .fontColor(this.currentTabKey === tabKey ? this.themePrimary : $r('app.color.text_secondary'))
+        .maxLines(1)
+        .textOverflow({ overflow: TextOverflow.Ellipsis })
+    }
+    .width('100%')
+    .height('100%')
+    .justifyContent(FlexAlign.Center)
+    .alignItems(HorizontalAlign.Center)
+  }
+
+  @Builder
+  private FloatingProviderList(tabKey: ProviderManageTabKey, scroller: ListScroller) {
+    List({ space: 8, scroller: scroller }) {
+      ListItem() {
+        Column()
+          .width('100%')
+          .height(this.getFloatingListTopSpacerHeight())
+      }
+      .focusable(false)
+      .selectable(false)
+
+      if (this.isLoading) {
+        ListItem() {
+          this.LoadingView()
+        }
+      } else {
+        Repeat<ModelProvider>(this.getProviderListDataSourceByTab(tabKey))
+          .each((obj: RepeatItem<ModelProvider>) => {
+            ListItem({ style: ListItemStyle.NONE }) {
+              ProviderCardItem({
+                provider: obj.item,
+                searchKeywords: this.searchKeywords,
+                active: !this.detailCreateMode && this.selectedProviderId === obj.item.id,
+                onCardClick: () => {
+                  this.openProviderDetail(obj.item.id)
+                },
+                onToggleEnabled: () => {
+                  this.toggleProviderEnabled(obj.item)
+                }
+              })
+            }
+            .margin({ left: 16, right: 16 })
+            .borderRadius(16)
+            .clip(true)
+          })
+          .key((item: ModelProvider) => {
+            return item.id
+          })
+          .virtualScroll({ totalCount: this.getProviderListDataSourceByTab(tabKey).length })
+          .onMove((from: number, to: number) => {
+            if (this.searchKeywords.trim() !== '') {
+              return
+            }
+            this.allProviders = reorderProvidersWithinTab(this.allProviders, tabKey, from, to)
+            this.saveOrder()
+          })
+
+        if (this.searchKeywords.trim() !== '' && this.getFilteredProvidersByTab(tabKey).length === 0) {
+          ListItem() {
+            Column() {
+              SymbolGlyph($r('sys.symbol.magnifyingglass'))
+                .fontSize(48)
+                .fontColor([$r('app.color.text_tertiary')])
+
+              Text($r('app.string.provider_models_not_found'))
+                .fontSize(16)
+                .fontColor($r('app.color.text_secondary'))
+                .margin({ top: 16 })
+
+              Text($r('app.string.search_try_other_keywords'))
+                .fontSize(14)
+                .fontColor($r('app.color.text_tertiary'))
+                .margin({ top: 4 })
+            }
+            .width('100%')
+            .padding({ top: 60, bottom: 60 })
+            .justifyContent(FlexAlign.Center)
+          }
+        }
+
+        ListItem() {
+          Column() {
+            Button() {
+              Row() {
+                SymbolGlyph($r('sys.symbol.plus_circle'))
+                  .fontSize(22)
+                  .fontColor([this.themePrimary])
+
+                Text($r('app.string.add_custom_provider'))
+                  .fontSize(15)
+                  .fontWeight(FontWeight.Medium)
+                  .fontColor(this.themePrimary)
+                  .margin({ left: 8 })
+              }
+            }
+            .width('100%')
+            .height(56)
+            .backgroundColor(Color.Transparent)
+            .borderRadius(24)
+            .systemMaterial(new uiMaterial.ImmersiveMaterial({
+              style: uiMaterial.ImmersiveStyle.REGULAR,
+              materialColor: Color.Transparent,
+              interactive: true,
+              lightEffect: { color: undefined }
+            }))
+            .onClick(() => {
+              this.openCreateProvider()
+            })
+          }
+          .width('100%')
+          .padding({ left: 16, right: 16, top: 8 })
+        }
+      }
+
+      ListItem() {
+        Column().height(this.getFloatingTabBottomInset())
+      }
+      .focusable(false)
+      .selectable(false)
+    }
+    .width('100%')
+    .height('100%')
+    .scrollBar(BarState.Off)
+    .edgeEffect(EdgeEffect.Spring)
+    .cachedCount(this.getProviderListCachedCountByTab(tabKey))
     .backgroundColor(getAppUiState().themeBackground)
   }
 

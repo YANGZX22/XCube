@@ -3,7 +3,8 @@ import {
   HdsNavigationTitleBarOptions,
   HdsNavigationTitleMode,
   HdsTabs,
-  HdsTabsFloatingStyle
+  HdsTabsFloatingStyle,
+  hdsMaterial
 } from '@kit.UIDesignKit'
 import { curves, uiMaterial } from '@kit.ArkUI'
 import { picker } from '@kit.CoreFileKit'
@@ -20,16 +21,13 @@ import { ServiceRegistry } from '../services/ServiceRegistry'
 import { SettingsCompactTitleBarContent } from '../components/settings/SettingsCompactPageHeader'
 import { getSettingsPageContentMaxWidth, getSettingsPageCompactTabsTotalInset } from '../utils/SettingsPageLayoutHelper'
 import { SettingsPagePresentationMode } from '../config/SettingsDetailPresentation'
+import { LayoutSizeClass } from '../config/LayoutProfile'
 import { getAppUiState } from '../state/AppUiState'
 import {
   buildHdsTopNavigationTitleBarOptionsForPage,
   getHdsTopNavigationMaskExtraHeight,
   getHdsStatusBarContentColor
 } from '../utils/HdsVisualEffectUtil'
-import {
-  buildCompactTabsFloatingStyle,
-  CompactTabsFloatingStyleOptions
-} from '../utils/HdsTabsFloatingStyleHelper'
 import { IndexBottomTabItem } from '../components/index/IndexBottomTabItem'
 import { showToast } from '../utils/ToastUtil'
 import { pickLocalizedText } from '../utils/LocalizedTextUtils'
@@ -61,6 +59,19 @@ const PREVIEW_TAB_INDEX_CHAT = 1
 const PREVIEW_TAB_INDEX_KNOWLEDGE = 2
 const PREVIEW_TAB_INDEX_SETTINGS = 3
 const APPEARANCE_BLOCK_GAP = 16
+const APPEARANCE_FLOATING_TAB_BAR_HEIGHT = 60
+const APPEARANCE_FLOATING_TAB_BAR_WIDTH = 280
+const APPEARANCE_FLOATING_TAB_BAR_SIDE_MARGIN = 16
+const APPEARANCE_FLOATING_TAB_BAR_BOTTOM_MARGIN = 12
+const APPEARANCE_FLOATING_TAB_BAR_SAFE_BOTTOM_MARGIN = 24
+const PREVIEW_FLOATING_TAB_BAR_HEIGHT = 52
+const PREVIEW_FLOATING_TAB_CONTAINER_HEIGHT = 76
+const PREVIEW_FLOATING_TAB_BOTTOM_MARGIN = 12
+const PREVIEW_FLOATING_TAB_MAX_CONTAINER_WIDTH = 320
+const PREVIEW_FLOATING_TAB_HORIZONTAL_PADDING = 16
+const PREVIEW_FLOATING_TAB_ITEM_GAP = 8
+const PREVIEW_FLOATING_ADD_BUTTON_SIZE = 52
+const PREVIEW_FLOATING_TAB_BAR_WIDTH_ADJUSTMENT = 4
 
 @ComponentV2
 export struct ThemeAppearanceSettingsView {
@@ -143,10 +154,9 @@ export struct ThemeAppearanceSettingsView {
 
   @Local currentTabIndex: number = TAB_INDEX_THEME
   @Local previewTabIndex: number = PREVIEW_TAB_INDEX_CHAT
-  @Local livePreviewExpanded: boolean = true
+  @Local livePreviewExpanded: boolean = false
 
   private settingsManager = ServiceRegistry.settings()
-  private appearanceTabsController: TabsController = new TabsController()
   private themeScroller: Scroller = new Scroller()
   private fontScroller: Scroller = new Scroller()
 
@@ -187,6 +197,10 @@ export struct ThemeAppearanceSettingsView {
 
   private isDetailPaneMode(): boolean {
     return this.settingsDetailPresentationMode === SettingsPagePresentationMode.DETAIL_PANE
+  }
+
+  private shouldUsePreviewNavigationRail(): boolean {
+    return this.layoutSizeClass === LayoutSizeClass.EXPANDED && this.windowWidthVp > this.windowHeightVp
   }
 
   private getLivePreviewHeight(): number {
@@ -547,15 +561,60 @@ export struct ThemeAppearanceSettingsView {
   }
 
   private buildPreviewFloatingStyle(): HdsTabsFloatingStyle {
-    const opts = new CompactTabsFloatingStyleOptions()
-    opts.materialType = this.materialType
-    opts.materialLevel = this.materialLevel
-    opts.lightColorMode = this.lightColorMode
-    opts.themePrimary = this.themePrimary
-    opts.barSideMargin = 10
-    opts.barBottomMargin = 8
-    opts.barWidth = { smallWidth: 200, mediumWidth: 220, largeWidth: 240 }
-    return buildCompactTabsFloatingStyle(opts)
+    return {
+      barSideMargin: 8,
+      barBottomMargin: PREVIEW_FLOATING_TAB_BOTTOM_MARGIN,
+      barWidth: {
+        smallWidth: this.getPreviewFloatingTabBarWidth(),
+        mediumWidth: this.getPreviewFloatingTabBarWidth(),
+        largeWidth: this.getPreviewFloatingTabBarWidth()
+      },
+      gradientMask: { maskColor: Color.Transparent },
+      lightColor: Color.White,
+      systemMaterialEffect: {
+        materialType: hdsMaterial.MaterialType.IMMERSIVE,
+        materialLevel: hdsMaterial.MaterialLevel.ADAPTIVE
+      }
+    }
+  }
+
+  private getPreviewBottomNavigationWidth(): number {
+    if (this.windowWidthVp <= 0 || this.isDetailPaneMode()) {
+      return PREVIEW_FLOATING_TAB_MAX_CONTAINER_WIDTH
+    }
+    return Math.min(PREVIEW_FLOATING_TAB_MAX_CONTAINER_WIDTH, this.windowWidthVp - 32)
+  }
+
+  private getPreviewFloatingTabHostWidth(): number {
+    return this.getPreviewBottomNavigationWidth() - PREVIEW_FLOATING_TAB_HORIZONTAL_PADDING -
+      PREVIEW_FLOATING_TAB_ITEM_GAP - PREVIEW_FLOATING_ADD_BUTTON_SIZE
+  }
+
+  private getPreviewFloatingTabBarWidth(): number {
+    return this.getPreviewFloatingTabHostWidth() - PREVIEW_FLOATING_TAB_BAR_WIDTH_ADJUSTMENT
+  }
+
+  private getAppearanceFloatingTabBottomMargin(): number {
+    return this.px2vp(this.bottomAvoidHeight) > 0 ? APPEARANCE_FLOATING_TAB_BAR_SAFE_BOTTOM_MARGIN :
+      APPEARANCE_FLOATING_TAB_BAR_BOTTOM_MARGIN
+  }
+
+  private buildAppearanceFloatingStyle(): HdsTabsFloatingStyle {
+    return {
+      barSideMargin: APPEARANCE_FLOATING_TAB_BAR_SIDE_MARGIN,
+      barBottomMargin: this.getAppearanceFloatingTabBottomMargin(),
+      barWidth: {
+        smallWidth: APPEARANCE_FLOATING_TAB_BAR_WIDTH,
+        mediumWidth: APPEARANCE_FLOATING_TAB_BAR_WIDTH,
+        largeWidth: APPEARANCE_FLOATING_TAB_BAR_WIDTH
+      },
+      gradientMask: { maskColor: Color.Transparent },
+      lightColor: Color.White,
+      systemMaterialEffect: {
+        materialType: hdsMaterial.MaterialType.IMMERSIVE,
+        materialLevel: hdsMaterial.MaterialLevel.ADAPTIVE
+      }
+    }
   }
 
   private getAppearanceBlockMaterial(interactive: boolean = false): uiMaterial.Material {
@@ -976,89 +1035,173 @@ export struct ThemeAppearanceSettingsView {
         this.MiniTabBarSettings()
       }
     }
+    .width('100%')
+    .height('100%')
+  }
+
+  @Builder
+  private MiniPreviewTabButton(index: number) {
+    Row() {
+      this.MiniPreviewTab(index)
+    }
     .layoutWeight(1)
-    .height(52)
+    .height('100%')
     .onClick(() => {
-      if (this.previewTabIndex !== index) {
-        this.previewTabIndex = index
-      }
+      this.previewTabIndex = index
     })
+  }
+
+  @Builder
+  private MiniManuscriptBottomNavigation() {
+    Stack() {
+      Row() {
+        this.MiniPreviewTabButton(PREVIEW_TAB_INDEX_ASSISTANTS)
+        this.MiniPreviewTabButton(PREVIEW_TAB_INDEX_CHAT)
+        this.MiniPreviewTabButton(PREVIEW_TAB_INDEX_KNOWLEDGE)
+        this.MiniPreviewTabButton(PREVIEW_TAB_INDEX_SETTINGS)
+      }
+      .width('100%')
+      .height(52)
+      .backgroundColor(this.themeSurface)
+      .border({ width: { top: 1 }, color: getAppUiState().themeDivider })
+      .position({ x: 0, y: 24 })
+
+      Row() {
+        Blank()
+
+        Button({ type: ButtonType.Normal, stateEffect: false }) {
+          SymbolGlyph($r('sys.symbol.plus'))
+            .fontSize(20)
+            .fontColor([this.getManuscriptAccentDeep()])
+        }
+        .width(40)
+        .height(40)
+        .padding(0)
+        .backgroundColor(Color.Transparent)
+        .borderRadius(0)
+      }
+      .width('100%')
+      .height(40)
+      .padding({ right: 12 })
+      .position({ x: 0, y: 0 })
+    }
+    .width('100%')
+    .height(PREVIEW_FLOATING_TAB_CONTAINER_HEIGHT)
+    .clip(false)
+  }
+
+  @Builder
+  private MiniFloatingBottomNavigation() {
+    Row({ space: 8 }) {
+      HdsTabs({ barPosition: BarPosition.End, index: this.previewTabIndex }) {
+        TabContent() {
+          Column()
+        }
+        .tabBar(this.MiniPreviewTab(PREVIEW_TAB_INDEX_ASSISTANTS))
+
+        TabContent() {
+          Column()
+        }
+        .tabBar(this.MiniPreviewTab(PREVIEW_TAB_INDEX_CHAT))
+
+        TabContent() {
+          Column()
+        }
+        .tabBar(this.MiniPreviewTab(PREVIEW_TAB_INDEX_KNOWLEDGE))
+
+        TabContent() {
+          Column()
+        }
+        .tabBar(this.MiniPreviewTab(PREVIEW_TAB_INDEX_SETTINGS))
+      }
+      .width(this.getPreviewFloatingTabHostWidth())
+      .height(PREVIEW_FLOATING_TAB_CONTAINER_HEIGHT)
+      .barMode(BarMode.Fixed)
+      .barHeight(PREVIEW_FLOATING_TAB_BAR_HEIGHT)
+      .barOverlap(true)
+      .barPosition(BarPosition.End)
+      .vertical(false)
+      .scrollable(false)
+      .animationDuration(260)
+      .barBackgroundColor(Color.Transparent)
+      .barFloatingStyle(this.buildPreviewFloatingStyle())
+      .backgroundColor(Color.Transparent)
+      .clip(false)
+      .onChange((index: number) => {
+        this.previewTabIndex = index
+      })
+
+      Button({ type: ButtonType.Circle, stateEffect: false }) {
+        SymbolGlyph($r('sys.symbol.plus'))
+          .fontSize(23)
+          .fontColor([this.isManuscriptMode() ? this.getManuscriptAccentDeep() : this.themePrimary])
+      }
+      .width(52)
+      .height(52)
+      .padding(0)
+      .backgroundColor(Color.Transparent)
+      .borderRadius(26)
+      .systemMaterial(new uiMaterial.ImmersiveMaterial({
+        style: uiMaterial.ImmersiveStyle.REGULAR,
+        materialColor: Color.Transparent,
+        applyShadow: true,
+        interactive: false,
+        lightEffect: { color: Color.White }
+      }))
+      .margin({ bottom: PREVIEW_FLOATING_TAB_BOTTOM_MARGIN })
+    }
+    .width(this.getPreviewBottomNavigationWidth())
+    .height(PREVIEW_FLOATING_TAB_CONTAINER_HEIGHT)
+    .padding({ left: 8, right: 8 })
+    .alignItems(VerticalAlign.Bottom)
+    .alignSelf(ItemAlign.Center)
+    .clip(false)
   }
 
   @Builder
   private MiniCurrentBottomNavigation() {
     if (this.isManuscriptMode()) {
-      Stack({ alignContent: Alignment.Bottom }) {
-        Button({ type: ButtonType.Normal, stateEffect: false }) {
-          SymbolGlyph($r('sys.symbol.plus'))
-            .fontSize(18)
-            .fontColor([this.getManuscriptAccentDeep()])
-        }
-        .width(38)
-        .height(38)
-        .padding(0)
-        .backgroundColor(Color.Transparent)
-        .borderRadius(0)
-        .position({ x: '100%', y: 0 })
-        .translate({ x: -48, y: 0 })
-
-        Row() {
-          this.MiniPreviewTab(PREVIEW_TAB_INDEX_ASSISTANTS)
-          this.MiniPreviewTab(PREVIEW_TAB_INDEX_CHAT)
-          this.MiniPreviewTab(PREVIEW_TAB_INDEX_KNOWLEDGE)
-          this.MiniPreviewTab(PREVIEW_TAB_INDEX_SETTINGS)
-        }
-        .width('100%')
-        .height(52)
-        .backgroundColor(this.themeSurface)
-        .border({ width: { top: 1 }, color: getAppUiState().themeDivider })
-      }
-      .width('100%')
-      .height(82)
+      this.MiniManuscriptBottomNavigation()
     } else {
-      Row({ space: 8 }) {
-        Row() {
-          this.MiniPreviewTab(PREVIEW_TAB_INDEX_ASSISTANTS)
-          this.MiniPreviewTab(PREVIEW_TAB_INDEX_CHAT)
-          this.MiniPreviewTab(PREVIEW_TAB_INDEX_KNOWLEDGE)
-          this.MiniPreviewTab(PREVIEW_TAB_INDEX_SETTINGS)
-        }
-        .layoutWeight(1)
-        .height(52)
-        .padding({ left: 4, right: 4 })
-        .backgroundColor(Color.Transparent)
-        .borderRadius(26)
-        .clip(true)
-        .systemMaterial(new uiMaterial.ImmersiveMaterial({
-          style: uiMaterial.ImmersiveStyle.REGULAR,
-          materialColor: Color.Transparent,
-          applyShadow: true,
-          interactive: false,
-          lightEffect: { color: undefined }
-        }))
-
-        Button({ type: ButtonType.Circle, stateEffect: false }) {
-          SymbolGlyph($r('sys.symbol.plus'))
-            .fontSize(23)
-            .fontColor([this.themePrimary])
-        }
-        .width(52)
-        .height(52)
-        .padding(0)
-        .backgroundColor(Color.Transparent)
-        .borderRadius(26)
-        .systemMaterial(new uiMaterial.ImmersiveMaterial({
-          style: uiMaterial.ImmersiveStyle.REGULAR,
-          materialColor: Color.Transparent,
-          applyShadow: true,
-          interactive: false,
-          lightEffect: { color: undefined }
-        }))
-      }
-      .width('100%')
-      .height(68)
-      .padding({ left: 8, right: 8, top: 4, bottom: 12 })
+      this.MiniFloatingBottomNavigation()
     }
+  }
+
+  @Builder
+  private MiniPreviewNavigationRail() {
+    Column({ space: 4 }) {
+      this.MiniPreviewRailTab(PREVIEW_TAB_INDEX_ASSISTANTS)
+      this.MiniPreviewRailTab(PREVIEW_TAB_INDEX_CHAT)
+      this.MiniPreviewRailTab(PREVIEW_TAB_INDEX_KNOWLEDGE)
+      this.MiniPreviewRailTab(PREVIEW_TAB_INDEX_SETTINGS)
+
+      Blank()
+    }
+    .width(64)
+    .height('100%')
+    .padding({ left: 6, right: 6, top: 8, bottom: 8 })
+    .backgroundColor(this.themeSurface)
+    .borderRadius({
+      topLeft: this.isManuscriptMode() ? 3 : 22,
+      bottomLeft: this.isManuscriptMode() ? 3 : 22
+    })
+    .border({ width: { right: 1 }, color: getAppUiState().themeDivider })
+    .clip(true)
+  }
+
+  @Builder
+  private MiniPreviewRailTab(index: number) {
+    Column() {
+      this.MiniPreviewTab(index)
+    }
+    .width('100%')
+    .height(58)
+    .borderRadius(this.isManuscriptMode() ? 0 : 16)
+    .backgroundColor(this.previewTabIndex === index && !this.isManuscriptMode() ?
+      this.themePrimaryLight : Color.Transparent)
+    .onClick(() => {
+      this.previewTabIndex = index
+    })
   }
 
   @Builder
@@ -1313,7 +1456,7 @@ export struct ThemeAppearanceSettingsView {
   }
 
   @Builder
-  private CurrentAppearancePreview() {
+  private MiniPreviewMainContent(showBottomNavigation: boolean) {
     Column() {
       this.CurrentPreviewHeader()
 
@@ -1324,14 +1467,39 @@ export struct ThemeAppearanceSettingsView {
       .layoutWeight(1)
       .alignItems(VerticalAlign.Top)
 
-      this.MiniCurrentBottomNavigation()
+      if (showBottomNavigation) {
+        this.MiniCurrentBottomNavigation()
+      }
+    }
+    .width('100%')
+    .height('100%')
+  }
+
+  @Builder
+  private CurrentAppearancePreview() {
+    Stack() {
+      if (this.shouldUsePreviewNavigationRail()) {
+        Row() {
+          this.MiniPreviewNavigationRail()
+
+          Column() {
+            this.MiniPreviewMainContent(false)
+          }
+          .layoutWeight(1)
+          .height('100%')
+        }
+        .width('100%')
+        .height('100%')
+      } else {
+        this.MiniPreviewMainContent(true)
+      }
     }
     .width('100%')
     .height(this.getLivePreviewHeight())
     .backgroundColor(this.themeBackground)
     .borderRadius(this.isManuscriptMode() ? 3 : 22)
     .border({ width: 1, color: this.isManuscriptMode() ? getAppUiState().themeDivider : this.themePrimaryLight })
-    .clip(true)
+    .clip(false)
     .animation({ duration: 400, curve: Curve.EaseInOut })
   }
 
@@ -1402,56 +1570,29 @@ export struct ThemeAppearanceSettingsView {
       .height(this.livePreviewExpanded ? this.getLivePreviewHeight() : 0)
       .opacity(this.livePreviewExpanded ? 1 : 0)
       .translate({ y: this.livePreviewExpanded ? 0 : -10 })
-      .clip(true)
+      .clip(!this.livePreviewExpanded)
     }
     .width('100%')
   }
 
   @Builder
-  private AppearanceTabBar(label: Resource, index: number) {
-    Button({ type: ButtonType.Normal, stateEffect: false }) {
-      Row() {
-        Text(label)
-          .fontSize(14)
-          .fontWeight(this.currentTabIndex === index ? FontWeight.Bold : FontWeight.Medium)
-          .fontColor(this.currentTabIndex === index ? this.themeUserBubbleText : $r('app.color.text_secondary'))
-      }
-      .width('100%')
-      .height('100%')
-      .justifyContent(FlexAlign.Center)
-      .borderRadius(20)
-      .backgroundColor(this.currentTabIndex === index ? this.themePrimary : Color.Transparent)
-    }
-    .layoutWeight(1)
-    .height(40)
-    .padding(0)
-    .borderRadius(20)
-    .clip(true)
-    .backgroundColor(Color.Transparent)
-    .systemMaterial(new uiMaterial.ImmersiveMaterial({
-      style: uiMaterial.ImmersiveStyle.ULTRA_THIN,
-      applyShadow: true,
-      interactive: true,
-      lightEffect: { color: Color.White }
-    }))
-    .onClick(() => {
-      if (this.currentTabIndex !== index) {
-        this.appearanceTabsController.changeIndex(index)
-      }
-    })
-  }
+  private AppearanceFloatingTab(index: number, icon: Resource, label: Resource) {
+    Column({ space: 2 }) {
+      SymbolGlyph(icon)
+        .fontSize(22)
+        .fontColor([this.currentTabIndex === index ? this.themePrimary : $r('app.color.text_secondary')])
 
-  @Builder
-  private AppearanceFloatingTabs() {
-    Row({ space: 8 }) {
-      this.AppearanceTabBar($r('app.string.appearance_tab_theme'), 0)
-      this.AppearanceTabBar($r('app.string.appearance_tab_font'), 1)
-      this.AppearanceTabBar($r('app.string.appearance_tab_material'), 2)
+      Text(label)
+        .fontSize(10)
+        .fontWeight(this.currentTabIndex === index ? FontWeight.Bold : FontWeight.Medium)
+        .fontColor(this.currentTabIndex === index ? this.themePrimary : $r('app.color.text_secondary'))
+        .maxLines(1)
+        .textOverflow({ overflow: TextOverflow.Ellipsis })
     }
-    .width(this.windowWidthVp >= 600 ? 272 : 248)
-    .height(40)
-    .margin({ bottom: 28 })
-    .backgroundColor(Color.Transparent)
+    .width('100%')
+    .height('100%')
+    .justifyContent(FlexAlign.Center)
+    .alignItems(HorizontalAlign.Center)
   }
 
   @Builder
@@ -1459,6 +1600,8 @@ export struct ThemeAppearanceSettingsView {
     Scroll(this.themeScroller) {
       Row() {
         Column({ space: APPEARANCE_BLOCK_GAP }) {
+          this.LivePreviewSection()
+
           this.VisualEffectsEntryCard()
 
           this.SectionHeader($r('app.string.appearance_display_mode_title'),
@@ -1489,11 +1632,17 @@ export struct ThemeAppearanceSettingsView {
       }
       .width('100%')
       .justifyContent(FlexAlign.Center)
-      .padding({ left: 16, right: 16, top: 16, bottom: this.getScrollBottomPadding() })
+      .padding({
+        left: 16,
+        right: 16,
+        top: this.getCompactContentTopPadding() + 16,
+        bottom: this.getScrollBottomPadding()
+      })
     }
     .width('100%')
     .height('100%')
     .scrollBar(BarState.Off)
+    .align(Alignment.Top)
   }
 
   @Builder
@@ -1501,6 +1650,8 @@ export struct ThemeAppearanceSettingsView {
     Scroll(this.fontScroller) {
       Row() {
         Column({ space: APPEARANCE_BLOCK_GAP }) {
+          this.LivePreviewSection()
+
           this.SectionHeader($r('app.string.appearance_tab_font'),
             $r('app.string.settings_chat_font_desc'))
 
@@ -1690,156 +1841,169 @@ export struct ThemeAppearanceSettingsView {
       }
       .width('100%')
       .justifyContent(FlexAlign.Center)
-      .padding({ left: 16, right: 16, top: 16, bottom: this.getScrollBottomPadding() })
+      .padding({
+        left: 16,
+        right: 16,
+        top: this.getCompactContentTopPadding() + 16,
+        bottom: this.getScrollBottomPadding()
+      })
     }
     .width('100%')
     .height('100%')
     .scrollBar(BarState.Off)
+    .align(Alignment.Top)
   }
 
   @Builder
   private MaterialTabContent() {
     Scroll() {
       Row() {
-        Column() {
-          Row({ space: 16 }) {
-            Column({ space: 4 }) {
-              Text($r('app.string.chat_list_immersive_material_title'))
-                .fontSize(16)
-                .fontWeight(FontWeight.Medium)
-                .fontColor($r('app.color.text_primary'))
-                .width('100%')
+        Column({ space: APPEARANCE_BLOCK_GAP }) {
+          this.LivePreviewSection()
 
-              Text($r('app.string.chat_list_immersive_material_desc'))
-                .fontSize(12)
-                .fontColor($r('app.color.text_secondary'))
-                .lineHeight(18)
-                .width('100%')
+          Column() {
+            Row({ space: 16 }) {
+              Column({ space: 4 }) {
+                Text($r('app.string.chat_list_immersive_material_title'))
+                  .fontSize(16)
+                  .fontWeight(FontWeight.Medium)
+                  .fontColor($r('app.color.text_primary'))
+                  .width('100%')
+
+                Text($r('app.string.chat_list_immersive_material_desc'))
+                  .fontSize(12)
+                  .fontColor($r('app.color.text_secondary'))
+                  .lineHeight(18)
+                  .width('100%')
+              }
+              .layoutWeight(1)
+              .alignItems(HorizontalAlign.Start)
+
+              Toggle({ type: ToggleType.Switch, isOn: this.chatListImmersiveMaterial })
+                .selectedColor(this.themePrimary)
+                .systemMaterial(new uiMaterial.Material())
+                .switchPointColor(Color.White)
+                .animation({ duration: 280, curve: curves.springMotion(0.35, 0.8) })
+                .onChange((enabled: boolean) => {
+                  this.handleChatListImmersiveMaterialChanged(enabled)
+                })
             }
-            .layoutWeight(1)
-            .alignItems(HorizontalAlign.Start)
+            .width('100%')
+            .padding(18)
+            .alignItems(VerticalAlign.Center)
 
-            Toggle({ type: ToggleType.Switch, isOn: this.chatListImmersiveMaterial })
-              .selectedColor(this.themePrimary)
-              .systemMaterial(new uiMaterial.Material())
-              .switchPointColor(Color.White)
-              .animation({ duration: 280, curve: curves.springMotion(0.35, 0.8) })
-              .onChange((enabled: boolean) => {
-                this.handleChatListImmersiveMaterialChanged(enabled)
-              })
+            Divider()
+              .color(this.themePrimaryLight)
+              .margin({ left: 18, right: 18 })
+
+            Row({ space: 16 }) {
+              Column({ space: 4 }) {
+                Text($r('app.string.knowledge_list_immersive_material_title'))
+                  .fontSize(16)
+                  .fontWeight(FontWeight.Medium)
+                  .fontColor($r('app.color.text_primary'))
+                  .width('100%')
+
+                Text($r('app.string.knowledge_list_immersive_material_desc'))
+                  .fontSize(12)
+                  .fontColor($r('app.color.text_secondary'))
+                  .lineHeight(18)
+                  .width('100%')
+              }
+              .layoutWeight(1)
+              .alignItems(HorizontalAlign.Start)
+
+              Toggle({ type: ToggleType.Switch, isOn: this.knowledgeListImmersiveMaterial })
+                .selectedColor(this.themePrimary)
+                .systemMaterial(new uiMaterial.Material())
+                .switchPointColor(Color.White)
+                .animation({ duration: 280, curve: curves.springMotion(0.35, 0.8) })
+                .onChange((enabled: boolean) => {
+                  this.handleKnowledgeListImmersiveMaterialChanged(enabled)
+                })
+            }
+            .width('100%')
+            .padding(18)
+            .alignItems(VerticalAlign.Center)
           }
           .width('100%')
-          .padding(18)
-          .alignItems(VerticalAlign.Center)
-
-          Divider()
-            .color(this.themePrimaryLight)
-            .margin({ left: 18, right: 18 })
-
-          Row({ space: 16 }) {
-            Column({ space: 4 }) {
-              Text($r('app.string.knowledge_list_immersive_material_title'))
-                .fontSize(16)
-                .fontWeight(FontWeight.Medium)
-                .fontColor($r('app.color.text_primary'))
-                .width('100%')
-
-              Text($r('app.string.knowledge_list_immersive_material_desc'))
-                .fontSize(12)
-                .fontColor($r('app.color.text_secondary'))
-                .lineHeight(18)
-                .width('100%')
-            }
-            .layoutWeight(1)
-            .alignItems(HorizontalAlign.Start)
-
-            Toggle({ type: ToggleType.Switch, isOn: this.knowledgeListImmersiveMaterial })
-              .selectedColor(this.themePrimary)
-              .systemMaterial(new uiMaterial.Material())
-              .switchPointColor(Color.White)
-              .animation({ duration: 280, curve: curves.springMotion(0.35, 0.8) })
-              .onChange((enabled: boolean) => {
-                this.handleKnowledgeListImmersiveMaterialChanged(enabled)
-              })
-          }
-          .width('100%')
-          .padding(18)
-          .alignItems(VerticalAlign.Center)
+          .backgroundColor(Color.Transparent)
+          .borderRadius(24)
+          .border({ width: 1, color: this.themePrimaryLight })
+          .systemMaterial(this.getAppearanceBlockMaterial(false))
         }
         .width('100%')
-        .backgroundColor(Color.Transparent)
-        .borderRadius(24)
-        .border({ width: 1, color: this.themePrimaryLight })
-        .systemMaterial(this.getAppearanceBlockMaterial(false))
         .constraintSize({ maxWidth: this.getContentMaxWidth() })
       }
       .width('100%')
       .justifyContent(FlexAlign.Center)
-      .padding({ left: 16, right: 16, top: 16, bottom: this.getScrollBottomPadding() })
+      .padding({
+        left: 16,
+        right: 16,
+        top: this.getCompactContentTopPadding() + 16,
+        bottom: this.getScrollBottomPadding()
+      })
     }
     .width('100%')
     .height('100%')
     .scrollBar(BarState.Off)
+    .align(Alignment.Top)
   }
 
   @Builder
   private PageBody() {
-    Column({ space: APPEARANCE_BLOCK_GAP }) {
-      Row() {
-        Column() {
-          this.LivePreviewSection()
+    Column() {
+      HdsTabs({ barPosition: BarPosition.End, index: this.currentTabIndex }) {
+        TabContent() {
+          this.ThemeTabContent()
         }
-        .width('100%')
-        .constraintSize({ maxWidth: this.getContentMaxWidth() })
-      }
-      .width('100%')
-      .justifyContent(FlexAlign.Center)
-      .padding({ left: 16, right: 16, top: 8 })
-
-      Stack({ alignContent: Alignment.Bottom }) {
-        Tabs({ index: this.currentTabIndex, controller: this.appearanceTabsController }) {
-          TabContent() {
-            this.ThemeTabContent()
-          }
-
-          TabContent() {
-            this.FontTabContent()
-          }
-
-          TabContent() {
-            this.MaterialTabContent()
-          }
-        }
-        .barHeight(0)
-        .backgroundColor(Color.Transparent)
-        .scrollable(true)
         .width('100%')
         .height('100%')
-        .animationDuration(280)
-        .onChange((idx: number) => {
-          if (this.currentTabIndex !== idx) {
-            animateTo({ duration: 220, curve: Curve.EaseInOut }, () => {
-              this.currentTabIndex = idx
-            })
-          }
-        })
+        .tabBar(this.AppearanceFloatingTab(0, $r('sys.symbol.paintbrush_pointed_waveform'),
+          $r('app.string.appearance_tab_theme')))
 
-        this.AppearanceFloatingTabs()
+        TabContent() {
+          this.FontTabContent()
+        }
+        .width('100%')
+        .height('100%')
+        .tabBar(this.AppearanceFloatingTab(1, $r('sys.symbol.textformat'),
+          $r('app.string.appearance_tab_font')))
+
+        TabContent() {
+          this.MaterialTabContent()
+        }
+        .width('100%')
+        .height('100%')
+        .tabBar(this.AppearanceFloatingTab(2, $r('sys.symbol.square_stack_3d'),
+          $r('app.string.appearance_tab_material')))
       }
       .width('100%')
-      .layoutWeight(1)
+      .height('100%')
+      .barMode(BarMode.Fixed)
+      .barHeight(APPEARANCE_FLOATING_TAB_BAR_HEIGHT)
+      .barOverlap(true)
+      .barPosition(BarPosition.End)
+      .vertical(false)
+      .scrollable(true)
+      .animationDuration(280)
+      .barBackgroundColor(Color.Transparent)
+      .barFloatingStyle(this.buildAppearanceFloatingStyle())
+      .backgroundColor(Color.Transparent)
+      .clip(false)
+      .onChange((index: number) => {
+        this.currentTabIndex = index
+      })
     }
     .width('100%')
     .layoutWeight(1)
+    .backgroundColor(Color.Transparent)
+    .clip(false)
   }
 
   @Builder
   private CompactBody() {
     Column() {
-      Blank()
-        .width('100%')
-        .height(this.getCompactContentTopPadding())
-
       this.PageBody()
     }
     .width('100%')
@@ -1877,12 +2041,22 @@ export struct ThemeAppearanceSettingsView {
   build() {
     Column() {
       if (this.isDetailPaneMode()) {
-        Column() {
-          this.DetailPaneHeader()
-          this.PageBody()
+        HdsNavigation() {
+          this.CompactBody()
         }
         .width('100%')
-        .layoutWeight(1)
+        .height('100%')
+        .backgroundColor(this.themeBackground)
+        .titleBar(this.getCompactTitleBarOptions())
+        .titleMode(HdsNavigationTitleMode.MINI)
+        .systemBarStyle(
+          { statusBarContentColor: getHdsStatusBarContentColor() },
+          { statusBarContentColor: getHdsStatusBarContentColor() }
+        )
+        .hideBackButton(false)
+        .hideToolBar(true)
+        .mode(NavigationMode.Stack)
+        .ignoreLayoutSafeArea([LayoutSafeAreaType.SYSTEM], [LayoutSafeAreaEdge.TOP])
       } else {
         HdsNavigation() {
           this.CompactBody()

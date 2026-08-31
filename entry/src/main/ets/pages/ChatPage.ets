@@ -4589,7 +4589,6 @@ export struct ChatPage {
       .backgroundColor(this.themeBackground)
     }
     .titleBar(this.getTitleBarOptions())
-    .bindToScrollable([this.scroller])
     .titleMode(HdsNavDestinationTitleMode.MINI)
     .hideTitleBar(this.showImagePreview, true)
     .systemBarStyle(

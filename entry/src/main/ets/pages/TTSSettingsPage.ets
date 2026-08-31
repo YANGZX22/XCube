@@ -18,8 +18,7 @@ import {
 import { getAppUiState, setAppUiStateValue } from '../state/AppUiState'
 import {
   buildHdsTopNavigationTitleBarOptionsForPage,
-  getHdsStatusBarContentColor,
-  getHdsTopNavigationContentTopPadding
+  getHdsStatusBarContentColor
 } from '../utils/HdsVisualEffectUtil'
 import {
   getSettingsPageCompactTabsTotalInset,
@@ -63,6 +62,7 @@ struct TTSSettingsPage {
   ]
   private preferences = getPreferencesService()
   private previewService: TTSService = getTTSService()
+  private compactScroller: Scroller = new Scroller()
   private settingsLoadGeneration: number = 0
   private voiceLoadGeneration: number = 0
 
@@ -377,11 +377,7 @@ struct TTSSettingsPage {
   }
 
   private getCompactContentTopPadding(): number {
-    return getHdsTopNavigationContentTopPadding(
-      this.px2vp(this.topAvoidHeight),
-      this.windowWidthVp,
-      this.windowHeightVp
-    )
+    return this.px2vp(this.topAvoidHeight) + 56
   }
 
   private getCompactTitleBarOptions(): HdsNavigationTitleBarOptions {
@@ -1019,11 +1015,11 @@ struct TTSSettingsPage {
   }
 
   @Builder
-  private PageContent() {
-    Scroll() {
-      Row() {
+  private PageContent(includeCompactTopSpacer: boolean) {
+    Scroll(this.compactScroller) {
+      Column() {
         Column({ space: 16 }) {
-          if (!this.isDetailPaneMode()) {
+          if (includeCompactTopSpacer) {
             Blank()
               .width('100%')
               .height(this.getCompactContentTopPadding())
@@ -1051,50 +1047,7 @@ struct TTSSettingsPage {
           .border({ width: 1, color: this.themePrimaryLight })
           .systemMaterial(createTtsSettingsCardMaterial())
 
-          if (this.engine === TTSEngineType.LOCAL) {
-            Row({ space: 14 }) {
-              Column() {
-                SymbolGlyph($r('sys.symbol.checkmark_circle_fill'))
-                  .fontSize(23)
-                  .fontColor([this.themePrimary])
-              }
-              .width(44)
-              .height(44)
-              .justifyContent(FlexAlign.Center)
-              .backgroundColor(Color.Transparent)
-              .borderRadius(14)
-              .border({ width: 1, color: this.themePrimaryLight })
-              .systemMaterial(new uiMaterial.ImmersiveMaterial({
-                style: uiMaterial.ImmersiveStyle.ULTRA_THIN,
-                materialColor: Color.Transparent,
-                applyShadow: false
-              }))
-
-              Column({ space: 5 }) {
-                Text($r('app.string.tts_local_ready'))
-                  .fontSize(15)
-                  .fontWeight(FontWeight.Medium)
-                  .fontColor($r('app.color.text_primary'))
-                  .width('100%')
-
-                Text($r('app.string.tts_local_note'))
-                  .fontSize(12)
-                  .fontColor($r('app.color.text_secondary'))
-                  .lineHeight(18)
-                  .width('100%')
-              }
-              .layoutWeight(1)
-              .alignItems(HorizontalAlign.Start)
-            }
-            .width('100%')
-            .padding(18)
-            .alignItems(VerticalAlign.Top)
-            .backgroundColor(Color.Transparent)
-            .borderRadius(24)
-            .border({ width: 1, color: this.themePrimaryLight })
-            .systemMaterial(createTtsSettingsCardMaterial())
-            .transition(TransitionEffect.OPACITY.animation({ duration: 200, curve: Curve.EaseOut }))
-          } else {
+          if (this.engine === TTSEngineType.ELEVENLABS) {
             Column() {
               this.ElevenLabsCardContent()
             }
@@ -1113,13 +1066,13 @@ struct TTSSettingsPage {
         .constraintSize({ maxWidth: this.getContentMaxWidth() })
       }
       .width('100%')
-      .justifyContent(FlexAlign.Center)
-      .alignItems(VerticalAlign.Top)
+      .alignItems(HorizontalAlign.Center)
       .padding({ left: 16, right: 16, top: 2, bottom: this.getContentBottomPadding() })
     }
     .width('100%')
-    .height('100%')
+    .layoutWeight(1)
     .scrollBar(BarState.Off)
+    .align(Alignment.Top)
     .edgeEffect(EdgeEffect.Spring)
   }
 
@@ -1134,7 +1087,7 @@ struct TTSSettingsPage {
           .layoutWeight(1)
       }
       .width('100%')
-      .height(64)
+      .height(56)
       .padding({ left: 24, right: 24 })
       .alignItems(VerticalAlign.Center)
     }
@@ -1156,15 +1109,25 @@ struct TTSSettingsPage {
   build() {
     Column() {
       if (this.isDetailPaneMode()) {
-        Column() {
-          this.DetailPaneHeader()
-          this.PageContent()
+        HdsNavigation() {
+          this.PageContent(true)
         }
         .width('100%')
-        .layoutWeight(1)
+        .height('100%')
+        .backgroundColor(getAppUiState().themeBackground)
+        .titleBar(this.getCompactTitleBarOptions())
+        .titleMode(HdsNavigationTitleMode.MINI)
+        .systemBarStyle(
+          { statusBarContentColor: getHdsStatusBarContentColor() },
+          { statusBarContentColor: getHdsStatusBarContentColor() }
+        )
+        .hideBackButton(false)
+        .hideToolBar(true)
+        .mode(NavigationMode.Stack)
+        .ignoreLayoutSafeArea([LayoutSafeAreaType.SYSTEM], [LayoutSafeAreaEdge.TOP])
       } else {
         HdsNavigation() {
-          this.PageContent()
+          this.PageContent(true)
         }
         .width('100%')
         .height('100%')

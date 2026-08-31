@@ -3158,6 +3158,26 @@ struct RetrievalCallLimitSlider {
     return mode === SliderChangeMode.End || mode === SliderChangeMode.Click
   }
 
+  @Builder
+  private ScaleTicks() {
+    Row() {
+      ForEach(this.scaleValues, (_scaleValue: number, index: number) => {
+        Column()
+          .width(2)
+          .height(7)
+          .borderRadius(1)
+          .backgroundColor($r('app.color.text_tertiary'))
+
+        if (index < this.scaleValues.length - 1) {
+          Blank()
+            .layoutWeight(1)
+        }
+      }, (_scaleValue: number, index: number) => `retrieval_tick_${index}`)
+    }
+    .width('100%')
+    .padding({ left: 11, right: 11 })
+  }
+
   build() {
     Column({ space: 4 }) {
       Row() {
@@ -3185,8 +3205,7 @@ struct RetrievalCallLimitSlider {
         .selectedColor(this.themePrimary)
         .trackColor(getAppUiState().themeBackground)
         .blockColor(Color.White)
-        .showSteps(true)
-        .stepColor(this.themePrimary)
+        .showSteps(false)
         .onChange((value: number, mode: SliderChangeMode) => {
           this.draggingLimit = Math.round(value)
           if (this.isSliderCommitted(mode)) {
@@ -3196,8 +3215,10 @@ struct RetrievalCallLimitSlider {
           }
         })
 
+      this.ScaleTicks()
+
       Row() {
-        ForEach(this.scaleValues, (scaleValue: number) => {
+        ForEach(this.scaleValues, (scaleValue: number, index: number) => {
           Text(scaleValue === 0 ? '∞' : `${scaleValue}`)
             .fontSize(9)
             .fontColor(scaleValue === this.getDisplayLimit()
@@ -3205,7 +3226,12 @@ struct RetrievalCallLimitSlider {
               : $r('app.color.text_tertiary'))
             .fontWeight(scaleValue === this.getDisplayLimit() ? FontWeight.Bold : FontWeight.Regular)
             .textAlign(TextAlign.Center)
-            .layoutWeight(1)
+            .width(24)
+
+          if (index < this.scaleValues.length - 1) {
+            Blank()
+              .layoutWeight(1)
+          }
         }, (scaleValue: number) => `${scaleValue}`)
       }
       .width('100%')

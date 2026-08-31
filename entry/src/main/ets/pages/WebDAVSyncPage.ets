@@ -830,12 +830,30 @@ struct WebDAVSyncPage {
   build() {
     Column() {
       if (this.isDetailPaneMode()) {
-        Column() {
-          this.DetailPaneHeader()
-          this.PageContent()
+        HdsNavigation() {
+          Column() {
+            Blank()
+              .width('100%')
+              .height(this.getCompactContentTopPadding())
+
+            this.PageContent()
+          }
+          .width('100%')
+          .height('100%')
         }
         .width('100%')
-        .layoutWeight(1)
+        .height('100%')
+        .backgroundColor(getAppUiState().themeBackground)
+        .titleBar(this.getCompactTitleBarOptions())
+        .titleMode(HdsNavigationTitleMode.MINI)
+        .systemBarStyle(
+          { statusBarContentColor: getHdsStatusBarContentColor() },
+          { statusBarContentColor: getHdsStatusBarContentColor() }
+        )
+        .hideBackButton(false)
+        .hideToolBar(true)
+        .mode(NavigationMode.Stack)
+        .ignoreLayoutSafeArea([LayoutSafeAreaType.SYSTEM], [LayoutSafeAreaEdge.TOP])
       } else {
         HdsNavigation() {
           this.PageContent()
@@ -844,7 +862,6 @@ struct WebDAVSyncPage {
         .height('100%')
         .backgroundColor(getAppUiState().themeBackground)
         .titleBar(this.getCompactTitleBarOptions())
-        .bindToScrollable([this.compactScroller])
         .titleMode(HdsNavigationTitleMode.MINI)
         .systemBarStyle(
           { statusBarContentColor: getHdsStatusBarContentColor() },

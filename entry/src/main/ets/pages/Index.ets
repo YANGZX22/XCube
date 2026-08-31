@@ -37,7 +37,6 @@ import { AppStorageKeys } from '../config/AppStorageKeys'
 import { SettingsRouteName } from '../config/SettingsRouteName'
 import {
   getIndexChatListPaneWidth,
-  getIndexPageHorizontalPadding,
   LayoutSizeClass
 } from '../config/LayoutProfile'
 import { createButtonTouchHandler, getButtonScale } from '../utils/ButtonAnimationUtils'
@@ -156,6 +155,9 @@ struct Index {
   private static readonly COMPACT_TABS_WITH_ACTION_MEDIUM_WIDTH: number = 316
   private static readonly COMPACT_TABS_WITH_ACTION_LARGE_WIDTH: number = 348
   private static readonly COMPACT_MINI_BAR_WIDTH: number = 56
+  private static readonly EXPANDED_NAVIGATION_RAIL_WIDTH: number = 72
+  private static readonly EXPANDED_FLOATING_NAVIGATION_RADIUS: number = 28
+  private static readonly KNOWLEDGE_SPLIT_TITLE_END_GUARD: number = 56
   private static readonly TAB_ASSISTANTS: number = INDEX_TAB_ASSISTANTS
   private static readonly TAB_CHAT: number = INDEX_TAB_CHAT
   private static readonly TAB_KNOWLEDGE: number = INDEX_TAB_KNOWLEDGE
@@ -435,12 +437,27 @@ struct Index {
     return getIndexChatListPaneWidth(this.windowWidthVp)
   }
 
-  private getExpandedPageHorizontalPadding(): number {
-    return getIndexPageHorizontalPadding(this.windowWidthVp)
-  }
-
   private getExpandedSettingsListWidth(): number {
     return getIndexChatListPaneWidth(this.windowWidthVp)
+  }
+
+  private getExpandedKnowledgeHostWidth(): number {
+    return Math.max(0, this.windowWidthVp - Index.EXPANDED_NAVIGATION_RAIL_WIDTH)
+  }
+
+  private getExpandedKnowledgeListPaneWidth(): number {
+    const hostWidth = this.getExpandedKnowledgeHostWidth()
+    if (this.windowWidthVp >= 1360) {
+      return Math.min(520, hostWidth * 0.5)
+    }
+    if (this.windowWidthVp >= 1120) {
+      return Math.min(480, hostWidth * 0.5)
+    }
+    return Math.min(440, Math.max(400, hostWidth * 0.5))
+  }
+
+  private getExpandedKnowledgePreviewPaneWidth(): number {
+    return Math.max(0, this.getExpandedKnowledgeHostWidth() - this.getExpandedKnowledgeListPaneWidth())
   }
 
   private isSettingsSplitMode(): boolean {
@@ -1245,9 +1262,6 @@ struct Index {
   }
 
   private getSettingsListTopSpacerHeight(): number {
-    if (this.isSettingsSplitMode()) {
-      return Index.TAB_TITLE_BAR_HEIGHT + this.getCompactSettingsTitleBarMaskExtraHeight()
-    }
     return this.getCompactSettingsHeaderDefaultHeight() + this.getCompactSettingsTitleBarMaskExtraHeight()
   }
 
@@ -1569,7 +1583,9 @@ struct Index {
   }
 
   private shouldApplyExpandedContentTopInset(): boolean {
-    return true
+    // Every expanded tab uses HDS Navigation, which owns the status-bar safe-area layout. Applying another
+    // inset to the shared host starts the navigation below the status bar and clips its immersive blur mask.
+    return false
   }
 
   private getActiveSessionIdForChatList(): string {
@@ -1903,33 +1919,29 @@ struct Index {
     Row() {
       this.ExpandedNavigationRail()
 
-        Column() {
-          if (this.shouldApplyExpandedContentTopInset()) {
-            Column()
-              .width('100%')
-              .height(this.px2vp(this.topAvoidHeight))
-          }
-
-          if (this.currentTabIndex === Index.TAB_CHAT) {
-            Column() {
-              this.ChatTab()
-            }
+      Column() {
+        if (this.shouldApplyExpandedContentTopInset()) {
+          Column()
             .width('100%')
-            .layoutWeight(1)
-            .padding({
-              left: this.getExpandedPageHorizontalPadding(),
-              right: this.getExpandedPageHorizontalPadding(),
-              bottom: 12
-            })
-          } else if (this.currentTabIndex === Index.TAB_ASSISTANTS) {
-            this.ExpandedAssistantsTab()
-          } else if (this.currentTabIndex === Index.TAB_KNOWLEDGE) {
-            this.ExpandedKnowledgeTab()
-          } else {
-            this.ExpandedSettingsTab()
-          }
+            .height(this.px2vp(this.topAvoidHeight))
         }
-        .layoutWeight(1)
+
+        if (this.currentTabIndex === Index.TAB_CHAT) {
+          Column() {
+            this.ChatTab()
+          }
+          .width('100%')
+          .layoutWeight(1)
+          .padding({ bottom: 12 })
+        } else if (this.currentTabIndex === Index.TAB_ASSISTANTS) {
+          this.ExpandedAssistantsTab()
+        } else if (this.currentTabIndex === Index.TAB_KNOWLEDGE) {
+          this.ExpandedKnowledgeTab()
+        } else {
+          this.ExpandedSettingsTab()
+        }
+      }
+      .layoutWeight(1)
       .height('100%')
       .backgroundColor(this.themeBackground)
     }
@@ -1940,28 +1952,49 @@ struct Index {
 
   @Builder
   ExpandedNavigationRail() {
-    Column({ space: 6 }) {
-      Column()
+    Column() {
+      Column() {
+        Blank()
+
+        Column({ space: 6 }) {
+          this.RailTabButton(Index.TAB_ASSISTANTS, $r('sys.symbol.person_fill'), $r('sys.symbol.person'),
+            $r('app.string.tab_assistants'))
+          this.RailTabButton(Index.TAB_CHAT, $r('sys.symbol.message_fill'), $r('sys.symbol.message'),
+            $r('app.string.tab_chat'))
+          this.RailTabButton(Index.TAB_KNOWLEDGE, $r('sys.symbol.externaldrive_fill'), $r('sys.symbol.externaldrive'),
+            $r('app.string.tab_knowledge'))
+          this.RailTabButton(Index.TAB_SETTINGS, $r('sys.symbol.gearshape_fill'), $r('sys.symbol.gearshape'),
+            $r('app.string.tab_settings'))
+        }
         .width('100%')
-        .height(this.px2vp(this.topAvoidHeight))
+        .alignItems(HorizontalAlign.Center)
 
-      this.RailTabButton(Index.TAB_ASSISTANTS, $r('sys.symbol.person_fill'), $r('sys.symbol.person'),
-        $r('app.string.tab_assistants'))
-      this.RailTabButton(Index.TAB_CHAT, $r('sys.symbol.message_fill'), $r('sys.symbol.message'), $r('app.string.tab_chat'))
-      this.RailTabButton(Index.TAB_KNOWLEDGE, $r('sys.symbol.externaldrive_fill'), $r('sys.symbol.externaldrive'),
-        $r('app.string.tab_knowledge'))
-      this.RailTabButton(Index.TAB_SETTINGS, $r('sys.symbol.gearshape_fill'), $r('sys.symbol.gearshape'), $r('app.string.tab_settings'))
-
-      Blank()
+        Blank()
+      }
+      .width('100%')
+      .height('100%')
+      .backgroundColor(Color.Transparent)
+      .borderRadius(Index.EXPANDED_FLOATING_NAVIGATION_RADIUS)
+      .clip(false)
+      .systemMaterial(new uiMaterial.ImmersiveMaterial({
+        style: uiMaterial.ImmersiveStyle.REGULAR,
+        materialColor: Color.Transparent,
+        applyShadow: true,
+        interactive: true,
+        lightEffect: { color: Color.White }
+      }))
     }
-    .width(88)
+    .width(Index.EXPANDED_NAVIGATION_RAIL_WIDTH)
     .height('100%')
-    .padding({ left: 8, right: 8, top: 8, bottom: 12 })
-    .backgroundColor(this.themeSurface)
-    .border({
-      width: { right: 1 },
-      color: $r('app.color.divider')
+    .padding({
+      left: 4,
+      right: 4,
+      top: 12 + this.px2vp(this.topAvoidHeight),
+      bottom: 12
     })
+    .backgroundColor(Color.Transparent)
+    .clip(false)
+    .zIndex(2)
   }
 
   @Builder
@@ -1972,16 +2005,6 @@ struct Index {
     .width('100%')
     .layoutWeight(1)
     .backgroundColor(this.themeBackground)
-    .borderRadius(24)
-    .clip(true)
-    .border({
-      width: 1,
-      color: $r('app.color.divider')
-    })
-    .padding({
-      left: this.getExpandedPageHorizontalPadding(),
-      right: this.getExpandedPageHorizontalPadding()
-    })
   }
 
   @Builder
@@ -1999,7 +2022,7 @@ struct Index {
     .width('100%')
     .height(64)
     .borderRadius(18)
-    .backgroundColor(this.isTabActive(index) ? this.themePrimaryLight : Color.Transparent)
+    .backgroundColor(Color.Transparent)
     .onClick(() => {
       this.switchToTab(index)
     })
@@ -2719,7 +2742,6 @@ struct Index {
     .height('100%')
     .backgroundColor(this.themeBackground)
     .titleBar(this.getCompactChatTitleBarOptions())
-    .bindToScrollable([this.sessionListScroller])
     .titleMode(HdsNavigationTitleMode.MINI)
     .systemBarStyle(
       { statusBarContentColor: getHdsStatusBarContentColor() },
@@ -3092,7 +3114,7 @@ struct Index {
   }
 
   private getAssistantsContentTopPadding(): number {
-    const topAvoidHeightVp = this.isExpandedLayout() ? 0 : this.px2vp(this.topAvoidHeight)
+    const topAvoidHeightVp = this.px2vp(this.topAvoidHeight)
     return getHdsTopNavigationContentTopPadding(topAvoidHeightVp, this.windowWidthVp, this.windowHeightVp,
       Index.TAB_TITLE_BAR_HEIGHT)
   }
@@ -3126,7 +3148,6 @@ struct Index {
       .height('100%')
       .backgroundColor(this.themeBackground)
       .titleBar(this.getAssistantsTitleBarOptions())
-      .bindToScrollable([this.assistantListScroller])
       .titleMode(HdsNavigationTitleMode.MINI)
       .systemBarStyle(
         { statusBarContentColor: getHdsStatusBarContentColor() },
@@ -3160,21 +3181,11 @@ struct Index {
       .height('100%')
       .constraintSize({ maxWidth: 720 })
       .backgroundColor(this.themeBackground)
-      .borderRadius(24)
-      .clip(true)
-      .border({
-        width: 1,
-        color: $r('app.color.divider')
-      })
     }
     .width('100%')
     .layoutWeight(1)
     .justifyContent(FlexAlign.Center)
-    .padding({
-      left: this.getExpandedPageHorizontalPadding(),
-      right: this.getExpandedPageHorizontalPadding(),
-      bottom: 12
-    })
+    .padding({ bottom: 12 })
   }
 
   private getKnowledgeTabBottomSpacerHeight(): number {
@@ -3662,7 +3673,7 @@ struct Index {
   }
 
   private getKnowledgeContentTopPadding(): number {
-    const topAvoidHeightVp = this.isExpandedLayout() ? 0 : this.px2vp(this.topAvoidHeight)
+    const topAvoidHeightVp = this.px2vp(this.topAvoidHeight)
     return getHdsTopNavigationContentTopPadding(topAvoidHeightVp, this.windowWidthVp, this.windowHeightVp,
       Index.TAB_TITLE_BAR_HEIGHT)
   }
@@ -3744,7 +3755,10 @@ struct Index {
   private getKnowledgeTitleBarOptions(): HdsNavigationTitleBarOptions {
     const options = new HdsTopNavigationBlurOptions()
     options.startPaddingVp = Index.TAB_TITLE_BAR_HORIZONTAL_PADDING
-    options.endPaddingVp = Index.TAB_TITLE_BAR_HORIZONTAL_PADDING
+    options.endPaddingVp = Index.TAB_TITLE_BAR_HORIZONTAL_PADDING +
+      (this.isExpandedLayout()
+        ? this.getExpandedKnowledgePreviewPaneWidth() + Index.KNOWLEDGE_SPLIT_TITLE_END_GUARD
+        : 0)
     options.materialType = this.materialType
     options.materialLevel = this.materialLevel
     options.windowWidthVp = this.windowWidthVp
@@ -3826,7 +3840,9 @@ struct Index {
       refreshRequestTick: this.knowledgeRefreshRequestTick,
       listScroller: this.knowledgeScroller,
       topSpacerHeight: this.getKnowledgeContentTopPadding(),
-      bottomSpacerHeight: this.getKnowledgeTabBottomSpacerHeight()
+      bottomSpacerHeight: this.getKnowledgeTabBottomSpacerHeight(),
+      splitPreviewMode: this.isExpandedLayout(),
+      splitListPaneWidth: this.getExpandedKnowledgeListPaneWidth()
     })
   }
 
@@ -3839,7 +3855,6 @@ struct Index {
     .height('100%')
     .backgroundColor(this.themeBackground)
     .titleBar(this.getKnowledgeTitleBarOptions())
-    .bindToScrollable([this.knowledgeScroller])
     .titleMode(HdsNavigationTitleMode.MINI)
     .systemBarStyle(
       { statusBarContentColor: getHdsStatusBarContentColor() },
@@ -3866,7 +3881,10 @@ struct Index {
     .stateEffect(false)
     .padding(0)
     .clip(false)
-    .position({ x: this.shouldPlaceFabOnLeft() ? 0 : '100%', y: '100%' })
+    .position({
+      x: this.shouldPlaceFabOnLeft() ? 0 : this.getExpandedKnowledgeListPaneWidth(),
+      y: '100%'
+    })
     .translate({ x: this.getFabOffsetX(), y: this.getFabOffsetY() })
     .scale(getButtonScale(this.fabPressed))
     .animation({
@@ -3889,6 +3907,22 @@ struct Index {
   }
 
   @Builder
+  private KnowledgePreviewTopMaskCover() {
+    if (this.isExpandedLayout()) {
+      Column()
+        .width(this.getExpandedKnowledgePreviewPaneWidth())
+        .height(this.getKnowledgeContentTopPadding())
+        .backgroundColor(this.themeBackground)
+        .border({
+          width: { left: 1 },
+          color: $r('app.color.divider')
+        })
+        .position({ x: this.getExpandedKnowledgeListPaneWidth(), y: 0 })
+        .zIndex(2)
+    }
+  }
+
+  @Builder
   ExpandedKnowledgeTab() {
     Row() {
       Stack({ alignContent: Alignment.BottomEnd }) {
@@ -3898,20 +3932,17 @@ struct Index {
         .width('100%')
         .height('100%')
 
+        this.KnowledgePreviewTopMaskCover()
+
         this.KnowledgeUploadFloatingActionButton()
       }
       .width('100%')
       .height('100%')
-      .constraintSize({ maxWidth: 720 })
     }
     .width('100%')
     .layoutWeight(1)
     .justifyContent(FlexAlign.Center)
-    .padding({
-      left: this.getExpandedPageHorizontalPadding(),
-      right: this.getExpandedPageHorizontalPadding(),
-      bottom: 12
-    })
+    .padding({ bottom: 12 })
   }
 
   @Builder
@@ -5904,7 +5935,6 @@ struct Index {
       .backgroundColor(this.themeBackground)
       .ignoreLayoutSafeArea([LayoutSafeAreaType.SYSTEM], [LayoutSafeAreaEdge.TOP])
       .titleBar(this.getCompactSettingsTitleBarOptions())
-      .bindToScrollable([this.settingsRootScroller])
       .titleMode(HdsNavigationTitleMode.MINI)
       .systemBarStyle(
         { statusBarContentColor: getHdsStatusBarContentColor() },
@@ -5925,7 +5955,6 @@ struct Index {
       .height('100%')
       .backgroundColor(this.themeBackground)
       .titleBar(this.getCompactSettingsTitleBarOptions())
-      .bindToScrollable([this.settingsRootScroller])
       .titleMode(HdsNavigationTitleMode.MINI)
       .systemBarStyle(
         { statusBarContentColor: getHdsStatusBarContentColor() },

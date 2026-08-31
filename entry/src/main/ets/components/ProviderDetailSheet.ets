@@ -3,7 +3,9 @@ import {
   HdsNavigation,
   HdsNavigationMenuItemOptions,
   HdsNavigationTitleBarOptions,
-  HdsNavigationTitleMode
+  HdsNavigationTitleMode,
+  HdsTabs,
+  hdsMaterial
 } from '@kit.UIDesignKit'
 import {
   ModelProvider,
@@ -81,21 +83,12 @@ export enum ProviderDetailPresentationMode {
   DETAIL_PANE = 'detailPane'
 }
 
-const PROVIDER_DETAIL_PANE_BOTTOM_BAR_BASE_HEIGHT = 60
-const PROVIDER_DETAIL_PANE_BOTTOM_BAR_EXTRA_SPACING = 12
-
-export function getProviderDetailPaneBottomBarHeight(bottomAvoidHeightVp: number): number {
-  return PROVIDER_DETAIL_PANE_BOTTOM_BAR_BASE_HEIGHT + bottomAvoidHeightVp
-}
-
-export function getProviderDetailPaneBottomInset(bottomAvoidHeightVp: number,
-  presentationMode: ProviderDetailPresentationMode): number {
-  if (presentationMode !== ProviderDetailPresentationMode.DETAIL_PANE) {
-    return 0
-  }
-  // Reserve trailing content space only when the bottom tabs overlay the detail pane body.
-  return getProviderDetailPaneBottomBarHeight(bottomAvoidHeightVp) + PROVIDER_DETAIL_PANE_BOTTOM_BAR_EXTRA_SPACING
-}
+const PROVIDER_DETAIL_FLOATING_TAB_BAR_HEIGHT = 60
+const PROVIDER_DETAIL_FLOATING_TAB_BAR_WIDTH = 280
+const PROVIDER_DETAIL_FLOATING_TAB_BAR_SIDE_MARGIN = 20
+const PROVIDER_DETAIL_FLOATING_TAB_BAR_BOTTOM_MARGIN = 12
+const PROVIDER_DETAIL_FLOATING_TAB_BAR_SAFE_BOTTOM_MARGIN = 24
+const PROVIDER_DETAIL_FLOATING_TAB_CONTENT_SPACING = 12
 
 enum ProviderModelRenderRowType {
   GROUP_HEADER = 0,
@@ -1027,14 +1020,6 @@ export struct ProviderDetailPanel {
     return menus
   }
 
-  private getDetailPaneBottomBarHeight(): number {
-    return getProviderDetailPaneBottomBarHeight(this.getBottomAvoidHeightVp())
-  }
-
-  private getDetailPaneBottomInset(): number {
-    return getProviderDetailPaneBottomInset(this.getBottomAvoidHeightVp(), this.presentationMode)
-  }
-
   private getCompactSettingsTabsInset(): number {
     return getSettingsPageCompactTabsTotalInset(this.getBottomAvoidHeightVp(), this.settingsDetailPresentationMode)
   }
@@ -1046,7 +1031,7 @@ export struct ProviderDetailPanel {
 
   private getConfigContentBottomSpacerHeight(): number {
     if (this.isDetailPanePresentation()) {
-      return this.getDetailPaneBottomInset()
+      return this.getDetailPaneFloatingTabBottomInset()
     }
     if (this.shouldAvoidCompactSettingsTabs()) {
       return 24 + this.getCompactSettingsTabsInset()
@@ -1056,7 +1041,7 @@ export struct ProviderDetailPanel {
 
   private getModelsListBottomSpacerHeight(): number {
     if (this.isDetailPanePresentation()) {
-      return this.getDetailPaneBottomInset()
+      return this.getDetailPaneFloatingTabBottomInset()
     }
     if (this.shouldAvoidCompactSettingsTabs()) {
       return 24 + this.getCompactSettingsTabsInset()
@@ -1115,6 +1100,16 @@ export struct ProviderDetailPanel {
     return false
   }
 
+  private getDetailPaneFloatingTabBottomMargin(): number {
+    return this.getBottomAvoidHeightVp() > 0 ? PROVIDER_DETAIL_FLOATING_TAB_BAR_SAFE_BOTTOM_MARGIN :
+      PROVIDER_DETAIL_FLOATING_TAB_BAR_BOTTOM_MARGIN
+  }
+
+  private getDetailPaneFloatingTabBottomInset(): number {
+    return PROVIDER_DETAIL_FLOATING_TAB_BAR_HEIGHT + this.getDetailPaneFloatingTabBottomMargin() +
+      PROVIDER_DETAIL_FLOATING_TAB_CONTENT_SPACING
+  }
+
   build() {
     if (this.isStandalonePagePresentation()) {
       HdsNavigation() {
@@ -1133,7 +1128,6 @@ export struct ProviderDetailPanel {
       .height('100%')
       .backgroundColor(getAppUiState().themeBackground)
       .titleBar(this.getStandaloneTitleBarOptions())
-      .bindToScrollable([this.pageConfigScroller, this.pageModelListScroller])
       .titleMode(HdsNavigationTitleMode.MINI)
       .systemBarStyle(
         { statusBarContentColor: getHdsStatusBarContentColor() },
@@ -1190,18 +1184,56 @@ export struct ProviderDetailPanel {
           .layoutWeight(1)
         }
       } else if (this.isDetailPanePresentation()) {
-        Stack({ alignContent: Alignment.BottomEnd }) {
-          Stack({ alignContent: Alignment.TopStart }) {
-            this.DetailPaneConfigContent()
-            this.DetailPaneModelsContent()
+        HdsNavigation() {
+          HdsTabs({ barPosition: BarPosition.End, index: this.currentTabIndex }) {
+            TabContent() {
+              this.DetailPaneConfigContent()
+            }
+            .tabBar(this.DetailPaneFloatingTabBuilder(0, $r('sys.symbol.gearshape'),
+              $r('app.string.provider_tab_config')))
+
+            TabContent() {
+              this.DetailPaneModelsContent()
+            }
+            .tabBar(this.DetailPaneFloatingTabBuilder(1, $r('sys.symbol.satellite_map'),
+              $r('app.string.provider_tab_models')))
           }
           .width('100%')
           .height('100%')
-
-          this.DetailPaneBottomTabs()
+          .barMode(BarMode.Fixed)
+          .barHeight(PROVIDER_DETAIL_FLOATING_TAB_BAR_HEIGHT)
+          .barOverlap(true)
+          .barPosition(BarPosition.End)
+          .vertical(false)
+          .scrollable(false)
+          .animationDuration(300)
+          .barBackgroundColor(Color.Transparent)
+          .barFloatingStyle({
+            barBottomMargin: this.getDetailPaneFloatingTabBottomMargin(),
+            barSideMargin: PROVIDER_DETAIL_FLOATING_TAB_BAR_SIDE_MARGIN,
+            barWidth: {
+              smallWidth: PROVIDER_DETAIL_FLOATING_TAB_BAR_WIDTH,
+              mediumWidth: PROVIDER_DETAIL_FLOATING_TAB_BAR_WIDTH,
+              largeWidth: PROVIDER_DETAIL_FLOATING_TAB_BAR_WIDTH
+            },
+            gradientMask: { maskColor: Color.Transparent },
+            lightColor: Color.White,
+            systemMaterialEffect: {
+              materialType: hdsMaterial.MaterialType.IMMERSIVE,
+              materialLevel: hdsMaterial.MaterialLevel.ADAPTIVE
+            }
+          })
+          .onChange((index: number) => {
+            this.currentTabIndex = index
+          })
         }
         .width('100%')
         .layoutWeight(1)
+        .backgroundColor(getAppUiState().themeBackground)
+        .hideTitleBar(true)
+        .hideBackButton(true)
+        .hideToolBar(true)
+        .mode(NavigationMode.Stack)
       } else {
         Tabs({ barPosition: BarPosition.End, index: this.currentTabIndex }) {
           TabContent() {
@@ -1321,7 +1353,6 @@ export struct ProviderDetailPanel {
     .scrollBar(BarState.Off)
     .edgeEffect(EdgeEffect.Spring)
     .align(Alignment.Top)
-    .visibility(this.currentTabIndex === 0 ? Visibility.Visible : Visibility.Hidden)
   }
 
   @Builder
@@ -1331,61 +1362,26 @@ export struct ProviderDetailPanel {
     }
     .width('100%')
     .height('100%')
-    .visibility(this.currentTabIndex === 1 ? Visibility.Visible : Visibility.Hidden)
   }
 
   @Builder
-  private DetailPaneBottomTabs() {
-    Column() {
-      Row({ space: 12 }) {
-        this.DetailPaneBottomTabButton(0, $r('sys.symbol.gearshape'), $r('app.string.provider_tab_config'))
-        this.DetailPaneBottomTabButton(1, $r('sys.symbol.satellite_map'), $r('app.string.provider_tab_models'))
-      }
-      .width('100%')
-      .padding({
-        left: 24,
-        right: 24,
-        top: 8,
-        bottom: 8 + this.getBottomAvoidHeightVp()
-      })
+  private DetailPaneFloatingTabBuilder(index: number, icon: Resource, title: Resource) {
+    Column({ space: 2 }) {
+      SymbolGlyph(icon)
+        .fontSize(22)
+        .fontColor([this.currentTabIndex === index ? this.themePrimary : $r('app.color.text_secondary')])
+
+      Text(title)
+        .fontSize(10)
+        .fontWeight(this.currentTabIndex === index ? FontWeight.Bold : FontWeight.Medium)
+        .fontColor(this.currentTabIndex === index ? this.themePrimary : $r('app.color.text_secondary'))
+        .maxLines(1)
+        .textOverflow({ overflow: TextOverflow.Ellipsis })
     }
     .width('100%')
-    .height(this.getDetailPaneBottomBarHeight())
-    .backgroundColor(getAppUiState().themeBackground)
-    .backgroundBlurStyle(BlurStyle.Thin)
-    .border({ width: { top: 1 }, color: $r('app.color.divider') })
-  }
-
-  @Builder
-  private DetailPaneBottomTabButton(index: number, icon: Resource, title: Resource) {
-    Button() {
-      Column({ space: 4 }) {
-        SymbolGlyph(icon)
-          .fontSize(18)
-          .fontColor([this.currentTabIndex === index ? this.themePrimary : $r('app.color.text_tertiary')])
-
-        Text(title)
-          .fontSize(12)
-          .fontWeight(this.currentTabIndex === index ? FontWeight.Bold : FontWeight.Medium)
-          .fontColor(this.currentTabIndex === index ? this.themePrimary : $r('app.color.text_secondary'))
-      }
-      .width('100%')
-      .height(44)
-      .justifyContent(FlexAlign.Center)
-      .alignItems(HorizontalAlign.Center)
-    }
-    .type(ButtonType.Normal)
-    .stateEffect(false)
-    .layoutWeight(1)
-    .padding(0)
-    .borderRadius(16)
-    .backgroundColor(this.currentTabIndex === index ? this.themePrimaryLight : Color.Transparent)
-    .onClick(() => {
-      if (this.currentTabIndex === index) {
-        return
-      }
-      this.currentTabIndex = index
-    })
+    .height('100%')
+    .justifyContent(FlexAlign.Center)
+    .alignItems(HorizontalAlign.Center)
   }
 
   @Builder

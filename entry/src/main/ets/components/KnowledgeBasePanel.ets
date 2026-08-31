@@ -49,6 +49,8 @@ export struct KnowledgeBasePanel {
   @Param listScroller: ListScroller = new ListScroller()
   @Param topSpacerHeight: number = 0
   @Param bottomSpacerHeight: number = 100
+  @Param splitPreviewMode: boolean = false
+  @Param splitListPaneWidth: number = 340
   @Local documents: KnowledgeDocument[] = []
   @Local isLoading: boolean = true
   @Local isWorking: boolean = false
@@ -444,6 +446,9 @@ export struct KnowledgeBasePanel {
   private async performDeleteDocument(document: KnowledgeDocument): Promise<void> {
     this.isWorking = true
     this.processingDocumentId = document.id
+    if (this.previewDocumentId === document.id) {
+      this.closeDocumentPreview()
+    }
     const deleted = await this.service.deleteDocument(document.id)
     this.documents = [...await this.service.listDocuments()]
     this.processingDocumentId = ''
@@ -1392,7 +1397,7 @@ export struct KnowledgeBasePanel {
       ImmersiveSheetHeader({
         title: this.previewTitle !== '' ? this.previewTitle : pickLocalizedText('文件预览', 'File preview'),
         onLeadingClick: (): void => {
-          this.showPreviewSheet = false
+          this.closeDocumentPreview()
         }
       })
 
@@ -1485,9 +1490,9 @@ export struct KnowledgeBasePanel {
     .backgroundColor(getAppUiState().themeBackground)
   }
 
-  build() {
-    Stack() {
-      List({ space: 0, scroller: this.listScroller }) {
+  @Builder
+  private KnowledgeDocumentList() {
+    List({ space: 0, scroller: this.listScroller }) {
         if (this.topSpacerHeight > 0) {
           ListItem() {
             Column()
@@ -1614,25 +1619,112 @@ export struct KnowledgeBasePanel {
           .focusable(false)
           .selectable(false)
         }
+    }
+    .width('100%')
+    .height('100%')
+    .scrollBar(BarState.Off)
+    .edgeEffect(EdgeEffect.Spring)
+    .cachedCount(4)
+  }
+
+  @Builder
+  private SplitPreviewPlaceholder() {
+    Column({ space: 12 }) {
+      Column() {
+        SymbolGlyph($r('sys.symbol.doc_text_badge_magnifyingglass'))
+          .renderingStrategy(SymbolRenderingStrategy.SINGLE)
+          .fontSize(30)
+          .fontColor([this.themePrimary])
+      }
+      .width(64)
+      .height(64)
+      .borderRadius(20)
+      .backgroundColor(withColorAlpha(this.themePrimary, this.isDarkMode ? '26' : '12'))
+      .justifyContent(FlexAlign.Center)
+      .alignItems(HorizontalAlign.Center)
+
+      Text(pickLocalizedText('选择知识文件以预览', 'Select a knowledge file to preview'))
+        .fontSize(16)
+        .fontWeight(FontWeight.Bold)
+        .fontColor($r('app.color.text_primary'))
+        .textAlign(TextAlign.Center)
+
+      Text(pickLocalizedText(
+        '点击左侧列表中的文件，预览内容将在这里显示。',
+        'Choose a file from the list on the left to show its preview here.'
+      ))
+        .fontSize(12)
+        .fontColor($r('app.color.text_secondary'))
+        .textAlign(TextAlign.Center)
+        .constraintSize({ maxWidth: 320 })
+    }
+    .width('100%')
+    .height('100%')
+    .justifyContent(FlexAlign.Center)
+    .alignItems(HorizontalAlign.Center)
+    .padding(24)
+  }
+
+  @Builder
+  private SplitPreviewPane() {
+    Column() {
+      if (this.topSpacerHeight > 0) {
+        Column()
+          .width('100%')
+          .height(this.topSpacerHeight)
+      }
+
+      Stack() {
+        if (this.showPreviewSheet) {
+          this.PreviewSheetContent()
+        } else {
+          this.SplitPreviewPlaceholder()
+        }
       }
       .width('100%')
-      .height('100%')
-      .scrollBar(BarState.Off)
-      .edgeEffect(EdgeEffect.Spring)
-      .cachedCount(4)
+      .layoutWeight(1)
+    }
+    .height('100%')
+    .layoutWeight(1)
+    .border({
+      width: { left: 1 },
+      color: getAppUiState().themeDivider
+    })
+    .backgroundColor(getAppUiState().themeBackground)
+  }
 
-      Column()
-        .width(0)
-        .height(0)
-        .bindSheet($$this.showPreviewSheet, this.PreviewSheetContent(), {
-          height: SheetSize.LARGE,
-          detents: [SheetSize.LARGE],
-          dragBar: true,
-          showClose: false,
-          onDisappear: () => {
-            this.closeDocumentPreview()
+  build() {
+    Stack() {
+      if (this.splitPreviewMode) {
+        Row() {
+          Column() {
+            this.KnowledgeDocumentList()
           }
-        })
+          .width(this.splitListPaneWidth)
+          .height('100%')
+
+          this.SplitPreviewPane()
+        }
+        .width('100%')
+        .height('100%')
+      } else {
+        this.KnowledgeDocumentList()
+
+        Column()
+          .width(0)
+          .height(0)
+          .bindSheet($$this.showPreviewSheet, this.PreviewSheetContent(), {
+            height: SheetSize.LARGE,
+            detents: [SheetSize.LARGE],
+            dragBar: true,
+            showClose: false,
+            onDisappear: () => {
+              if (!this.splitPreviewMode) {
+                this.closeDocumentPreview()
+              }
+            }
+          })
+      }
     }
     .width('100%')
     .height('100%')

@@ -142,7 +142,7 @@ export struct IndexSettingsPanel {
           } as SettingsListItemModel,
           {
             key: SettingsRouteName.HAND_ADAPTIVE,
-            icon: $r('sys.symbol.person'),
+            icon: $r('sys.symbol.phone_and_hand'),
             title: $r('app.string.settings_hand_adaptive'),
             subtitle: $r('app.string.settings_hand_adaptive_desc'),
             action: (): void => { this.onOpenHandAdaptive() }
