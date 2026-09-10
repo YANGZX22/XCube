@@ -65,6 +65,7 @@ export class AppUiState {
   @Trace lightColorMode: string = 'default'
   @Trace chatListImmersiveMaterial: boolean = false
   @Trace knowledgeListImmersiveMaterial: boolean = false
+  @Trace forceWrappedMaterialBlur: boolean = false
 }
 
 function readStorageValue<T>(key: string, fallback: T): T {
@@ -248,6 +249,9 @@ function applyAppUiStateValue<T extends string | number | boolean>(state: AppUiS
     case AppStorageKeys.KNOWLEDGE_LIST_IMMERSIVE_MATERIAL:
       state.knowledgeListImmersiveMaterial = value as boolean
       return
+    case AppStorageKeys.FORCE_WRAPPED_MATERIAL_BLUR:
+      state.forceWrappedMaterialBlur = value as boolean
+      return
     default:
       return
   }
@@ -362,6 +366,8 @@ function createAppUiStateFromStorage(): AppUiState {
     readStorageValue<boolean>(AppStorageKeys.CHAT_LIST_IMMERSIVE_MATERIAL, false))
   applyAppUiStateValue(state, AppStorageKeys.KNOWLEDGE_LIST_IMMERSIVE_MATERIAL,
     readStorageValue<boolean>(AppStorageKeys.KNOWLEDGE_LIST_IMMERSIVE_MATERIAL, false))
+  applyAppUiStateValue(state, AppStorageKeys.FORCE_WRAPPED_MATERIAL_BLUR,
+    readStorageValue<boolean>(AppStorageKeys.FORCE_WRAPPED_MATERIAL_BLUR, false))
   return state
 }
 
@@ -434,6 +440,7 @@ export function syncAppUiStateFromStorage(): void {
   state.lightColorMode = freshState.lightColorMode
   state.chatListImmersiveMaterial = freshState.chatListImmersiveMaterial
   state.knowledgeListImmersiveMaterial = freshState.knowledgeListImmersiveMaterial
+  state.forceWrappedMaterialBlur = freshState.forceWrappedMaterialBlur
 }
 
 export function applyThemeToAppUiState(themeId: string, colors: ThemeColorConfig): void {
@@ -576,6 +583,10 @@ function resolveAppUiStatePath(path: string): string {
       return 'lightColorMode'
     case AppStorageKeys.CHAT_LIST_IMMERSIVE_MATERIAL:
       return 'chatListImmersiveMaterial'
+    case AppStorageKeys.KNOWLEDGE_LIST_IMMERSIVE_MATERIAL:
+      return 'knowledgeListImmersiveMaterial'
+    case AppStorageKeys.FORCE_WRAPPED_MATERIAL_BLUR:
+      return 'forceWrappedMaterialBlur'
     default:
       return path
   }

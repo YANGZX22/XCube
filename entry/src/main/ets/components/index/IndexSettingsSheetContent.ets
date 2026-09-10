@@ -1,3 +1,4 @@
+import { ImmersiveButtonSurface } from '../ImmersiveButtonSurface'
 import { uiMaterial } from '@kit.ArkUI'
 import { ThemeMode, AppLanguage } from '../../services/PreferencesService'
 import { SettingsSheetType } from '../../pages/index/IndexPageTypes'
@@ -186,22 +187,31 @@ export struct IndexSettingsSheetContent {
         .lineHeight(18)
         .margin({ top: 10, bottom: 10 })
 
-      Button($r('app.string.notification_open_system_settings'))
-        .width('100%')
-        .height(40)
-        .fontSize(14)
-        .fontWeight(FontWeight.Medium)
-        .fontColor(this.themePrimary)
-        .backgroundColor(Color.Transparent)
-        .borderRadius(12)
-        .systemMaterial(new uiMaterial.ImmersiveMaterial({
-          style: uiMaterial.ImmersiveStyle.REGULAR,
-          interactive: true,
-          lightEffect: { color: undefined }
-        }))
-        .onClick(() => {
-          this.callbacks.onOpenSystemNotificationSettings()
-        })
+      Stack({ alignContent: Alignment.TopStart }) {
+        ImmersiveButtonSurface({
+          materialFactory: () => (new uiMaterial.ImmersiveMaterial({
+              style: uiMaterial.ImmersiveStyle.REGULAR,
+              interactive: true,
+              lightEffect: { color: undefined }
+            })),
+          cornerRadius: 12
+        }) {
+          Button($r('app.string.notification_open_system_settings'))
+            .width('100%')
+            .height(40)
+            .fontSize(14)
+            .fontWeight(FontWeight.Medium)
+            .fontColor(this.themePrimary)
+            .backgroundColor(Color.Transparent)
+            .borderRadius(12)
+            .onClick(() => {
+              this.callbacks.onOpenSystemNotificationSettings()
+            })
+        }
+      }
+      .width('100%')
+      .height(40)
+      .clip(false)
     }
     .width('100%')
     .padding({ left: 8, right: 8, top: 2, bottom: 2 })

@@ -1,3 +1,5 @@
+import { ImmersiveButtonSurface } from './ImmersiveButtonSurface'
+import { uiMaterial } from '@kit.ArkUI'
 /**
  * 附件选择器组件
  * 点击输入栏的 + 按钮后弹出，支持拍照、选择照片、上传文件
@@ -12,7 +14,6 @@ import { util } from '@kit.ArkTS'
 import { BusinessError } from '@kit.BasicServicesKit'
 import { getAttachmentStorageService, AttachmentStorageService } from '../services/AttachmentStorageService'
 import { getAppUiState } from '../state/AppUiState'
-import { uiMaterial } from '@kit.ArkUI'
 import { VisualEffectsMode } from '../models/ThemeColors'
 
 @ComponentV2
@@ -91,42 +92,51 @@ export struct AttachmentPicker {
 
   @Builder
   OptionButton(icon: Resource, label: string, action: () => void) {
-    Button({
-      type: ButtonType.Normal,
-      stateEffect: false
-    }) {
-      Column() {
-        SymbolGlyph(icon)
-          .fontSize(22)
-          .fontColor([this.isManuscriptMode ? getAppUiState().themeTextSecondary : this.themePrimary])
+    Stack({ alignContent: Alignment.TopStart }) {
+      ImmersiveButtonSurface({
+        materialFactory: this.isManuscriptMode ? undefined : () => (new uiMaterial.ImmersiveMaterial({
+          style: uiMaterial.ImmersiveStyle.REGULAR,
+          materialColor: Color.Transparent,
+          applyShadow: false,
+          interactive: true,
+          lightEffect: { color: undefined }
+        })),
+        cornerRadius: this.isManuscriptMode ? 0 : this.getOptionButtonRadius()
+      }) {
+        Button({
+          type: ButtonType.Normal,
+          stateEffect: false
+        }) {
+          Column() {
+            SymbolGlyph(icon)
+              .fontSize(22)
+              .fontColor([this.isManuscriptMode ? getAppUiState().themeTextSecondary : this.themePrimary])
 
-        Text(label)
-          .fontSize(12)
-          .fontWeight(FontWeight.Medium)
-          .fontColor(this.isManuscriptMode ? getAppUiState().themeTextSecondary : this.themePrimary)
-          .maxLines(1)
-          .margin({ top: 4 })
+            Text(label)
+              .fontSize(12)
+              .fontWeight(FontWeight.Medium)
+              .fontColor(this.isManuscriptMode ? getAppUiState().themeTextSecondary : this.themePrimary)
+              .maxLines(1)
+              .margin({ top: 4 })
+          }
+          .width('100%')
+          .height('100%')
+          .justifyContent(FlexAlign.Center)
+          .alignItems(HorizontalAlign.Center)
+        }
+        .width(this.getOptionButtonWidth())
+        .height(this.getOptionButtonHeight())
+        .padding(0)
+        .backgroundColor(Color.Transparent)
+        .borderRadius(this.isManuscriptMode ? 0 : this.getOptionButtonRadius())
+        .onClick(() => {
+          action()
+        })
       }
-      .width('100%')
-      .height('100%')
-      .justifyContent(FlexAlign.Center)
-      .alignItems(HorizontalAlign.Center)
     }
     .width(this.getOptionButtonWidth())
     .height(this.getOptionButtonHeight())
-    .padding(0)
-    .backgroundColor(Color.Transparent)
-    .borderRadius(this.isManuscriptMode ? 0 : this.getOptionButtonRadius())
-    .systemMaterial(this.isManuscriptMode ? undefined : new uiMaterial.ImmersiveMaterial({
-      style: uiMaterial.ImmersiveStyle.REGULAR,
-      materialColor: Color.Transparent,
-      applyShadow: false,
-      interactive: true,
-      lightEffect: { color: undefined }
-    }))
-    .onClick(() => {
-      action()
-    })
+    .clip(false)
   }
 
   // 打开相机拍照

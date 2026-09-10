@@ -29,6 +29,18 @@
       "value": "输入消息..."
     },
     {
+      "name": "chat_ai_generation_notice",
+      "value": "内容由 AI 生成；AI 也可能犯错，务必仔细斟酌"
+    },
+    {
+      "name": "chat_ai_notice_show_hint",
+      "value": "长按此处显示 AI 提示"
+    },
+    {
+      "name": "chat_ai_notice_hide_hint",
+      "value": "长按此处隐藏 AI 提示"
+    },
+    {
       "name": "chat_inflight_steer",
       "value": "引导当前回答"
     },
@@ -349,8 +361,32 @@
       "value": "对话列表页沉浸材质"
     },
     {
+      "name": "wrapped_material_compatibility_title",
+      "value": "材质兼容性"
+    },
+    {
+      "name": "wrapped_material_force_blur_title",
+      "value": "关闭沉浸光感材质"
+    },
+    {
+      "name": "wrapped_material_force_blur_desc",
+      "value": "关闭沉浸光感效果，当出现异常或滚动卡顿时可开启此项。可能存在 UI 问题"
+    },
+    {
+      "name": "wrapped_material_status_forced",
+      "value": "已关闭沉浸光感"
+    },
+    {
+      "name": "wrapped_material_status_available",
+      "value": "已启用沉浸光感"
+    },
+    {
+      "name": "wrapped_material_status_fallback",
+      "value": "无法启用沉浸光感。请将设备系统版本升级至 HarmonyOS 7.0.0 及以上版本"
+    },
+    {
       "name": "chat_list_immersive_material_desc",
-      "value": "开启后对话栏使用沉浸光感材质；关闭以避免卡顿。"
+      "value": "开启后对话栏使用沉浸光感材质；关闭后使用模糊以减少渲染开销"
     },
     {
       "name": "knowledge_list_immersive_material_title",
@@ -358,7 +394,7 @@
     },
     {
       "name": "knowledge_list_immersive_material_desc",
-      "value": "开启后知识库文件栏使用沉浸光感材质；关闭以避免卡顿。"
+      "value": "开启后知识库列表栏使用沉浸光感材质；关闭后使用模糊以减少渲染开销"
     },
     {
       "name": "settings_language",
@@ -2054,11 +2090,11 @@
     },
     {
       "name": "font_preview_ai_message",
-      "value": "你好！我是 XCube，很高兴为你服务。"
+      "value": "早安！祝你拥有奇妙的一天。"
     },
     {
       "name": "font_preview_user_message",
-      "value": "你好，请帮我写一段文字。"
+      "value": "早安"
     },
     {
       "name": "provider_add_model_placeholder",

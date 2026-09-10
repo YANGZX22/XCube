@@ -1,11 +1,17 @@
+import { DrawnFloatingTabBar } from '../components/DrawnFloatingTabBar'
+import { withColorAlpha } from '../utils/ColorAlphaUtils'
+import { getDrawnNavigationBorder, shouldUseDrawnNavigation } from '../utils/DrawnNavigationSupport'
+import { ImmersiveButtonSurface } from '../components/ImmersiveButtonSurface'
+import { getBlurBottomShadow } from '../utils/BlurShadowUtils'
+import { isWrappedMaterialApiAvailable, shouldUseWrappedMaterial } from '../utils/WrappedMaterialSupport'
 import {
   HdsNavigation,
   HdsNavigationTitleBarOptions,
   HdsNavigationTitleMode,
   HdsTabs,
-  HdsTabsFloatingStyle,
-  hdsMaterial
+  HdsTabsFloatingStyle
 } from '@kit.UIDesignKit'
+import { getHdsSystemMaterialEffect, HdsTabsBlurModifier, DrawnTabsContentModifier, getHdsMaterialLightColor } from '../utils/HdsMaterialSupport'
 import { curves, uiMaterial } from '@kit.ArkUI'
 import { picker } from '@kit.CoreFileKit'
 import {
@@ -151,6 +157,10 @@ export struct ThemeAppearanceSettingsView {
   @Local lightColorMode: string = 'default'
   @Local chatListImmersiveMaterial: boolean = false
   @Local knowledgeListImmersiveMaterial: boolean = false
+  @Local savingChatListMaterial: boolean = false
+  @Local savingKnowledgeListMaterial: boolean = false
+  @Local forceWrappedMaterialBlur: boolean = false
+  @Local savingWrappedMaterialFallback: boolean = false
 
   @Local currentTabIndex: number = TAB_INDEX_THEME
   @Local previewTabIndex: number = PREVIEW_TAB_INDEX_CHAT
@@ -188,6 +198,7 @@ export struct ThemeAppearanceSettingsView {
     this.lightColorMode = this.settingsManager.getLightColorMode()
     this.chatListImmersiveMaterial = this.settingsManager.getChatListImmersiveMaterial()
     this.knowledgeListImmersiveMaterial = this.settingsManager.getKnowledgeListImmersiveMaterial()
+    this.forceWrappedMaterialBlur = this.settingsManager.getForceWrappedMaterialBlur()
   }
 
   private getContentMaxWidth(): number {
@@ -227,13 +238,7 @@ export struct ThemeAppearanceSettingsView {
   }
 
   private getCompactTitleBarOptions(): HdsNavigationTitleBarOptions {
-    return buildHdsTopNavigationTitleBarOptionsForPage(
-      this.materialType,
-      this.materialLevel,
-      this.windowWidthVp,
-      this.windowHeightVp,
-      (): void => this.CompactTitleStackBuilder()
-    )
+    return buildHdsTopNavigationTitleBarOptionsForPage(this.materialType, this.materialLevel, this.windowWidthVp, this.windowHeightVp, (): void => this.CompactTitleStackBuilder(), [], this)
   }
 
   private getResolvedDarkMode(mode: ThemeMode = this.currentThemeMode): boolean {
@@ -529,35 +534,63 @@ export struct ThemeAppearanceSettingsView {
   }
 
   private async handleChatListImmersiveMaterialChanged(enabled: boolean): Promise<void> {
+    if (this.savingChatListMaterial || enabled === this.chatListImmersiveMaterial) {
+      return
+    }
     const previous = this.chatListImmersiveMaterial
-    animateTo({ duration: 280, curve: curves.springMotion(0.35, 0.8) }, () => {
-      this.chatListImmersiveMaterial = enabled
-    })
+    this.savingChatListMaterial = true
+    this.chatListImmersiveMaterial = enabled
     try {
       await this.settingsManager.setChatListImmersiveMaterial(enabled)
-    } catch (error) {
-      console.error('ThemeAppearanceSettingsView',
-        `Failed to set chat list immersive material: ${JSON.stringify(error)}`)
-      animateTo({ duration: 280, curve: curves.springMotion(0.35, 0.8) }, () => {
-        this.chatListImmersiveMaterial = previous
-      })
+    } catch (_error) {
+      this.chatListImmersiveMaterial = previous
+      showToast(this.getUIContext(), pickLocalizedText('材质设置保存失败，请重试', 'Could not save material settings. Try again.'))
+    } finally {
+      this.savingChatListMaterial = false
     }
   }
 
   private async handleKnowledgeListImmersiveMaterialChanged(enabled: boolean): Promise<void> {
+    if (this.savingKnowledgeListMaterial || enabled === this.knowledgeListImmersiveMaterial) {
+      return
+    }
     const previous = this.knowledgeListImmersiveMaterial
-    animateTo({ duration: 280, curve: curves.springMotion(0.35, 0.8) }, () => {
-      this.knowledgeListImmersiveMaterial = enabled
-    })
+    this.savingKnowledgeListMaterial = true
+    this.knowledgeListImmersiveMaterial = enabled
     try {
       await this.settingsManager.setKnowledgeListImmersiveMaterial(enabled)
-    } catch (error) {
-      console.error('ThemeAppearanceSettingsView',
-        `Failed to set knowledge list immersive material: ${JSON.stringify(error)}`)
-      animateTo({ duration: 280, curve: curves.springMotion(0.35, 0.8) }, () => {
-        this.knowledgeListImmersiveMaterial = previous
-      })
+    } catch (_error) {
+      this.knowledgeListImmersiveMaterial = previous
+      showToast(this.getUIContext(), pickLocalizedText('材质设置保存失败，请重试', 'Could not save material settings. Try again.'))
+    } finally {
+      this.savingKnowledgeListMaterial = false
     }
+  }
+
+  private async handleWrappedMaterialFallbackChanged(enabled: boolean): Promise<void> {
+    if (this.savingWrappedMaterialFallback || enabled === this.forceWrappedMaterialBlur) {
+      return
+    }
+    const previous = this.forceWrappedMaterialBlur
+    this.savingWrappedMaterialFallback = true
+    this.forceWrappedMaterialBlur = enabled
+    try {
+      await this.settingsManager.setForceWrappedMaterialBlur(enabled)
+    } catch (_error) {
+      this.forceWrappedMaterialBlur = previous
+      showToast(this.getUIContext(), pickLocalizedText('材质设置保存失败，请重试', 'Could not save material settings. Try again.'))
+    } finally {
+      this.savingWrappedMaterialFallback = false
+    }
+  }
+
+  private getWrappedMaterialStatus(): Resource {
+    if (this.forceWrappedMaterialBlur) {
+      return $r('app.string.wrapped_material_status_forced')
+    }
+    return isWrappedMaterialApiAvailable()
+      ? $r('app.string.wrapped_material_status_available')
+      : $r('app.string.wrapped_material_status_fallback')
   }
 
   private buildPreviewFloatingStyle(): HdsTabsFloatingStyle {
@@ -570,11 +603,8 @@ export struct ThemeAppearanceSettingsView {
         largeWidth: this.getPreviewFloatingTabBarWidth()
       },
       gradientMask: { maskColor: Color.Transparent },
-      lightColor: Color.White,
-      systemMaterialEffect: {
-        materialType: hdsMaterial.MaterialType.IMMERSIVE,
-        materialLevel: hdsMaterial.MaterialLevel.ADAPTIVE
-      }
+      lightColor: getHdsMaterialLightColor(Color.White),
+      systemMaterialEffect: getHdsSystemMaterialEffect()
     }
   }
 
@@ -609,22 +639,9 @@ export struct ThemeAppearanceSettingsView {
         largeWidth: APPEARANCE_FLOATING_TAB_BAR_WIDTH
       },
       gradientMask: { maskColor: Color.Transparent },
-      lightColor: Color.White,
-      systemMaterialEffect: {
-        materialType: hdsMaterial.MaterialType.IMMERSIVE,
-        materialLevel: hdsMaterial.MaterialLevel.ADAPTIVE
-      }
+      lightColor: getHdsMaterialLightColor(Color.White),
+      systemMaterialEffect: getHdsSystemMaterialEffect()
     }
-  }
-
-  private getAppearanceBlockMaterial(interactive: boolean = false): uiMaterial.Material {
-    return new uiMaterial.ImmersiveMaterial({
-      style: uiMaterial.ImmersiveStyle.ULTRA_THIN,
-      materialColor: Color.Transparent,
-      applyShadow: true,
-      interactive: interactive,
-      lightEffect: { color: undefined }
-    })
   }
 
   private getThemeRowStartIndexes(): number[] {
@@ -752,7 +769,8 @@ export struct ThemeAppearanceSettingsView {
       width: this.isManuscriptMode() ? 2 : 1,
       color: this.isManuscriptMode() ? this.getManuscriptAccent() : this.themePrimaryLight
     })
-    .systemMaterial(this.getAppearanceBlockMaterial(false))
+    .backdropBlur(16)
+    .shadow(getBlurBottomShadow())
     .animation({ duration: 400, curve: Curve.EaseInOut })
   }
 
@@ -834,7 +852,8 @@ export struct ThemeAppearanceSettingsView {
     .borderRadius(24)
     .border({ width: 1, color: this.themePrimaryLight })
     .padding({ top: 6, bottom: 6 })
-    .systemMaterial(this.getAppearanceBlockMaterial(false))
+    .backdropBlur(16)
+    .shadow(getBlurBottomShadow())
   }
 
   @Builder
@@ -942,7 +961,8 @@ export struct ThemeAppearanceSettingsView {
       color: this.currentColorTheme === theme.id ? this.themePrimary : this.themePrimaryLight
     })
     .layoutWeight(1)
-    .systemMaterial(this.getAppearanceBlockMaterial(true))
+    .backdropBlur(16)
+    .shadow(getBlurBottomShadow())
     .opacity(this.isManuscriptMode() ? 0.45 : 1)
     .enabled(!this.isManuscriptMode())
     .onClick(() => {
@@ -954,33 +974,44 @@ export struct ThemeAppearanceSettingsView {
 
   @Builder
   private FontPresetButton(label: Resource, size: number) {
-    Button(label)
-      .height(36)
-      .fontSize(13)
-      .fontWeight(FontWeight.Medium)
-      .fontColor(this.chatFontSize === size ? Color.White : this.themePrimary)
-      .backgroundColor(Color.Transparent)
-      .borderRadius(18)
-      .border({
-        width: 1,
-        color: this.chatFontSize === size ? this.themePrimary : this.themePrimaryLight
-      })
-      .systemMaterial(new uiMaterial.ImmersiveMaterial({
-        style: uiMaterial.ImmersiveStyle.ULTRA_THIN,
-        materialColor: this.chatFontSize === size ? this.themePrimary : Color.Transparent,
-        applyShadow: false,
-        interactive: true,
-        lightEffect: { color: undefined }
-      }))
-      .layoutWeight(1)
-      .onClick(() => {
-        this.handleFontSizeChanged(size)
-      })
+    Stack({ alignContent: Alignment.TopStart }) {
+      ImmersiveButtonSurface({
+        materialFactory: () => (new uiMaterial.ImmersiveMaterial({
+            style: uiMaterial.ImmersiveStyle.ULTRA_THIN,
+            materialColor: this.chatFontSize === size ? withColorAlpha(this.themePrimary, '26') : Color.Transparent,
+            applyShadow: false,
+            interactive: true,
+            lightEffect: { color: undefined }
+          })),
+        fallbackShadow: false,
+        cornerRadius: 18
+      }) {
+        Button(label)
+          .height(36)
+          .fontSize(13)
+          .fontWeight(shouldUseWrappedMaterial() && this.chatFontSize === size ? FontWeight.Bold : FontWeight.Medium)
+          .fontColor(this.themePrimary)
+          .backgroundColor(Color.Transparent)
+          .borderRadius(18)
+          .border({
+            width: shouldUseWrappedMaterial() ? 0 : 1,
+            color: this.chatFontSize === size ? this.themePrimary : this.themePrimaryLight
+          })
+          .onClick(() => {
+            this.handleFontSizeChanged(size)
+          })
+        .width('100%')
+      }
+    }
+    .height(36)
+    .layoutWeight(1)
+    .clip(false)
   }
 
   @Builder
   private MiniTabBarAssistants() {
     IndexBottomTabItem({
+      disablePressScale: shouldUseDrawnNavigation(),
       active: this.previewTabIndex === PREVIEW_TAB_INDEX_ASSISTANTS,
       activeIcon: $r('sys.symbol.person_fill'),
       inactiveIcon: $r('sys.symbol.person'),
@@ -992,6 +1023,7 @@ export struct ThemeAppearanceSettingsView {
   @Builder
   private MiniTabBarChat() {
     IndexBottomTabItem({
+      disablePressScale: shouldUseDrawnNavigation(),
       active: this.previewTabIndex === PREVIEW_TAB_INDEX_CHAT,
       activeIcon: $r('sys.symbol.ellipsis_message_fill'),
       inactiveIcon: $r('sys.symbol.ellipsis_message'),
@@ -1003,6 +1035,7 @@ export struct ThemeAppearanceSettingsView {
   @Builder
   private MiniTabBarSettings() {
     IndexBottomTabItem({
+      disablePressScale: shouldUseDrawnNavigation(),
       active: this.previewTabIndex === PREVIEW_TAB_INDEX_SETTINGS,
       activeIcon: $r('sys.symbol.gearshape_fill'),
       inactiveIcon: $r('sys.symbol.gearshape'),
@@ -1014,6 +1047,7 @@ export struct ThemeAppearanceSettingsView {
   @Builder
   private MiniTabBarKnowledge() {
     IndexBottomTabItem({
+      disablePressScale: shouldUseDrawnNavigation(),
       active: this.previewTabIndex === PREVIEW_TAB_INDEX_KNOWLEDGE,
       activeIcon: $r('sys.symbol.externaldrive_fill'),
       inactiveIcon: $r('sys.symbol.externaldrive'),
@@ -1091,68 +1125,114 @@ export struct ThemeAppearanceSettingsView {
   }
 
   @Builder
+  private DrawnPreviewTab(index: number) {
+    if (index === 0) {
+      this.MiniPreviewTab(PREVIEW_TAB_INDEX_ASSISTANTS)
+    }
+    else if (index === 1) {
+      this.MiniPreviewTab(PREVIEW_TAB_INDEX_CHAT)
+    }
+    else if (index === 2) {
+      this.MiniPreviewTab(PREVIEW_TAB_INDEX_KNOWLEDGE)
+    }
+    else {
+      this.MiniPreviewTab(PREVIEW_TAB_INDEX_SETTINGS)
+    }
+  }
+
+  @Builder
   private MiniFloatingBottomNavigation() {
     Row() {
-      HdsTabs({ barPosition: BarPosition.End, index: this.previewTabIndex }) {
-        TabContent() {
-          Column()
-        }
-        .tabBar(this.MiniPreviewTab(PREVIEW_TAB_INDEX_ASSISTANTS))
+      Stack({ alignContent: Alignment.Bottom }) {
+        HdsTabs({ barPosition: BarPosition.End, index: this.previewTabIndex }) {
+          TabContent() {
+            Column()
+          }
+          .tabBar(this.MiniPreviewTab(PREVIEW_TAB_INDEX_ASSISTANTS))
 
-        TabContent() {
-          Column()
-        }
-        .tabBar(this.MiniPreviewTab(PREVIEW_TAB_INDEX_CHAT))
+          TabContent() {
+            Column()
+          }
+          .tabBar(this.MiniPreviewTab(PREVIEW_TAB_INDEX_CHAT))
 
-        TabContent() {
-          Column()
-        }
-        .tabBar(this.MiniPreviewTab(PREVIEW_TAB_INDEX_KNOWLEDGE))
+          TabContent() {
+            Column()
+          }
+          .tabBar(this.MiniPreviewTab(PREVIEW_TAB_INDEX_KNOWLEDGE))
 
-        TabContent() {
-          Column()
+          TabContent() {
+            Column()
+          }
+          .tabBar(this.MiniPreviewTab(PREVIEW_TAB_INDEX_SETTINGS))
         }
-        .tabBar(this.MiniPreviewTab(PREVIEW_TAB_INDEX_SETTINGS))
+        .width(this.getPreviewFloatingTabHostWidth())
+        .height(PREVIEW_FLOATING_TAB_CONTAINER_HEIGHT)
+        .barMode(BarMode.Fixed)
+        .barHeight(shouldUseDrawnNavigation() ? 0 : PREVIEW_FLOATING_TAB_BAR_HEIGHT)
+        .barOverlap(true)
+        .barPosition(BarPosition.End)
+        .vertical(false)
+        .scrollable(false)
+        .animationDuration(260)
+        .barFloatingStyle(shouldUseDrawnNavigation() ? undefined : this.buildPreviewFloatingStyle())
+        .attributeModifier(shouldUseDrawnNavigation() ? new DrawnTabsContentModifier() : new HdsTabsBlurModifier(shouldUseWrappedMaterial()))
+        .backgroundColor(Color.Transparent)
+        .clip(false)
+        .onChange((index: number) => {
+          this.previewTabIndex = index
+        })
+        if (shouldUseDrawnNavigation()) {
+          DrawnFloatingTabBar({
+            tabCount: 4,
+            selectedIndex: this.previewTabIndex,
+            showSelectionBubble: false,
+            barWidth: this.getPreviewFloatingTabBarWidth(),
+            barHeight: PREVIEW_FLOATING_TAB_BAR_HEIGHT,
+            itemContent: (index: number): void => this.DrawnPreviewTab(index),
+            onSelect: (index: number) => {
+              this.previewTabIndex = index
+            }
+          })
+          .margin({ bottom: PREVIEW_FLOATING_TAB_BOTTOM_MARGIN })
+        }
       }
       .width(this.getPreviewFloatingTabHostWidth())
       .height(PREVIEW_FLOATING_TAB_CONTAINER_HEIGHT)
-      .barMode(BarMode.Fixed)
-      .barHeight(PREVIEW_FLOATING_TAB_BAR_HEIGHT)
-      .barOverlap(true)
-      .barPosition(BarPosition.End)
-      .vertical(false)
-      .scrollable(false)
-      .animationDuration(260)
-      .barBackgroundColor(Color.Transparent)
-      .barFloatingStyle(this.buildPreviewFloatingStyle())
-      .backgroundColor(Color.Transparent)
-      .clip(false)
-      .onChange((index: number) => {
-        this.previewTabIndex = index
-      })
 
       Blank()
         .layoutWeight(1)
         .constraintSize({ minWidth: PREVIEW_FLOATING_TAB_ITEM_GAP })
 
-      Button({ type: ButtonType.Circle, stateEffect: false }) {
-        SymbolGlyph($r('sys.symbol.plus'))
-          .fontSize(23)
-          .fontColor([this.isManuscriptMode() ? this.getManuscriptAccentDeep() : this.themePrimary])
+      Stack({ alignContent: Alignment.TopStart }) {
+        ImmersiveButtonSurface({
+          materialFactory: () => (new uiMaterial.ImmersiveMaterial({
+            style: uiMaterial.ImmersiveStyle.REGULAR,
+            materialColor: Color.Transparent,
+            applyShadow: true,
+            interactive: false,
+            lightEffect: { color: Color.White }
+          })),
+          fallbackShadow: false,
+          cornerRadius: 26
+        }) {
+          Button({ type: ButtonType.Circle, stateEffect: false }) {
+            SymbolGlyph($r('sys.symbol.plus'))
+              .fontSize(23)
+              .fontColor([this.isManuscriptMode() ? this.getManuscriptAccentDeep() : this.themePrimary])
+          }
+          .width(52)
+          .height(52)
+          .padding(0)
+          .backgroundColor(Color.Transparent)
+          .borderRadius(26)
+          .border(shouldUseDrawnNavigation() ? getDrawnNavigationBorder() : undefined)
+          .shadow(shouldUseWrappedMaterial() ? undefined : getBlurBottomShadow())
+        }
       }
       .width(52)
       .height(52)
-      .padding(0)
-      .backgroundColor(Color.Transparent)
-      .borderRadius(26)
-      .systemMaterial(new uiMaterial.ImmersiveMaterial({
-        style: uiMaterial.ImmersiveStyle.REGULAR,
-        materialColor: Color.Transparent,
-        applyShadow: true,
-        interactive: false,
-        lightEffect: { color: Color.White }
-      }))
       .margin({ bottom: PREVIEW_FLOATING_TAB_BOTTOM_MARGIN })
+      .clip(false)
     }
     .width('100%')
     .height(PREVIEW_FLOATING_TAB_CONTAINER_HEIGHT)
@@ -1209,23 +1289,32 @@ export struct ThemeAppearanceSettingsView {
 
   @Builder
   private MiniPreviewHeaderIcon(symbol: Resource) {
-    Button({ type: ButtonType.Normal, stateEffect: false }) {
-      SymbolGlyph(symbol)
-        .fontSize(this.isManuscriptMode() ? 15 : 17)
-        .fontColor([this.isManuscriptMode() ? this.getManuscriptAccentDeep() : this.themePrimary])
+    Stack({ alignContent: Alignment.TopStart }) {
+      ImmersiveButtonSurface({
+        materialFactory: this.isManuscriptMode() ? undefined : () => (new uiMaterial.ImmersiveMaterial({
+          style: uiMaterial.ImmersiveStyle.ULTRA_THIN,
+          materialColor: Color.Transparent,
+          applyShadow: false,
+          interactive: false,
+          lightEffect: { color: undefined }
+        })),
+        cornerRadius: this.isManuscriptMode() ? 0 : 17
+      }) {
+        Button({ type: ButtonType.Normal, stateEffect: false }) {
+          SymbolGlyph(symbol)
+            .fontSize(this.isManuscriptMode() ? 15 : 17)
+            .fontColor([this.isManuscriptMode() ? this.getManuscriptAccentDeep() : this.themePrimary])
+        }
+        .width(34)
+        .height(34)
+        .padding(0)
+        .backgroundColor(Color.Transparent)
+        .borderRadius(this.isManuscriptMode() ? 0 : 17)
+      }
     }
     .width(34)
     .height(34)
-    .padding(0)
-    .backgroundColor(Color.Transparent)
-    .borderRadius(this.isManuscriptMode() ? 0 : 17)
-    .systemMaterial(this.isManuscriptMode() ? undefined : new uiMaterial.ImmersiveMaterial({
-      style: uiMaterial.ImmersiveStyle.ULTRA_THIN,
-      materialColor: Color.Transparent,
-      applyShadow: false,
-      interactive: false,
-      lightEffect: { color: undefined }
-    }))
+    .clip(false)
   }
 
   @Builder
@@ -1315,13 +1404,8 @@ export struct ThemeAppearanceSettingsView {
       width: this.isManuscriptMode() ? { top: 1, bottom: 1 } : 0.5,
       color: this.isManuscriptMode() ? getAppUiState().themeDivider : this.themePrimaryLight
     })
-    .systemMaterial(this.isManuscriptMode() ? undefined : new uiMaterial.ImmersiveMaterial({
-      style: uiMaterial.ImmersiveStyle.REGULAR,
-      materialColor: this.themeAiBubble,
-      applyShadow: false,
-      interactive: false,
-      lightEffect: { color: undefined }
-    }))
+    .backdropBlur(this.isManuscriptMode() ? 0 : 24)
+    .shadow(getBlurBottomShadow(!(this.isManuscriptMode())))
   }
 
   @Builder
@@ -1385,19 +1469,14 @@ export struct ThemeAppearanceSettingsView {
               .fontSize(this.chatFontSize)
               .lineHeight(this.chatFontSize + 7)
               .fontFamily(this.previewChatTypeface)
-              .fontColor(this.themeUserBubbleText)
+              .fontColor($r('app.color.text_primary'))
           }
           .padding({ left: 12, right: 12, top: 8, bottom: 8 })
-          .backgroundColor(this.themeUserBubble)
+          .backgroundColor(Color.Transparent)
           .borderRadius({ topLeft: 16, topRight: 16, bottomLeft: 16, bottomRight: 5 })
           .constraintSize({ maxWidth: '78%' })
-          .systemMaterial(new uiMaterial.ImmersiveMaterial({
-            style: uiMaterial.ImmersiveStyle.REGULAR,
-            materialColor: this.themeUserBubble,
-            applyShadow: false,
-            interactive: false,
-            lightEffect: { color: undefined }
-          }))
+          .backdropBlur(24)
+          .shadow(getBlurBottomShadow())
         }
         .width('100%')
 
@@ -1437,16 +1516,11 @@ export struct ThemeAppearanceSettingsView {
           }
           .width('100%')
           .padding({ left: 12, right: 12, top: 10, bottom: 10 })
-          .backgroundColor(this.themeAiBubble)
+          .backgroundColor(Color.Transparent)
           .borderRadius(14)
           .border({ width: 0.5, color: this.themePrimaryLight })
-          .systemMaterial(new uiMaterial.ImmersiveMaterial({
-            style: uiMaterial.ImmersiveStyle.REGULAR,
-            materialColor: this.themeAiBubble,
-            applyShadow: false,
-            interactive: false,
-            lightEffect: { color: undefined }
-          }))
+          .backdropBlur(24)
+          .shadow(getBlurBottomShadow())
 
           this.PreviewMessageActions(FlexAlign.Start)
         }
@@ -1548,13 +1622,8 @@ export struct ThemeAppearanceSettingsView {
       .borderRadius(16)
       .backgroundColor(Color.Transparent)
       .border({ width: 1, color: this.themePrimaryLight })
-      .systemMaterial(new uiMaterial.ImmersiveMaterial({
-        style: uiMaterial.ImmersiveStyle.ULTRA_THIN,
-        materialColor: Color.Transparent,
-        applyShadow: false,
-        interactive: true,
-        lightEffect: { color: undefined }
-      }))
+      .backdropBlur(16)
+      .shadow(getBlurBottomShadow())
     }
     .width('100%')
     .alignItems(VerticalAlign.Center)
@@ -1589,12 +1658,12 @@ export struct ThemeAppearanceSettingsView {
     Column({ space: 2 }) {
       SymbolGlyph(icon)
         .fontSize(22)
-        .fontColor([this.currentTabIndex === index ? this.themePrimary : $r('app.color.text_secondary')])
+        .fontColor([this.currentTabIndex === index ? (shouldUseDrawnNavigation() ? Color.White : this.themePrimary) : $r('app.color.text_secondary')])
 
       Text(label)
         .fontSize(10)
         .fontWeight(this.currentTabIndex === index ? FontWeight.Bold : FontWeight.Medium)
-        .fontColor(this.currentTabIndex === index ? this.themePrimary : $r('app.color.text_secondary'))
+        .fontColor(this.currentTabIndex === index ? (shouldUseDrawnNavigation() ? Color.White : this.themePrimary) : $r('app.color.text_secondary'))
         .maxLines(1)
         .textOverflow({ overflow: TextOverflow.Ellipsis })
     }
@@ -1724,7 +1793,8 @@ export struct ThemeAppearanceSettingsView {
           .backgroundColor(Color.Transparent)
           .borderRadius(24)
           .border({ width: 1, color: this.themePrimaryLight })
-          .systemMaterial(this.getAppearanceBlockMaterial(false))
+          .backdropBlur(16)
+          .shadow(getBlurBottomShadow())
 
           Column({ space: 10 }) {
             Text($r('app.string.settings_markdown_renderer'))
@@ -1767,7 +1837,8 @@ export struct ThemeAppearanceSettingsView {
           .backgroundColor(Color.Transparent)
           .borderRadius(24)
           .border({ width: 1, color: this.themePrimaryLight })
-          .systemMaterial(this.getAppearanceBlockMaterial(false))
+          .backdropBlur(16)
+          .shadow(getBlurBottomShadow())
 
           Row({ space: 16 }) {
             Column({ space: 4 }) {
@@ -1803,7 +1874,8 @@ export struct ThemeAppearanceSettingsView {
           .backgroundColor(Color.Transparent)
           .borderRadius(24)
           .border({ width: 1, color: this.themePrimaryLight })
-          .systemMaterial(this.getAppearanceBlockMaterial(false))
+          .backdropBlur(16)
+          .shadow(getBlurBottomShadow())
 
           Column({ space: 10 }) {
             Text($r('app.string.settings_chat_serif_font_family'))
@@ -1843,7 +1915,8 @@ export struct ThemeAppearanceSettingsView {
           .backgroundColor(Color.Transparent)
           .borderRadius(24)
           .border({ width: 1, color: this.themePrimaryLight })
-          .systemMaterial(this.getAppearanceBlockMaterial(false))
+          .backdropBlur(16)
+          .shadow(getBlurBottomShadow())
         }
         .width('100%')
         .constraintSize({ maxWidth: this.getContentMaxWidth() })
@@ -1864,11 +1937,61 @@ export struct ThemeAppearanceSettingsView {
   }
 
   @Builder
+  private MaterialCompatibilitySection() {
+    Column({ space: 12 }) {
+      Text($r('app.string.wrapped_material_compatibility_title'))
+        .fontSize(16)
+        .fontWeight(FontWeight.Medium)
+        .fontColor($r('app.color.text_primary'))
+        .width('100%')
+
+      Row({ space: 16 }) {
+        Column({ space: 4 }) {
+          Text($r('app.string.wrapped_material_force_blur_title'))
+            .fontSize(14)
+            .fontColor($r('app.color.text_primary'))
+            .width('100%')
+          Text($r('app.string.wrapped_material_force_blur_desc'))
+            .fontSize(12)
+            .fontColor($r('app.color.text_secondary'))
+            .lineHeight(18)
+            .width('100%')
+        }
+        .layoutWeight(1)
+
+        Toggle({ type: ToggleType.Switch, isOn: this.forceWrappedMaterialBlur })
+          .selectedColor(this.themePrimary)
+          .switchPointColor(Color.White)
+          .enabled(!this.savingWrappedMaterialFallback)
+          .onChange((enabled: boolean) => {
+            this.handleWrappedMaterialFallbackChanged(enabled)
+          })
+      }
+      .width('100%')
+      .alignItems(VerticalAlign.Center)
+
+      Text(this.getWrappedMaterialStatus())
+        .fontSize(12)
+        .fontColor($r('app.color.text_secondary'))
+        .lineHeight(18)
+        .width('100%')
+    }
+    .width('100%')
+    .padding(18)
+    .backgroundColor(Color.Transparent)
+    .borderRadius(24)
+    .border({ width: 1, color: this.themePrimaryLight })
+    .backdropBlur(16)
+    .shadow(getBlurBottomShadow())
+  }
+
+  @Builder
   private MaterialTabContent() {
     Scroll() {
       Row() {
         Column({ space: APPEARANCE_BLOCK_GAP }) {
           this.LivePreviewSection()
+          this.MaterialCompatibilitySection()
 
           Column() {
             Row({ space: 16 }) {
@@ -1892,7 +2015,7 @@ export struct ThemeAppearanceSettingsView {
                 .selectedColor(this.themePrimary)
                 .systemMaterial(new uiMaterial.Material())
                 .switchPointColor(Color.White)
-                .animation({ duration: 280, curve: curves.springMotion(0.35, 0.8) })
+                .enabled(!this.savingChatListMaterial)
                 .onChange((enabled: boolean) => {
                   this.handleChatListImmersiveMaterialChanged(enabled)
                 })
@@ -1926,7 +2049,7 @@ export struct ThemeAppearanceSettingsView {
                 .selectedColor(this.themePrimary)
                 .systemMaterial(new uiMaterial.Material())
                 .switchPointColor(Color.White)
-                .animation({ duration: 280, curve: curves.springMotion(0.35, 0.8) })
+                .enabled(!this.savingKnowledgeListMaterial)
                 .onChange((enabled: boolean) => {
                   this.handleKnowledgeListImmersiveMaterialChanged(enabled)
                 })
@@ -1939,7 +2062,19 @@ export struct ThemeAppearanceSettingsView {
           .backgroundColor(Color.Transparent)
           .borderRadius(24)
           .border({ width: 1, color: this.themePrimaryLight })
-          .systemMaterial(this.getAppearanceBlockMaterial(false))
+          .backdropBlur(16)
+          .shadow(getBlurBottomShadow())
+
+          if (this.isManuscriptMode()) {
+            Text(pickLocalizedText(
+              '手稿模式保留纸面样式；切回普通模式后应用上述材质设置。',
+              'Manuscript mode keeps its paper style. These material settings apply in standard mode.'
+            ))
+              .fontSize(12)
+              .fontColor($r('app.color.text_secondary'))
+              .lineHeight(18)
+              .width('100%')
+          }
         }
         .width('100%')
         .constraintSize({ maxWidth: this.getContentMaxWidth() })
@@ -1960,49 +2095,82 @@ export struct ThemeAppearanceSettingsView {
   }
 
   @Builder
+  private DrawnAppearanceTab(index: number) {
+    if (index === 0) {
+      this.AppearanceFloatingTab(0, $r('sys.symbol.paintbrush_pointed_waveform'),
+          $r('app.string.appearance_tab_theme'))
+    }
+    else if (index === 1) {
+      this.AppearanceFloatingTab(1, $r('sys.symbol.textformat'),
+          $r('app.string.appearance_tab_font'))
+    }
+    else {
+      this.AppearanceFloatingTab(2, $r('sys.symbol.square_stack_3d'),
+          $r('app.string.appearance_tab_material'))
+    }
+  }
+
+  @Builder
   private PageBody() {
     Column() {
-      HdsTabs({ barPosition: BarPosition.End, index: this.currentTabIndex }) {
-        TabContent() {
-          this.ThemeTabContent()
-        }
-        .width('100%')
-        .height('100%')
-        .tabBar(this.AppearanceFloatingTab(0, $r('sys.symbol.paintbrush_pointed_waveform'),
-          $r('app.string.appearance_tab_theme')))
+      Stack({ alignContent: Alignment.Bottom }) {
+        HdsTabs({ barPosition: BarPosition.End, index: this.currentTabIndex }) {
+          TabContent() {
+            this.ThemeTabContent()
+          }
+          .width('100%')
+          .height('100%')
+          .tabBar(this.AppearanceFloatingTab(0, $r('sys.symbol.paintbrush_pointed_waveform'),
+            $r('app.string.appearance_tab_theme')))
 
-        TabContent() {
-          this.FontTabContent()
-        }
-        .width('100%')
-        .height('100%')
-        .tabBar(this.AppearanceFloatingTab(1, $r('sys.symbol.textformat'),
-          $r('app.string.appearance_tab_font')))
+          TabContent() {
+            this.FontTabContent()
+          }
+          .width('100%')
+          .height('100%')
+          .tabBar(this.AppearanceFloatingTab(1, $r('sys.symbol.textformat'),
+            $r('app.string.appearance_tab_font')))
 
-        TabContent() {
-          this.MaterialTabContent()
+          TabContent() {
+            this.MaterialTabContent()
+          }
+          .width('100%')
+          .height('100%')
+          .tabBar(this.AppearanceFloatingTab(2, $r('sys.symbol.square_stack_3d'),
+            $r('app.string.appearance_tab_material')))
         }
         .width('100%')
         .height('100%')
-        .tabBar(this.AppearanceFloatingTab(2, $r('sys.symbol.square_stack_3d'),
-          $r('app.string.appearance_tab_material')))
+        .barMode(BarMode.Fixed)
+        .barHeight(shouldUseDrawnNavigation() ? 0 : APPEARANCE_FLOATING_TAB_BAR_HEIGHT)
+        .barOverlap(true)
+        .barPosition(BarPosition.End)
+        .vertical(false)
+        .scrollable(true)
+        .animationDuration(280)
+        .barFloatingStyle(shouldUseDrawnNavigation() ? undefined : this.buildAppearanceFloatingStyle())
+        .attributeModifier(shouldUseDrawnNavigation() ? new DrawnTabsContentModifier() : new HdsTabsBlurModifier(shouldUseWrappedMaterial()))
+        .backgroundColor(Color.Transparent)
+        .clip(false)
+        .onChange((index: number) => {
+          this.currentTabIndex = index
+        })
+        if (shouldUseDrawnNavigation()) {
+          DrawnFloatingTabBar({
+            tabCount: 3,
+            selectedIndex: this.currentTabIndex,
+            barWidth: APPEARANCE_FLOATING_TAB_BAR_WIDTH,
+            barHeight: APPEARANCE_FLOATING_TAB_BAR_HEIGHT,
+            itemContent: (index: number): void => this.DrawnAppearanceTab(index),
+            onSelect: (index: number) => {
+              this.currentTabIndex = index
+            }
+          })
+          .margin({ bottom: this.getAppearanceFloatingTabBottomMargin() })
+        }
       }
       .width('100%')
       .height('100%')
-      .barMode(BarMode.Fixed)
-      .barHeight(APPEARANCE_FLOATING_TAB_BAR_HEIGHT)
-      .barOverlap(true)
-      .barPosition(BarPosition.End)
-      .vertical(false)
-      .scrollable(true)
-      .animationDuration(280)
-      .barBackgroundColor(Color.Transparent)
-      .barFloatingStyle(this.buildAppearanceFloatingStyle())
-      .backgroundColor(Color.Transparent)
-      .clip(false)
-      .onChange((index: number) => {
-        this.currentTabIndex = index
-      })
     }
     .width('100%')
     .layoutWeight(1)
@@ -2062,7 +2230,7 @@ export struct ThemeAppearanceSettingsView {
           { statusBarContentColor: getHdsStatusBarContentColor() },
           { statusBarContentColor: getHdsStatusBarContentColor() }
         )
-        .hideBackButton(false)
+        .hideBackButton(shouldUseDrawnNavigation())
         .hideToolBar(true)
         .mode(NavigationMode.Stack)
         .ignoreLayoutSafeArea([LayoutSafeAreaType.SYSTEM], [LayoutSafeAreaEdge.TOP])
@@ -2079,7 +2247,7 @@ export struct ThemeAppearanceSettingsView {
           { statusBarContentColor: getHdsStatusBarContentColor() },
           { statusBarContentColor: getHdsStatusBarContentColor() }
         )
-        .hideBackButton(false)
+        .hideBackButton(shouldUseDrawnNavigation())
         .hideToolBar(true)
         .mode(NavigationMode.Stack)
         .ignoreLayoutSafeArea([LayoutSafeAreaType.SYSTEM], [LayoutSafeAreaEdge.TOP])

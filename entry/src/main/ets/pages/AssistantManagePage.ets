@@ -1,3 +1,4 @@
+import { shouldUseDrawnNavigation } from '../utils/DrawnNavigationSupport'
 import { uiMaterial } from '@kit.ArkUI'
 import { Assistant, DEFAULT_ASSISTANT_ID } from '../models/AssistantModels'
 import { ModelProvider } from '../models/ChatModels'
@@ -180,8 +181,7 @@ struct AssistantManagePage {
   }
 
   private getCompactTitleBarOptions(): HdsNavigationTitleBarOptions {
-    return buildHdsTopNavigationTitleBarOptionsForPage(this.materialType, this.materialLevel, this.windowWidthVp,
-      this.windowHeightVp, (): void => this.CompactTitleStackBuilder())
+    return buildHdsTopNavigationTitleBarOptionsForPage(this.materialType, this.materialLevel, this.windowWidthVp, this.windowHeightVp, (): void => this.CompactTitleStackBuilder(), [], this)
   }
 
   private async loadData(): Promise<void> {
@@ -1083,7 +1083,7 @@ struct AssistantManagePage {
           { statusBarContentColor: getHdsStatusBarContentColor() },
           { statusBarContentColor: getHdsStatusBarContentColor() }
         )
-        .hideBackButton(false)
+        .hideBackButton(shouldUseDrawnNavigation())
         .hideToolBar(true)
         .mode(NavigationMode.Stack)
         .ignoreLayoutSafeArea([LayoutSafeAreaType.SYSTEM], [LayoutSafeAreaEdge.TOP])
@@ -1100,7 +1100,7 @@ struct AssistantManagePage {
           { statusBarContentColor: getHdsStatusBarContentColor() },
           { statusBarContentColor: getHdsStatusBarContentColor() }
         )
-        .hideBackButton(false)
+        .hideBackButton(shouldUseDrawnNavigation())
         .hideToolBar(true)
         .mode(NavigationMode.Stack)
         .ignoreLayoutSafeArea([LayoutSafeAreaType.SYSTEM], [LayoutSafeAreaEdge.TOP])

@@ -1,10 +1,17 @@
 import { AttachmentType, MessageAttachment } from '../../models/ChatModels'
 import { getAppUiState } from '../../state/AppUiState'
+import { VisualEffectsMode } from '../../models/ThemeColors'
+import { ImmersiveMaterialAnchor } from '../ImmersiveMaterialBackdrop'
 
 @ComponentV2
 export struct DraftPreviewBubble {
   @Param inputText: string = ''
   @Param pendingAttachments: MessageAttachment[] = []
+  @Local bubbleWidthVp: number = 0
+  @Local bubbleHeightVp: number = 0
+  private get isManuscriptMode(): boolean {
+    return getAppUiState().visualEffectsMode === VisualEffectsMode.MANUSCRIPT
+  }
   private get themeUserBubble(): string {
     return getAppUiState().themeUserBubble
   }
@@ -110,47 +117,71 @@ export struct DraftPreviewBubble {
       Row() {
         Blank()
 
-        Column() {
-          if (this.pendingAttachments.length > 0) {
-            this.DraftPreviewImages(this.getDraftImageAttachmentIndices())
+        Stack({ alignContent: Alignment.TopStart }) {
+          if (!this.isManuscriptMode) {
+            ImmersiveMaterialAnchor({
+              surfaceWidth: this.bubbleWidthVp,
+              surfaceHeight: this.bubbleHeightVp,
+              cornerRadius: { topLeft: 20, topRight: 20, bottomLeft: 20, bottomRight: 6 }
+            })
           }
 
-          if (this.inputText.trim().length > 0) {
-            Text(this.inputText.trim())
-              .fontSize(this.chatFontSize)
-              .fontColor(this.themeUserBubbleText)
-              .lineHeight(this.chatFontSize + 7)
-          } else {
-            Text($r('app.string.input_placeholder'))
-              .fontSize(this.chatFontSize)
-              .fontColor(this.themeUserBubbleText)
-              .opacity(0.45)
-              .lineHeight(this.chatFontSize + 7)
+          Column() {
+            if (this.pendingAttachments.length > 0) {
+              this.DraftPreviewImages(this.getDraftImageAttachmentIndices())
+            }
+
+            if (this.inputText.trim().length > 0) {
+              Text(this.inputText.trim())
+                .fontSize(this.chatFontSize)
+                .fontColor(this.isManuscriptMode ? this.themeUserBubbleText : $r('app.color.text_primary'))
+                .lineHeight(this.chatFontSize + 7)
+            } else {
+              Text($r('app.string.input_placeholder'))
+                .fontSize(this.chatFontSize)
+                .fontColor(this.isManuscriptMode ? this.themeUserBubbleText : $r('app.color.text_primary'))
+                .opacity(0.45)
+                .lineHeight(this.chatFontSize + 7)
+            }
           }
-        }
-        .padding(this.pendingAttachments.length > 0 ?
-          {
-            left: 8,
-            right: 8,
-            top: 8,
-            bottom: 8
-          } :
-          {
-            left: 14,
-            right: 14,
-            top: 10,
-            bottom: 10
+          .padding(this.pendingAttachments.length > 0 ?
+            {
+              left: 8,
+              right: 8,
+              top: 8,
+              bottom: 8
+            } :
+            {
+              left: 14,
+              right: 14,
+              top: 10,
+              bottom: 10
+            })
+          .backgroundColor(this.isManuscriptMode ? this.themeUserBubble : Color.Transparent)
+          .borderRadius({
+            topLeft: 20,
+            topRight: 20,
+            bottomLeft: 20,
+            bottomRight: 6
           })
-        .backgroundColor(this.themeUserBubble)
-        .borderRadius({
-          topLeft: 20,
-          topRight: 20,
-          bottomLeft: 20,
-          bottomRight: 6
-        })
-        .clip(true)
+          .clip(true)
+          .opacity(0.55)
+          .onSizeChange((_oldSize: SizeOptions, size: SizeOptions) => {
+            if (this.isManuscriptMode) {
+              return
+            }
+            const width = Number(size.width)
+            const height = Number(size.height)
+            if (Number.isFinite(width) && width > 0 && Math.abs(width - this.bubbleWidthVp) > 0.1) {
+              this.bubbleWidthVp = width
+            }
+            if (Number.isFinite(height) && height > 0 && Math.abs(height - this.bubbleHeightVp) > 0.1) {
+              this.bubbleHeightVp = height
+            }
+          })
+        }
         .constraintSize({ maxWidth: '75%' })
-        .opacity(0.55)
+        .clip(false)
       }
       .width('100%')
       .alignItems(VerticalAlign.Top)
@@ -159,4 +190,3 @@ export struct DraftPreviewBubble {
     .alignItems(HorizontalAlign.End)
   }
 }
-

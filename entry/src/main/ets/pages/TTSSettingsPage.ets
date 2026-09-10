@@ -1,3 +1,8 @@
+import { shouldUseDrawnNavigation } from '../utils/DrawnNavigationSupport'
+import { withColorAlpha } from '../utils/ColorAlphaUtils'
+import { shouldUseWrappedMaterial } from '../utils/WrappedMaterialSupport'
+import { ImmersiveButtonSurface } from '../components/ImmersiveButtonSurface'
+import { getBlurBottomShadow } from '../utils/BlurShadowUtils'
 import { curves, uiMaterial } from '@kit.ArkUI'
 import { HdsNavigation, HdsNavigationTitleBarOptions, HdsNavigationTitleMode } from '@kit.UIDesignKit'
 import { AppStorageKeys } from '../config/AppStorageKeys'
@@ -28,15 +33,6 @@ import { showSnackBar, SnackBarDisplayOptions, SnackBarTone } from '../utils/Toa
 
 let ttsSettingsPathStack: NavPathStack | null = null
 
-function createTtsSettingsCardMaterial(): uiMaterial.Material {
-  return new uiMaterial.ImmersiveMaterial({
-    style: uiMaterial.ImmersiveStyle.ULTRA_THIN,
-    materialColor: Color.Transparent,
-    applyShadow: true,
-    interactive: false,
-    lightEffect: { color: undefined }
-  })
-}
 
 @Entry
 @ComponentV2
@@ -381,13 +377,7 @@ struct TTSSettingsPage {
   }
 
   private getCompactTitleBarOptions(): HdsNavigationTitleBarOptions {
-    return buildHdsTopNavigationTitleBarOptionsForPage(
-      this.materialType,
-      this.materialLevel,
-      this.windowWidthVp,
-      this.windowHeightVp,
-      (): void => this.CompactTitleStackBuilder()
-    )
+    return buildHdsTopNavigationTitleBarOptionsForPage(this.materialType, this.materialLevel, this.windowWidthVp, this.windowHeightVp, (): void => this.CompactTitleStackBuilder(), [], this)
   }
 
   private handleBack(): void {
@@ -450,76 +440,88 @@ struct TTSSettingsPage {
     description: Resource
   ) {
     // Keep both choices the same size so labels stay aligned across languages.
-    Button() {
-      Column({ space: 9 }) {
-        Row() {
-          Column() {
-            SymbolGlyph(icon)
-              .fontSize(21)
-              .fontColor([this.engine === engine ? Color.White : this.themePrimary])
-          }
-          .width(38)
-          .height(38)
-          .justifyContent(FlexAlign.Center)
-          .borderRadius(12)
-          .backgroundColor(this.engine === engine ? '#26FFFFFF' : Color.Transparent)
-          .border({ width: 1, color: this.engine === engine ? '#38FFFFFF' : this.themePrimaryLight })
+    Stack({ alignContent: Alignment.TopStart }) {
+      ImmersiveButtonSurface({
+        materialFactory: () => (new uiMaterial.ImmersiveMaterial({
+          style: uiMaterial.ImmersiveStyle.THIN,
+          materialColor: this.engine === engine ? withColorAlpha(this.themePrimary, '26') : Color.Transparent,
+          applyShadow: false,
+          interactive: true,
+          lightEffect: { color: undefined }
+        })),
+        fallbackShadow: false,
+        cornerRadius: 18
+      }) {
+        Button() {
+          Column({ space: 9 }) {
+            Row() {
+              Column() {
+                SymbolGlyph(icon)
+                  .fontSize(21)
+                  .fontColor([this.engine === engine && !shouldUseWrappedMaterial() ? Color.White : this.themePrimary])
+              }
+              .width(38)
+              .height(38)
+              .justifyContent(FlexAlign.Center)
+              .borderRadius(12)
+              .backgroundColor(this.engine === engine ? '#26FFFFFF' : Color.Transparent)
+              .border({ width: 1, color: this.engine === engine ? '#38FFFFFF' : this.themePrimaryLight })
 
-          Blank()
+              Blank()
 
-          if (this.engine === engine) {
-            SymbolGlyph($r('sys.symbol.checkmark_circle_fill'))
-              .fontSize(18)
-              .fontColor([Color.White])
-              .transition(
-                TransitionEffect.OPACITY.combine(TransitionEffect.scale({ x: 0.55, y: 0.55 }))
-                  .animation({ duration: 320, curve: curves.springMotion(0.35, 0.82) })
-              )
+              if (this.engine === engine) {
+                SymbolGlyph($r('sys.symbol.checkmark_circle_fill'))
+                  .fontSize(18)
+                  .fontColor([shouldUseWrappedMaterial() ? this.themePrimary : Color.White])
+                  .transition(
+                    TransitionEffect.OPACITY.combine(TransitionEffect.scale({ x: 0.55, y: 0.55 }))
+                      .animation({ duration: 320, curve: curves.springMotion(0.35, 0.82) })
+                  )
+              }
+            }
+            .width('100%')
+
+            Column({ space: 3 }) {
+              Text(title)
+                .fontSize(14)
+                .fontWeight(FontWeight.Medium)
+                .fontColor(this.engine === engine ? this.themePrimary : $r('app.color.text_primary'))
+                .width('100%')
+
+              Text(description)
+                .fontSize(11)
+                .fontColor($r('app.color.text_secondary'))
+                .lineHeight(16)
+                .maxLines(2)
+                .width('100%')
+            }
+            .alignItems(HorizontalAlign.Start)
           }
+          .width('100%')
+          .height('100%')
+          .alignItems(HorizontalAlign.Start)
+          .justifyContent(FlexAlign.Start)
         }
+        .height(112)
+        .padding(13)
+        .backgroundColor(Color.Transparent)
+        .borderRadius(18)
+        .border({ width: shouldUseWrappedMaterial() ? 0 : 1,
+          color: this.engine === engine ? this.themePrimary : this.themePrimaryLight })
+        .stateEffect(false)
+        .enabled(this.ttsEnabled)
+        .onClick((): void => {
+          this.selectEngine(engine)
+        })
         .width('100%')
-
-        Column({ space: 3 }) {
-          Text(title)
-            .fontSize(14)
-            .fontWeight(FontWeight.Medium)
-            .fontColor(this.engine === engine ? Color.White : $r('app.color.text_primary'))
-            .width('100%')
-
-          Text(description)
-            .fontSize(11)
-            .fontColor(this.engine === engine ? '#EDEAFF' : $r('app.color.text_secondary'))
-            .lineHeight(16)
-            .maxLines(2)
-            .width('100%')
-        }
-        .alignItems(HorizontalAlign.Start)
       }
-      .width('100%')
-      .height('100%')
-      .alignItems(HorizontalAlign.Start)
-      .justifyContent(FlexAlign.Start)
     }
     .layoutWeight(1)
     .height(112)
-    .padding(13)
-    .backgroundColor(this.engine === engine ? this.themePrimary : Color.Transparent)
-    .borderRadius(18)
-    .border({ width: 1, color: this.engine === engine ? this.themePrimary : this.themePrimaryLight })
     .opacity(this.ttsEnabled ? 1 : 0.5)
     .animation({ duration: 320, curve: curves.springMotion(0.35, 0.82) })
-    .stateEffect(false)
-    .systemMaterial(new uiMaterial.ImmersiveMaterial({
-      style: uiMaterial.ImmersiveStyle.REGULAR,
-      materialColor: this.engine === engine ? this.themePrimary : Color.Transparent,
-      applyShadow: false,
-      interactive: true,
-      lightEffect: { color: undefined }
-    }))
     .enabled(this.ttsEnabled)
-    .onClick((): void => {
-      this.selectEngine(engine)
-    })
+    .clip(false)
   }
 
   @Builder
@@ -587,11 +589,8 @@ struct TTSSettingsPage {
         .backgroundColor(Color.Transparent)
         .borderRadius(16)
         .padding({ left: 12, right: 12 })
-        .systemMaterial(new uiMaterial.ImmersiveMaterial({
-          style: uiMaterial.ImmersiveStyle.ULTRA_THIN,
-          materialColor: Color.Transparent,
-          applyShadow: false
-        }))
+        .backdropBlur(16)
+        .shadow(getBlurBottomShadow())
         .enabled(this.ttsEnabled)
         .onChange(onChange)
     }
@@ -608,38 +607,48 @@ struct TTSSettingsPage {
           .fontColor($r('app.color.text_secondary'))
           .layoutWeight(1)
 
-        Button() {
-          Row({ space: 5 }) {
-            SymbolGlyph($r('sys.symbol.arrow_2_circlepath'))
-              .fontSize(14)
-              .fontColor([this.themePrimary])
-              .rotate({ angle: this.isLoadingVoices ? 180 : 0 })
-              .animation({ duration: 250, curve: Curve.EaseOut })
+        Stack({ alignContent: Alignment.TopStart }) {
+          ImmersiveButtonSurface({
+            materialFactory: () => (new uiMaterial.ImmersiveMaterial({
+              style: uiMaterial.ImmersiveStyle.REGULAR,
+              materialColor: Color.Transparent,
+              applyShadow: false,
+              interactive: true,
+              lightEffect: { color: undefined }
+            })),
+            fallbackShadow: false,
+            cornerRadius: 14
+          }) {
+            Button() {
+              Row({ space: 5 }) {
+                SymbolGlyph($r('sys.symbol.arrow_2_circlepath'))
+                  .fontSize(14)
+                  .fontColor([this.themePrimary])
+                  .rotate({ angle: this.isLoadingVoices ? 180 : 0 })
+                  .animation({ duration: 250, curve: Curve.EaseOut })
 
-            Text(this.isLoadingVoices ?
-              $r('app.string.tts_loading_voices') : $r('app.string.tts_load_voices'))
-              .fontSize(12)
-              .fontWeight(FontWeight.Medium)
-              .fontColor(this.themePrimary)
+                Text(this.isLoadingVoices ?
+                  $r('app.string.tts_loading_voices') : $r('app.string.tts_load_voices'))
+                  .fontSize(12)
+                  .fontWeight(FontWeight.Medium)
+                  .fontColor(this.themePrimary)
+              }
+              .alignItems(VerticalAlign.Center)
+            }
+            .height(32)
+            .padding({ left: 10, right: 10 })
+            .backgroundColor(Color.Transparent)
+            .borderRadius(14)
+            .stateEffect(false)
+            .enabled(this.ttsEnabled && !this.isLoadingVoices)
+            .onClick((): void => {
+              this.loadVoices()
+            })
           }
-          .alignItems(VerticalAlign.Center)
         }
         .height(32)
-        .padding({ left: 10, right: 10 })
-        .backgroundColor(Color.Transparent)
-        .borderRadius(14)
-        .stateEffect(false)
-        .systemMaterial(new uiMaterial.ImmersiveMaterial({
-          style: uiMaterial.ImmersiveStyle.REGULAR,
-          materialColor: Color.Transparent,
-          applyShadow: false,
-          interactive: true,
-          lightEffect: { color: undefined }
-        }))
         .enabled(this.ttsEnabled && !this.isLoadingVoices)
-        .onClick((): void => {
-          this.loadVoices()
-        })
+        .clip(false)
       }
       .width('100%')
       .alignItems(VerticalAlign.Center)
@@ -916,11 +925,8 @@ struct TTSSettingsPage {
       .backgroundColor(Color.Transparent)
       .borderRadius(16)
       .border({ width: 1, color: this.themePrimaryLight })
-      .systemMaterial(new uiMaterial.ImmersiveMaterial({
-        style: uiMaterial.ImmersiveStyle.ULTRA_THIN,
-        materialColor: Color.Transparent,
-        applyShadow: false
-      }))
+      .backdropBlur(16)
+      .shadow(getBlurBottomShadow())
 
       Divider()
         .color($r('app.color.divider'))
@@ -946,69 +952,89 @@ struct TTSSettingsPage {
   @Builder
   private ActionButtons() {
     Row({ space: 12 }) {
-      Button() {
-        Row({ space: 7 }) {
-          SymbolGlyph(this.isTesting ?
-            $r('sys.symbol.xmark_circle_fill') : $r('sys.symbol.speaker_wave_2'))
-            .fontSize(17)
-            .fontColor([this.themePrimary])
-            .scale({ x: this.isTesting ? 1.08 : 1, y: this.isTesting ? 1.08 : 1 })
-            .animation({ duration: 280, curve: curves.springMotion(0.35, 0.82) })
+      Stack({ alignContent: Alignment.TopStart }) {
+        ImmersiveButtonSurface({
+          materialFactory: () => (new uiMaterial.ImmersiveMaterial({
+              style: uiMaterial.ImmersiveStyle.THIN,
+              materialColor: Color.Transparent,
+              applyShadow: false,
+              interactive: true,
+              lightEffect: { color: undefined }
+            })),
+          fallbackShadow: false,
+          cornerRadius: 16
+        }) {
+          Button() {
+            Row({ space: 7 }) {
+              SymbolGlyph(this.isTesting ?
+                $r('sys.symbol.xmark_circle_fill') : $r('sys.symbol.speaker_wave_2'))
+                .fontSize(17)
+                .fontColor([this.themePrimary])
+                .scale({ x: this.isTesting ? 1.08 : 1, y: this.isTesting ? 1.08 : 1 })
+                .animation({ duration: 280, curve: curves.springMotion(0.35, 0.82) })
 
-          Text(this.isTesting ? $r('app.string.tts_stop_test') : $r('app.string.tts_test'))
-            .fontSize(14)
-            .fontWeight(FontWeight.Medium)
-            .fontColor(this.themePrimary)
+              Text(this.isTesting ? $r('app.string.tts_stop_test') : $r('app.string.tts_test'))
+                .fontSize(14)
+                .fontWeight(FontWeight.Medium)
+                .fontColor(this.themePrimary)
+            }
+            .alignItems(VerticalAlign.Center)
+          }
+            .height(48)
+            .backgroundColor(Color.Transparent)
+            .borderRadius(16)
+            .border({ width: shouldUseWrappedMaterial() ? 0 : 1, color: this.themePrimaryLight })
+            .stateEffect(false)
+            .onClick((): void => {
+              this.testPlayback()
+            })
+          .width('100%')
         }
-        .alignItems(VerticalAlign.Center)
       }
-        .layoutWeight(1)
-        .height(48)
-        .backgroundColor(Color.Transparent)
-        .borderRadius(16)
-        .border({ width: 1, color: this.themePrimaryLight })
-        .scale({ x: this.isTesting ? 0.98 : 1, y: this.isTesting ? 0.98 : 1 })
-        .animation({ duration: 280, curve: curves.springMotion(0.35, 0.82) })
-        .stateEffect(false)
-        .systemMaterial(new uiMaterial.ImmersiveMaterial({
-          style: uiMaterial.ImmersiveStyle.REGULAR,
-          materialColor: Color.Transparent,
-          applyShadow: false,
-          interactive: true,
-          lightEffect: { color: undefined }
-        }))
-        .onClick((): void => {
-          this.testPlayback()
-        })
+      .layoutWeight(1)
+      .height(48)
+      .scale({ x: this.isTesting ? 0.98 : 1, y: this.isTesting ? 0.98 : 1 })
+      .animation({ duration: 280, curve: curves.springMotion(0.35, 0.82) })
+      .clip(false)
 
-      Button() {
-        Row({ space: 7 }) {
-          SymbolGlyph($r('sys.symbol.save'))
-            .fontSize(17)
-            .fontColor([Color.White])
+      Stack({ alignContent: Alignment.TopStart }) {
+        ImmersiveButtonSurface({
+          materialFactory: () => (new uiMaterial.ImmersiveMaterial({
+              style: uiMaterial.ImmersiveStyle.THIN,
+              materialColor: withColorAlpha(this.themePrimary, '26'),
+              applyShadow: false,
+              interactive: true,
+              lightEffect: { color: undefined }
+            })),
+          fallbackShadow: false,
+          cornerRadius: 16
+        }) {
+          Button() {
+            Row({ space: 7 }) {
+              SymbolGlyph($r('sys.symbol.save'))
+                .fontSize(17)
+                .fontColor([this.themePrimary])
 
-          Text($r('app.string.tts_save'))
-            .fontSize(14)
-            .fontWeight(FontWeight.Medium)
-            .fontColor(Color.White)
+              Text($r('app.string.tts_save'))
+                .fontSize(14)
+                .fontWeight(FontWeight.Medium)
+                .fontColor(this.themePrimary)
+            }
+            .alignItems(VerticalAlign.Center)
+          }
+            .height(48)
+            .backgroundColor(Color.Transparent)
+            .borderRadius(16)
+            .stateEffect(false)
+            .onClick((): void => {
+              this.saveSettings()
+            })
+          .width('100%')
         }
-        .alignItems(VerticalAlign.Center)
       }
-        .layoutWeight(1)
-        .height(48)
-        .backgroundColor(this.themePrimary)
-        .borderRadius(16)
-        .stateEffect(false)
-        .systemMaterial(new uiMaterial.ImmersiveMaterial({
-          style: uiMaterial.ImmersiveStyle.REGULAR,
-          materialColor: this.themePrimary,
-          applyShadow: false,
-          interactive: true,
-          lightEffect: { color: undefined }
-        }))
-        .onClick((): void => {
-          this.saveSettings()
-        })
+      .layoutWeight(1)
+      .height(48)
+      .clip(false)
     }
     .width('100%')
     .padding({ top: 2, bottom: 2 })
@@ -1035,7 +1061,8 @@ struct TTSSettingsPage {
           .border({ width: this.ttsEnabled ? 1.5 : 1, color: this.themePrimaryLight })
           .scale({ x: this.ttsEnabled ? 1 : 0.99, y: this.ttsEnabled ? 1 : 0.99 })
           .animation({ duration: 320, curve: curves.springMotion(0.35, 0.82) })
-          .systemMaterial(createTtsSettingsCardMaterial())
+          .backdropBlur(16)
+          .shadow(getBlurBottomShadow())
 
           Column() {
             this.EngineCardContent()
@@ -1045,7 +1072,8 @@ struct TTSSettingsPage {
           .backgroundColor(Color.Transparent)
           .borderRadius(24)
           .border({ width: 1, color: this.themePrimaryLight })
-          .systemMaterial(createTtsSettingsCardMaterial())
+          .backdropBlur(16)
+          .shadow(getBlurBottomShadow())
 
           if (this.engine === TTSEngineType.ELEVENLABS) {
             Column() {
@@ -1056,7 +1084,8 @@ struct TTSSettingsPage {
             .backgroundColor(Color.Transparent)
             .borderRadius(24)
             .border({ width: 1, color: this.themePrimaryLight })
-            .systemMaterial(createTtsSettingsCardMaterial())
+            .backdropBlur(16)
+            .shadow(getBlurBottomShadow())
             .transition(TransitionEffect.OPACITY.animation({ duration: 200, curve: Curve.EaseOut }))
           }
 
@@ -1121,7 +1150,7 @@ struct TTSSettingsPage {
           { statusBarContentColor: getHdsStatusBarContentColor() },
           { statusBarContentColor: getHdsStatusBarContentColor() }
         )
-        .hideBackButton(false)
+        .hideBackButton(shouldUseDrawnNavigation())
         .hideToolBar(true)
         .mode(NavigationMode.Stack)
         .ignoreLayoutSafeArea([LayoutSafeAreaType.SYSTEM], [LayoutSafeAreaEdge.TOP])
@@ -1138,7 +1167,7 @@ struct TTSSettingsPage {
           { statusBarContentColor: getHdsStatusBarContentColor() },
           { statusBarContentColor: getHdsStatusBarContentColor() }
         )
-        .hideBackButton(false)
+        .hideBackButton(shouldUseDrawnNavigation())
         .hideToolBar(true)
         .mode(NavigationMode.Stack)
         .ignoreLayoutSafeArea([LayoutSafeAreaType.SYSTEM], [LayoutSafeAreaEdge.TOP])

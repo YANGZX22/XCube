@@ -1,3 +1,5 @@
+import { ImmersiveButtonSurface } from './ImmersiveButtonSurface'
+import { getBlurBottomShadow } from '../utils/BlurShadowUtils'
 import { uiMaterial } from '@kit.ArkUI'
 import { AsyncCallback, BusinessError } from '@kit.BasicServicesKit'
 import { image } from '@kit.ImageKit'
@@ -25,6 +27,7 @@ function createSavedPlaceMaterial(interactive: boolean = false): uiMaterial.Mate
     lightEffect: { color: undefined }
   })
 }
+
 
 @ComponentV2
 struct SavedPlaceMapPicker {
@@ -495,7 +498,8 @@ struct SavedPlaceEditorSheetContent {
           .fontSize(14)
           .backgroundColor(Color.Transparent)
           .borderRadius(14)
-          .systemMaterial(createSavedPlaceMaterial(true))
+          .backdropBlur(16)
+          .shadow(getBlurBottomShadow())
           .onChange((value: string): void => {
             this.label = value
             this.errorMessage = ''
@@ -510,44 +514,63 @@ struct SavedPlaceEditorSheetContent {
             .height(44)
             .backgroundColor(Color.Transparent)
             .borderRadius(22)
-            .systemMaterial(createSavedPlaceMaterial(true))
+            .backdropBlur(16)
+            .shadow(getBlurBottomShadow())
             .onChange((value: string): void => {
               this.searchQuery = value
               this.errorMessage = ''
             })
             .onSubmit((_value: string): void => this.handleSearch())
 
-          Button({ type: ButtonType.Circle, stateEffect: false }) {
-            if (this.isSearching) {
-              LoadingProgress().width(18).height(18).color(this.themePrimary)
-            } else {
-              SymbolGlyph($r('sys.symbol.magnifyingglass'))
-                .fontSize(18)
-                .fontColor([this.themePrimary])
+          Stack({ alignContent: Alignment.TopStart }) {
+            ImmersiveButtonSurface({
+              materialFactory: () => (createSavedPlaceMaterial(true)),
+              cornerRadius: undefined
+            }) {
+              Button({ type: ButtonType.Circle, stateEffect: false }) {
+                if (this.isSearching) {
+                  LoadingProgress().width(18).height(18).color(this.themePrimary)
+                } else {
+                  SymbolGlyph($r('sys.symbol.magnifyingglass'))
+                    .fontSize(18)
+                    .fontColor([this.themePrimary])
+                }
+              }
+              .width(44)
+              .height(44)
+              .padding(0)
+              .backgroundColor(Color.Transparent)
+              .onClick((): void => this.handleSearch())
             }
           }
           .width(44)
           .height(44)
-          .padding(0)
-          .backgroundColor(Color.Transparent)
-          .systemMaterial(createSavedPlaceMaterial(true))
-          .onClick((): void => this.handleSearch())
+          .clip(false)
 
-          Button({ type: ButtonType.Circle, stateEffect: false }) {
-            if (this.isLocating) {
-              LoadingProgress().width(18).height(18).color(this.themePrimary)
-            } else {
-              SymbolGlyph($r('sys.symbol.location_north_up_right'))
-                .fontSize(18)
-                .fontColor([this.themePrimary])
+          Stack({ alignContent: Alignment.TopStart }) {
+            ImmersiveButtonSurface({
+              materialFactory: () => (createSavedPlaceMaterial(true)),
+              cornerRadius: undefined
+            }) {
+              Button({ type: ButtonType.Circle, stateEffect: false }) {
+                if (this.isLocating) {
+                  LoadingProgress().width(18).height(18).color(this.themePrimary)
+                } else {
+                  SymbolGlyph($r('sys.symbol.location_north_up_right'))
+                    .fontSize(18)
+                    .fontColor([this.themePrimary])
+                }
+              }
+              .width(44)
+              .height(44)
+              .padding(0)
+              .backgroundColor(Color.Transparent)
+              .onClick((): void => this.handleUseCurrentLocation())
             }
           }
           .width(44)
           .height(44)
-          .padding(0)
-          .backgroundColor(Color.Transparent)
-          .systemMaterial(createSavedPlaceMaterial(true))
-          .onClick((): void => this.handleUseCurrentLocation())
+          .clip(false)
         }
         .width('100%')
 
@@ -575,7 +598,8 @@ struct SavedPlaceEditorSheetContent {
                 .padding(10)
                 .borderRadius(14)
                 .backgroundColor(Color.Transparent)
-                .systemMaterial(createSavedPlaceMaterial(true))
+                .backdropBlur(16)
+                .shadow(getBlurBottomShadow())
                 .alignItems(HorizontalAlign.Start)
                 .onClick((): void => this.selectSearchResult(place))
               }, (place: MapPlaceResult) => `${place.siteId}_${place.latitude}_${place.longitude}`)
@@ -607,7 +631,8 @@ struct SavedPlaceEditorSheetContent {
             .padding({ left: 10, right: 10, top: 6, bottom: 6 })
             .borderRadius(14)
             .backgroundColor(Color.Transparent)
-            .systemMaterial(createSavedPlaceMaterial(false))
+            .backdropBlur(16)
+            .shadow(getBlurBottomShadow())
             .margin({ left: 10, top: 10 })
         }
         .width('100%')
@@ -643,7 +668,8 @@ struct SavedPlaceEditorSheetContent {
           .padding(10)
           .borderRadius(14)
           .backgroundColor(Color.Transparent)
-          .systemMaterial(createSavedPlaceMaterial(false))
+          .backdropBlur(16)
+          .shadow(getBlurBottomShadow())
         }
 
         if (this.errorMessage !== '') {
@@ -833,29 +859,47 @@ export struct SavedPlacesCard {
                   .maxLines(2)
                   .textOverflow({ overflow: TextOverflow.Ellipsis })
 
-                Button({ type: ButtonType.Circle, stateEffect: false }) {
-                  SymbolGlyph($r('sys.symbol.square_and_pencil'))
-                    .fontSize(15)
-                    .fontColor([this.themePrimary])
+                Stack({ alignContent: Alignment.TopStart }) {
+                  ImmersiveButtonSurface({
+                    materialFactory: () => (createSavedPlaceMaterial(true)),
+                    cornerRadius: undefined
+                  }) {
+                    Button({ type: ButtonType.Circle, stateEffect: false }) {
+                      SymbolGlyph($r('sys.symbol.square_and_pencil'))
+                        .fontSize(15)
+                        .fontColor([this.themePrimary])
+                    }
+                    .width(34)
+                    .height(34)
+                    .padding(0)
+                    .backgroundColor(Color.Transparent)
+                    .onClick((): void => this.openEdit(place))
+                  }
                 }
                 .width(34)
                 .height(34)
-                .padding(0)
-                .backgroundColor(Color.Transparent)
-                .systemMaterial(createSavedPlaceMaterial(true))
-                .onClick((): void => this.openEdit(place))
+                .clip(false)
 
-                Button({ type: ButtonType.Circle, stateEffect: false }) {
-                  SymbolGlyph($r('sys.symbol.trash'))
-                    .fontSize(15)
-                    .fontColor([$r('app.color.status_error')])
+                Stack({ alignContent: Alignment.TopStart }) {
+                  ImmersiveButtonSurface({
+                    materialFactory: () => (createSavedPlaceMaterial(true)),
+                    cornerRadius: undefined
+                  }) {
+                    Button({ type: ButtonType.Circle, stateEffect: false }) {
+                      SymbolGlyph($r('sys.symbol.trash'))
+                        .fontSize(15)
+                        .fontColor([$r('app.color.status_error')])
+                    }
+                    .width(34)
+                    .height(34)
+                    .padding(0)
+                    .backgroundColor(Color.Transparent)
+                    .onClick((): void => this.confirmDelete(place))
+                  }
                 }
                 .width(34)
                 .height(34)
-                .padding(0)
-                .backgroundColor(Color.Transparent)
-                .systemMaterial(createSavedPlaceMaterial(true))
-                .onClick((): void => this.confirmDelete(place))
+                .clip(false)
               }
               .width('100%')
               .padding({ top: 9, bottom: 9 })
@@ -871,29 +915,39 @@ export struct SavedPlacesCard {
           .width('100%')
         }
 
-        Button({ type: ButtonType.Capsule, stateEffect: false }) {
-          Row({ space: 6 }) {
-            SymbolGlyph($r('sys.symbol.plus'))
-              .fontSize(14)
-              .fontColor([this.themePrimary])
-            Text(pickLocalizedText('添加地点', 'Add Place'))
-              .fontSize(12)
-              .fontWeight(FontWeight.Medium)
-              .fontColor(this.themePrimary)
+        Stack({ alignContent: Alignment.TopStart }) {
+          ImmersiveButtonSurface({
+            materialFactory: () => (createSavedPlaceMaterial(true)),
+            cornerRadius: undefined
+          }) {
+            Button({ type: ButtonType.Capsule, stateEffect: false }) {
+              Row({ space: 6 }) {
+                SymbolGlyph($r('sys.symbol.plus'))
+                  .fontSize(14)
+                  .fontColor([this.themePrimary])
+                Text(pickLocalizedText('添加地点', 'Add Place'))
+                  .fontSize(12)
+                  .fontWeight(FontWeight.Medium)
+                  .fontColor(this.themePrimary)
+              }
+            }
+            .width('100%')
+            .height(38)
+            .backgroundColor(Color.Transparent)
+            .onClick((): void => this.openAdd())
           }
         }
         .width('100%')
         .height(38)
-        .backgroundColor(Color.Transparent)
-        .systemMaterial(createSavedPlaceMaterial(true))
-        .onClick((): void => this.openAdd())
+        .clip(false)
       }
       .width('100%')
       .padding(16)
       .borderRadius(16)
       .backgroundColor(Color.Transparent)
       .border({ width: 0.5, color: getAppUiState().themePrimaryLight })
-      .systemMaterial(createSavedPlaceMaterial(false))
+      .backdropBlur(16)
+      .shadow(getBlurBottomShadow())
 
       Column()
         .width(0)

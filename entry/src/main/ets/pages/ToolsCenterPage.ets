@@ -1,3 +1,4 @@
+import { shouldUseDrawnNavigation } from '../utils/DrawnNavigationSupport'
 import { ToolsCenterPanel } from '../components/ToolsCenterPanel'
 import { HdsNavigation, HdsNavigationTitleBarOptions, HdsNavigationTitleMode } from '@kit.UIDesignKit'
 import { SettingsCompactTitleBarContent } from '../components/settings/SettingsCompactPageHeader'
@@ -73,8 +74,7 @@ struct ToolsCenterPage {
   }
 
   private getCompactTitleBarOptions(): HdsNavigationTitleBarOptions {
-    return buildHdsTopNavigationTitleBarOptionsForPage(this.materialType, this.materialLevel, this.windowWidthVp,
-      this.windowHeightVp, (): void => this.CompactTitleStackBuilder())
+    return buildHdsTopNavigationTitleBarOptionsForPage(this.materialType, this.materialLevel, this.windowWidthVp, this.windowHeightVp, (): void => this.CompactTitleStackBuilder(), [], this)
   }
 
   @Builder
@@ -84,7 +84,7 @@ struct ToolsCenterPage {
         ToolsCenterPanel({
           showHeader: false,
           contentBottomPadding: this.getContentBottomPadding(),
-          contentTopPadding: this.isDetailPaneMode() ? 0 : this.getCompactContentTopPadding(),
+          contentTopPadding: this.getCompactContentTopPadding(),
           contentScroller: this.toolsCenterScroller
         })
       }
@@ -133,15 +133,7 @@ struct ToolsCenterPage {
     Column() {
       if (this.isDetailPaneMode()) {
         HdsNavigation() {
-          Column() {
-            Blank()
-              .width('100%')
-              .height(this.getCompactContentTopPadding())
-
-            this.PageContent()
-          }
-          .width('100%')
-          .height('100%')
+          this.PageContent()
         }
         .width('100%')
         .height('100%')
@@ -152,7 +144,7 @@ struct ToolsCenterPage {
           { statusBarContentColor: getHdsStatusBarContentColor() },
           { statusBarContentColor: getHdsStatusBarContentColor() }
         )
-        .hideBackButton(false)
+        .hideBackButton(shouldUseDrawnNavigation())
         .hideToolBar(true)
         .mode(NavigationMode.Stack)
         .ignoreLayoutSafeArea([LayoutSafeAreaType.SYSTEM], [LayoutSafeAreaEdge.TOP])
@@ -169,7 +161,7 @@ struct ToolsCenterPage {
           { statusBarContentColor: getHdsStatusBarContentColor() },
           { statusBarContentColor: getHdsStatusBarContentColor() }
         )
-        .hideBackButton(false)
+        .hideBackButton(shouldUseDrawnNavigation())
         .hideToolBar(true)
         .mode(NavigationMode.Stack)
         .ignoreLayoutSafeArea([LayoutSafeAreaType.SYSTEM], [LayoutSafeAreaEdge.TOP])

@@ -1,5 +1,6 @@
 import { ChatSession } from '../../models/ChatModels'
 import { SessionCard } from '../SessionCard'
+import { LIST_MATERIAL_CARD_RADIUS } from '../ImmersiveListSurface'
 import { SessionListItemData } from '../../pages/index/IndexSessionListDataSource'
 import { getAppUiState } from '../../state/AppUiState'
 import { VisualEffectsMode } from '../../models/ThemeColors'
@@ -158,7 +159,7 @@ export struct IndexSessionListItem {
         this.onToggleFavorite(this.item.session)
       }
     })
-      .borderRadius(12)
+      .borderRadius(LIST_MATERIAL_CARD_RADIUS)
       .clip(false)
       .border({
         width: 2,

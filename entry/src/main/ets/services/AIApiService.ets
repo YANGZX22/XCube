@@ -35,6 +35,7 @@ import {
 } from './ProviderCompatibilityRegistry'
 import { normalizeCustomHeaderName, parseCustomHeadersMap } from '../utils/CustomHeaderUtils'
 import { estimateProviderManagedAttachmentTokens, estimateTextTokens } from '../utils/ModelBillingUtils'
+import { mergeToolArgumentDelta } from '../utils/ToolArgumentStreamUtils'
 import {
   extractSseDataPayload,
   joinOpenAIStreamReasoningDetails,
@@ -932,21 +933,7 @@ export class ToolCallStreamState {
   }
 
   private mergeToolArguments(previousArguments: string, incomingArguments: string): string {
-    if (previousArguments === '') {
-      return incomingArguments
-    }
-    if (incomingArguments === '' || incomingArguments === previousArguments) {
-      return previousArguments
-    }
-    // 标准 OpenAI 流返回纯增量；部分兼容服务则每次重复返回从 JSON 起点开始的
-    // 累计快照。识别包含关系后只保留较完整版本，避免长参数被拼成 `{}{}...`。
-    if (incomingArguments.startsWith(previousArguments)) {
-      return incomingArguments
-    }
-    if (previousArguments.startsWith(incomingArguments)) {
-      return previousArguments
-    }
-    return previousArguments + incomingArguments
+    return mergeToolArgumentDelta(previousArguments, incomingArguments)
   }
 
   private normalizeToolArguments(rawArgs: string | Object): string {

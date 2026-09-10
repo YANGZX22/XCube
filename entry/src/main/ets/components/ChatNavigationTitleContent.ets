@@ -1,9 +1,12 @@
 import { uiMaterial } from '@kit.ArkUI'
+import { PlainNavigationButtonModifier } from '../utils/DrawnNavigationSupport'
 import { ChatMarkdownHybridRenderer } from './ChatMarkdownHybridRenderer'
 import { ProviderIconSmall } from './ProviderIcon'
 import { getAppUiState } from '../state/AppUiState'
 import { buildIconResourcePath, getModelIconPath, isNetworkIconPath, isSandboxIconPath } from '../utils/ProviderIconUtils'
 import { VisualEffectsMode } from '../models/ThemeColors'
+import { shouldUseWrappedMaterial, WrappedMaterialModifier } from '../utils/WrappedMaterialSupport'
+import { getHdsFallbackBackgroundEffect } from '../utils/HdsMaterialSupport'
 import {
   ensureManuscriptFonts,
   MANUSCRIPT_BODY_FONT,
@@ -249,6 +252,19 @@ export struct ChatNavigationTitleContent {
     return Math.min(100, Math.max(0, this.contextPercent))
   }
 
+  private getMoreMenuOptions(): MenuOptions {
+    if (shouldUseWrappedMaterial()) {
+      return {
+        systemMaterial: new uiMaterial.ImmersiveMaterial({ style: uiMaterial.ImmersiveStyle.THICK })
+      }
+    }
+    return {
+      backgroundColor: Color.Transparent,
+      backgroundBlurStyle: BlurStyle.NONE,
+      backgroundEffect: getHdsFallbackBackgroundEffect()
+    }
+  }
+
   @Builder
   private MoreMenuBuilder() {
     Menu() {
@@ -302,11 +318,11 @@ export struct ChatNavigationTitleContent {
         .onClick(() => {
           this.onNewChat()
         })
-        .systemMaterial(this.isManuscriptMode ? undefined : new uiMaterial.ImmersiveMaterial({
+        .attributeModifier(this.isManuscriptMode ? undefined : new WrappedMaterialModifier(() => new uiMaterial.ImmersiveMaterial({
           style: uiMaterial.ImmersiveStyle.REGULAR,
           interactive: true,
           lightEffect: { color: undefined }
-        }))
+        }), shouldUseWrappedMaterial()))
       }
 
       if (this.showContextProgress) {
@@ -331,11 +347,11 @@ export struct ChatNavigationTitleContent {
         .onClick(() => {
           this.onContextProgressClick()
         })
-        .systemMaterial(this.isManuscriptMode ? undefined : new uiMaterial.ImmersiveMaterial({
+        .attributeModifier(this.isManuscriptMode ? undefined : new WrappedMaterialModifier(() => new uiMaterial.ImmersiveMaterial({
           style: uiMaterial.ImmersiveStyle.REGULAR,
           interactive: true,
           lightEffect: { color: undefined }
-        }))
+        }), shouldUseWrappedMaterial()))
       }
 
       Button({ type: this.isManuscriptMode ? ButtonType.Normal : ButtonType.Circle,
@@ -351,16 +367,12 @@ export struct ChatNavigationTitleContent {
       .backgroundColor(Color.Transparent)
       .borderRadius(this.isManuscriptMode ? 0 : this.getActionButtonSize() / 2)
       .clip(!this.isManuscriptMode)
-      .bindMenu(this.MoreMenuBuilder(), {
-        systemMaterial: new uiMaterial.ImmersiveMaterial({
-          style: uiMaterial.ImmersiveStyle.THICK
-        })
-      })
-      .systemMaterial(this.isManuscriptMode ? undefined : new uiMaterial.ImmersiveMaterial({
+      .bindMenu(this.MoreMenuBuilder(), this.getMoreMenuOptions())
+      .attributeModifier(this.isManuscriptMode ? undefined : new WrappedMaterialModifier(() => new uiMaterial.ImmersiveMaterial({
         style: uiMaterial.ImmersiveStyle.REGULAR,
         interactive: true,
         lightEffect: { color: undefined }
-      }))
+      }), shouldUseWrappedMaterial()))
     }
     .height(this.getActionButtonSize())
     .padding({ left: this.isManuscriptMode ? 2 : 0, right: this.isManuscriptMode ? 2 : 0 })
@@ -502,7 +514,7 @@ export struct ChatNavigationTitleContent {
     } else {
       Row() {
       if (this.showLeadingBackAction) {
-        Button({ type: ButtonType.Circle, stateEffect: true }) {
+        Button({ type: ButtonType.Circle, stateEffect: false }) {
           SymbolGlyph($r('sys.symbol.chevron_left'))
             .fontSize(CHAT_NAVIGATION_ACTION_BUTTON_ICON_SIZE)
             .fontColor([this.themePrimary])
@@ -511,8 +523,9 @@ export struct ChatNavigationTitleContent {
         .height(CHAT_NAVIGATION_ACTION_BUTTON_SIZE)
         .padding(0)
         .backgroundColor(Color.Transparent)
-        .borderRadius(0)
-        .border({ width: { bottom: 1 }, color: this.themePrimary })
+        .borderRadius(20)
+        .margin({ right: 8 })
+        .attributeModifier(new PlainNavigationButtonModifier())
         .onClick(() => {
           this.onBack()
         })

@@ -1,3 +1,5 @@
+import { ImmersiveInputSurface } from './ImmersiveInputSurface'
+import { InteractiveMaterialButton } from './InteractiveMaterialButton'
 import { getModelIconPath, buildIconResourcePath } from '../utils/ProviderIconUtils'
 import { MessageAttachment, AttachmentType } from '../models/ChatModels'
 import {
@@ -34,7 +36,6 @@ export struct ChatInputBar {
   @Local modelBtnPressed: boolean = false
   @Local attachmentBtnPressed: boolean = false
   @Local showInFlightSendMenu: boolean = false
-  @Local immersiveBarHeightVp: number = 52
   private readonly editingHeaderHeightVp: number = 28
   @Param inputText: string = ''
   @Event onInputTextChange: (value: string) => void = (_value: string): void => {}
@@ -69,9 +70,6 @@ export struct ChatInputBar {
   }
   private get themeUserBubble(): string {
     return getAppUiState().themeUserBubble
-  }
-  private get themeAiBubble(): string {
-    return getAppUiState().themeAiBubble
   }
   private get inputButtonIconColor(): ResourceColor {
     return getAppUiState().isDarkMode ? Color.White : this.themePrimary
@@ -131,8 +129,6 @@ export struct ChatInputBar {
   }
   private lastHasContent: boolean = false
   private breatheTimerId: number = -1
-  // 焦点控制器
-  private focusController: TextAreaController = new TextAreaController()
 
   private getCurrentModelIconPath(): string {
     if (this.currentModelId === '' || this.currentProviderId === '') {
@@ -185,42 +181,13 @@ export struct ChatInputBar {
 
       if (this.isManuscriptMode) {
         this.ManuscriptBar()
-      } else if (this.isEditing) {
-        Stack({ alignContent: Alignment.Top }) {
-          // 编辑态底板始终比当前输入栏高一个标题区，并随多行输入实时撑高。
-          Column()
-            .width('100%')
-            .height(this.immersiveBarHeightVp + this.editingHeaderHeightVp)
-            .backgroundColor(this.themeAiBubble)
-            .borderRadius(24)
-
-          Column() {
-            Blank()
-              .height(this.editingHeaderHeightVp)
-
-            this.ImmersiveBar()
-          }
-          .width('100%')
-
-          Row() {
-            SymbolGlyph($r('sys.symbol.square_and_pencil'))
-              .fontSize(12)
-              .fontColor([this.themePrimary])
-
-            Text($r('app.string.editing_message'))
-              .fontSize(12)
-              .fontColor(this.themePrimary)
-              .margin({ left: 4 })
-          }
-          .width('100%')
-          .height(this.editingHeaderHeightVp)
-          .justifyContent(FlexAlign.Center)
-        }
-        .width('100%')
-        .height(this.immersiveBarHeightVp + this.editingHeaderHeightVp)
       } else {
-        // 输入栏主体（整条沉浸光感浮动面）
-        this.ImmersiveBar()
+        ImmersiveInputSurface({
+          minSurfaceHeight: 52 + (this.isEditing ? this.editingHeaderHeightVp : 0),
+          maxSurfaceHeight: 132 + (this.isEditing ? this.editingHeaderHeightVp : 0)
+        }) {
+          this.InputSurfaceContent()
+        }
       }
     }
     .width('100%')
@@ -479,7 +446,40 @@ export struct ChatInputBar {
     )
   }
 
-  // 整条输入栏作为单一沉浸光感浮动面（Row + systemMaterial）；高度随输入内容自适应展开
+  @Builder
+  private InputSurfaceContent() {
+    if (this.isEditing) {
+      Stack({ alignContent: Alignment.Top }) {
+        Column() {
+          Blank()
+            .height(this.editingHeaderHeightVp)
+
+          this.ImmersiveBar()
+        }
+        .width('100%')
+
+        Row() {
+          SymbolGlyph($r('sys.symbol.square_and_pencil'))
+            .fontSize(12)
+            .fontColor([this.themePrimary])
+
+          Text($r('app.string.editing_message'))
+            .fontSize(12)
+            .fontColor(this.themePrimary)
+            .margin({ left: 4 })
+        }
+        .width('100%')
+        .height(this.editingHeaderHeightVp)
+        .justifyContent(FlexAlign.Center)
+      }
+      .width('100%')
+      .clip(false)
+    } else {
+      this.ImmersiveBar()
+    }
+  }
+
+  // TextArea 保持原生内容测高，外层材质只跟随结果，不固定输入高度。
   @Builder
   ImmersiveBar() {
     Row() {
@@ -489,38 +489,28 @@ export struct ChatInputBar {
     .constraintSize({ minHeight: 52, maxHeight: 132 })
     .backgroundColor(Color.Transparent)
     .borderRadius(24)
-    .clip(false)
     .border({
       width: this.isEditing ? 2 : 0,
       color: this.isEditing ? this.themePrimary : Color.Transparent
     })
-    .systemMaterial(new uiMaterial.ImmersiveMaterial({
-      style: uiMaterial.ImmersiveStyle.REGULAR,
-      // 输入栏底板只保留材质外观，禁用按压时的整体形变。
-      interactive: false,
-      lightEffect: { color: undefined }
-    }))
-    .shadow({
-      radius: this.isEditing ? 16 : 32,
-      color: this.isEditing ? withColorAlpha(this.themePrimary, '26') : 'rgba(0, 0, 0, 0.1)',
-      offsetX: 0,
-      offsetY: this.isEditing ? -4 : 8
-    })
+    .clip(false)
     .animation({ duration: 200, curve: Curve.EaseOut })
-    .onAreaChange((_oldArea: Area, newArea: Area) => {
-      const measuredHeight = Number(newArea.height)
-      if (Number.isFinite(measuredHeight) && measuredHeight > 0 &&
-        Math.abs(this.immersiveBarHeightVp - measuredHeight) > 0.5) {
-        this.immersiveBarHeightVp = measuredHeight
-      }
-    })
   }
 
   @Builder
   InputRow() {
     Row() {
       // 模型图标按钮 - 点击触发快速切换（编辑模式下也可点击切换模型）
-      Button({ type: ButtonType.Circle, stateEffect: false }) {
+      InteractiveMaterialButton({
+        surfaceWidth: 40,
+        surfaceHeight: 40,
+        buttonType: ButtonType.Circle,
+        interactive: true,
+        materialColor: withColorAlpha(this.themeUserBubble, '40'),
+        onActivate: () => {
+          this.onModelIconClick()
+        }
+      }) {
         Stack({ alignContent: Alignment.Center }) {
           if (this.currentModelId !== '') {
             if (this.hasCurrentModelIcon()) {
@@ -557,29 +547,6 @@ export struct ChatInputBar {
         .width(40)
         .height(40)
       }
-      .width(40)
-      .height(40)
-      .padding(0)
-      .backgroundColor(Color.Transparent)
-      .systemMaterial(new uiMaterial.ImmersiveMaterial({
-        style: uiMaterial.ImmersiveStyle.REGULAR,
-        materialColor: withColorAlpha(this.themeUserBubble, '40'),
-        applyShadow: false,
-        interactive: true,
-        lightEffect: { color: undefined }
-      }))
-      .scale({ x: this.modelBtnPressed ? 0.95 : 1, y: this.modelBtnPressed ? 0.95 : 1 })
-      .animation({ duration: 150, curve: Curve.EaseOut })
-      .onTouch((event: TouchEvent) => {
-        if (event.type === TouchType.Down) {
-          this.modelBtnPressed = true
-        } else if (event.type === TouchType.Up || event.type === TouchType.Cancel) {
-          this.modelBtnPressed = false
-        }
-      })
-      .onClick(() => {
-        this.onModelIconClick()
-      })
 
         // 输入框
         TextArea({ text: this.inputText, placeholder: $r('app.string.input_placeholder') })
@@ -653,76 +620,67 @@ export struct ChatInputBar {
         }
 
         // 发送/停止按钮（编辑模式下为"保存并发送"）
-        Button({ type: ButtonType.Circle, stateEffect: false }) {
-          Stack({ alignContent: Alignment.Center }) {
-            SymbolGlyph(this.getSendButtonSymbol())
-              .fontSize(this.isSending ? 20 : 22)
-              .fontColor([this.themePrimary])
-              .symbolEffect(
-                new ScaleSymbolEffect(EffectScope.WHOLE),
-                this.iconTrigger
-              )
-
-            if (this.queuedMessageCount > 0) {
-              Text(this.queuedMessageCount > 9 ? '9+' : this.queuedMessageCount.toString())
-                .fontSize(8)
-                .fontWeight(FontWeight.Bold)
-                .fontColor(Color.White)
-                .textAlign(TextAlign.Center)
-                .width(16)
-                .height(16)
-                .backgroundColor(this.themePrimary)
-                .borderRadius(8)
-                .position({ x: 23, y: -3 })
+        Stack() {
+          InteractiveMaterialButton({
+            surfaceWidth: 40,
+            surfaceHeight: 40,
+            buttonType: ButtonType.Circle,
+            interactive: true,
+            materialColor: withColorAlpha(this.themeUserBubble, '40'),
+            onActivate: () => {
+              if (this.isSending) {
+                if (!this.computeHasContent()) {
+                  this.onStop()
+                } else if (this.isInFlightSendChoiceActive()) {
+                  this.showInFlightSendMenu = true
+                } else if (!this.isInFlightSendChoiceActive()) {
+                  // 回答已经结束、仅剩任务收尾时直接按默认队列发送，不再要求用户二次选择。
+                  this.onQueueSend()
+                }
+              } else if (this.isSendDispatching) {
+                return
+              } else {
+                if (!this.computeHasContent()) {
+                  return
+                }
+                this.onSend()
+              }
             }
+          }) {
+            Stack({ alignContent: Alignment.Center }) {
+              SymbolGlyph(this.getSendButtonSymbol())
+                .fontSize(this.isSending ? 20 : 22)
+                .fontColor([this.themePrimary])
+                .symbolEffect(
+                  new ScaleSymbolEffect(EffectScope.WHOLE),
+                  this.iconTrigger
+                )
+
+              if (this.queuedMessageCount > 0) {
+                Text(this.queuedMessageCount > 9 ? '9+' : this.queuedMessageCount.toString())
+                  .fontSize(8)
+                  .fontWeight(FontWeight.Bold)
+                  .fontColor(Color.White)
+                  .textAlign(TextAlign.Center)
+                  .width(16)
+                  .height(16)
+                  .backgroundColor(this.themePrimary)
+                  .borderRadius(8)
+                  .position({ x: 23, y: -3 })
+              }
+            }
+            .width(40)
+            .height(40)
           }
-          .width(40)
-          .height(40)
         }
         .width(40)
         .height(40)
-        .padding(0)
-        .backgroundColor(Color.Transparent)
-        .systemMaterial(new uiMaterial.ImmersiveMaterial({
-          style: uiMaterial.ImmersiveStyle.REGULAR,
-          materialColor: withColorAlpha(this.themeUserBubble, '40'),
-          applyShadow: false,
-          interactive: true,
-          lightEffect: { color: undefined }
-        }))
+        .clip(false)
         .opacity(this.breathOpacity)
-        .scale({
-          x: this.sendBtnPressed ? 0.95 * this.sendBtnScale : this.sendBtnScale,
-          y: this.sendBtnPressed ? 0.95 * this.sendBtnScale : this.sendBtnScale
-        })
+        // 按压形变交给原生材质，仅保留发送状态切换的缩放与呼吸动画。
+        .scale({ x: this.sendBtnScale, y: this.sendBtnScale })
         .rotate({ angle: this.sendBtnRotation })
         .animation({ duration: 200, curve: Curve.EaseInOut })
-        .onTouch((event: TouchEvent) => {
-          if (event.type === TouchType.Down) {
-            this.sendBtnPressed = true
-          } else if (event.type === TouchType.Up || event.type === TouchType.Cancel) {
-            this.sendBtnPressed = false
-          }
-        })
-        .onClick(() => {
-          if (this.isSending) {
-            if (!this.computeHasContent()) {
-              this.onStop()
-            } else if (this.isInFlightSendChoiceActive()) {
-              this.showInFlightSendMenu = true
-            } else if (!this.isInFlightSendChoiceActive()) {
-              // 回答已经结束、仅剩任务收尾时直接按默认队列发送，不再要求用户二次选择。
-              this.onQueueSend()
-            }
-          } else if (this.isSendDispatching) {
-            return
-          } else {
-            if (!this.computeHasContent()) {
-              return
-            }
-            this.onSend()
-          }
-        })
         .bindMenu(this.showInFlightSendMenu, this.InFlightSendMenu(), {
           systemMaterial: new uiMaterial.ImmersiveMaterial({
             style: uiMaterial.ImmersiveStyle.THICK

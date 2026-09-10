@@ -1,3 +1,5 @@
+import { ImmersiveButtonSurface } from '../components/ImmersiveButtonSurface'
+import { getBlurBottomShadow, getBlurFloatingActionShadow } from '../utils/BlurShadowUtils'
 import { curves, SymbolGlyphModifier, uiMaterial } from '@kit.ArkUI'
 import { ConfigurationConstant, common } from '@kit.AbilityKit'
 import { notificationManager } from '@kit.NotificationKit'
@@ -9,9 +11,9 @@ import {
   HdsNavigationMenuItemOptions,
   HdsNavigationTitleBarOptions,
   HdsNavigationTitleMode,
-  HdsTabs,
-  hdsMaterial
+  HdsTabs
 } from '@kit.UIDesignKit'
+import { getHdsSystemMaterialEffect, HdsTabsBlurModifier, DrawnTabsContentModifier } from '../utils/HdsMaterialSupport'
 import {
   ApiStyle,
   ChatSession,
@@ -52,6 +54,7 @@ import {
   parseOpenSessionPayload
 } from '../utils/TaskAlertUtils'
 import { IndexBottomTabItem } from '../components/index/IndexBottomTabItem'
+import { getDrawnNavigationBorder, PlainNavigationButtonModifier, shouldUseDrawnNavigation } from '../utils/DrawnNavigationSupport'
 import { IndexEmptyStateCard } from '../components/index/IndexEmptyStateCard'
 import { IndexSettingsPanel } from '../components/index/IndexSettingsPanel'
 import { IndexSettingsSheetContent } from '../components/index/IndexSettingsSheetContent'
@@ -60,6 +63,8 @@ import { ManuscriptPageTitle } from '../components/index/ManuscriptPageTitle'
 import { ManuscriptTopArcButton } from '../components/index/ManuscriptTopArcButton'
 import { ChatMultiSelectToolbar } from '../components/chat/ChatMultiSelectToolbar'
 import { ChatFloatingImmersiveButton } from '../components/ChatFloatingImmersiveButton'
+import { InteractiveMaterialButton } from '../components/InteractiveMaterialButton'
+import { shouldUseWrappedMaterial, WRAPPED_MATERIAL_REGULAR } from '../utils/WrappedMaterialSupport'
 import { ImmersiveTaskAlertBanner } from '../components/ImmersiveTaskAlertBanner'
 import { PyodideWebHost } from '../components/PyodideWebHost'
 import { KnowledgeBasePanel } from '../components/KnowledgeBasePanel'
@@ -1863,6 +1868,7 @@ struct Index {
           .height('100%')
           .barMode(BarMode.Fixed)
           .barHeight(0)
+          .attributeModifier(shouldUseDrawnNavigation() ? new DrawnTabsContentModifier() : undefined)
           .barOverlap(false)
           .barPosition(BarPosition.End)
           .vertical(false)
@@ -1976,13 +1982,8 @@ struct Index {
       .backgroundColor(Color.Transparent)
       .borderRadius(Index.EXPANDED_FLOATING_NAVIGATION_RADIUS)
       .clip(false)
-      .systemMaterial(new uiMaterial.ImmersiveMaterial({
-        style: uiMaterial.ImmersiveStyle.REGULAR,
-        materialColor: Color.Transparent,
-        applyShadow: true,
-        interactive: true,
-        lightEffect: { color: Color.White }
-      }))
+      .backdropBlur(24)
+      .shadow(getBlurBottomShadow())
     }
     .width(Index.EXPANDED_NAVIGATION_RAIL_WIDTH)
     .height('100%')
@@ -2376,6 +2377,25 @@ struct Index {
       .onClick(() => {
         this.handleCompactBottomMiniBarClick()
       })
+    } else if (shouldUseDrawnNavigation()) {
+      Button({ type: ButtonType.Circle, stateEffect: false }) {
+        SymbolGlyph($r('sys.symbol.plus'))
+          .fontSize(28)
+          .fontColor([this.themePrimary])
+      }
+      .width(Index.COMPACT_MINI_BAR_WIDTH)
+      .height(Index.COMPACT_TABS_BAR_HEIGHT)
+      .padding(0)
+      .backgroundColor(Color.Transparent)
+      .backdropBlur(24)
+      .borderRadius(Index.COMPACT_TABS_BAR_HEIGHT / 2)
+      .border(getDrawnNavigationBorder())
+      .shadow(getBlurBottomShadow())
+      .clip(false)
+      .attributeModifier(new PlainNavigationButtonModifier())
+      .onClick(() => {
+        this.handleCompactBottomMiniBarClick()
+      })
     } else {
       ChatFloatingImmersiveButton({
         barWidth: Index.COMPACT_MINI_BAR_WIDTH,
@@ -2385,6 +2405,7 @@ struct Index {
         iconColor: [this.themePrimary],
         iconOffsetY: 0,
         responsePadding: 0,
+        enableMaterialInteraction: true,
         enableShadow: true,
         shadowRadius: 18,
         shadowColor: this.fabShadowColor,
@@ -2416,6 +2437,20 @@ struct Index {
       .backgroundColor(this.themeSurface)
       .borderRadius(0)
       .border({ width: { top: 1 }, color: this.themeDivider })
+    } else if (!shouldUseWrappedMaterial()) {
+      // 降级时不用 HDS 悬浮宿主：材质 NONE 不等同于禁用其形变/选中态交互。
+      // 将原有 24vp 透明背景模糊直接交给实际可见的 Row，不额外叠加模糊层。
+      Row() {
+        this.CompactBottomTabBarContent()
+      }
+      .width(this.getCompactBottomTabBarWidth())
+      .height(Index.COMPACT_TABS_BAR_HEIGHT)
+      .backgroundColor(Color.Transparent)
+      .backdropBlur(24)
+      .borderRadius(Index.COMPACT_TABS_BAR_HEIGHT / 2)
+      .border(getDrawnNavigationBorder())
+      .shadow(getBlurBottomShadow())
+      .clip(false)
     } else {
       HdsTabs() {
         TabContent()
@@ -2425,7 +2460,6 @@ struct Index {
       .barOverlap(true)
       .barPosition(BarPosition.End)
       .vertical(false)
-      .barBackgroundColor(Color.Transparent)
       .width(this.getCompactBottomTabBarWidth())
       .height(Index.COMPACT_TABS_BAR_HEIGHT)
       .backgroundColor(Color.Transparent)
@@ -2440,11 +2474,9 @@ struct Index {
           largeWidth: this.getCompactBottomTabBarWidth()
         },
         gradientMask: { maskColor: Color.Transparent },
-        systemMaterialEffect: {
-          materialType: hdsMaterial.MaterialType.IMMERSIVE,
-          materialLevel: hdsMaterial.MaterialLevel.ADAPTIVE
-        }
+        systemMaterialEffect: getHdsSystemMaterialEffect()
       })
+      .attributeModifier(new HdsTabsBlurModifier(shouldUseWrappedMaterial()))
     }
   }
 
@@ -2492,7 +2524,7 @@ struct Index {
       .height(Index.COMPACT_TABS_BAR_HEIGHT)
       .padding({ left: this.isManuscriptMode() ? 0 : 6, right: this.isManuscriptMode() ? 0 : 6 })
       .backgroundColor(Color.Transparent)
-      .translate({ y: this.isManuscriptMode() ? 0 : -3 })
+      .translate({ y: this.isManuscriptMode() || shouldUseDrawnNavigation() ? 0 : -3 })
     }
     .width('100%')
     .height(Index.COMPACT_TABS_BAR_HEIGHT)
@@ -2502,6 +2534,7 @@ struct Index {
   TabBarChat() {
     IndexBottomTabItem({
       active: this.isTabActive(Index.TAB_CHAT),
+      disablePressScale: !this.isManuscriptMode() && !shouldUseWrappedMaterial(),
       activeIcon: $r('sys.symbol.ellipsis_message_fill'),
       inactiveIcon: $r('sys.symbol.ellipsis_message'),
       label: $r('app.string.tab_chat'),
@@ -2513,6 +2546,7 @@ struct Index {
   TabBarAssistants() {
     IndexBottomTabItem({
       active: this.isTabActive(Index.TAB_ASSISTANTS),
+      disablePressScale: !this.isManuscriptMode() && !shouldUseWrappedMaterial(),
       activeIcon: $r('sys.symbol.person_fill'),
       inactiveIcon: $r('sys.symbol.person'),
       label: $r('app.string.tab_assistants'),
@@ -2524,6 +2558,7 @@ struct Index {
   TabBarKnowledge() {
     IndexBottomTabItem({
       active: this.isTabActive(Index.TAB_KNOWLEDGE),
+      disablePressScale: !this.isManuscriptMode() && !shouldUseWrappedMaterial(),
       activeIcon: $r('sys.symbol.externaldrive_fill'),
       inactiveIcon: $r('sys.symbol.externaldrive'),
       label: $r('app.string.tab_knowledge'),
@@ -2535,6 +2570,7 @@ struct Index {
   TabBarSettings() {
     IndexBottomTabItem({
       active: this.isTabActive(Index.TAB_SETTINGS),
+      disablePressScale: !this.isManuscriptMode() && !shouldUseWrappedMaterial(),
       activeIcon: $r('sys.symbol.gearshape_fill'),
       inactiveIcon: $r('sys.symbol.gearshape'),
       label: $r('app.string.tab_settings'),
@@ -2767,7 +2803,7 @@ struct Index {
       this.windowHeightVp)
     options.menuItems = this.isManuscriptMode() ? [] : this.getCompactChatTitleBarMenuItems()
     options.stackBuilder = (): void => this.CompactChatTitleStackBuilder()
-    return buildHdsTopNavigationTitleBarOptions(options)
+    return buildHdsTopNavigationTitleBarOptions(options, this)
   }
 
   private getCompactChatTitleBarMaskExtraHeight(): number {
@@ -3131,7 +3167,7 @@ struct Index {
     options.blurEffectiveEndOffsetVp = getHdsTopNavigationBlurEffectiveEndOffset(this.windowWidthVp,
       this.windowHeightVp)
     options.stackBuilder = (): void => this.AssistantsHeader()
-    return buildHdsTopNavigationTitleBarOptions(options)
+    return buildHdsTopNavigationTitleBarOptions(options, this)
   }
 
   @Builder
@@ -3830,7 +3866,7 @@ struct Index {
       ]
     }
     options.stackBuilder = (): void => this.KnowledgeTitleStackBuilder()
-    return buildHdsTopNavigationTitleBarOptions(options)
+    return buildHdsTopNavigationTitleBarOptions(options, this)
   }
 
   @Builder
@@ -3891,12 +3927,12 @@ struct Index {
       duration: 420,
       curve: curves.springMotion(0.75, 0.86)
     })
-    .shadow({
+    .shadow(shouldUseWrappedMaterial() ? {
       radius: this.fabPressed ? 20 : 14,
       color: this.fabShadowColor,
       offsetX: 0,
       offsetY: 8
-    })
+    } : getBlurFloatingActionShadow())
     .onTouch(createButtonTouchHandler((pressed: boolean) => {
       this.fabPressed = pressed
     }))
@@ -3979,34 +4015,43 @@ struct Index {
 
   @Builder
   private AssistantHeaderPill(value: string, label: ResourceStr) {
-    Button({ type: this.isManuscriptMode() ? ButtonType.Normal : ButtonType.Capsule, stateEffect: false }) {
-      Row({ space: 4 }) {
-        Text(value)
-          .fontSize(11)
-          .fontWeight(FontWeight.Bold)
-          .fontColor($r('app.color.text_primary'))
-          .textAlign(TextAlign.Center)
+    Stack({ alignContent: Alignment.TopStart }) {
+      ImmersiveButtonSurface({
+        materialFactory: this.isManuscriptMode() ? undefined : () => (new uiMaterial.ImmersiveMaterial({
+          style: uiMaterial.ImmersiveStyle.REGULAR,
+          materialColor: Color.Transparent,
+          applyShadow: false,
+          interactive: false,
+          lightEffect: { color: undefined }
+        })),
+        cornerRadius: this.isManuscriptMode() ? 0 : this.getAssistantHeaderPillHeight() / 2
+      }) {
+        Button({ type: this.isManuscriptMode() ? ButtonType.Normal : ButtonType.Capsule, stateEffect: false }) {
+          Row({ space: 4 }) {
+            Text(value)
+              .fontSize(11)
+              .fontWeight(FontWeight.Bold)
+              .fontColor($r('app.color.text_primary'))
+              .textAlign(TextAlign.Center)
 
-        Text(label)
-          .fontSize(10)
-          .fontColor($r('app.color.text_secondary'))
-          .textAlign(TextAlign.Center)
+            Text(label)
+              .fontSize(10)
+              .fontColor($r('app.color.text_secondary'))
+              .textAlign(TextAlign.Center)
+          }
+          .justifyContent(FlexAlign.Center)
+          .alignItems(VerticalAlign.Center)
+        }
+        .width(this.getAssistantHeaderPillWidth(value))
+        .height(this.getAssistantHeaderPillHeight())
+        .padding({ left: 8, right: 8 })
+        .backgroundColor(Color.Transparent)
+        .borderRadius(this.isManuscriptMode() ? 0 : this.getAssistantHeaderPillHeight() / 2)
       }
-      .justifyContent(FlexAlign.Center)
-      .alignItems(VerticalAlign.Center)
     }
     .width(this.getAssistantHeaderPillWidth(value))
     .height(this.getAssistantHeaderPillHeight())
-    .padding({ left: 8, right: 8 })
-    .backgroundColor(Color.Transparent)
-    .borderRadius(this.isManuscriptMode() ? 0 : this.getAssistantHeaderPillHeight() / 2)
-    .systemMaterial(this.isManuscriptMode() ? undefined : new uiMaterial.ImmersiveMaterial({
-      style: uiMaterial.ImmersiveStyle.REGULAR,
-      materialColor: Color.Transparent,
-      applyShadow: false,
-      interactive: false,
-      lightEffect: { color: undefined }
-    }))
+    .clip(false)
   }
 
   private getAssistantHeaderPillHeight(): number {
@@ -4255,65 +4300,97 @@ struct Index {
   @Builder
   private AssistantSwipeButton(symbol: Resource, label: ResourceStr, backgroundColor: ResourceColor, width: number,
     onTap: () => void) {
-    Button() {
-      Column() {
-        SymbolGlyph(symbol)
-          .fontSize(18)
-          .fontColor([Color.White])
+    Stack({ alignContent: Alignment.TopStart }) {
+      ImmersiveButtonSurface({
+        materialFactory: () => (new uiMaterial.ImmersiveMaterial({
+          style: uiMaterial.ImmersiveStyle.REGULAR,
+          materialColor: backgroundColor,
+          applyShadow: false,
+          interactive: true,
+          lightEffect: { color: undefined }
+        })),
+        fallbackShadow: false,
+        cornerRadius: 0
+      }) {
+        Button() {
+          Column() {
+            SymbolGlyph(symbol)
+              .fontSize(18)
+              .fontColor([Color.White])
 
-        Text(label)
-          .fontSize(11)
-          .fontWeight(FontWeight.Medium)
-          .fontColor(Color.White)
-          .maxLines(1)
-          .textOverflow({ overflow: TextOverflow.Ellipsis })
-          .textAlign(TextAlign.Center)
-          .margin({ top: 2 })
+            Text(label)
+              .fontSize(11)
+              .fontWeight(FontWeight.Medium)
+              .fontColor(Color.White)
+              .maxLines(1)
+              .textOverflow({ overflow: TextOverflow.Ellipsis })
+              .textAlign(TextAlign.Center)
+              .margin({ top: 2 })
+          }
+          .width('100%')
+          .padding({ left: 4, right: 4 })
+          .justifyContent(FlexAlign.Center)
+          .alignItems(HorizontalAlign.Center)
+        }
+        .width(width)
+        .height('100%')
+        .borderRadius(0)
+        .backgroundColor(Color.Transparent)
+        .stateEffect(false)
+        .onClick(() => {
+          onTap()
+        })
       }
-      .width('100%')
-      .padding({ left: 4, right: 4 })
-      .justifyContent(FlexAlign.Center)
-      .alignItems(HorizontalAlign.Center)
     }
     .width(width)
     .height('100%')
-    .borderRadius(0)
-    .backgroundColor(backgroundColor)
-    .stateEffect(false)
-    .systemMaterial(new uiMaterial.ImmersiveMaterial({
-      style: uiMaterial.ImmersiveStyle.REGULAR,
-      materialColor: backgroundColor,
-      applyShadow: false,
-      interactive: true,
-      lightEffect: { color: undefined }
-    }))
-    .onClick(() => {
-      onTap()
-    })
+    .clip(false)
   }
 
   @Builder
   private AssistantFloatingActionButton() {
-    Button() {
-      SymbolGlyph($r('sys.symbol.plus'))
-        .fontSize(24)
-        .fontColor([Color.White])
+    Stack({ alignContent: Alignment.TopStart }) {
+      ImmersiveButtonSurface({
+        materialFactory: () => (new uiMaterial.ImmersiveMaterial({
+          style: uiMaterial.ImmersiveStyle.REGULAR,
+          materialColor: this.themePrimary,
+          applyShadow: true,
+          interactive: true,
+          lightEffect: { color: undefined }
+        })),
+        fallbackShadow: false,
+        cornerRadius: INDEX_NEW_CHAT_FAB_SIZE / 2
+      }) {
+        Button() {
+          SymbolGlyph($r('sys.symbol.plus'))
+            .fontSize(24)
+            .fontColor([Color.White])
+        }
+        .width(INDEX_NEW_CHAT_FAB_SIZE)
+        .height(INDEX_NEW_CHAT_FAB_SIZE)
+        .borderRadius(INDEX_NEW_CHAT_FAB_SIZE / 2)
+        .backgroundColor(Color.Transparent)
+        .type(ButtonType.Circle)
+        .stateEffect(false)
+        .padding(0)
+        .clip(false)
+        .shadow(shouldUseWrappedMaterial() ? {
+          radius: this.fabPressed ? 20 : 14,
+          color: this.fabShadowColor,
+          offsetX: 0,
+          offsetY: 8
+        } : getBlurFloatingActionShadow())
+        .onTouch(createButtonTouchHandler((pressed: boolean) => {
+          this.fabPressed = pressed
+        }))
+        .onClick(() => {
+          this.fabPressed = false
+          this.openAssistantManageForNew()
+        })
+      }
     }
     .width(INDEX_NEW_CHAT_FAB_SIZE)
     .height(INDEX_NEW_CHAT_FAB_SIZE)
-    .borderRadius(INDEX_NEW_CHAT_FAB_SIZE / 2)
-    .backgroundColor(this.themePrimary)
-    .type(ButtonType.Circle)
-    .stateEffect(false)
-    .padding(0)
-    .clip(false)
-    .systemMaterial(new uiMaterial.ImmersiveMaterial({
-      style: uiMaterial.ImmersiveStyle.REGULAR,
-      materialColor: this.themePrimary,
-      applyShadow: true,
-      interactive: true,
-      lightEffect: { color: undefined }
-    }))
     .position({ x: this.shouldPlaceFabOnLeft() ? 0 : '100%', y: '100%' })
     .translate({ x: this.getFabOffsetX(), y: this.getFabOffsetY() })
     .scale(getButtonScale(this.fabPressed))
@@ -4321,19 +4398,7 @@ struct Index {
       duration: 420,
       curve: curves.springMotion(0.75, 0.86)
     })
-    .shadow({
-      radius: this.fabPressed ? 20 : 14,
-      color: this.fabShadowColor,
-      offsetX: 0,
-      offsetY: 8
-    })
-    .onTouch(createButtonTouchHandler((pressed: boolean) => {
-      this.fabPressed = pressed
-    }))
-    .onClick(() => {
-      this.fabPressed = false
-      this.openAssistantManageForNew()
-    })
+    .clip(false)
   }
 
   private getAssistantOrdinal(assistant: Assistant): number {
@@ -4517,13 +4582,8 @@ struct Index {
         color: assistant.id === this.currentAssistantId || this.openingAssistantId === assistant.id ?
           this.themePrimary : this.themePrimaryLight
       })
-      .systemMaterial(new uiMaterial.ImmersiveMaterial({
-        style: uiMaterial.ImmersiveStyle.REGULAR,
-        materialColor: Color.Transparent,
-        applyShadow: true,
-        interactive: false,
-        lightEffect: { color: undefined }
-      }))
+      .backdropBlur(24)
+      .shadow(getBlurBottomShadow())
       .scale({
         x: this.openingAssistantId === assistant.id ? 0.985 : 1,
         y: this.openingAssistantId === assistant.id ? 0.985 : 1
@@ -4619,30 +4679,40 @@ struct Index {
         this.openAssistantSessions(assistant)
       })
 
-      Button() {
-        SymbolGlyph($r('sys.symbol.dot_grid_2x2'))
-          .fontSize(18)
-          .fontColor([$r('app.color.text_secondary')])
+      Stack({ alignContent: Alignment.TopStart }) {
+        ImmersiveButtonSurface({
+          materialFactory: () => (new uiMaterial.ImmersiveMaterial({
+            style: uiMaterial.ImmersiveStyle.REGULAR,
+            materialColor: Color.Transparent,
+            applyShadow: false,
+            interactive: true,
+            lightEffect: { color: undefined }
+          })),
+          fallbackShadow: false,
+          cornerRadius: 17
+        }) {
+          Button() {
+            SymbolGlyph($r('sys.symbol.dot_grid_2x2'))
+              .fontSize(18)
+              .fontColor([$r('app.color.text_secondary')])
+          }
+          .width(40)
+          .height(34)
+          .borderRadius(17)
+          .padding(0)
+          .backgroundColor(Color.Transparent)
+          .stateEffect(false)
+          .bindMenu(this.AssistantCardMoreMenu(assistant), {
+            placement: Placement.BottomRight,
+            offset: { x: 0, y: 8 },
+            backgroundColor: this.themeSurface,
+            backgroundBlurStyle: BlurStyle.Regular
+          })
+        }
       }
       .width(40)
       .height(34)
-      .borderRadius(17)
-      .padding(0)
-      .backgroundColor(Color.Transparent)
-      .stateEffect(false)
-      .systemMaterial(new uiMaterial.ImmersiveMaterial({
-        style: uiMaterial.ImmersiveStyle.REGULAR,
-        materialColor: Color.Transparent,
-        applyShadow: false,
-        interactive: true,
-        lightEffect: { color: undefined }
-      }))
-      .bindMenu(this.AssistantCardMoreMenu(assistant), {
-        placement: Placement.BottomRight,
-        offset: { x: 0, y: 8 },
-        backgroundColor: this.themeSurface,
-        backgroundBlurStyle: BlurStyle.Regular
-      })
+      .clip(false)
     }
     .width('100%')
     .alignItems(VerticalAlign.Center)
@@ -4650,39 +4720,49 @@ struct Index {
 
   @Builder
   private AssistantCardActionButton(symbol: Resource, label: ResourceStr, primary: boolean, onTap: () => void) {
-    Button() {
-      Row({ space: 5 }) {
-        SymbolGlyph(symbol)
-          .fontSize(15)
-          .fontColor([primary ? Color.White : this.themePrimary])
+    Stack({ alignContent: Alignment.TopStart }) {
+      ImmersiveButtonSurface({
+        materialFactory: () => (new uiMaterial.ImmersiveMaterial({
+          style: uiMaterial.ImmersiveStyle.REGULAR,
+          materialColor: primary ? this.themePrimary : this.themePrimaryLight,
+          applyShadow: false,
+          interactive: true,
+          lightEffect: { color: undefined }
+        })),
+        fallbackShadow: false,
+        cornerRadius: 17
+      }) {
+        Button() {
+          Row({ space: 5 }) {
+            SymbolGlyph(symbol)
+              .fontSize(15)
+              .fontColor([primary ? Color.White : this.themePrimary])
 
-        Text(label)
-          .fontSize(12)
-          .fontWeight(FontWeight.Medium)
-          .fontColor(primary ? Color.White : this.themePrimary)
-          .maxLines(1)
-          .textOverflow({ overflow: TextOverflow.Ellipsis })
+            Text(label)
+              .fontSize(12)
+              .fontWeight(FontWeight.Medium)
+              .fontColor(primary ? Color.White : this.themePrimary)
+              .maxLines(1)
+              .textOverflow({ overflow: TextOverflow.Ellipsis })
+          }
+          .justifyContent(FlexAlign.Center)
+          .alignItems(VerticalAlign.Center)
+          .width('100%')
+        }
+        .height(34)
+        .borderRadius(17)
+        .padding({ left: 10, right: 10 })
+        .backgroundColor(Color.Transparent)
+        .stateEffect(false)
+        .onClick(() => {
+          onTap()
+        })
+        .width('100%')
       }
-      .justifyContent(FlexAlign.Center)
-      .alignItems(VerticalAlign.Center)
-      .width('100%')
     }
     .layoutWeight(1)
     .height(34)
-    .borderRadius(17)
-    .padding({ left: 10, right: 10 })
-    .backgroundColor(primary ? this.themePrimary : this.themePrimaryLight)
-    .stateEffect(false)
-    .systemMaterial(new uiMaterial.ImmersiveMaterial({
-      style: uiMaterial.ImmersiveStyle.REGULAR,
-      materialColor: primary ? this.themePrimary : this.themePrimaryLight,
-      applyShadow: false,
-      interactive: true,
-      lightEffect: { color: undefined }
-    }))
-    .onClick(() => {
-      onTap()
-    })
+    .clip(false)
   }
 
   @Builder
@@ -4734,12 +4814,8 @@ struct Index {
     .backgroundColor(Color.Transparent)
     .borderRadius(10)
     .border({ width: 0.5, color: this.themePrimaryLight })
-    .systemMaterial(new uiMaterial.ImmersiveMaterial({
-      style: uiMaterial.ImmersiveStyle.ULTRA_THIN,
-      materialColor: Color.Transparent,
-      applyShadow: false,
-      interactive: false
-    }))
+    .backdropBlur(16)
+    .shadow(getBlurBottomShadow())
   }
 
   @Builder
@@ -4915,35 +4991,42 @@ struct Index {
           .placeholderColor($r('app.color.text_tertiary'))
           .backgroundColor(Color.Transparent)
           .borderRadius(16)
-          .systemMaterial(new uiMaterial.ImmersiveMaterial({
-            style: uiMaterial.ImmersiveStyle.ULTRA_THIN,
-            materialColor: Color.Transparent,
-            applyShadow: false
-          }))
+          .backdropBlur(16)
+          .shadow(getBlurBottomShadow())
           .padding({ left: 14, right: 14 })
           .onChange((text: string) => {
             this.assistantFormName = text
           })
 
-        Button() {
-          this.AssistantFormAvatarBadge(60, 20, 34)
+        Stack({ alignContent: Alignment.TopStart }) {
+          ImmersiveButtonSurface({
+            materialFactory: () => (new uiMaterial.ImmersiveMaterial({
+              style: uiMaterial.ImmersiveStyle.REGULAR,
+              materialColor: Color.Transparent,
+              applyShadow: false,
+              interactive: true,
+              lightEffect: { color: undefined }
+            })),
+            fallbackShadow: false,
+            cornerRadius: 20
+          }) {
+            Button() {
+              this.AssistantFormAvatarBadge(60, 20, 34)
+            }
+            .width(60)
+            .height(60)
+            .padding(0)
+            .backgroundColor(Color.Transparent)
+            .borderRadius(20)
+            .stateEffect(false)
+            .onClick(() => {
+              this.showAssistantAvatarEditorSheet = true
+            })
+          }
         }
         .width(60)
         .height(60)
-        .padding(0)
-        .backgroundColor(Color.Transparent)
-        .borderRadius(20)
-        .stateEffect(false)
-        .systemMaterial(new uiMaterial.ImmersiveMaterial({
-          style: uiMaterial.ImmersiveStyle.REGULAR,
-          materialColor: Color.Transparent,
-          applyShadow: false,
-          interactive: true,
-          lightEffect: { color: undefined }
-        }))
-        .onClick(() => {
-          this.showAssistantAvatarEditorSheet = true
-        })
+        .clip(false)
       }
       .width('100%')
       .alignItems(VerticalAlign.Center)
@@ -4989,11 +5072,8 @@ struct Index {
         .placeholderColor($r('app.color.text_tertiary'))
         .backgroundColor(Color.Transparent)
         .borderRadius(16)
-        .systemMaterial(new uiMaterial.ImmersiveMaterial({
-          style: uiMaterial.ImmersiveStyle.ULTRA_THIN,
-          materialColor: Color.Transparent,
-          applyShadow: false
-        }))
+        .backdropBlur(16)
+        .shadow(getBlurBottomShadow())
         .padding(14)
         .onChange((value: string) => {
           this.assistantFormSystemPrompt = value
@@ -5021,26 +5101,36 @@ struct Index {
       .alignItems(HorizontalAlign.Start)
 
       if (this.assistantFormDefaultModelId !== '') {
-        Button() {
-          SymbolGlyph($r('sys.symbol.xmark'))
-            .fontSize(16)
-            .fontColor([$r('app.color.text_secondary')])
+        Stack({ alignContent: Alignment.TopStart }) {
+          ImmersiveButtonSurface({
+            materialFactory: () => (new uiMaterial.ImmersiveMaterial({
+              style: uiMaterial.ImmersiveStyle.REGULAR,
+              materialColor: Color.Transparent,
+              applyShadow: false,
+              interactive: true,
+              lightEffect: { color: undefined }
+            })),
+            fallbackShadow: false,
+            cornerRadius: 17
+          }) {
+            Button() {
+              SymbolGlyph($r('sys.symbol.xmark'))
+                .fontSize(16)
+                .fontColor([$r('app.color.text_secondary')])
+            }
+            .width(34)
+            .height(34)
+            .borderRadius(17)
+            .backgroundColor(Color.Transparent)
+            .stateEffect(false)
+            .onClick(() => {
+              this.clearAssistantDefaultModel()
+            })
+          }
         }
         .width(34)
         .height(34)
-        .borderRadius(17)
-        .backgroundColor(Color.Transparent)
-        .stateEffect(false)
-        .systemMaterial(new uiMaterial.ImmersiveMaterial({
-          style: uiMaterial.ImmersiveStyle.REGULAR,
-          materialColor: Color.Transparent,
-          applyShadow: false,
-          interactive: true,
-          lightEffect: { color: undefined }
-        }))
-        .onClick(() => {
-          this.clearAssistantDefaultModel()
-        })
+        .clip(false)
       }
 
       SymbolGlyph($r('sys.symbol.chevron_right'))
@@ -5052,13 +5142,8 @@ struct Index {
     .backgroundColor(Color.Transparent)
     .borderRadius(16)
     .border({ width: 1, color: this.themePrimaryLight })
-    .systemMaterial(new uiMaterial.ImmersiveMaterial({
-      style: uiMaterial.ImmersiveStyle.REGULAR,
-      materialColor: Color.Transparent,
-      applyShadow: false,
-      interactive: true,
-      lightEffect: { color: undefined }
-    }))
+    .backdropBlur(24)
+    .shadow(getBlurBottomShadow())
     .margin({ top: 16, bottom: 16 })
     .onClick(() => {
       this.showAssistantModelSheet = true
@@ -5167,13 +5252,8 @@ struct Index {
           .height(36)
           .borderRadius(12)
           .backgroundColor(Color.Transparent)
-          .systemMaterial(new uiMaterial.ImmersiveMaterial({
-            style: uiMaterial.ImmersiveStyle.ULTRA_THIN,
-            materialColor: Color.Transparent,
-            applyShadow: false,
-            interactive: true,
-            lightEffect: { color: undefined }
-          }))
+          .backdropBlur(16)
+          .shadow(getBlurBottomShadow())
 
           Text(this.getCurrentAssistantName())
             .fontFamily(this.isManuscriptMode() ? MANUSCRIPT_HEADING_FONT : '')
@@ -5311,13 +5391,8 @@ struct Index {
     .justifyContent(FlexAlign.Center)
     .alignItems(VerticalAlign.Center)
     .backgroundColor(Color.Transparent)
-    .systemMaterial(this.isManuscriptMode() ? undefined : new uiMaterial.ImmersiveMaterial({
-      style: uiMaterial.ImmersiveStyle.REGULAR,
-      materialColor: Color.Transparent,
-      applyShadow: false,
-      interactive: false,
-      lightEffect: { color: undefined }
-    }))
+    .backdropBlur(this.isManuscriptMode() ? 0 : 24)
+    .shadow(getBlurBottomShadow(!(this.isManuscriptMode())))
     .position({ x: '50%', y: this.getFloatingSearchPanelTop() })
     .translate({ x: '-50%' })
     .transition(TransitionEffect.asymmetric(
@@ -5388,13 +5463,8 @@ struct Index {
     .backgroundColor(Color.Transparent)
     .borderRadius(16)
     .border({ width: 1, color: this.themePrimaryLight })
-    .systemMaterial(new uiMaterial.ImmersiveMaterial({
-      style: uiMaterial.ImmersiveStyle.REGULAR,
-      materialColor: Color.Transparent,
-      applyShadow: false,
-      interactive: true,
-      lightEffect: { color: undefined }
-    }))
+    .backdropBlur(24)
+    .shadow(getBlurBottomShadow())
     .onClick(() => {
       this.showAssistantSwitchSheet = false
       if (assistant.id !== this.currentAssistantId) {
@@ -5723,38 +5793,38 @@ struct Index {
 
   @Builder
   FloatingActionButton() {
-    Button() {
-      SymbolGlyph($r('sys.symbol.plus'))
-        .fontSize(24)
-        .fontColor([Color.White])
+    Stack() {
+      InteractiveMaterialButton({
+        surfaceWidth: INDEX_NEW_CHAT_FAB_SIZE,
+        surfaceHeight: INDEX_NEW_CHAT_FAB_SIZE,
+        buttonType: ButtonType.Circle,
+        materialStyle: WRAPPED_MATERIAL_REGULAR,
+        materialColor: this.themePrimary,
+        applyShadow: true,
+        buttonShadow: shouldUseWrappedMaterial() ? {
+          radius: 14,
+          color: this.fabShadowColor,
+          offsetX: 0,
+          offsetY: 8
+        } : getBlurFloatingActionShadow(),
+        onActivate: () => {
+          this.fabPressed = false
+          this.openChatRoute({} as ChatPageRouteParams)
+        }
+      }) {
+        SymbolGlyph($r('sys.symbol.plus'))
+          .fontSize(24)
+          .fontColor([Color.White])
+      }
     }
     .width(INDEX_NEW_CHAT_FAB_SIZE)
     .height(INDEX_NEW_CHAT_FAB_SIZE)
-    .borderRadius(INDEX_NEW_CHAT_FAB_SIZE / 2)
-    .backgroundColor(this.themePrimary)
-    .type(ButtonType.Circle)
-    .stateEffect(false)
-    .padding(0)
     .clip(false)
     .position({ x: this.shouldPlaceFabOnLeft() ? 0 : '100%', y: '100%' })
     .translate({ x: this.getFabOffsetX(), y: this.getFabOffsetY() })
-    .scale(getButtonScale(this.fabPressed))
     .animation({
       duration: 420,
       curve: curves.springMotion(0.75, 0.86)
-    })
-    .shadow({
-      radius: this.fabPressed ? 20 : 14,
-      color: this.fabShadowColor,
-      offsetX: 0,
-      offsetY: 8
-    })
-    .onTouch(createButtonTouchHandler((pressed: boolean) => {
-      this.fabPressed = pressed
-    }))
-    .onClick(() => {
-      this.fabPressed = false
-      this.openChatRoute({} as ChatPageRouteParams)
     })
   }
 
@@ -5900,7 +5970,7 @@ struct Index {
     options.blurEffectiveEndOffsetVp = getHdsTopNavigationBlurEffectiveEndOffset(this.windowWidthVp,
       this.windowHeightVp)
     options.stackBuilder = (): void => this.CompactSettingsTitleStackBuilder()
-    return buildHdsTopNavigationTitleBarOptions(options)
+    return buildHdsTopNavigationTitleBarOptions(options, this)
   }
 
   @Builder

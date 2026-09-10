@@ -1,3 +1,4 @@
+import { getBlurBottomShadow } from '../utils/BlurShadowUtils'
 import { ModelInfo } from '../models/ChatModels'
 import {
   ModelRowGroupPosition,
@@ -9,7 +10,6 @@ import {
 import { PickerModelGroup } from '../config/ProviderDetailShared'
 import { buildModelIconRenderData, ModelIconRenderData } from '../utils/ModelIconRenderUtils'
 import { getAppUiState } from '../state/AppUiState'
-import { uiMaterial } from '@kit.ArkUI'
 import { withColorAlpha } from '../utils/ColorAlphaUtils'
 import { ImmersiveSheetHeader } from './ImmersiveSheetHeader'
 
@@ -186,15 +186,6 @@ export struct ModelPickerSheet {
     return this.showSelectedOnly ? this.visibleModelIds.length : this.filteredModelIds.length
   }
 
-  private getModelListMaterial(): uiMaterial.Material {
-    return new uiMaterial.ImmersiveMaterial({
-      style: uiMaterial.ImmersiveStyle.REGULAR,
-      materialColor: Color.Transparent,
-      applyShadow: false,
-      interactive: true,
-      lightEffect: { color: undefined }
-    })
-  }
 
   private buildModelRow(group: PickerModelGroup, modelId: string, index: number): ModelPickerModelRow {
     return {
@@ -281,13 +272,8 @@ export struct ModelPickerSheet {
       .height(40)
       .borderRadius(20)
       .backgroundColor(Color.Transparent)
-      .systemMaterial(new uiMaterial.ImmersiveMaterial({
-        style: uiMaterial.ImmersiveStyle.ULTRA_THIN,
-        materialColor: Color.Transparent,
-        applyShadow: false,
-        interactive: true,
-        lightEffect: { color: undefined }
-      }))
+      .backdropBlur(16)
+      .shadow(getBlurBottomShadow())
       .padding({ left: 16, right: 16 })
       .onChange((value: string) => {
         this.searchKeywords = value
@@ -441,7 +427,8 @@ export struct ModelPickerSheet {
         .backgroundColor(Color.Transparent)
         .borderRadius(16)
         .border({ width: 1, color: this.themePrimaryLight })
-        .systemMaterial(this.getModelListMaterial())
+        .backdropBlur(24)
+        .shadow(getBlurBottomShadow())
       }
       .sticky(StickyStyle.None)
       .width('100%')

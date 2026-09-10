@@ -1,3 +1,4 @@
+import { getBlurBottomShadow } from '../utils/BlurShadowUtils'
 import { uiMaterial } from '@kit.ArkUI'
 import { ToolConfig, SearchEngine, ToolSourceType } from '../models/ChatModels'
 import { McpAuthType, McpServerConfig } from '../models/McpModels'
@@ -68,15 +69,6 @@ class McpHeaderEntry {
   }
 }
 
-function createToolServiceCardMaterial(interactive: boolean = false): uiMaterial.Material {
-  return new uiMaterial.ImmersiveMaterial({
-    style: uiMaterial.ImmersiveStyle.ULTRA_THIN,
-    materialColor: Color.Transparent,
-    applyShadow: true,
-    interactive: interactive,
-    lightEffect: { color: undefined }
-  })
-}
 
 @ComponentV2
 export struct ToolsCenterPanel {
@@ -1638,7 +1630,8 @@ export struct ToolsCenterPanel {
           .borderRadius(16)
           .border({ width: 0.5, color: getAppUiState().themePrimaryLight })
           .backgroundColor(Color.Transparent)
-          .systemMaterial(createToolServiceCardMaterial(false))
+          .backdropBlur(16)
+          .shadow(getBlurBottomShadow())
 
           Column({ space: 8 }) {
             Text(pickLocalizedText('Bearer 令牌（推荐）', 'Bearer token (recommended)'))
@@ -1668,7 +1661,8 @@ export struct ToolsCenterPanel {
           .borderRadius(16)
           .border({ width: 0.5, color: getAppUiState().themePrimaryLight })
           .backgroundColor(Color.Transparent)
-          .systemMaterial(createToolServiceCardMaterial(false))
+          .backdropBlur(16)
+          .shadow(getBlurBottomShadow())
 
           Text(pickLocalizedText(
             '隐私提示：启用后，当前会话中由模型选择读取的图片会发送到该网关，并继续发送给 ModLens 配置的视觉 provider。原有“图片转文本”工具仍只在设备本地执行 OCR。',
@@ -2009,7 +2003,8 @@ export struct ToolsCenterPanel {
           .borderRadius(16)
           .backgroundColor(Color.Transparent)
           .border({ width: 0.5, color: getAppUiState().themePrimaryLight })
-          .systemMaterial(createToolServiceCardMaterial(false))
+          .backdropBlur(16)
+          .shadow(getBlurBottomShadow())
         }
         .width('100%')
         .padding({ left: 16, right: 16, bottom: 24 })
@@ -2119,7 +2114,8 @@ export struct ToolsCenterPanel {
           .borderRadius(16)
           .backgroundColor(Color.Transparent)
           .border({ width: 0.5, color: getAppUiState().themePrimaryLight })
-          .systemMaterial(createToolServiceCardMaterial(false))
+          .backdropBlur(16)
+          .shadow(getBlurBottomShadow())
 
           Column({ space: 12 }) {
             Column({ space: 4 }) {
@@ -2193,7 +2189,8 @@ export struct ToolsCenterPanel {
           .borderRadius(16)
           .backgroundColor(Color.Transparent)
           .border({ width: 0.5, color: getAppUiState().themePrimaryLight })
-          .systemMaterial(createToolServiceCardMaterial(false))
+          .backdropBlur(16)
+          .shadow(getBlurBottomShadow())
 
           Column({ space: 12 }) {
             Column({ space: 4 }) {
@@ -2312,7 +2309,8 @@ export struct ToolsCenterPanel {
           .borderRadius(16)
           .backgroundColor(Color.Transparent)
           .border({ width: 0.5, color: getAppUiState().themePrimaryLight })
-          .systemMaterial(createToolServiceCardMaterial(false))
+          .backdropBlur(16)
+          .shadow(getBlurBottomShadow())
 
           Column({ space: 12 }) {
             Row({ space: 8 }) {
@@ -2474,7 +2472,8 @@ export struct ToolsCenterPanel {
           .borderRadius(16)
           .backgroundColor(Color.Transparent)
           .border({ width: 0.5, color: getAppUiState().themePrimaryLight })
-          .systemMaterial(createToolServiceCardMaterial(false))
+          .backdropBlur(16)
+          .shadow(getBlurBottomShadow())
 
           Row({ space: 12 }) {
             Column({ space: 4 }) {
@@ -2508,7 +2507,8 @@ export struct ToolsCenterPanel {
           .borderRadius(16)
           .backgroundColor(Color.Transparent)
           .border({ width: 0.5, color: getAppUiState().themePrimaryLight })
-          .systemMaterial(createToolServiceCardMaterial(false))
+          .backdropBlur(16)
+          .shadow(getBlurBottomShadow())
         }
         .width('100%')
         .padding({ left: 16, right: 16, bottom: 24 })
@@ -2595,7 +2595,8 @@ export struct ToolsCenterPanel {
           .borderRadius(16)
           .backgroundColor(Color.Transparent)
           .border({ width: 0.5, color: getAppUiState().themePrimaryLight })
-          .systemMaterial(createToolServiceCardMaterial(false))
+          .backdropBlur(16)
+          .shadow(getBlurBottomShadow())
 
           Column({ space: 12 }) {
             Column({ space: 6 }) {
@@ -2648,7 +2649,8 @@ export struct ToolsCenterPanel {
           .borderRadius(16)
           .backgroundColor(Color.Transparent)
           .border({ width: 0.5, color: getAppUiState().themePrimaryLight })
-          .systemMaterial(createToolServiceCardMaterial(false))
+          .backdropBlur(16)
+          .shadow(getBlurBottomShadow())
 
           Column({ space: 8 }) {
             Text('SKILL.md')
@@ -2680,7 +2682,8 @@ export struct ToolsCenterPanel {
           .borderRadius(16)
           .backgroundColor(Color.Transparent)
           .border({ width: 0.5, color: getAppUiState().themePrimaryLight })
-          .systemMaterial(createToolServiceCardMaterial(false))
+          .backdropBlur(16)
+          .shadow(getBlurBottomShadow())
         }
         .width('100%')
         .padding({ left: 16, right: 16, bottom: 24 })
@@ -2918,7 +2921,8 @@ export struct ToolsCenterPanel {
                 .borderRadius(16)
                 .backgroundColor(Color.Transparent)
                 .border({ width: 0.5, color: getAppUiState().themePrimaryLight })
-                .systemMaterial(createToolServiceCardMaterial(false))
+                .backdropBlur(16)
+                .shadow(getBlurBottomShadow())
               } else {
                 ForEach(this.mcpServers, (server: McpServerConfig) => {
                   McpServerCardItem({
@@ -3123,7 +3127,8 @@ struct SearchServiceCardItem {
     .borderRadius(16)
     .backgroundColor(Color.Transparent)
     .border({ width: 0.5, color: getAppUiState().themePrimaryLight })
-    .systemMaterial(createToolServiceCardMaterial(false))
+    .backdropBlur(16)
+    .shadow(getBlurBottomShadow())
     .onClick(() => {
       this.onOpenConfig()
     })
@@ -3326,7 +3331,8 @@ struct RetrievalCallLimitCardItem {
     .borderRadius(16)
     .backgroundColor(Color.Transparent)
     .border({ width: 0.5, color: getAppUiState().themePrimaryLight })
-    .systemMaterial(createToolServiceCardMaterial(false))
+    .backdropBlur(16)
+    .shadow(getBlurBottomShadow())
   }
 }
 
@@ -3531,7 +3537,8 @@ struct ContextCompactCardItem {
     .borderRadius(16)
     .backgroundColor(Color.Transparent)
     .border({ width: 0.5, color: getAppUiState().themePrimaryLight })
-    .systemMaterial(createToolServiceCardMaterial(false))
+    .backdropBlur(16)
+    .shadow(getBlurBottomShadow())
   }
 }
 
@@ -3728,7 +3735,8 @@ struct SkillServiceCardItem {
     .borderRadius(16)
     .backgroundColor(Color.Transparent)
     .border({ width: 0.5, color: getAppUiState().themePrimaryLight })
-    .systemMaterial(createToolServiceCardMaterial(false))
+    .backdropBlur(16)
+    .shadow(getBlurBottomShadow())
     .animation({ duration: 220, curve: Curve.EaseInOut })
   }
 }
@@ -3833,7 +3841,8 @@ struct SkillListCardItem {
     .borderRadius(16)
     .backgroundColor(Color.Transparent)
     .border({ width: 0.5, color: getAppUiState().themePrimaryLight })
-    .systemMaterial(createToolServiceCardMaterial(false))
+    .backdropBlur(16)
+    .shadow(getBlurBottomShadow())
   }
 }
 
@@ -3997,7 +4006,8 @@ struct BuiltinToolCardItem {
     .borderRadius(16)
     .backgroundColor(Color.Transparent)
     .border({ width: 0.5, color: getAppUiState().themePrimaryLight })
-    .systemMaterial(createToolServiceCardMaterial(false))
+    .backdropBlur(16)
+    .shadow(getBlurBottomShadow())
   }
 }
 
@@ -4297,6 +4307,7 @@ struct McpServerCardItem {
     .borderRadius(16)
     .backgroundColor(Color.Transparent)
     .border({ width: 0.5, color: getAppUiState().themePrimaryLight })
-    .systemMaterial(createToolServiceCardMaterial(false))
+    .backdropBlur(16)
+    .shadow(getBlurBottomShadow())
   }
 }

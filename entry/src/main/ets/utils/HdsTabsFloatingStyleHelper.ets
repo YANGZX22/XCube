@@ -1,4 +1,5 @@
-import { hdsMaterial, HdsTabsFloatingStyle, HdsBarWidthRangeOptions } from '@kit.UIDesignKit'
+import { HdsTabsFloatingStyle, HdsBarWidthRangeOptions } from '@kit.UIDesignKit'
+import { getHdsSystemMaterialEffect, getHdsMaterialLightColor } from './HdsMaterialSupport'
 
 const DEFAULT_BAR_WIDTH: HdsBarWidthRangeOptions = {
   smallWidth: 248,
@@ -21,10 +22,7 @@ export function buildCompactTabsFloatingStyle(opts: CompactTabsFloatingStyleOpti
     barWidth: opts.barWidth,
     barSideMargin: opts.barSideMargin,
     barBottomMargin: opts.barBottomMargin,
-    systemMaterialEffect: {
-      materialType: hdsMaterial.MaterialType.ADAPTIVE,
-      materialLevel: hdsMaterial.MaterialLevel.ADAPTIVE
-    },
-    lightColor: opts.lightColorMode === 'theme' ? opts.themePrimary : undefined
+    systemMaterialEffect: getHdsSystemMaterialEffect(opts.materialType, opts.materialLevel),
+    lightColor: opts.lightColorMode === 'theme' ? getHdsMaterialLightColor(opts.themePrimary) : undefined
   }
 }

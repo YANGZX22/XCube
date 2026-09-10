@@ -2,7 +2,6 @@ import { ToolCall, ToolResult } from '../models/ChatModels'
 import { getAppUiState } from '../state/AppUiState'
 import { buildToolArgumentsPreview, buildToolResultPreview, ToolPayloadPreview } from '../utils/ToolPayloadSummaryUtils'
 import { withColorAlpha } from '../utils/ColorAlphaUtils'
-import { uiMaterial } from '@kit.ArkUI'
 import { VisualEffectsMode } from '../models/ThemeColors'
 import { MANUSCRIPT_COMPACT_BAR_HEIGHT } from '../utils/ManuscriptVisualUtils'
 import {
@@ -405,19 +404,13 @@ export struct ToolCallCard {
       color: this.isManuscriptMode ? getAppUiState().themeDivider : this.getTimelineRailColor()
     })
     .clip(false)
-    .systemMaterial(this.embedded || this.isManuscriptMode ? undefined : new uiMaterial.ImmersiveMaterial({
-      style: uiMaterial.ImmersiveStyle.REGULAR,
-      materialColor: this.themeAiBubble,
-      applyShadow: false,
-      interactive: false,
-      lightEffect: { color: undefined }
-    }))
+    .backdropBlur(this.embedded || this.isManuscriptMode ? 0 : 24)
     .shadow({
       radius: this.embedded || this.isManuscriptMode ? 0 : 12,
       color: this.embedded || this.isManuscriptMode ? Color.Transparent :
         (this.isDarkMode ? 'rgba(0, 0, 0, 0.32)' : 'rgba(15, 23, 42, 0.14)'),
       offsetX: 0,
-      offsetY: 0
+      offsetY: 3
     })
   }
 

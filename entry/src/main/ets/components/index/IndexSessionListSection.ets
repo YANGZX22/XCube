@@ -1,3 +1,5 @@
+import { ImmersiveButtonSurface } from '../ImmersiveButtonSurface'
+import { LIST_MATERIAL_CARD_RADIUS } from '../ImmersiveListSurface'
 import { uiMaterial } from '@kit.ArkUI'
 import { ChatSession } from '../../models/ChatModels'
 import { SessionListGroupViewModel, SessionListItemData } from '../../pages/index/IndexSessionListDataSource'
@@ -105,22 +107,31 @@ export struct IndexSessionListSection {
   @Builder
   private FavoriteSwipeButton(session: ChatSession) {
     Row() {
-      Button({ type: ButtonType.Circle, stateEffect: false }) {
-        this.FavoriteSwipeContent(session)
+      Stack({ alignContent: Alignment.TopStart }) {
+        ImmersiveButtonSurface({
+          materialFactory: () => (new uiMaterial.ImmersiveMaterial({
+            style: uiMaterial.ImmersiveStyle.REGULAR,
+            interactive: true,
+            lightEffect: { color: undefined }
+          })),
+          cornerRadius: undefined
+        }) {
+          Button({ type: ButtonType.Circle, stateEffect: false }) {
+            this.FavoriteSwipeContent(session)
+          }
+          .width(this.getSwipeButtonHeight())
+          .height(this.getSwipeButtonHeight())
+          .backgroundColor(Color.Transparent)
+          .padding(0)
+          .onClick(() => {
+            this.sessionListScroller.closeAllSwipeActions()
+            this.onToggleFavorite(session)
+          })
+        }
       }
       .width(this.getSwipeButtonHeight())
       .height(this.getSwipeButtonHeight())
-      .backgroundColor(Color.Transparent)
-      .padding(0)
-      .onClick(() => {
-        this.sessionListScroller.closeAllSwipeActions()
-        this.onToggleFavorite(session)
-      })
-      .systemMaterial(new uiMaterial.ImmersiveMaterial({
-        style: uiMaterial.ImmersiveStyle.REGULAR,
-        interactive: true,
-        lightEffect: { color: undefined }
-      }))
+      .clip(false)
     }
     .width(72)
     .height('100%')
@@ -155,22 +166,31 @@ export struct IndexSessionListSection {
   @Builder
   private DeleteSwipePanel(sessionId: string) {
     Row() {
-      Button({ type: ButtonType.Circle, stateEffect: false }) {
-        this.DeleteSwipeContent()
+      Stack({ alignContent: Alignment.TopStart }) {
+        ImmersiveButtonSurface({
+          materialFactory: () => (new uiMaterial.ImmersiveMaterial({
+            style: uiMaterial.ImmersiveStyle.REGULAR,
+            interactive: true,
+            lightEffect: { color: undefined }
+          })),
+          cornerRadius: undefined
+        }) {
+          Button({ type: ButtonType.Circle, stateEffect: false }) {
+            this.DeleteSwipeContent()
+          }
+          .width(this.getSwipeButtonHeight())
+          .height(this.getSwipeButtonHeight())
+          .backgroundColor(Color.Transparent)
+          .padding(0)
+          .onClick(() => {
+            this.sessionListScroller.closeAllSwipeActions()
+            this.onDeleteSession(sessionId)
+          })
+        }
       }
       .width(this.getSwipeButtonHeight())
       .height(this.getSwipeButtonHeight())
-      .backgroundColor(Color.Transparent)
-      .padding(0)
-      .onClick(() => {
-        this.sessionListScroller.closeAllSwipeActions()
-        this.onDeleteSession(sessionId)
-      })
-      .systemMaterial(new uiMaterial.ImmersiveMaterial({
-        style: uiMaterial.ImmersiveStyle.REGULAR,
-        interactive: true,
-        lightEffect: { color: undefined }
-      }))
+      .clip(false)
     }
     .width(64)
     .height('100%')
@@ -257,7 +277,7 @@ export struct IndexSessionListSection {
           start: this.FavoriteSwipeButton(item.session),
           end: this.DeleteSwipePanel(item.session.id)
         })
-        .borderRadius(this.isManuscriptMode ? 0 : 12)
+        .borderRadius(this.isManuscriptMode ? 0 : LIST_MATERIAL_CARD_RADIUS)
         .clip(false)
       }, (item: SessionListItemData): string => item.key)
     }

@@ -1,8 +1,9 @@
+import { ImmersiveButtonSurface } from './ImmersiveButtonSurface'
+import { uiMaterial } from '@kit.ArkUI'
 import { MessageAttachment, AttachmentType } from '../models/ChatModels'
 import { BaseItemInfo, PhotoSource, RecentPhotoComponent, RecentPhotoOptions, photoAccessHelper } from '@kit.MediaLibraryKit'
 import { fileIo } from '@kit.CoreFileKit'
 import { util } from '@kit.ArkTS'
-import { uiMaterial } from '@kit.ArkUI'
 import { getAttachmentStorageService } from '../services/AttachmentStorageService'
 import { AppStorageKeys } from '../config/AppStorageKeys'
 import { getAppUiState } from '../state/AppUiState'
@@ -45,27 +46,36 @@ export struct ScreenshotBanner {
             .fontColor($r('app.color.text_primary'))
             .fontWeight(FontWeight.Medium)
           Blank()
-          Button({ type: ButtonType.Circle, stateEffect: this.isManuscriptMode }) {
-            SymbolGlyph($r('sys.symbol.xmark'))
-              .fontSize(9)
-              .fontColor([$r('app.color.text_secondary')])
+          Stack({ alignContent: Alignment.TopStart }) {
+            ImmersiveButtonSurface({
+              materialFactory: this.isManuscriptMode ? undefined : () => (new uiMaterial.ImmersiveMaterial({
+                style: uiMaterial.ImmersiveStyle.ULTRA_THIN,
+                materialColor: Color.Transparent,
+                applyShadow: false,
+                interactive: true,
+                lightEffect: { color: undefined }
+              })),
+              cornerRadius: this.isManuscriptMode ? 0 : 10
+            }) {
+              Button({ type: ButtonType.Circle, stateEffect: this.isManuscriptMode }) {
+                SymbolGlyph($r('sys.symbol.xmark'))
+                  .fontSize(9)
+                  .fontColor([$r('app.color.text_secondary')])
+              }
+              .width(this.isManuscriptMode ? 44 : 20)
+              .height(this.isManuscriptMode ? 44 : 20)
+              .padding(0)
+              .backgroundColor(Color.Transparent)
+              .borderRadius(this.isManuscriptMode ? 0 : 10)
+              .border({ width: 0, color: Color.Transparent })
+              .onClick(() => {
+                this.dismiss()
+              })
+            }
           }
           .width(this.isManuscriptMode ? 44 : 20)
           .height(this.isManuscriptMode ? 44 : 20)
-          .padding(0)
-          .backgroundColor(Color.Transparent)
-          .borderRadius(this.isManuscriptMode ? 0 : 10)
-          .border({ width: 0, color: Color.Transparent })
-          .systemMaterial(this.isManuscriptMode ? undefined : new uiMaterial.ImmersiveMaterial({
-            style: uiMaterial.ImmersiveStyle.ULTRA_THIN,
-            materialColor: Color.Transparent,
-            applyShadow: false,
-            interactive: true,
-            lightEffect: { color: undefined }
-          }))
-          .onClick(() => {
-            this.dismiss()
-          })
+          .clip(false)
         }
         .width('100%')
 
@@ -100,13 +110,7 @@ export struct ScreenshotBanner {
         color: this.isManuscriptMode ? getAppUiState().themeDivider : this.themePrimary
       })
       .clip(false)
-      .systemMaterial(this.isManuscriptMode ? undefined : new uiMaterial.ImmersiveMaterial({
-        style: uiMaterial.ImmersiveStyle.REGULAR,
-        materialColor: Color.Transparent,
-        applyShadow: false,
-        interactive: false,
-        lightEffect: { color: undefined }
-      }))
+      .backdropBlur(this.isManuscriptMode ? 0 : 24)
       .shadow({
         radius: this.isManuscriptMode ? 0 : 20,
         color: this.isManuscriptMode ? Color.Transparent : 'rgba(0, 0, 0, 0.12)',

@@ -1,3 +1,4 @@
+import { ImmersiveButtonSurface } from './ImmersiveButtonSurface'
 import { uiMaterial } from '@kit.ArkUI'
 
 /**
@@ -26,6 +27,7 @@ export struct ImmersiveSheetHeader {
   @Event onTrailingClick: () => void = (): void => {}
   @Event onSecondaryTrailingClick: () => void = (): void => {}
 
+
   private getActionMaterial(interactive: boolean): uiMaterial.Material {
     return new uiMaterial.ImmersiveMaterial({
       style: uiMaterial.ImmersiveStyle.REGULAR,
@@ -40,23 +42,33 @@ export struct ImmersiveSheetHeader {
     Row() {
       Row() {
         if (this.showLeading) {
-          Button({ type: ButtonType.Circle, stateEffect: false }) {
-            SymbolGlyph(this.leadingSymbol)
-              .fontSize(17)
-              .fontColor([this.leadingColor])
+          Stack({ alignContent: Alignment.TopStart }) {
+            ImmersiveButtonSurface({
+              materialFactory: () => (this.getActionMaterial(this.leadingButtonEnabled)),
+              cornerRadius: 18
+            }) {
+              Button({ type: ButtonType.Circle, stateEffect: false }) {
+                SymbolGlyph(this.leadingSymbol)
+                  .fontSize(17)
+                  .fontColor([this.leadingColor])
+              }
+              .width(36)
+              .height(36)
+              .padding(0)
+              .backgroundColor(Color.Transparent)
+              .borderRadius(18)
+              .enabled(this.leadingButtonEnabled)
+              .onClick(() => {
+                if (this.leadingButtonEnabled) {
+                  this.onLeadingClick()
+                }
+              })
+            }
           }
           .width(36)
           .height(36)
-          .padding(0)
-          .backgroundColor(Color.Transparent)
-          .borderRadius(18)
           .enabled(this.leadingButtonEnabled)
-          .systemMaterial(this.getActionMaterial(this.leadingButtonEnabled))
-          .onClick(() => {
-            if (this.leadingButtonEnabled) {
-              this.onLeadingClick()
-            }
-          })
+          .clip(false)
         }
       }
       .width(this.showSecondaryTrailing ? 80 : 36)
@@ -75,47 +87,66 @@ export struct ImmersiveSheetHeader {
 
       Row({ space: 8 }) {
         if (this.showSecondaryTrailing) {
-          Button({ type: ButtonType.Circle, stateEffect: false }) {
-            SymbolGlyph(this.secondaryTrailingSymbol)
-              .fontSize(17)
-              .fontColor([this.secondaryTrailingColor])
+          Stack({ alignContent: Alignment.TopStart }) {
+            ImmersiveButtonSurface({
+              materialFactory: () => (this.getActionMaterial(true)),
+              cornerRadius: 18
+            }) {
+              Button({ type: ButtonType.Circle, stateEffect: false }) {
+                SymbolGlyph(this.secondaryTrailingSymbol)
+                  .fontSize(17)
+                  .fontColor([this.secondaryTrailingColor])
+              }
+              .width(36)
+              .height(36)
+              .padding(0)
+              .backgroundColor(Color.Transparent)
+              .borderRadius(18)
+              .onClick(() => {
+                this.onSecondaryTrailingClick()
+              })
+            }
           }
           .width(36)
           .height(36)
-          .padding(0)
-          .backgroundColor(Color.Transparent)
-          .borderRadius(18)
-          .systemMaterial(this.getActionMaterial(true))
-          .onClick(() => {
-            this.onSecondaryTrailingClick()
-          })
+          .clip(false)
         }
 
         if (this.showTrailing) {
-          Button({ type: ButtonType.Circle, stateEffect: false }) {
-            if (this.trailingLoading) {
-              LoadingProgress()
-                .width(17)
-                .height(17)
-                .color(this.trailingColor)
-            } else {
-              SymbolGlyph(this.trailingSymbol)
-                .fontSize(17)
-                .fontColor([this.trailingColor])
+          Stack({ alignContent: Alignment.TopStart }) {
+            ImmersiveButtonSurface({
+              materialFactory: () => (this.getActionMaterial(this.trailingButtonEnabled && !this.trailingLoading)),
+              cornerRadius: 18
+            }) {
+              Button({ type: ButtonType.Circle, stateEffect: false }) {
+                if (this.trailingLoading) {
+                  LoadingProgress()
+                    .width(17)
+                    .height(17)
+                    .color(this.trailingColor)
+                } else {
+                  SymbolGlyph(this.trailingSymbol)
+                    .fontSize(17)
+                    .fontColor([this.trailingColor])
+                }
+              }
+              .width(36)
+              .height(36)
+              .padding(0)
+              .backgroundColor(Color.Transparent)
+              .borderRadius(18)
+              .enabled(this.trailingButtonEnabled && !this.trailingLoading)
+              .onClick(() => {
+                if (this.trailingButtonEnabled && !this.trailingLoading) {
+                  this.onTrailingClick()
+                }
+              })
             }
           }
           .width(36)
           .height(36)
-          .padding(0)
-          .backgroundColor(Color.Transparent)
-          .borderRadius(18)
           .enabled(this.trailingButtonEnabled && !this.trailingLoading)
-          .systemMaterial(this.getActionMaterial(this.trailingButtonEnabled && !this.trailingLoading))
-          .onClick(() => {
-            if (this.trailingButtonEnabled && !this.trailingLoading) {
-              this.onTrailingClick()
-            }
-          })
+          .clip(false)
         }
       }
       .width(this.showSecondaryTrailing ? 80 : 36)

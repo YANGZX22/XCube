@@ -1,3 +1,6 @@
+import { ImmersiveButtonSurface } from './ImmersiveButtonSurface'
+import { uiMaterial } from '@kit.ArkUI'
+import { getBlurBottomShadow } from '../utils/BlurShadowUtils'
 import { ModelProvider, ModelInfo } from '../models/ChatModels'
 import {
   ModelRowGroupPosition,
@@ -12,7 +15,6 @@ import { FavoriteModelsService, getFavoriteModelsService } from '../services/Fav
 import { ProviderIcon } from './ProviderIcon'
 import { buildModelIconRenderData, ModelIconRenderData } from '../utils/ModelIconRenderUtils'
 import { getAppUiState } from '../state/AppUiState'
-import { uiMaterial } from '@kit.ArkUI'
 import { withColorAlpha } from '../utils/ColorAlphaUtils'
 
 class ModelSelectorProviderGroup {
@@ -79,6 +81,7 @@ export struct ModelSelectorContent {
       lightEffect: interactive ? { color: undefined } : undefined
     })
   }
+
   @Event onSelectModel: (providerId: string, modelId: string, modelName: string) => void =
     (_providerId: string, _modelId: string, _modelName: string): void => {}
   @Event onLongPressModel: (model: ModelInfo, provider: ModelProvider) => void =
@@ -270,43 +273,52 @@ export struct ModelSelectorContent {
         .layoutWeight(1)
         .height(40)
         .borderRadius(20)
-        .backgroundColor(this.immersiveMaterial ? Color.Transparent : getAppUiState().themeBackground)
-        .systemMaterial(this.getImmersiveMaterial(true))
+        .backgroundColor(this.immersiveMaterial ? Color.Transparent : (this.immersiveMaterial ? Color.Transparent : getAppUiState().themeBackground))
+        .backdropBlur(this.immersiveMaterial ? 24 : 0)
+        .shadow(getBlurBottomShadow(this.immersiveMaterial))
         .onChange((value: string) => {
           this.searchKeywords = value
           this.rebuildRows()
         })
 
       if (this.showFavoriteFilter) {
-        Button({ type: ButtonType.Capsule, stateEffect: false }) {
-          Row() {
-            SymbolGlyph(this.showFavoritesOnly ? $r('sys.symbol.heart_fill') : $r('sys.symbol.heart'))
-              .fontSize(14)
-              .fontColor([this.showFavoritesOnly ? this.favoriteAccentColor : $r('app.color.text_secondary')])
+        Stack({ alignContent: Alignment.TopStart }) {
+          ImmersiveButtonSurface({
+            materialFactory: () => (this.getImmersiveMaterial(
+              true,
+              this.showFavoritesOnly ? this.favoriteFilterActiveBackground : Color.Transparent
+            )),
+            cornerRadius: undefined
+          }) {
+            Button({ type: ButtonType.Capsule, stateEffect: false }) {
+              Row() {
+                SymbolGlyph(this.showFavoritesOnly ? $r('sys.symbol.heart_fill') : $r('sys.symbol.heart'))
+                  .fontSize(14)
+                  .fontColor([this.showFavoritesOnly ? this.favoriteAccentColor : $r('app.color.text_secondary')])
 
-            Text($r('app.string.menu_favorite'))
-              .fontSize(12)
-              .fontColor(this.showFavoritesOnly ? this.favoriteAccentColor : $r('app.color.text_secondary'))
-              .margin({ left: 4 })
+                Text($r('app.string.menu_favorite'))
+                  .fontSize(12)
+                  .fontColor(this.showFavoritesOnly ? this.favoriteAccentColor : $r('app.color.text_secondary'))
+                  .margin({ left: 4 })
+              }
+            }
+            .height(32)
+            .padding({ left: 10, right: 10 })
+            .backgroundColor(this.immersiveMaterial ? Color.Transparent : (this.immersiveMaterial ? Color.Transparent :
+              (this.showFavoritesOnly ? this.favoriteFilterActiveBackground : getAppUiState().themeSurface)))
+            .border({
+              width: this.immersiveMaterial ? 0 : (this.showFavoritesOnly ? 1 : 0.5),
+              color: this.showFavoritesOnly ? this.favoriteAccentColor : $r('app.color.divider')
+            })
+            .onClick(() => {
+              this.showFavoritesOnly = !this.showFavoritesOnly
+              this.rebuildRows()
+            })
           }
         }
         .height(32)
-        .padding({ left: 10, right: 10 })
         .margin({ left: 8 })
-        .backgroundColor(this.immersiveMaterial ? Color.Transparent :
-          (this.showFavoritesOnly ? this.favoriteFilterActiveBackground : getAppUiState().themeSurface))
-        .border({
-          width: this.immersiveMaterial ? 0 : (this.showFavoritesOnly ? 1 : 0.5),
-          color: this.showFavoritesOnly ? this.favoriteAccentColor : $r('app.color.divider')
-        })
-        .systemMaterial(this.getImmersiveMaterial(
-          true,
-          this.showFavoritesOnly ? this.favoriteFilterActiveBackground : Color.Transparent
-        ))
-        .onClick(() => {
-          this.showFavoritesOnly = !this.showFavoritesOnly
-          this.rebuildRows()
-        })
+        .clip(false)
       }
     }
     .width(this.narrowSearchBar ? (this.windowWidthVp >= 600 ? 360 : '82%') : '100%')
@@ -334,13 +346,14 @@ export struct ModelSelectorContent {
             }
             .width('100%')
             .padding(16)
-            .backgroundColor(this.immersiveMaterial ? Color.Transparent : getAppUiState().themeSurface)
+            .backgroundColor(this.immersiveMaterial ? Color.Transparent : (this.immersiveMaterial ? Color.Transparent : getAppUiState().themeSurface))
             .borderRadius(16)
             .border({
               width: this.immersiveMaterial ? 1 : 0,
               color: this.immersiveMaterial ? this.themePrimaryLight : Color.Transparent
             })
-            .systemMaterial(this.getImmersiveMaterial(true, Color.Transparent, false))
+            .backdropBlur(this.immersiveMaterial ? 24 : 0)
+            .shadow(getBlurBottomShadow(this.immersiveMaterial))
             .onClick(() => {
               this.onClearSelection()
             })
@@ -367,7 +380,8 @@ export struct ModelSelectorContent {
               width: this.showImmersiveGroupBorder ? 1 : 0,
               color: this.showImmersiveGroupBorder ? this.themePrimaryLight : Color.Transparent
             })
-            .systemMaterial(this.getImmersiveMaterial(true, Color.Transparent, !this.showImmersiveGroupBorder))
+            .backdropBlur(this.immersiveMaterial ? 24 : 0)
+            .shadow(getBlurBottomShadow(this.immersiveMaterial))
           }, (group: ModelSelectorProviderGroup) => this.getProviderGroupRenderKey(group))
         } else {
           ForEach(this.rows, (row: ModelSelectorRow) => {

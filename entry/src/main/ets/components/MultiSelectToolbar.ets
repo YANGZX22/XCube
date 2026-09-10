@@ -1,3 +1,4 @@
+import { ImmersiveButtonSurface } from './ImmersiveButtonSurface'
 import { uiMaterial } from '@kit.ArkUI'
 import { getAppUiState } from '../state/AppUiState'
 
@@ -46,26 +47,36 @@ export struct MultiSelectToolbar {
   private ToolbarAction(symbol: Resource, label: ResourceStr, color: ResourceColor, enabled: boolean,
     destructive: boolean, onTap: () => void) {
     Column({ space: 5 }) {
-      Button({ type: ButtonType.Circle, stateEffect: false }) {
-        SymbolGlyph(symbol)
-          .fontSize(18)
-          .fontColor([enabled ? color : $r('app.color.text_tertiary')])
+      Stack({ alignContent: Alignment.TopStart }) {
+        ImmersiveButtonSurface({
+          materialFactory: () => (new uiMaterial.ImmersiveMaterial({
+            style: uiMaterial.ImmersiveStyle.REGULAR,
+            materialColor: destructive && enabled ? this.destructiveButtonMaterialColor : undefined,
+            interactive: true,
+            lightEffect: { color: undefined }
+          })),
+          cornerRadius: undefined
+        }) {
+          Button({ type: ButtonType.Circle, stateEffect: false }) {
+            SymbolGlyph(symbol)
+              .fontSize(18)
+              .fontColor([enabled ? color : $r('app.color.text_tertiary')])
+          }
+          .width(42)
+          .height(42)
+          .padding(0)
+          .enabled(enabled)
+          .backgroundColor(Color.Transparent)
+          .onClick(() => {
+            onTap()
+          })
+        }
       }
       .width(42)
       .height(42)
-      .padding(0)
       .enabled(enabled)
       .opacity(enabled ? 1 : 0.45)
-      .backgroundColor(Color.Transparent)
-      .systemMaterial(new uiMaterial.ImmersiveMaterial({
-        style: uiMaterial.ImmersiveStyle.REGULAR,
-        materialColor: destructive && enabled ? this.destructiveButtonMaterialColor : undefined,
-        interactive: true,
-        lightEffect: { color: undefined }
-      }))
-      .onClick(() => {
-        onTap()
-      })
+      .clip(false)
 
       Text(label)
         .fontSize(11)
@@ -131,16 +142,12 @@ export struct MultiSelectToolbar {
     .alignItems(HorizontalAlign.Center)
     .padding({ left: 16, right: 16, top: 12, bottom: 12 })
     .backgroundColor(Color.Transparent)
-    .systemMaterial(new uiMaterial.ImmersiveMaterial({
-      style: uiMaterial.ImmersiveStyle.REGULAR,
-      interactive: true,
-      lightEffect: { color: undefined }
-    }))
+    .backdropBlur(24)
     .shadow({
       radius: 8,
       color: 'rgba(0, 0, 0, 0.08)',
       offsetX: 0,
-      offsetY: -2
+      offsetY: 3
     })
   }
 }

@@ -1,5 +1,5 @@
+import { getBlurBottomShadow } from '../utils/BlurShadowUtils'
 import { deviceInfo } from '@kit.BasicServicesKit'
-import { uiMaterial } from '@kit.ArkUI'
 import { ModelProvider } from '../models/ChatModels'
 import {
   KnowledgeEmbeddingSelection
@@ -120,18 +120,13 @@ export struct KnowledgeEmbeddingSelectSheetContent {
     .padding({ left: 12, right: 12, top: 11, bottom: 11 })
     .borderRadius(EMBEDDING_OPTION_CORNER_RADIUS)
     .clip(true)
-    .backgroundColor(this.currentSelection.isApi() ? Color.Transparent : this.themePrimary)
+    .backgroundColor(Color.Transparent)
     .border({
       width: !this.currentSelection.isApi() ? 1 : 0.5,
       color: !this.currentSelection.isApi() ? this.themePrimary : getAppUiState().themePrimaryLight
     })
-    .systemMaterial(new uiMaterial.ImmersiveMaterial({
-      style: uiMaterial.ImmersiveStyle.REGULAR,
-      materialColor: this.currentSelection.isApi() ? Color.Transparent : this.themePrimary,
-      applyShadow: false,
-      interactive: true,
-      lightEffect: { color: undefined }
-    }))
+    .backdropBlur(24)
+    .shadow(getBlurBottomShadow())
     .hitTestBehavior(this.isApplying || !this.isLocalEmbeddingSupported
       ? HitTestMode.None
       : HitTestMode.Block)
@@ -187,11 +182,8 @@ export struct KnowledgeEmbeddingSelectSheetContent {
     .borderRadius(EMBEDDING_OPTION_CORNER_RADIUS)
     .backgroundColor(Color.Transparent)
     .border({ width: 0.5, color: getAppUiState().themePrimaryLight })
-    .systemMaterial(new uiMaterial.ImmersiveMaterial({
-      style: uiMaterial.ImmersiveStyle.ULTRA_THIN,
-      materialColor: Color.Transparent,
-      applyShadow: false
-    }))
+    .backdropBlur(16)
+    .shadow(getBlurBottomShadow())
     .alignItems(VerticalAlign.Top)
   }
 
@@ -250,11 +242,8 @@ export struct KnowledgeEmbeddingSelectSheetContent {
     .borderRadius(18)
     .backgroundColor(Color.Transparent)
     .border({ width: 0.5, color: getAppUiState().themePrimaryLight })
-    .systemMaterial(new uiMaterial.ImmersiveMaterial({
-      style: uiMaterial.ImmersiveStyle.REGULAR,
-      materialColor: Color.Transparent,
-      applyShadow: true
-    }))
+    .backdropBlur(24)
+    .shadow(getBlurBottomShadow())
   }
 
   build() {

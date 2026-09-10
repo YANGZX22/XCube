@@ -1,3 +1,4 @@
+import { getBlurBottomShadow } from '../utils/BlurShadowUtils'
 import { uiMaterial } from '@kit.ArkUI'
 import { common, Want } from '@kit.AbilityKit'
 import {
@@ -663,13 +664,8 @@ export struct EmailAccountSettingsCard {
     .borderRadius(16)
     .backgroundColor(Color.Transparent)
     .border({ width: 0.5, color: getAppUiState().themePrimaryLight })
-    .systemMaterial(new uiMaterial.ImmersiveMaterial({
-      style: uiMaterial.ImmersiveStyle.ULTRA_THIN,
-      materialColor: Color.Transparent,
-      applyShadow: true,
-      interactive: false,
-      lightEffect: { color: undefined }
-    }))
+    .backdropBlur(16)
+    .shadow(getBlurBottomShadow())
     .bindSheet($$this.showConfigSheet, this.ConfigSheetContent(), {
       height: SheetSize.LARGE,
       detents: [SheetSize.LARGE],

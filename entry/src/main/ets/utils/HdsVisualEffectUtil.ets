@@ -4,18 +4,24 @@ import {
   HdsNavigationTitleBarOptions,
   HdsNavigationMenuItemOptions,
   ScrollEffectType,
-  hdsEffect,
-  hdsMaterial
+  hdsEffect
 } from '@kit.UIDesignKit'
 import { getAppUiState } from '../state/AppUiState'
 import { withColorAlpha } from './ColorAlphaUtils'
+import { shouldUseWrappedMaterial } from './WrappedMaterialSupport'
+import { getHdsSystemMaterialEffect } from './HdsMaterialSupport'
+import { shouldUseDrawnNavigation } from './DrawnNavigationSupport'
+import { DrawnNavigationTitleBuilder } from '../components/DrawnNavigationTitle'
 
 const STATUS_BAR_CONTENT_LIGHT: string = '#1F2329'
 const STATUS_BAR_CONTENT_DARK: string = '#F5F7FA'
 const TITLE_BAR_BLUR_EFFECTIVE_START_OFFSET: number = 0
 const TITLE_BAR_BLUR_EFFECTIVE_END_OFFSET: number = 20
 
-export function buildPointLightBorderEffect(sourceBright: boolean = false): uiEffect.VisualEffect {
+export function buildPointLightBorderEffect(sourceBright: boolean = false): uiEffect.VisualEffect | undefined {
+  if (!shouldUseWrappedMaterial()) {
+    return undefined
+  }
   return new hdsEffect.HdsEffectBuilder()
     .pointLight({
       sourceType: sourceBright ? hdsEffect.PointLightSourceType.BRIGHT : hdsEffect.PointLightSourceType.NONE,
@@ -95,7 +101,8 @@ export function getHdsTopNavigationBlurRadius(materialType: number, materialLeve
 }
 
 export function buildHdsTopNavigationTitleBarOptions(
-  options: HdsTopNavigationBlurOptions): HdsNavigationTitleBarOptions {
+  options: HdsTopNavigationBlurOptions, builderOwner: Object): HdsNavigationTitleBarOptions {
+  const useDrawnTitle = shouldUseDrawnNavigation()
   return {
     padding: {
       start: LengthMetrics.vp(options.startPaddingVp),
@@ -106,30 +113,32 @@ export function buildHdsTopNavigationTitleBarOptions(
         mainTitle: ' '
       },
       menu: {
-        value: options.menuItems,
+        value: useDrawnTitle ? [] : options.menuItems,
         maxCount: options.menuMaxCount
       },
-      stackBuilder: options.stackBuilder,
+      stackBuilder: useDrawnTitle ? DrawnNavigationTitleBuilder.bind(builderOwner, options.stackBuilder,
+        options.menuItems, options.endPaddingVp) : options.stackBuilder,
       bottomBuilder: {
         builder: options.bottomBuilder,
         height: options.bottomBuilderHeightVp
       }
     },
     style: {
+      // 顶部两种模式共用原有渐变模糊范围和滚动响应；只替换沉浸材质与按钮外观。
+      blurStrategy: undefined,
       scrollEffectOpts: {
         enableScrollEffect: true,
         scrollEffectType: getHdsTopNavigationScrollEffectType(options.materialType),
         blurEffectiveStartOffset: LengthMetrics.vp(TITLE_BAR_BLUR_EFFECTIVE_START_OFFSET),
         blurEffectiveEndOffset: LengthMetrics.vp(options.blurEffectiveEndOffsetVp)
       },
-      systemMaterialEffect: {
-        materialType: hdsMaterial.MaterialType.ADAPTIVE,
-        materialLevel: hdsMaterial.MaterialLevel.ADAPTIVE
-      },
+      // 仅切换材质：降级显式传 NONE，恢复后沿用用户所选类型和等级；模糊配置独立保留。
+      systemMaterialEffect: getHdsSystemMaterialEffect(options.materialType, options.materialLevel),
       scrollEffectStyle: {
         backgroundStyle: {
           backgroundColor: $r('sys.color.ohos_id_color_background_transparent'),
-          maskExtraHeight: options.maskExtraHeightVp
+          maskExtraHeight: options.maskExtraHeightVp,
+          blurRadius: undefined
         },
         contentStyle: {
           titleStyle: {
@@ -146,6 +155,7 @@ export function buildHdsTopNavigationTitleBarOptions(
         }
       },
       originalStyle: {
+        backgroundStyle: undefined,
         contentStyle: {
           titleStyle: {
             mainTitleColor: Color.Black
@@ -168,7 +178,7 @@ export function buildHdsTopNavigationTitleBarOptions(
 
 export function buildHdsTopNavigationTitleBarOptionsForPage(materialType: number, materialLevel: number,
   windowWidthVp: number, windowHeightVp: number, stackBuilder: () => void,
-  menuItems: Array<HdsNavigationMenuItemOptions> = []): HdsNavigationTitleBarOptions {
+  menuItems: Array<HdsNavigationMenuItemOptions>, builderOwner: Object): HdsNavigationTitleBarOptions {
   const options = new HdsTopNavigationBlurOptions()
   options.startPaddingVp = 16
   options.endPaddingVp = 16
@@ -180,5 +190,5 @@ export function buildHdsTopNavigationTitleBarOptionsForPage(materialType: number
   options.blurEffectiveEndOffsetVp = getHdsTopNavigationBlurEffectiveEndOffset(windowWidthVp, windowHeightVp)
   options.stackBuilder = stackBuilder
   options.menuItems = menuItems
-  return buildHdsTopNavigationTitleBarOptions(options)
+  return buildHdsTopNavigationTitleBarOptions(options, builderOwner)
 }

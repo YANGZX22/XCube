@@ -8,9 +8,11 @@ import { ReasoningControlMode } from '../../services/ProviderCompatibilityRegist
 import { matchSlashCommands, SlashCommandItem } from '../../utils/SlashCommandUtils'
 import { getAppUiState } from '../../state/AppUiState'
 import { VisualEffectsMode } from '../../models/ThemeColors'
+import { CHAT_AI_NOTICE_MIN_HEIGHT_VP } from '../../config/ChatLayout'
 
 @ComponentV2
 export struct ChatInputAreaSection {
+  @Local isAiNoticeHidden: boolean = false
   @Param inputText: string = ''
   @Event onInputTextChange: (value: string) => void = (_value: string): void => {}
   @Param attachments: MessageAttachment[] = []
@@ -97,7 +99,57 @@ export struct ChatInputAreaSection {
   }
 
   private getBottomSpacerHeight(): number {
-    return this.bottomAvoidHeight + 4
+    // 提示优先复用原有底部留白，不再把整组输入栏向上顶一个提示高度。
+    return Math.max(0, this.bottomAvoidHeight + 4 - CHAT_AI_NOTICE_MIN_HEIGHT_VP)
+  }
+
+  private toggleAiGenerationNotice(): void {
+    this.getUIContext().animateTo({ duration: 260, curve: Curve.EaseInOut }, () => {
+      this.isAiNoticeHidden = !this.isAiNoticeHidden
+    })
+  }
+
+  @Builder
+  private AiGenerationNotice() {
+    // 只移动/淡出标识内容，固定触发区始终保留；隐藏时不挤动输入框和消息列表。
+    Row() {
+      Row({ space: 4 }) {
+        SymbolGlyph($r('sys.symbol.AI_model'))
+          .fontSize(12)
+          .fontColor([getAppUiState().themePrimary])
+          .accessibilityLevel('no')
+          .hitTestBehavior(HitTestMode.None)
+
+        Text($r('app.string.chat_ai_generation_notice'))
+          .fontSize(10)
+          .fontWeight(FontWeight.Medium)
+          .fontColor(getAppUiState().themeTextTertiary)
+          .textAlign(TextAlign.Center)
+          .constraintSize({ maxWidth: '90%' })
+          .hitTestBehavior(HitTestMode.None)
+      }
+      .padding({ left: 8, right: 8, top: 2, bottom: 2 })
+      .alignItems(VerticalAlign.Center)
+      .constraintSize({ maxWidth: '100%' })
+      .translate({ y: this.isAiNoticeHidden ? CHAT_AI_NOTICE_MIN_HEIGHT_VP + 8 : -2 })
+      .opacity(this.isAiNoticeHidden ? 0 : 1)
+      .hitTestBehavior(HitTestMode.None)
+    }
+    .width('100%')
+    .constraintSize({ minHeight: CHAT_AI_NOTICE_MIN_HEIGHT_VP })
+    .padding({ top: 4 })
+    .justifyContent(FlexAlign.Center)
+    .clip(true)
+    .accessibilityGroup(true)
+    .accessibilityText($r('app.string.chat_ai_generation_notice'))
+    .accessibilityDescription(this.isAiNoticeHidden ? $r('app.string.chat_ai_notice_show_hint') :
+      $r('app.string.chat_ai_notice_hide_hint'))
+    .gesture(
+      LongPressGesture({ duration: 500, repeat: false })
+        .onAction(() => {
+          this.toggleAiGenerationNotice()
+        })
+    )
   }
 
   build() {
@@ -257,6 +309,8 @@ export struct ChatInputAreaSection {
           }
         })
 
+        this.AiGenerationNotice()
+
         Column() {
           AttachmentPicker({
             showDragBar: false,
@@ -296,6 +350,6 @@ export struct ChatInputAreaSection {
       width: this.isManuscriptMode ? { top: 1 } : 0,
       color: getAppUiState().themeDivider
     })
-    .translate({ y: this.isManuscriptMode ? 20 : 0 })
+    .translate({ y: this.isManuscriptMode ? 17 : -3 })
   }
 }

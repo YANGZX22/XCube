@@ -1,3 +1,5 @@
+import { getChatAiNoticeExtraInsetVp } from '../../config/ChatLayout'
+
 export function shouldShowScrollToTopButtonForChat(
   isMultiSelectMode: boolean,
   totalMessages: number,
@@ -34,7 +36,7 @@ export function getListBottomPaddingForChat(pendingAttachmentCount: number, isEd
   if (isEditingMessage) {
     base += 80
   }
-  return base + bottomAvoidHeightVp
+  return base + bottomAvoidHeightVp + getChatAiNoticeExtraInsetVp(bottomAvoidHeightVp)
 }
 
 export function getPreviewTimeTextForChat(date: Date): string {

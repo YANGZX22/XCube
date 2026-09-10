@@ -10,7 +10,7 @@
 
 <p align="center">
   <img src="https://img.shields.io/badge/HarmonyOS-7_(API_26)-4285F4" alt="HarmonyOS 7" />
-  <a href="./CHANGELOG.md"><img src="https://img.shields.io/badge/version-1.3.6-2ea44f" alt="版本 1.3.6" /></a>
+  <a href="./CHANGELOG.md"><img src="https://img.shields.io/badge/version-2.0.0-2ea44f" alt="版本 2.0.0" /></a>
   <a href="./LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue" alt="MIT License" /></a>
 </p>
 
@@ -21,14 +21,10 @@
 ## 最新信息
 
 > [!IMPORTANT]
-> **Immersive Light 兼容性问题（自 2026 年 8 月 28 日起）：**在 HarmonyOS `7.0.0.105`（API 26）上，尽管 DevEco Studio 编译成功，但沉浸光感效果目前在所有 HarmonyOS 7 新增的接口中均无法正常工作；原始的 HarmonyOS 6 沉浸光感接口和界面效果则不受影响。可能的原因是项目所使用的 API 26 Beta 2 SDK（`26.0.0.32`）与官方系统运行时（`26.0.0.105`）之间存在兼容性差异。
-
-> [!NOTE]
-> 由于临近 HarmonyOS 7 正式发布，本仓库将暂缓更新。待正式版发布后，本应用可能会尝试华为应用市场邀请测试功能，届时安装将更便捷。但请注意，本应用可能永远不会正式上架华为应用市场。
-
+> **Immersive Light 兼容性问题**: 自 `HarmonyOS 7.0.0.105` (API 26) 起，[普通 ArkUI 组件通过应用级开启或者组件级开启方式开启沉浸光感被限制](https://developer.huawei.com/consumer/cn/doc/harmonyos-guides/arkts-immersive-light-sense-overview#约束与限制)，我们已对此限制进行兼容，并尝试恢复到和限制前同等效果。即便如此，兼容性适配仍需时间。
 
 > [!IMPORTANT]
-> XCube 要求设备运行 **HarmonyOS 7（API 26.0.0）或更高版本**。HarmonyOS 6 及更早版本的用户需先加入[花粉 Beta 版测试计划](https://cn.club.vmall.com/mhw/assets/file-html-app/3b2bca9630d0fcb2bb2dfac09ee415ea20230529103243/index.html?ts=1785306752202#/)，再安装本应用。测试计划时间以网站为准。
+> XCube 已对 HarmonyOS 6 及更早版本进行兼容，但仍可能存在 UI 问题。将设备版本升至 HarmonyOS 7 及以上版本以获得最佳体验。
 
 > [!NOTE]
 > XCube 延续自 [YANGZX22/chatcube](https://github.com/YANGZX22/chatcube)，该项目最初由 [LongLiveY96/ChatCube](https://github.com/LongLiveY96/ChatCube) 分支而来。两个早期版本的版权与 MIT 许可证声明均完整保留。
@@ -152,12 +148,14 @@ HarmonyOS 应用无法直接运行 ModLens 所需的 Node.js CLI，因此项目�
 
 ## 快速开始
 
+### 1. 本地编译
+
 ### 环境要求
 
-- 运行 HarmonyOS 7(API 26.0.0) 及以上版本的设备 (Phone/Tablet/2-in-1)
-- [DevEco Studio ≥ 26.0.0 Beta2](https://developer.huawei.com/consumer/cn/deveco-studio/)
+- 运行 HarmonyOS 7 (API 26.0.0) 及以上版本的设备
+- [DevEco Studio ≥ 26.0.0](https://developer.huawei.com/consumer/cn/deveco-studio/)
 
-### 1. 克隆并配置项目
+#### A. 克隆并配置项目
 
 ```bash
 git clone https://github.com/YANGZX22/XCube.git
@@ -166,7 +164,7 @@ cp build-profile.json5.example build-profile.json5
 # 编辑 build-profile.json5，填写签名配置
 ```
 
-### 2. 添加语音识别模型（一次性配置）
+#### B. 添加语音识别模型（一次性配置）
 
 > [!NOTE]
 > ASR 模型体积过大，未纳入 Git 仓库，需要手动添加：
@@ -176,11 +174,13 @@ cp build-profile.json5.example build-profile.json5
 
 该模型目录已被 `.gitignore` 排除，不会提交到仓库。
 
-### 3. 运行
+#### C. 运行
 
 使用 DevEco Studio 打开项目，并在目标设备上运行。
 
-#### 或者选择直接侧载 HAP
+### 2. 从邀测链接安装 (即将上线)
+
+### 3. 或者选择直接侧载 HAP (即将停止维护)
 
 在 [Release](https://github.com/YANGZX22/XCube/releases) 页面下载最新版本 HAP 文件后，可以通过 [Auto-installer](https://github.com/likuai2010/auto-installer/) 或 [DevEco Testing](https://developer.huawei.com/consumer/cn/deveco-testing/) 将 HAP 安装至设备。
 

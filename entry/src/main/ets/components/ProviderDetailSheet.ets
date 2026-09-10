@@ -1,12 +1,17 @@
+import { shouldUseDrawnNavigation } from '../utils/DrawnNavigationSupport'
+import { DrawnFloatingTabBar } from './DrawnFloatingTabBar'
+import { ImmersiveButtonSurface } from './ImmersiveButtonSurface'
+import { getBlurBottomShadow } from '../utils/BlurShadowUtils'
 import { KeyboardAvoidMode, SymbolGlyphModifier, uiMaterial } from '@kit.ArkUI'
 import {
   HdsNavigation,
   HdsNavigationMenuItemOptions,
   HdsNavigationTitleBarOptions,
   HdsNavigationTitleMode,
-  HdsTabs,
-  hdsMaterial
+  HdsTabs
 } from '@kit.UIDesignKit'
+import { getHdsSystemMaterialEffect, HdsTabsBlurModifier, DrawnTabsContentModifier, getHdsMaterialLightColor } from '../utils/HdsMaterialSupport'
+import { shouldUseWrappedMaterial } from '../utils/WrappedMaterialSupport'
 import {
   ModelProvider,
   ModelInfo,
@@ -48,8 +53,6 @@ import {
 } from '../config/ProviderModelActions'
 import { getAppUiState } from '../state/AppUiState'
 import { applyModelDraft } from '../utils/ModelDraftUtils'
-import { getSettingsPageCompactTabsTotalInset } from '../utils/SettingsPageLayoutHelper'
-import { SettingsPagePresentationMode } from '../config/SettingsDetailPresentation'
 import { pickLocalizedText } from '../utils/LocalizedTextUtils'
 import {
   buildCustomHeadersJson,
@@ -143,10 +146,6 @@ export struct ProviderDetailPanel {
   private get materialLevel(): number {
     return getAppUiState().materialLevel
   }
-  private get settingsDetailPresentationMode(): string {
-    return getAppUiState().settingsDetailPresentationMode
-  }
-
   @Local provider: ModelProvider | null = null
   @Local providerNameText: string = ''
   @Local isLoading: boolean = true
@@ -978,17 +977,27 @@ export struct ProviderDetailPanel {
     return this.px2vp(this.bottomAvoidHeight)
   }
 
-  private getStandaloneContentTopPadding(): number {
+  private getPageContentTopPadding(): number {
     return getHdsTopNavigationContentTopPadding(this.px2vp(this.topAvoidHeight), this.windowWidthVp,
       this.windowHeightVp)
   }
 
-  private getStandaloneTitleBarOptions(): HdsNavigationTitleBarOptions {
-    return buildHdsTopNavigationTitleBarOptionsForPage(this.materialType, this.materialLevel, this.windowWidthVp,
-      this.windowHeightVp, (): void => this.StandaloneTitleStackBuilder(), this.getStandaloneTitleBarMenuItems())
+  private getPageTitleBarOptions(): HdsNavigationTitleBarOptions {
+    const titleBarOptions = buildHdsTopNavigationTitleBarOptionsForPage(this.materialType, this.materialLevel, this.windowWidthVp, this.windowHeightVp, (): void => this.PageTitleStackBuilder(), this.getPageTitleBarMenuItems(), this)
+    if (this.isDetailPanePresentation() && titleBarOptions.content !== undefined) {
+      titleBarOptions.content.backIcon = {
+        label: $r('app.string.action_back'),
+        action: (): void => {
+          if (!this.handleInternalBackPressed()) {
+            this.onClose()
+          }
+        }
+      }
+    }
+    return titleBarOptions
   }
 
-  private getStandaloneTitleBarMenuItems(): Array<HdsNavigationMenuItemOptions> {
+  private getPageTitleBarMenuItems(): Array<HdsNavigationMenuItemOptions> {
     const menus: Array<HdsNavigationMenuItemOptions> = []
     if (!this.isCreateMode && this.provider !== null && !this.provider.isPreset) {
       const deleteIcon = new SymbolGlyphModifier($r('sys.symbol.clean'))
@@ -1020,31 +1029,16 @@ export struct ProviderDetailPanel {
     return menus
   }
 
-  private getCompactSettingsTabsInset(): number {
-    return getSettingsPageCompactTabsTotalInset(this.getBottomAvoidHeightVp(), this.settingsDetailPresentationMode)
-  }
-
-  private shouldAvoidCompactSettingsTabs(): boolean {
-    return this.presentationMode === ProviderDetailPresentationMode.PAGE &&
-      this.settingsDetailPresentationMode !== SettingsPagePresentationMode.DETAIL_PANE
-  }
-
   private getConfigContentBottomSpacerHeight(): number {
-    if (this.isDetailPanePresentation()) {
-      return this.getDetailPaneFloatingTabBottomInset()
+    if (this.isStandalonePagePresentation() || this.isDetailPanePresentation()) {
+      return this.getFloatingTabBottomInset()
     }
-    if (this.shouldAvoidCompactSettingsTabs()) {
-      return 24 + this.getCompactSettingsTabsInset()
-    }
-    return this.isStandalonePagePresentation() ? 12 : 20
+    return 20
   }
 
   private getModelsListBottomSpacerHeight(): number {
-    if (this.isDetailPanePresentation()) {
-      return this.getDetailPaneFloatingTabBottomInset()
-    }
-    if (this.shouldAvoidCompactSettingsTabs()) {
-      return 24 + this.getCompactSettingsTabsInset()
+    if (this.isStandalonePagePresentation() || this.isDetailPanePresentation()) {
+      return this.getFloatingTabBottomInset()
     }
     return 16
   }
@@ -1074,9 +1068,6 @@ export struct ProviderDetailPanel {
   }
 
   private headerSaveSymbol(): Resource {
-    if (this.isStandalonePagePresentation()) {
-      return $r('sys.symbol.save')
-    }
     return $r('sys.symbol.checkmark')
   }
 
@@ -1100,23 +1091,23 @@ export struct ProviderDetailPanel {
     return false
   }
 
-  private getDetailPaneFloatingTabBottomMargin(): number {
+  private getFloatingTabBottomMargin(): number {
     return this.getBottomAvoidHeightVp() > 0 ? PROVIDER_DETAIL_FLOATING_TAB_BAR_SAFE_BOTTOM_MARGIN :
       PROVIDER_DETAIL_FLOATING_TAB_BAR_BOTTOM_MARGIN
   }
 
-  private getDetailPaneFloatingTabBottomInset(): number {
-    return PROVIDER_DETAIL_FLOATING_TAB_BAR_HEIGHT + this.getDetailPaneFloatingTabBottomMargin() +
+  private getFloatingTabBottomInset(): number {
+    return PROVIDER_DETAIL_FLOATING_TAB_BAR_HEIGHT + this.getFloatingTabBottomMargin() +
       PROVIDER_DETAIL_FLOATING_TAB_CONTENT_SPACING
   }
 
   build() {
-    if (this.isStandalonePagePresentation()) {
+    if (this.isStandalonePagePresentation() || this.isDetailPanePresentation()) {
       HdsNavigation() {
         Column() {
           Blank()
             .width('100%')
-            .height(this.getStandaloneContentTopPadding())
+            .height(this.getPageContentTopPadding())
 
           this.PanelMainContent()
           this.UnifiedSheetHost()
@@ -1127,7 +1118,7 @@ export struct ProviderDetailPanel {
       .width('100%')
       .height('100%')
       .backgroundColor(getAppUiState().themeBackground)
-      .titleBar(this.getStandaloneTitleBarOptions())
+      .titleBar(this.getPageTitleBarOptions())
       .titleMode(HdsNavigationTitleMode.MINI)
       .systemBarStyle(
         { statusBarContentColor: getHdsStatusBarContentColor() },
@@ -1159,81 +1150,8 @@ export struct ProviderDetailPanel {
     } else {
       this.ProviderHeaderCard()
 
-      if (this.isStandalonePagePresentation()) {
-        this.PageSectionTabs()
-
-        if (this.currentTabIndex === 0) {
-          Scroll(this.pageConfigScroller) {
-            Column() {
-              this.ApiConfigCard()
-
-              Column().height(this.getConfigContentBottomSpacerHeight())
-            }
-            .width('100%')
-          }
-          .width('100%')
-          .layoutWeight(1)
-          .scrollBar(BarState.Off)
-          .edgeEffect(EdgeEffect.Spring)
-          .align(Alignment.Top)
-        } else {
-          Column() {
-            this.ModelsCard()
-          }
-          .width('100%')
-          .layoutWeight(1)
-        }
-      } else if (this.isDetailPanePresentation()) {
-        HdsNavigation() {
-          HdsTabs({ barPosition: BarPosition.End, index: this.currentTabIndex }) {
-            TabContent() {
-              this.DetailPaneConfigContent()
-            }
-            .tabBar(this.DetailPaneFloatingTabBuilder(0, $r('sys.symbol.gearshape'),
-              $r('app.string.provider_tab_config')))
-
-            TabContent() {
-              this.DetailPaneModelsContent()
-            }
-            .tabBar(this.DetailPaneFloatingTabBuilder(1, $r('sys.symbol.satellite_map'),
-              $r('app.string.provider_tab_models')))
-          }
-          .width('100%')
-          .height('100%')
-          .barMode(BarMode.Fixed)
-          .barHeight(PROVIDER_DETAIL_FLOATING_TAB_BAR_HEIGHT)
-          .barOverlap(true)
-          .barPosition(BarPosition.End)
-          .vertical(false)
-          .scrollable(false)
-          .animationDuration(300)
-          .barBackgroundColor(Color.Transparent)
-          .barFloatingStyle({
-            barBottomMargin: this.getDetailPaneFloatingTabBottomMargin(),
-            barSideMargin: PROVIDER_DETAIL_FLOATING_TAB_BAR_SIDE_MARGIN,
-            barWidth: {
-              smallWidth: PROVIDER_DETAIL_FLOATING_TAB_BAR_WIDTH,
-              mediumWidth: PROVIDER_DETAIL_FLOATING_TAB_BAR_WIDTH,
-              largeWidth: PROVIDER_DETAIL_FLOATING_TAB_BAR_WIDTH
-            },
-            gradientMask: { maskColor: Color.Transparent },
-            lightColor: Color.White,
-            systemMaterialEffect: {
-              materialType: hdsMaterial.MaterialType.IMMERSIVE,
-              materialLevel: hdsMaterial.MaterialLevel.ADAPTIVE
-            }
-          })
-          .onChange((index: number) => {
-            this.currentTabIndex = index
-          })
-        }
-        .width('100%')
-        .layoutWeight(1)
-        .backgroundColor(getAppUiState().themeBackground)
-        .hideTitleBar(true)
-        .hideBackButton(true)
-        .hideToolBar(true)
-        .mode(NavigationMode.Stack)
+      if (this.isStandalonePagePresentation() || this.isDetailPanePresentation()) {
+        this.FloatingSectionTabs()
       } else {
         Tabs({ barPosition: BarPosition.End, index: this.currentTabIndex }) {
           TabContent() {
@@ -1339,8 +1257,81 @@ export struct ProviderDetailPanel {
   }
 
   @Builder
-  private DetailPaneConfigContent() {
-    Scroll() {
+  private DrawnSectionTab(index: number) {
+    if (index === 0) {
+      this.FloatingTabBuilder(0, $r('sys.symbol.gearshape'),
+        $r('app.string.provider_tab_config'))
+    }
+    else {
+      this.FloatingTabBuilder(1, $r('sys.symbol.satellite_map'),
+        $r('app.string.provider_tab_models'))
+    }
+  }
+
+  @Builder
+  private FloatingSectionTabs() {
+    Stack({ alignContent: Alignment.Bottom }) {
+      HdsTabs({ barPosition: BarPosition.End, index: this.currentTabIndex }) {
+        TabContent() {
+          this.FloatingConfigContent()
+        }
+        .tabBar(this.FloatingTabBuilder(0, $r('sys.symbol.gearshape'),
+          $r('app.string.provider_tab_config')))
+
+        TabContent() {
+          this.FloatingModelsContent()
+        }
+        .tabBar(this.FloatingTabBuilder(1, $r('sys.symbol.satellite_map'),
+          $r('app.string.provider_tab_models')))
+      }
+      .width('100%')
+      .height('100%')
+      .barMode(BarMode.Fixed)
+      .barHeight(shouldUseDrawnNavigation() ? 0 : PROVIDER_DETAIL_FLOATING_TAB_BAR_HEIGHT)
+      .barOverlap(true)
+      .barPosition(BarPosition.End)
+      .vertical(false)
+      .scrollable(false)
+      .animationDuration(300)
+      .barFloatingStyle(shouldUseDrawnNavigation() ? undefined : {
+        barBottomMargin: this.getFloatingTabBottomMargin(),
+        barSideMargin: PROVIDER_DETAIL_FLOATING_TAB_BAR_SIDE_MARGIN,
+        barWidth: {
+          smallWidth: PROVIDER_DETAIL_FLOATING_TAB_BAR_WIDTH,
+          mediumWidth: PROVIDER_DETAIL_FLOATING_TAB_BAR_WIDTH,
+          largeWidth: PROVIDER_DETAIL_FLOATING_TAB_BAR_WIDTH
+        },
+        gradientMask: { maskColor: Color.Transparent },
+        lightColor: getHdsMaterialLightColor(Color.White),
+        systemMaterialEffect: getHdsSystemMaterialEffect()
+      })
+      .attributeModifier(shouldUseDrawnNavigation() ? new DrawnTabsContentModifier() : new HdsTabsBlurModifier(shouldUseWrappedMaterial()))
+      .backgroundColor(Color.Transparent)
+      .clip(false)
+      .onChange((index: number) => {
+        this.currentTabIndex = index
+      })
+      if (shouldUseDrawnNavigation()) {
+        DrawnFloatingTabBar({
+          tabCount: 2,
+          selectedIndex: this.currentTabIndex,
+          barWidth: PROVIDER_DETAIL_FLOATING_TAB_BAR_WIDTH,
+          barHeight: PROVIDER_DETAIL_FLOATING_TAB_BAR_HEIGHT,
+          itemContent: (index: number): void => this.DrawnSectionTab(index),
+          onSelect: (index: number) => {
+            this.currentTabIndex = index
+          }
+        })
+        .margin({ bottom: this.getFloatingTabBottomMargin() })
+      }
+    }
+    .width('100%')
+    .layoutWeight(1)
+  }
+
+  @Builder
+  private FloatingConfigContent() {
+    Scroll(this.pageConfigScroller) {
       Column() {
         this.ApiConfigCard()
 
@@ -1356,7 +1347,7 @@ export struct ProviderDetailPanel {
   }
 
   @Builder
-  private DetailPaneModelsContent() {
+  private FloatingModelsContent() {
     Column() {
       this.ModelsCard()
     }
@@ -1365,16 +1356,16 @@ export struct ProviderDetailPanel {
   }
 
   @Builder
-  private DetailPaneFloatingTabBuilder(index: number, icon: Resource, title: Resource) {
+  private FloatingTabBuilder(index: number, icon: Resource, title: Resource) {
     Column({ space: 2 }) {
       SymbolGlyph(icon)
         .fontSize(22)
-        .fontColor([this.currentTabIndex === index ? this.themePrimary : $r('app.color.text_secondary')])
+        .fontColor([this.currentTabIndex === index ? (shouldUseDrawnNavigation() ? Color.White : this.themePrimary) : $r('app.color.text_secondary')])
 
       Text(title)
         .fontSize(10)
         .fontWeight(this.currentTabIndex === index ? FontWeight.Bold : FontWeight.Medium)
-        .fontColor(this.currentTabIndex === index ? this.themePrimary : $r('app.color.text_secondary'))
+        .fontColor(this.currentTabIndex === index ? (shouldUseDrawnNavigation() ? Color.White : this.themePrimary) : $r('app.color.text_secondary'))
         .maxLines(1)
         .textOverflow({ overflow: TextOverflow.Ellipsis })
     }
@@ -1385,50 +1376,13 @@ export struct ProviderDetailPanel {
   }
 
   @Builder
-  PageSectionTabs() {
-    Row({ space: 20 }) {
-      this.PageSectionTabButton(0, $r('app.string.provider_tab_config'))
-      this.PageSectionTabButton(1, $r('app.string.provider_tab_models'))
-      Blank()
-    }
-    .width('100%')
-    .padding({ left: 16, right: 16, top: 2, bottom: 2 })
-  }
-
-  @Builder
-  PageSectionTabButton(index: number, title: Resource) {
-    Button() {
-      Column({ space: 6 }) {
-        Text(title)
-          .fontSize(15)
-          .fontWeight(this.currentTabIndex === index ? FontWeight.Bold : FontWeight.Medium)
-          .fontColor(this.currentTabIndex === index ? $r('app.color.text_primary') : $r('app.color.text_secondary'))
-
-        Column()
-          .width(this.currentTabIndex === index ? 24 : 14)
-          .height(3)
-          .borderRadius(2)
-          .backgroundColor(this.currentTabIndex === index ? this.themePrimary : Color.Transparent)
-      }
-      .alignItems(HorizontalAlign.Start)
-    }
-    .type(ButtonType.Normal)
-    .stateEffect(false)
-    .padding({ left: 0, right: 0, top: 4, bottom: 4 })
-    .backgroundColor(Color.Transparent)
-    .onClick(() => {
-      if (this.currentTabIndex === index) {
-        return
-      }
-      this.currentTabIndex = index
-    })
-  }
-
-  @Builder
-  StandaloneTitleStackBuilder() {
+  PageTitleStackBuilder() {
     Row() {
       Column({ space: 2 }) {
-        Text($r('app.string.provider_detail_title'))
+        Text(this.isDetailPanePresentation() ?
+          (this.isCreateMode ? $r('app.string.add_custom_provider') :
+            (this.provider?.name ?? $r('app.string.provider_detail_title'))) :
+          $r('app.string.provider_detail_title'))
           .fontSize(18)
           .fontWeight(FontWeight.Bold)
           .fontColor($r('app.color.text_primary'))
@@ -1702,9 +1656,10 @@ export struct ProviderDetailPanel {
                   .fontSize(20)
                   .fontWeight(FontWeight.Bold)
                   .fontColor($r('app.color.text_primary'))
-                  .backgroundColor(this.providerNameText.length > 0 ? Color.Transparent : this.themePrimaryLight)
-                  .borderRadius(8)
-                  .border({ width: this.providerNameText.length > 0 ? 0 : 1, color: this.themePrimary })
+                  .backgroundColor(Color.Transparent)
+                  .borderRadius(16)
+                  .backdropBlur(16)
+                  .shadow(getBlurBottomShadow())
                   .padding({ left: 8, right: 4, top: 0, bottom: 0 })
                   .onChange((value: string) => {
                     this.providerNameText = value
@@ -1723,9 +1678,10 @@ export struct ProviderDetailPanel {
                   .fontSize(20)
                   .fontWeight(FontWeight.Bold)
                   .fontColor($r('app.color.text_primary'))
-                  .backgroundColor(this.providerNameText.length > 0 ? Color.Transparent : this.themePrimaryLight)
-                  .borderRadius(8)
-                  .border({ width: this.providerNameText.length > 0 ? 0 : 1, color: this.themePrimary })
+                  .backgroundColor(Color.Transparent)
+                  .borderRadius(16)
+                  .backdropBlur(16)
+                  .shadow(getBlurBottomShadow())
                   .padding({ left: 8, right: 4, top: 0, bottom: 0 })
                   .onChange((value: string) => {
                     this.providerNameText = value
@@ -1867,9 +1823,10 @@ export struct ProviderDetailPanel {
                 .fontSize(18)
                 .fontWeight(FontWeight.Bold)
                 .fontColor($r('app.color.text_primary'))
-                .backgroundColor(this.providerNameText.length > 0 ? Color.Transparent : this.themePrimaryLight)
-                .borderRadius(8)
-                .border({ width: this.providerNameText.length > 0 ? 0 : 1, color: this.themePrimary })
+                .backgroundColor(Color.Transparent)
+                .borderRadius(16)
+                .backdropBlur(16)
+                .shadow(getBlurBottomShadow())
                 .padding({ left: 8, right: 4, top: 0, bottom: 0 })
                 .onChange((value: string) => {
                   this.providerNameText = value
@@ -1889,9 +1846,10 @@ export struct ProviderDetailPanel {
                 .fontSize(18)
                 .fontWeight(FontWeight.Bold)
                 .fontColor($r('app.color.text_primary'))
-                .backgroundColor(this.providerNameText.length > 0 ? Color.Transparent : this.themePrimaryLight)
-                .borderRadius(8)
-                .border({ width: this.providerNameText.length > 0 ? 0 : 1, color: this.themePrimary })
+                .backgroundColor(Color.Transparent)
+                .borderRadius(16)
+                .backdropBlur(16)
+                .shadow(getBlurBottomShadow())
                 .padding({ left: 8, right: 4, top: 0, bottom: 0 })
                 .onChange((value: string) => {
                   this.providerNameText = value
@@ -2158,38 +2116,49 @@ export struct ProviderDetailPanel {
             })
 
           // 测试按钮
-          Button() {
-            if (this.isTesting) {
-              LoadingProgress()
-                .width(16)
-                .height(16)
-                .color(this.themePrimary)
-            } else {
-              Text($r('app.string.test_connection'))
-                .fontSize(13)
-                .fontColor(this.themePrimary)
+          Stack({ alignContent: Alignment.TopStart }) {
+            ImmersiveButtonSurface({
+              materialFactory: () => (new uiMaterial.ImmersiveMaterial({
+                style: uiMaterial.ImmersiveStyle.REGULAR,
+                materialColor: this.themePrimaryLight,
+                interactive: true,
+                lightEffect: { color: undefined }
+              })),
+              cornerRadius: 16
+            }) {
+              Button() {
+                if (this.isTesting) {
+                  LoadingProgress()
+                    .width(16)
+                    .height(16)
+                    .color(this.themePrimary)
+                } else {
+                  Text($r('app.string.test_connection'))
+                    .fontSize(13)
+                    .fontColor(this.themePrimary)
+                }
+              }
+              .height(32)
+              .padding({ left: 12, right: 12 })
+              .backgroundColor(Color.Transparent)
+              .borderRadius(16)
+              .enabled(!this.isTesting)
+              .onClick(() => {
+                this.testConnection()
+              })
             }
           }
           .height(32)
-          .padding({ left: 12, right: 12 })
-          .backgroundColor(this.themePrimaryLight)
-          .borderRadius(16)
-          .systemMaterial(new uiMaterial.ImmersiveMaterial({
-            style: uiMaterial.ImmersiveStyle.REGULAR,
-            materialColor: this.themePrimaryLight,
-            interactive: true,
-            lightEffect: { color: undefined }
-          }))
           .margin({ left: 8 })
           .enabled(!this.isTesting)
-          .onClick(() => {
-            this.testConnection()
-          })
+          .clip(false)
         }
         .width('100%')
         .height(48)
-        .backgroundColor(this.themePrimaryLight)
-        .borderRadius(8)
+        .backgroundColor(Color.Transparent)
+        .borderRadius(16)
+        .backdropBlur(16)
+        .shadow(getBlurBottomShadow())
         .padding({ left: 12, right: 8 })
         .margin({ top: 8 })
       }
@@ -2215,8 +2184,10 @@ export struct ProviderDetailPanel {
         TextInput({ text: this.provider?.baseUrl ?? '', placeholder: $r('app.string.provider_base_url_placeholder') })
           .fontSize(14)
           .fontColor($r('app.color.text_primary'))
-          .backgroundColor(this.themePrimaryLight)
-          .borderRadius(8)
+          .backgroundColor(Color.Transparent)
+          .borderRadius(16)
+          .backdropBlur(16)
+          .shadow(getBlurBottomShadow())
           .height(48)
           .width('100%')
           .padding({ left: 12, right: 12 })
@@ -2244,8 +2215,10 @@ export struct ProviderDetailPanel {
         TextInput({ text: this.provider?.apiPath ?? '', placeholder: $r('app.string.provider_api_path_placeholder') })
           .fontSize(14)
           .fontColor($r('app.color.text_primary'))
-          .backgroundColor(this.themePrimaryLight)
-          .borderRadius(8)
+          .backgroundColor(Color.Transparent)
+          .borderRadius(16)
+          .backdropBlur(16)
+          .shadow(getBlurBottomShadow())
           .height(48)
           .width('100%')
           .padding({ left: 12, right: 12 })
@@ -2358,8 +2331,9 @@ export struct ProviderDetailPanel {
                   .width('100%')
                   .height(44)
                   .borderRadius(14)
-                  .backgroundColor(this.themePrimaryLight)
-                  .border({ width: 1, color: $r('app.color.divider') })
+                  .backgroundColor(Color.Transparent)
+                  .backdropBlur(16)
+                  .shadow(getBlurBottomShadow())
                   .padding({ left: 14, right: 14 })
               }
               .width('100%')
@@ -2381,8 +2355,9 @@ export struct ProviderDetailPanel {
                     .width('100%')
                     .height(44)
                     .borderRadius(14)
-                    .backgroundColor(this.themePrimaryLight)
-                    .border({ width: 1, color: $r('app.color.divider') })
+                    .backgroundColor(Color.Transparent)
+                    .backdropBlur(16)
+                    .shadow(getBlurBottomShadow())
                     .padding({ left: 14, right: 14 })
                 } else {
                   TextInput({ text: entry.value, placeholder: $r('app.string.provider_custom_header_value_placeholder') })
@@ -2393,8 +2368,9 @@ export struct ProviderDetailPanel {
                     .width('100%')
                     .height(44)
                     .borderRadius(14)
-                    .backgroundColor(this.themePrimaryLight)
-                    .border({ width: 1, color: $r('app.color.divider') })
+                    .backgroundColor(Color.Transparent)
+                    .backdropBlur(16)
+                    .shadow(getBlurBottomShadow())
                     .padding({ left: 14, right: 14 })
                 }
               }
@@ -2473,8 +2449,10 @@ BalanceInput(label: Resource, placeholder: Resource, value: string, field: strin
     TextInput({ text: value, placeholder: placeholder })
       .fontSize(14)
       .fontColor($r('app.color.text_primary'))
-      .backgroundColor(this.themePrimaryLight)
-      .borderRadius(8)
+      .backgroundColor(Color.Transparent)
+      .borderRadius(14)
+      .backdropBlur(16)
+      .shadow(getBlurBottomShadow())
       .height(44)
       .width('100%')
       .padding({ left: 12, right: 12 })
@@ -2503,97 +2481,123 @@ ModelsCard() {
 
         // 一键开关按钮
         if (this.provider !== null && this.provider.models.length > 0) {
-          Button() {
-            Row() {
-              SymbolGlyph(this.isAllModelsEnabled() ? $r('sys.symbol.xmark_circle') : $r('sys.symbol.checkmark_circle'))
-                .fontSize(14)
-                .fontColor([this.isAllModelsEnabled() ? $r('app.color.text_tertiary') : this.themePrimary])
-                .symbolEffect(new ReplaceSymbolEffect(EffectScope.WHOLE), this.toggleAllEffectTrigger)
-              Text(this.isAllModelsEnabled() ? $r('app.string.provider_disable_all') : $r('app.string.provider_enable_all'))
-                .fontSize(13)
-                .fontColor(this.isAllModelsEnabled() ? $r('app.color.text_tertiary') : this.themePrimary)
-                .margin({ left: 4 })
+          Stack({ alignContent: Alignment.TopStart }) {
+            ImmersiveButtonSurface({
+              materialFactory: () => (new uiMaterial.ImmersiveMaterial({
+                style: uiMaterial.ImmersiveStyle.REGULAR,
+                materialColor: this.isAllModelsEnabled() ? getAppUiState().themeBackground : this.themePrimaryLight,
+                interactive: true,
+                lightEffect: { color: undefined }
+              })),
+              cornerRadius: 16
+            }) {
+              Button() {
+                Row() {
+                  SymbolGlyph(this.isAllModelsEnabled() ? $r('sys.symbol.xmark_circle') : $r('sys.symbol.checkmark_circle'))
+                    .fontSize(14)
+                    .fontColor([this.isAllModelsEnabled() ? $r('app.color.text_tertiary') : this.themePrimary])
+                    .symbolEffect(new ReplaceSymbolEffect(EffectScope.WHOLE), this.toggleAllEffectTrigger)
+                  Text(this.isAllModelsEnabled() ? $r('app.string.provider_disable_all') : $r('app.string.provider_enable_all'))
+                    .fontSize(13)
+                    .fontColor(this.isAllModelsEnabled() ? $r('app.color.text_tertiary') : this.themePrimary)
+                    .margin({ left: 4 })
+                }
+              }
+              .height(32)
+              .padding({ left: 10, right: 10 })
+              .backgroundColor(Color.Transparent)
+              .borderRadius(16)
+              .onClick(() => {
+                // 触发切换动效
+                this.toggleAllEffectTrigger++
+                if (this.isAllModelsEnabled()) {
+                  this.disableAllModels()
+                } else {
+                  this.enableAllModels()
+                }
+              })
             }
           }
           .height(32)
-          .padding({ left: 10, right: 10 })
-          .backgroundColor(this.isAllModelsEnabled() ? getAppUiState().themeBackground : this.themePrimaryLight)
-          .borderRadius(16)
-          .systemMaterial(new uiMaterial.ImmersiveMaterial({
-            style: uiMaterial.ImmersiveStyle.REGULAR,
-            materialColor: this.isAllModelsEnabled() ? getAppUiState().themeBackground : this.themePrimaryLight,
-            interactive: true,
-            lightEffect: { color: undefined }
-          }))
           .margin({ right: 8 })
-          .onClick(() => {
-            // 触发切换动效
-            this.toggleAllEffectTrigger++
-            if (this.isAllModelsEnabled()) {
-              this.disableAllModels()
-            } else {
-              this.enableAllModels()
-            }
-          })
+          .clip(false)
         }
 
         // 手动添加模型按钮
-        Button() {
-          SymbolGlyph($r('sys.symbol.plus'))
-            .fontSize(14)
-            .fontColor([this.themePrimary])
-        }
-        .type(ButtonType.Circle)
-        .width(32)
-        .height(32)
-        .backgroundColor(this.themePrimaryLight)
-        .systemMaterial(new uiMaterial.ImmersiveMaterial({
-          style: uiMaterial.ImmersiveStyle.REGULAR,
-          materialColor: this.themePrimaryLight,
-          interactive: true,
-          lightEffect: { color: undefined }
-        }))
-        .margin({ right: 8 })
-        .onClick(() => {
-          this.showAddModelInput = !this.showAddModelInput
-          if (!this.showAddModelInput) {
-            this.addModelIdText = ''
-          }
-        })
-
-        // 获取模型按钮
-        Button() {
-          Row() {
-            if (this.isFetchingModels) {
-              LoadingProgress()
-                .width(14)
-                .height(14)
-                .color(this.themePrimary)
-            } else {
-              SymbolGlyph($r('sys.symbol.arrow_clockwise'))
+        Stack({ alignContent: Alignment.TopStart }) {
+          ImmersiveButtonSurface({
+            materialFactory: () => (new uiMaterial.ImmersiveMaterial({
+              style: uiMaterial.ImmersiveStyle.REGULAR,
+              materialColor: this.themePrimaryLight,
+              interactive: true,
+              lightEffect: { color: undefined }
+            })),
+            cornerRadius: undefined
+          }) {
+            Button() {
+              SymbolGlyph($r('sys.symbol.plus'))
                 .fontSize(14)
                 .fontColor([this.themePrimary])
             }
-            Text(this.isFetchingModels ? $r('app.string.provider_fetching') : $r('app.string.provider_fetch_models'))
-              .fontSize(13)
-              .fontColor(this.themePrimary)
-              .margin({ left: 4 })
+            .type(ButtonType.Circle)
+            .width(32)
+            .height(32)
+            .backgroundColor(Color.Transparent)
+            .onClick(() => {
+              this.showAddModelInput = !this.showAddModelInput
+              if (!this.showAddModelInput) {
+                this.addModelIdText = ''
+              }
+            })
+          }
+        }
+        .width(32)
+        .height(32)
+        .margin({ right: 8 })
+        .clip(false)
+
+        // 获取模型按钮
+        Stack({ alignContent: Alignment.TopStart }) {
+          ImmersiveButtonSurface({
+            materialFactory: () => (new uiMaterial.ImmersiveMaterial({
+              style: uiMaterial.ImmersiveStyle.REGULAR,
+              materialColor: this.themePrimaryLight,
+              interactive: true,
+              lightEffect: { color: undefined }
+            })),
+            cornerRadius: 16
+          }) {
+            Button() {
+              Row() {
+                if (this.isFetchingModels) {
+                  LoadingProgress()
+                    .width(14)
+                    .height(14)
+                    .color(this.themePrimary)
+                } else {
+                  SymbolGlyph($r('sys.symbol.arrow_clockwise'))
+                    .fontSize(14)
+                    .fontColor([this.themePrimary])
+                }
+                Text(this.isFetchingModels ? $r('app.string.provider_fetching') : $r('app.string.provider_fetch_models'))
+                  .fontSize(13)
+                  .fontColor(this.themePrimary)
+                  .margin({ left: 4 })
+              }
+            }
+            .height(32)
+            .padding({ left: 12, right: 12 })
+            .backgroundColor(Color.Transparent)
+            .borderRadius(16)
+            .enabled(!this.isFetchingModels)
+            .onClick(() => {
+              this.fetchModels()
+            })
           }
         }
         .height(32)
-        .padding({ left: 12, right: 12 })
-        .backgroundColor(this.themePrimaryLight)
-        .borderRadius(16)
-        .systemMaterial(new uiMaterial.ImmersiveMaterial({
-          style: uiMaterial.ImmersiveStyle.REGULAR,
-          materialColor: this.themePrimaryLight,
-          interactive: true,
-          lightEffect: { color: undefined }
-        }))
         .enabled(!this.isFetchingModels)
-        .onClick(() => {
-          this.fetchModels()
-        })
+        .clip(false)
       }
       .width('100%')
       .padding({ left: 16, right: 16, top: 12, bottom: 8 })
@@ -2604,13 +2608,8 @@ ModelsCard() {
         .height(40)
         .borderRadius(20)
         .backgroundColor(Color.Transparent)
-        .systemMaterial(new uiMaterial.ImmersiveMaterial({
-          style: uiMaterial.ImmersiveStyle.ULTRA_THIN,
-          materialColor: Color.Transparent,
-          applyShadow: false,
-          interactive: true,
-          lightEffect: { color: undefined }
-        }))
+        .backdropBlur(16)
+        .shadow(getBlurBottomShadow())
         .padding({ left: 16, right: 16 })
         .onChange((value: string) => {
           this.searchKeywords = value
@@ -2624,8 +2623,10 @@ ModelsCard() {
             .layoutWeight(1)
             .height(36)
             .fontSize(14)
-            .backgroundColor(this.themePrimaryLight)
-            .borderRadius(8)
+            .backgroundColor(Color.Transparent)
+            .borderRadius(14)
+            .backdropBlur(16)
+            .shadow(getBlurBottomShadow())
             .onChange((value: string) => {
               this.addModelIdText = value
             })

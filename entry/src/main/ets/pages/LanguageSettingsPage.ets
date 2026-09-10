@@ -1,3 +1,4 @@
+import { shouldUseDrawnNavigation } from '../utils/DrawnNavigationSupport'
 import { AppStorageKeys } from '../config/AppStorageKeys'
 import { LayoutSizeClass } from '../config/LayoutProfile'
 import { AppLanguage } from '../services/PreferencesService'
@@ -85,8 +86,7 @@ struct LanguageSettingsPage {
   }
 
   private getCompactTitleBarOptions(): HdsNavigationTitleBarOptions {
-    return buildHdsTopNavigationTitleBarOptionsForPage(this.materialType, this.materialLevel, this.windowWidthVp,
-      this.windowHeightVp, (): void => this.CompactTitleStackBuilder())
+    return buildHdsTopNavigationTitleBarOptionsForPage(this.materialType, this.materialLevel, this.windowWidthVp, this.windowHeightVp, (): void => this.CompactTitleStackBuilder(), [], this)
   }
 
   private buildCallbacks(): IndexSettingsSheetActionCallbacks {
@@ -186,7 +186,7 @@ struct LanguageSettingsPage {
           { statusBarContentColor: getHdsStatusBarContentColor() },
           { statusBarContentColor: getHdsStatusBarContentColor() }
         )
-        .hideBackButton(false)
+        .hideBackButton(shouldUseDrawnNavigation())
         .hideToolBar(true)
         .mode(NavigationMode.Stack)
         .ignoreLayoutSafeArea([LayoutSafeAreaType.SYSTEM], [LayoutSafeAreaEdge.TOP])
@@ -203,7 +203,7 @@ struct LanguageSettingsPage {
           { statusBarContentColor: getHdsStatusBarContentColor() },
           { statusBarContentColor: getHdsStatusBarContentColor() }
         )
-        .hideBackButton(false)
+        .hideBackButton(shouldUseDrawnNavigation())
         .hideToolBar(true)
         .mode(NavigationMode.Stack)
         .ignoreLayoutSafeArea([LayoutSafeAreaType.SYSTEM], [LayoutSafeAreaEdge.TOP])

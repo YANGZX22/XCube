@@ -1,3 +1,4 @@
+import { shouldUseDrawnNavigation } from '../utils/DrawnNavigationSupport'
 import { common } from '@kit.AbilityKit'
 import { notificationManager } from '@kit.NotificationKit'
 import { AppStorageKeys } from '../config/AppStorageKeys'
@@ -95,8 +96,7 @@ struct NotificationSettingsPage {
   }
 
   private getCompactTitleBarOptions(): HdsNavigationTitleBarOptions {
-    return buildHdsTopNavigationTitleBarOptionsForPage(this.materialType, this.materialLevel, this.windowWidthVp,
-      this.windowHeightVp, (): void => this.CompactTitleStackBuilder())
+    return buildHdsTopNavigationTitleBarOptionsForPage(this.materialType, this.materialLevel, this.windowWidthVp, this.windowHeightVp, (): void => this.CompactTitleStackBuilder(), [], this)
   }
 
   private buildCallbacks(): IndexSettingsSheetActionCallbacks {
@@ -232,7 +232,7 @@ struct NotificationSettingsPage {
           { statusBarContentColor: getHdsStatusBarContentColor() },
           { statusBarContentColor: getHdsStatusBarContentColor() }
         )
-        .hideBackButton(false)
+        .hideBackButton(shouldUseDrawnNavigation())
         .hideToolBar(true)
         .mode(NavigationMode.Stack)
         .ignoreLayoutSafeArea([LayoutSafeAreaType.SYSTEM], [LayoutSafeAreaEdge.TOP])
@@ -249,7 +249,7 @@ struct NotificationSettingsPage {
           { statusBarContentColor: getHdsStatusBarContentColor() },
           { statusBarContentColor: getHdsStatusBarContentColor() }
         )
-        .hideBackButton(false)
+        .hideBackButton(shouldUseDrawnNavigation())
         .hideToolBar(true)
         .mode(NavigationMode.Stack)
         .ignoreLayoutSafeArea([LayoutSafeAreaType.SYSTEM], [LayoutSafeAreaEdge.TOP])

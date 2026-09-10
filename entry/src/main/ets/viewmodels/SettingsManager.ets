@@ -50,6 +50,7 @@ export class SettingsManager {
   private lightColorMode: string = 'default'
   private chatListImmersiveMaterial: boolean = false
   private knowledgeListImmersiveMaterial: boolean = false
+  private forceWrappedMaterialBlur: boolean = false
   private callbacks: SettingsChangeCallback[] = []
   private isInitialized: boolean = false
   private initPromise: Promise<void> | null = null
@@ -98,6 +99,8 @@ export class SettingsManager {
     this.lightColorMode = await preferencesService.getLightColorMode()
     this.chatListImmersiveMaterial = await preferencesService.getChatListImmersiveMaterial()
     this.knowledgeListImmersiveMaterial = await preferencesService.getKnowledgeListImmersiveMaterial()
+    this.forceWrappedMaterialBlur = await preferencesService.getForceWrappedMaterialBlur()
+    setAppUiStateValue(AppStorageKeys.FORCE_WRAPPED_MATERIAL_BLUR, this.forceWrappedMaterialBlur)
     setAppUiStateValue(AppStorageKeys.CHAT_SERIF_FONT_ENABLED, this.chatSerifFontEnabled)
     setAppUiStateValue(AppStorageKeys.VISUAL_EFFECTS_MODE, this.visualEffectsMode)
     setAppUiStateValue(AppStorageKeys.CHAT_SERIF_FONT_FAMILY, this.chatSerifFontFamily)
@@ -131,6 +134,8 @@ export class SettingsManager {
     this.lightColorMode = await preferencesService.getLightColorMode()
     this.chatListImmersiveMaterial = await preferencesService.getChatListImmersiveMaterial()
     this.knowledgeListImmersiveMaterial = await preferencesService.getKnowledgeListImmersiveMaterial()
+    this.forceWrappedMaterialBlur = await preferencesService.getForceWrappedMaterialBlur()
+    setAppUiStateValue(AppStorageKeys.FORCE_WRAPPED_MATERIAL_BLUR, this.forceWrappedMaterialBlur)
     setAppUiStateValue(AppStorageKeys.CHAT_SERIF_FONT_ENABLED, this.chatSerifFontEnabled)
     setAppUiStateValue(AppStorageKeys.VISUAL_EFFECTS_MODE, this.visualEffectsMode)
     setAppUiStateValue(AppStorageKeys.CHAT_SERIF_FONT_FAMILY, this.chatSerifFontFamily)
@@ -461,8 +466,8 @@ export class SettingsManager {
       return
     }
 
-    this.chatListImmersiveMaterial = enabled
     await getPreferencesService().setChatListImmersiveMaterial(enabled)
+    this.chatListImmersiveMaterial = enabled
     setAppUiStateValue(AppStorageKeys.CHAT_LIST_IMMERSIVE_MATERIAL, enabled)
   }
 
@@ -470,13 +475,26 @@ export class SettingsManager {
     return this.knowledgeListImmersiveMaterial
   }
 
+  getForceWrappedMaterialBlur(): boolean {
+    return this.forceWrappedMaterialBlur
+  }
+
+  async setForceWrappedMaterialBlur(enabled: boolean): Promise<void> {
+    if (this.forceWrappedMaterialBlur === enabled) {
+      return
+    }
+    await getPreferencesService().setForceWrappedMaterialBlur(enabled)
+    this.forceWrappedMaterialBlur = enabled
+    setAppUiStateValue(AppStorageKeys.FORCE_WRAPPED_MATERIAL_BLUR, enabled)
+  }
+
   async setKnowledgeListImmersiveMaterial(enabled: boolean): Promise<void> {
     if (this.knowledgeListImmersiveMaterial === enabled) {
       return
     }
 
-    this.knowledgeListImmersiveMaterial = enabled
     await getPreferencesService().setKnowledgeListImmersiveMaterial(enabled)
+    this.knowledgeListImmersiveMaterial = enabled
     setAppUiStateValue(AppStorageKeys.KNOWLEDGE_LIST_IMMERSIVE_MATERIAL, enabled)
   }
 

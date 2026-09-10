@@ -1,3 +1,5 @@
+import { InteractiveMaterialRow } from './InteractiveMaterialRow'
+import { ImmersiveMaterialAnchor } from './ImmersiveMaterialBackdrop'
 import { AssistantResponseSegment, AssistantResponseSegmentType, ChatMessage, MessageRole, MessageAttachment, AttachmentType, ContextCompactionUiState, ToolCall, ToolResult } from '../models/ChatModels'
 import { VisualEffectsMode } from '../models/ThemeColors'
 import { pasteboard } from '@kit.BasicServicesKit'
@@ -153,6 +155,10 @@ export struct MessageBubble {
   @Local latexPreviewPixelMap: image.PixelMap | undefined = undefined
   @Local latexPreviewImageWidth: number = 0
   @Local latexPreviewImageHeight: number = 0
+  @Local userBubbleWidthVp: number = 0
+  @Local userBubbleHeightVp: number = 0
+  @Local assistantBubbleWidthVp: number = 0
+  @Local assistantBubbleHeightVp: number = 0
   // 深色模式状态（用于主题适配）
   private get isDarkMode(): boolean {
     return getAppUiState().isDarkMode
@@ -1620,6 +1626,137 @@ export struct MessageBubble {
     return this.isManuscriptMode ? 14 : 13
   }
 
+  // 工具栏各按钮/版本文本都是固定宽度，Divider 固定 1vp。
+  // 根据可见项求宽度，避免把整个 TabBar 的外扩尺寸当作 Row 宽度，或锁住后续增减项。
+  private getActionToolbarWidth(actionCount: number, separators: number): number {
+    const versionItems = this.shouldShowVersionSwitcher() ? 3 : 0
+    const separatorCount = separators + (versionItems > 0 ? 1 : 0)
+    const itemCount = actionCount + versionItems + separatorCount
+    return (actionCount + versionItems) * this.getMessageToolbarButtonSize() +
+      separatorCount * 7 + Math.max(0, itemCount - 1) * 2 + 6
+  }
+
+  private getUserActionToolbarWidth(): number {
+    return this.getActionToolbarWidth(3 + (this.canCopyMessageContent() ? 1 : 0), 0)
+  }
+
+  private getAssistantActionToolbarWidth(): number {
+    const actionCount = 3 + (this.canCopyMessageContent() ? 1 : 0) +
+      (this.canReadMessageContent() ? 1 : 0) + (this.canTranslateMessageContent() ? 1 : 0) +
+      (this.shouldShowEstimatedCost() ? 1 : 0)
+    return this.getActionToolbarWidth(actionCount, 1)
+  }
+
+  @Builder
+  private UserActionToolbarContent() {
+    if (this.shouldShowVersionSwitcher()) {
+      Button({ type: ButtonType.Circle, stateEffect: false }) {
+        SymbolGlyph($r('sys.symbol.chevron_left'))
+          .fontSize(13)
+          .fontColor([this.canSwitchToPreviousVersion()
+            ? $r('app.color.text_tertiary') : $r('app.color.divider')])
+      }
+      .width(this.getMessageToolbarButtonSize())
+      .height(this.getMessageToolbarButtonSize())
+      .padding(0)
+      .backgroundColor(Color.Transparent)
+      .onClick(() => {
+        if (this.canSwitchToPreviousVersion()) {
+          this.onSwitchVersion(-1)
+        }
+      })
+
+      Text(`${this.message.versionIndex + 1}/${this.message.versionCount}`)
+        .fontSize(12)
+        .fontColor($r('app.color.text_tertiary'))
+        .width(this.getMessageToolbarButtonSize())
+        .textAlign(TextAlign.Center)
+
+      Button({ type: ButtonType.Circle, stateEffect: false }) {
+        SymbolGlyph($r('sys.symbol.chevron_right'))
+          .fontSize(13)
+          .fontColor([this.canSwitchToNextVersion()
+            ? $r('app.color.text_tertiary') : $r('app.color.divider')])
+      }
+      .width(this.getMessageToolbarButtonSize())
+      .height(this.getMessageToolbarButtonSize())
+      .padding(0)
+      .backgroundColor(Color.Transparent)
+      .onClick(() => {
+        if (this.canSwitchToNextVersion()) {
+          this.onSwitchVersion(1)
+        }
+      })
+
+      Divider()
+        .width(1)
+        .vertical(true)
+        .height(14)
+        .color($r('app.color.divider'))
+        .margin({ left: 3, right: 3 })
+    }
+
+    // 复制
+    if (this.canCopyMessageContent()) {
+      Button({ type: ButtonType.Circle, stateEffect: false }) {
+        SymbolGlyph($r('sys.symbol.checkmark_square_on_square'))
+          .fontSize(13)
+          .fontColor([$r('app.color.text_tertiary')])
+      }
+      .width(this.getMessageToolbarButtonSize())
+      .height(this.getMessageToolbarButtonSize())
+      .padding(0)
+      .backgroundColor(Color.Transparent)
+      .onClick(() => {
+        this.handleCopy()
+      })
+    }
+
+    // 重新生成
+    Button({ type: ButtonType.Circle, stateEffect: false }) {
+      SymbolGlyph($r('sys.symbol.arrow_clockwise'))
+        .fontSize(13)
+        .fontColor([$r('app.color.text_tertiary')])
+    }
+    .width(this.getMessageToolbarButtonSize())
+    .height(this.getMessageToolbarButtonSize())
+    .padding(0)
+    .backgroundColor(Color.Transparent)
+    .onClick(() => {
+      this.onRegenerate()
+    })
+
+    // 编辑
+    Button({ type: ButtonType.Circle, stateEffect: false }) {
+      SymbolGlyph($r('sys.symbol.square_and_pencil'))
+        .fontSize(13)
+        .fontColor([$r('app.color.text_tertiary')])
+    }
+    .width(this.getMessageToolbarButtonSize())
+    .height(this.getMessageToolbarButtonSize())
+    .padding(0)
+    .backgroundColor(Color.Transparent)
+    .onClick(() => {
+      this.onEdit()
+    })
+
+    // 更多
+    Button({ type: ButtonType.Circle, stateEffect: false }) {
+      SymbolGlyph($r('sys.symbol.dot_grid_2x2'))
+        .fontSize(13)
+        .fontColor([$r('app.color.text_tertiary')])
+    }
+    .width(this.getMessageToolbarButtonSize())
+    .height(this.getMessageToolbarButtonSize())
+    .padding(0)
+    .backgroundColor(Color.Transparent)
+    .bindMenu(this.UserMoreMenu(), {
+      systemMaterial: new uiMaterial.ImmersiveMaterial({
+        style: uiMaterial.ImmersiveStyle.THICK
+      })
+    })
+  }
+
   @Builder
   UserMessage() {
     Column() {
@@ -1627,59 +1764,70 @@ export struct MessageBubble {
         Blank()
 
         Row() {
-          Column() {
-            // 图片附件显示
-            if (this.hasDisplayAttachments()) {
-              if (this.isEditing) {
-                this.PreviewAttachments()
-              } else {
-                this.UserAttachments()
+          Stack({ alignContent: Alignment.TopStart }) {
+            ImmersiveMaterialAnchor({
+              surfaceWidth: this.userBubbleWidthVp,
+              surfaceHeight: this.userBubbleHeightVp,
+              cornerRadius: { topLeft: 20, topRight: 20, bottomLeft: 20, bottomRight: 6 }
+            })
+
+            Column() {
+              // 图片附件显示
+              if (this.hasDisplayAttachments()) {
+                if (this.isEditing) {
+                  this.PreviewAttachments()
+                } else {
+                  this.UserAttachments()
+                }
+              }
+
+              if (this.shouldShowDocumentToolHint()) {
+                this.DocumentToolHintBlock()
+              }
+
+              // 文本内容
+              if (this.getDisplayContent().length > 0) {
+                Text(this.getDisplayContent())
+                  .fontSize(this.chatFontSize)
+                  .fontFamily(this.chatBubbleTypeface)
+                  .fontColor($r('app.color.text_primary'))
+                  .lineHeight(Math.round(this.chatFontSize * 1.4))
+                  .textAlign(TextAlign.Start)
+                  .alignSelf(ItemAlign.Start)
               }
             }
-
-            if (this.shouldShowDocumentToolHint()) {
-              this.DocumentToolHintBlock()
-            }
-
-            // 文本内容
-            if (this.getDisplayContent().length > 0) {
-              Text(this.getDisplayContent())
-                .fontSize(this.chatFontSize)
-                .fontFamily(this.chatBubbleTypeface)
-                .fontColor(this.themeUserBubbleText)
-                .lineHeight(Math.round(this.chatFontSize * 1.4))
-                .textAlign(TextAlign.Start)
-                .alignSelf(ItemAlign.Start)
-            }
+            .alignItems(HorizontalAlign.Start)
+            .padding(this.hasDisplayAttachments() ? { left: 8, right: 8, top: 8, bottom: 8 } : { left: 14, right: 14, top: 10, bottom: 10 })
+            .backgroundColor(Color.Transparent)
+            .borderRadius({
+              topLeft: 20,
+              topRight: 20,
+              bottomLeft: 20,
+              bottomRight: 6
+            })
+            .clip(true)
+            .border({
+              width: this.isEditing ? 2 : (this.isMultiSelectMode && this.isSelected ? 1.2 : 0.5),
+              color: this.isEditing
+                ? '#FFFFFF'
+                : (this.isMultiSelectMode && this.isSelected ? withColorAlpha(this.themePrimary, '66') : 'rgba(255, 255, 255, 0.15)')
+            })
+            .onSizeChange((_oldSize: SizeOptions, size: SizeOptions) => {
+              const width = Number(size.width)
+              const height = Number(size.height)
+              if (Number.isFinite(width) && width > 0 && Math.abs(width - this.userBubbleWidthVp) > 0.1) {
+                this.userBubbleWidthVp = width
+              }
+              if (Number.isFinite(height) && height > 0 && Math.abs(height - this.userBubbleHeightVp) > 0.1) {
+                this.userBubbleHeightVp = height
+              }
+            })
           }
-          .alignItems(HorizontalAlign.Start)
-          .padding(this.hasDisplayAttachments() ? { left: 8, right: 8, top: 8, bottom: 8 } : { left: 14, right: 14, top: 10, bottom: 10 })
-          .backgroundColor(this.isMultiSelectMode && this.isSelected
-            ? this.lightenColor(this.themeUserBubble, 0.15)
-            : this.themeUserBubble)
-          .borderRadius({
-            topLeft: 20,
-            topRight: 20,
-            bottomLeft: 20,
-            bottomRight: 6
-          })
-          .clip(true)
           .constraintSize({
             minWidth: this.hasDisplayAttachments() || this.shouldShowDocumentToolHint() ? 280 : 0,
             maxWidth: this.hasDisplayAttachments() || this.shouldShowDocumentToolHint() ? '88%' : '75%'
           })
-          .border({
-            width: this.isEditing ? 2 : (this.isMultiSelectMode && this.isSelected ? 1.2 : 0.5),
-            color: this.isEditing
-              ? '#FFFFFF'
-              : (this.isMultiSelectMode && this.isSelected ? withColorAlpha(this.themePrimary, '66') : 'rgba(255, 255, 255, 0.15)')
-          })
-          .systemMaterial(new uiMaterial.ImmersiveMaterial({
-            style: uiMaterial.ImmersiveStyle.REGULAR,
-            materialColor: this.isMultiSelectMode && this.isSelected
-              ? this.lightenColor(this.themeUserBubble, 0.15)
-              : this.themeUserBubble
-          }))
+          .clip(false)
 
           // 多选选中竖条
           if (this.isMultiSelectMode && this.isSelected) {
@@ -1702,123 +1850,12 @@ export struct MessageBubble {
         Row() {
           Blank()
 
-          Row({ space: 2 }) {
-            if (this.shouldShowVersionSwitcher()) {
-              Button({ type: ButtonType.Circle, stateEffect: false }) {
-                SymbolGlyph($r('sys.symbol.chevron_left'))
-                  .fontSize(13)
-                  .fontColor([this.canSwitchToPreviousVersion()
-                    ? $r('app.color.text_tertiary') : $r('app.color.divider')])
-              }
-              .width(this.getMessageToolbarButtonSize())
-              .height(this.getMessageToolbarButtonSize())
-              .padding(0)
-              .backgroundColor(Color.Transparent)
-              .onClick(() => {
-                if (this.canSwitchToPreviousVersion()) {
-                  this.onSwitchVersion(-1)
-                }
-              })
-
-              Text(`${this.message.versionIndex + 1}/${this.message.versionCount}`)
-                .fontSize(12)
-                .fontColor($r('app.color.text_tertiary'))
-                .width(this.getMessageToolbarButtonSize())
-                .textAlign(TextAlign.Center)
-
-              Button({ type: ButtonType.Circle, stateEffect: false }) {
-                SymbolGlyph($r('sys.symbol.chevron_right'))
-                  .fontSize(13)
-                  .fontColor([this.canSwitchToNextVersion()
-                    ? $r('app.color.text_tertiary') : $r('app.color.divider')])
-              }
-              .width(this.getMessageToolbarButtonSize())
-              .height(this.getMessageToolbarButtonSize())
-              .padding(0)
-              .backgroundColor(Color.Transparent)
-              .onClick(() => {
-                if (this.canSwitchToNextVersion()) {
-                  this.onSwitchVersion(1)
-                }
-              })
-
-              Divider()
-                .vertical(true)
-                .height(14)
-                .color($r('app.color.divider'))
-                .margin({ left: 3, right: 3 })
-            }
-
-            // 复制
-            if (this.canCopyMessageContent()) {
-              Button({ type: ButtonType.Circle, stateEffect: false }) {
-                SymbolGlyph($r('sys.symbol.checkmark_square_on_square'))
-                  .fontSize(13)
-                  .fontColor([$r('app.color.text_tertiary')])
-              }
-              .width(this.getMessageToolbarButtonSize())
-              .height(this.getMessageToolbarButtonSize())
-              .padding(0)
-              .backgroundColor(Color.Transparent)
-              .onClick(() => {
-                this.handleCopy()
-              })
-            }
-
-            // 重新生成
-            Button({ type: ButtonType.Circle, stateEffect: false }) {
-              SymbolGlyph($r('sys.symbol.arrow_clockwise'))
-                .fontSize(13)
-                .fontColor([$r('app.color.text_tertiary')])
-            }
-            .width(this.getMessageToolbarButtonSize())
-            .height(this.getMessageToolbarButtonSize())
-            .padding(0)
-            .backgroundColor(Color.Transparent)
-            .onClick(() => {
-              this.onRegenerate()
-            })
-
-            // 编辑
-            Button({ type: ButtonType.Circle, stateEffect: false }) {
-              SymbolGlyph($r('sys.symbol.square_and_pencil'))
-                .fontSize(13)
-                .fontColor([$r('app.color.text_tertiary')])
-            }
-            .width(this.getMessageToolbarButtonSize())
-            .height(this.getMessageToolbarButtonSize())
-            .padding(0)
-            .backgroundColor(Color.Transparent)
-            .onClick(() => {
-              this.onEdit()
-            })
-
-            // 更多
-            Button({ type: ButtonType.Circle, stateEffect: false }) {
-              SymbolGlyph($r('sys.symbol.dot_grid_2x2'))
-                .fontSize(13)
-                .fontColor([$r('app.color.text_tertiary')])
-            }
-            .width(this.getMessageToolbarButtonSize())
-            .height(this.getMessageToolbarButtonSize())
-            .padding(0)
-            .backgroundColor(Color.Transparent)
-            .bindMenu(this.UserMoreMenu(), {
-              systemMaterial: new uiMaterial.ImmersiveMaterial({
-                style: uiMaterial.ImmersiveStyle.THICK
-              })
-            })
+          InteractiveMaterialRow({
+            surfaceWidth: this.getUserActionToolbarWidth(),
+            surfaceHeight: this.getMessageToolbarHeight()
+          }) {
+            this.UserActionToolbarContent()
           }
-          .height(this.getMessageToolbarHeight())
-          .padding({ left: 3, right: 3 })
-          .borderRadius(this.getMessageToolbarHeight() / 2)
-          .clip(true)
-          .alignItems(VerticalAlign.Center)
-          .systemMaterial(new uiMaterial.ImmersiveMaterial({
-            style: uiMaterial.ImmersiveStyle.REGULAR,
-            interactive: true,
-            lightEffect: { color: undefined }
-          }))
         }
         .width('100%')
         .margin({ top: 6 })
@@ -2170,135 +2207,79 @@ export struct MessageBubble {
 
   @Builder
   private AssistantActionToolbar() {
-    Row({ space: this.isManuscriptMode ? 0 : 2 }) {
-      if (this.shouldShowVersionSwitcher()) {
-        Button({ type: ButtonType.Circle, stateEffect: this.isManuscriptMode }) {
-          SymbolGlyph($r('sys.symbol.chevron_left'))
-            .fontSize(this.getMessageToolbarIconSize())
-            .fontColor([this.canSwitchToPreviousVersion()
-              ? this.messageToolbarIconColor : $r('app.color.divider')])
-        }
-        .width(this.getMessageToolbarButtonSize())
-        .height(this.getMessageToolbarButtonSize())
-        .padding(0)
-        .backgroundColor(Color.Transparent)
-        .onClick(() => {
-          if (this.canSwitchToPreviousVersion()) {
-            this.onSwitchVersion(-1)
-          }
-        })
-
-        Text(`${this.message.versionIndex + 1}/${this.message.versionCount}`)
-          .fontSize(12)
-          .fontColor(this.messageToolbarIconColor)
-          .width(this.getMessageToolbarButtonSize())
-          .textAlign(TextAlign.Center)
-
-        Button({ type: ButtonType.Circle, stateEffect: this.isManuscriptMode }) {
-          SymbolGlyph($r('sys.symbol.chevron_right'))
-            .fontSize(this.getMessageToolbarIconSize())
-            .fontColor([this.canSwitchToNextVersion()
-              ? this.messageToolbarIconColor : $r('app.color.divider')])
-        }
-        .width(this.getMessageToolbarButtonSize())
-        .height(this.getMessageToolbarButtonSize())
-        .padding(0)
-        .backgroundColor(Color.Transparent)
-        .onClick(() => {
-          if (this.canSwitchToNextVersion()) {
-            this.onSwitchVersion(1)
-          }
-        })
-
-        Divider()
-          .vertical(true)
-          .height(14)
-          .color($r('app.color.divider'))
-          .margin(this.isManuscriptMode ? 0 : { left: 3, right: 3 })
+    if (this.isManuscriptMode) {
+      Row({ space: 0 }) {
+        this.AssistantActionToolbarContent()
       }
-
-      if (this.canCopyMessageContent()) {
-        Button({ type: ButtonType.Circle, stateEffect: this.isManuscriptMode }) {
-          SymbolGlyph($r('sys.symbol.checkmark_square_on_square'))
-            .fontSize(this.getMessageToolbarIconSize())
-            .fontColor([this.messageToolbarIconColor])
-        }
-        .width(this.getMessageToolbarButtonSize())
-        .height(this.getMessageToolbarButtonSize())
-        .padding(0)
-        .backgroundColor(Color.Transparent)
-        .onClick(() => {
-          this.handleCopy()
-        })
+      .height(this.getMessageToolbarHeight())
+      .padding({ left: 3, right: 3 })
+      .borderRadius(0)
+      .border({ width: 0, color: this.manuscriptAccent })
+      .clip(false)
+      .alignItems(VerticalAlign.Center)
+      .backgroundColor(Color.Transparent)
+    } else {
+      InteractiveMaterialRow({
+        surfaceWidth: this.getAssistantActionToolbarWidth(),
+        surfaceHeight: this.getMessageToolbarHeight()
+      }) {
+        this.AssistantActionToolbarContent()
       }
+    }
+  }
 
+  @Builder
+  private AssistantActionToolbarContent() {
+    if (this.shouldShowVersionSwitcher()) {
       Button({ type: ButtonType.Circle, stateEffect: this.isManuscriptMode }) {
-        SymbolGlyph($r('sys.symbol.arrow_clockwise'))
+        SymbolGlyph($r('sys.symbol.chevron_left'))
           .fontSize(this.getMessageToolbarIconSize())
-          .fontColor([this.messageToolbarIconColor])
+          .fontColor([this.canSwitchToPreviousVersion()
+            ? this.messageToolbarIconColor : $r('app.color.divider')])
       }
       .width(this.getMessageToolbarButtonSize())
       .height(this.getMessageToolbarButtonSize())
       .padding(0)
       .backgroundColor(Color.Transparent)
       .onClick(() => {
-        this.onRegenerate()
+        if (this.canSwitchToPreviousVersion()) {
+          this.onSwitchVersion(-1)
+        }
       })
 
-      if (this.canReadMessageContent()) {
-        Button({ type: ButtonType.Circle, stateEffect: this.isManuscriptMode }) {
-          if (this.ttsLoadingMessageId === this.message.id) {
-            LoadingProgress()
-              .width(this.getMessageToolbarIconSize())
-              .height(this.getMessageToolbarIconSize())
-              .color(this.themePrimary)
-          } else {
-            SymbolGlyph((this.speakingMessageId === this.message.id)
-              ? $r('sys.symbol.pause') : $r('sys.symbol.speaker_wave_2'))
-              .fontSize(this.getMessageToolbarIconSize())
-              .fontColor([(this.speakingMessageId === this.message.id)
-                ? this.themePrimary : this.messageToolbarIconColor])
-          }
-        }
+      Text(`${this.message.versionIndex + 1}/${this.message.versionCount}`)
+        .fontSize(12)
+        .fontColor(this.messageToolbarIconColor)
         .width(this.getMessageToolbarButtonSize())
-        .height(this.getMessageToolbarButtonSize())
-        .padding(0)
-        .backgroundColor(Color.Transparent)
-        .onClick(() => {
-          if (this.ttsLoadingMessageId === this.message.id ||
-            this.speakingMessageId === this.message.id) {
-            this.onTTSStop()
-          } else {
-            this.onTTS(this.message.id, this.message.content)
-          }
-        })
-      }
+        .textAlign(TextAlign.Center)
 
-      if (this.canTranslateMessageContent()) {
-        Button({ type: ButtonType.Circle, stateEffect: this.isManuscriptMode }) {
-          SymbolGlyph($r('sys.symbol.translate'))
-            .fontSize(this.getMessageToolbarIconSize())
-            .fontColor([this.messageToolbarIconColor])
-        }
-        .width(this.getMessageToolbarButtonSize())
-        .height(this.getMessageToolbarButtonSize())
-        .padding(0)
-        .backgroundColor(Color.Transparent)
-        .bindMenu(this.TranslateSubMenu(), {
-          systemMaterial: new uiMaterial.ImmersiveMaterial({
-            style: uiMaterial.ImmersiveStyle.THICK
-          })
-        })
+      Button({ type: ButtonType.Circle, stateEffect: this.isManuscriptMode }) {
+        SymbolGlyph($r('sys.symbol.chevron_right'))
+          .fontSize(this.getMessageToolbarIconSize())
+          .fontColor([this.canSwitchToNextVersion()
+            ? this.messageToolbarIconColor : $r('app.color.divider')])
       }
+      .width(this.getMessageToolbarButtonSize())
+      .height(this.getMessageToolbarButtonSize())
+      .padding(0)
+      .backgroundColor(Color.Transparent)
+      .onClick(() => {
+        if (this.canSwitchToNextVersion()) {
+          this.onSwitchVersion(1)
+        }
+      })
 
       Divider()
+        .width(1)
         .vertical(true)
         .height(14)
         .color($r('app.color.divider'))
         .margin(this.isManuscriptMode ? 0 : { left: 3, right: 3 })
+    }
 
+    if (this.canCopyMessageContent()) {
       Button({ type: ButtonType.Circle, stateEffect: this.isManuscriptMode }) {
-        SymbolGlyph($r('sys.symbol.dart_target'))
+        SymbolGlyph($r('sys.symbol.checkmark_square_on_square'))
           .fontSize(this.getMessageToolbarIconSize())
           .fontColor([this.messageToolbarIconColor])
       }
@@ -2307,46 +2288,55 @@ export struct MessageBubble {
       .padding(0)
       .backgroundColor(Color.Transparent)
       .onClick(() => {
-        this.showCacheHitPopup = !this.showCacheHitPopup
+        this.handleCopy()
       })
-      .bindPopup(this.showCacheHitPopup, {
-        message: this.getCacheHitText(),
-        placement: Placement.Top,
-        systemMaterial: new uiMaterial.ImmersiveMaterial({
-          style: uiMaterial.ImmersiveStyle.THIN
-        }),
-        onStateChange: (event) => {
-          this.showCacheHitPopup = event.isVisible
-        }
-      })
+    }
 
-      if (this.shouldShowEstimatedCost()) {
-        Button({ type: ButtonType.Circle, stateEffect: this.isManuscriptMode }) {
-          SymbolGlyph($r('sys.symbol.yuansign_coupon'))
-            .fontSize(this.getMessageToolbarIconSize())
-            .fontColor([this.messageToolbarIconColor])
-        }
-        .width(this.getMessageToolbarButtonSize())
-        .height(this.getMessageToolbarButtonSize())
-        .padding(0)
-        .backgroundColor(Color.Transparent)
-        .onClick(() => {
-          this.showEstimatedCostPopup = !this.showEstimatedCostPopup
-        })
-        .bindPopup(this.showEstimatedCostPopup, {
-          message: this.getEstimatedCostText(),
-          placement: Placement.Top,
-          systemMaterial: new uiMaterial.ImmersiveMaterial({
-            style: uiMaterial.ImmersiveStyle.THIN
-          }),
-          onStateChange: (event) => {
-            this.showEstimatedCostPopup = event.isVisible
-          }
-        })
-      }
+    Button({ type: ButtonType.Circle, stateEffect: this.isManuscriptMode }) {
+      SymbolGlyph($r('sys.symbol.arrow_clockwise'))
+        .fontSize(this.getMessageToolbarIconSize())
+        .fontColor([this.messageToolbarIconColor])
+    }
+    .width(this.getMessageToolbarButtonSize())
+    .height(this.getMessageToolbarButtonSize())
+    .padding(0)
+    .backgroundColor(Color.Transparent)
+    .onClick(() => {
+      this.onRegenerate()
+    })
 
+    if (this.canReadMessageContent()) {
       Button({ type: ButtonType.Circle, stateEffect: this.isManuscriptMode }) {
-        SymbolGlyph($r('sys.symbol.dot_grid_2x2'))
+        if (this.ttsLoadingMessageId === this.message.id) {
+          LoadingProgress()
+            .width(this.getMessageToolbarIconSize())
+            .height(this.getMessageToolbarIconSize())
+            .color(this.themePrimary)
+        } else {
+          SymbolGlyph((this.speakingMessageId === this.message.id)
+            ? $r('sys.symbol.pause') : $r('sys.symbol.speaker_wave_2'))
+            .fontSize(this.getMessageToolbarIconSize())
+            .fontColor([(this.speakingMessageId === this.message.id)
+              ? this.themePrimary : this.messageToolbarIconColor])
+        }
+      }
+      .width(this.getMessageToolbarButtonSize())
+      .height(this.getMessageToolbarButtonSize())
+      .padding(0)
+      .backgroundColor(Color.Transparent)
+      .onClick(() => {
+        if (this.ttsLoadingMessageId === this.message.id ||
+          this.speakingMessageId === this.message.id) {
+          this.onTTSStop()
+        } else {
+          this.onTTS(this.message.id, this.message.content)
+        }
+      })
+    }
+
+    if (this.canTranslateMessageContent()) {
+      Button({ type: ButtonType.Circle, stateEffect: this.isManuscriptMode }) {
+        SymbolGlyph($r('sys.symbol.translate'))
           .fontSize(this.getMessageToolbarIconSize())
           .fontColor([this.messageToolbarIconColor])
       }
@@ -2354,26 +2344,82 @@ export struct MessageBubble {
       .height(this.getMessageToolbarButtonSize())
       .padding(0)
       .backgroundColor(Color.Transparent)
-      .bindMenu(this.AssistantMoreMenu(), {
+      .bindMenu(this.TranslateSubMenu(), {
         systemMaterial: new uiMaterial.ImmersiveMaterial({
           style: uiMaterial.ImmersiveStyle.THICK
         })
       })
     }
-    .height(this.getMessageToolbarHeight())
-    .padding({ left: 3, right: 3 })
-    .borderRadius(this.isManuscriptMode ? 0 : this.getMessageToolbarHeight() / 2)
-    .border({
-      width: 0,
-      color: this.isManuscriptMode ? this.manuscriptAccent : this.manuscriptAccentDeep
+
+    Divider()
+      .width(1)
+      .vertical(true)
+      .height(14)
+      .color($r('app.color.divider'))
+      .margin(this.isManuscriptMode ? 0 : { left: 3, right: 3 })
+
+    Button({ type: ButtonType.Circle, stateEffect: this.isManuscriptMode }) {
+      SymbolGlyph($r('sys.symbol.dart_target'))
+        .fontSize(this.getMessageToolbarIconSize())
+        .fontColor([this.messageToolbarIconColor])
+    }
+    .width(this.getMessageToolbarButtonSize())
+    .height(this.getMessageToolbarButtonSize())
+    .padding(0)
+    .backgroundColor(Color.Transparent)
+    .onClick(() => {
+      this.showCacheHitPopup = !this.showCacheHitPopup
     })
-    .clip(!this.isManuscriptMode)
-    .alignItems(VerticalAlign.Center)
-    .systemMaterial(this.isManuscriptMode ? undefined : new uiMaterial.ImmersiveMaterial({
-      style: uiMaterial.ImmersiveStyle.REGULAR,
-      interactive: true,
-      lightEffect: { color: undefined }
-    }))
+    .bindPopup(this.showCacheHitPopup, {
+      message: this.getCacheHitText(),
+      placement: Placement.Top,
+      systemMaterial: new uiMaterial.ImmersiveMaterial({
+        style: uiMaterial.ImmersiveStyle.THIN
+      }),
+      onStateChange: (event) => {
+        this.showCacheHitPopup = event.isVisible
+      }
+    })
+
+    if (this.shouldShowEstimatedCost()) {
+      Button({ type: ButtonType.Circle, stateEffect: this.isManuscriptMode }) {
+        SymbolGlyph($r('sys.symbol.yuansign_coupon'))
+          .fontSize(this.getMessageToolbarIconSize())
+          .fontColor([this.messageToolbarIconColor])
+      }
+      .width(this.getMessageToolbarButtonSize())
+      .height(this.getMessageToolbarButtonSize())
+      .padding(0)
+      .backgroundColor(Color.Transparent)
+      .onClick(() => {
+        this.showEstimatedCostPopup = !this.showEstimatedCostPopup
+      })
+      .bindPopup(this.showEstimatedCostPopup, {
+        message: this.getEstimatedCostText(),
+        placement: Placement.Top,
+        systemMaterial: new uiMaterial.ImmersiveMaterial({
+          style: uiMaterial.ImmersiveStyle.THIN
+        }),
+        onStateChange: (event) => {
+          this.showEstimatedCostPopup = event.isVisible
+        }
+      })
+    }
+
+    Button({ type: ButtonType.Circle, stateEffect: this.isManuscriptMode }) {
+      SymbolGlyph($r('sys.symbol.dot_grid_2x2'))
+        .fontSize(this.getMessageToolbarIconSize())
+        .fontColor([this.messageToolbarIconColor])
+    }
+    .width(this.getMessageToolbarButtonSize())
+    .height(this.getMessageToolbarButtonSize())
+    .padding(0)
+    .backgroundColor(Color.Transparent)
+    .bindMenu(this.AssistantMoreMenu(), {
+      systemMaterial: new uiMaterial.ImmersiveMaterial({
+        style: uiMaterial.ImmersiveStyle.THICK
+      })
+    })
   }
 
   private getOrderedResponseSegments(): AssistantResponseSegment[] {
@@ -2778,19 +2824,13 @@ export struct MessageBubble {
       color: this.isManuscriptMode ? getAppUiState().themeDivider : this.getTimelineRailColor()
     })
     .clip(false)
-    .systemMaterial(this.isManuscriptMode ? undefined : new uiMaterial.ImmersiveMaterial({
-      style: uiMaterial.ImmersiveStyle.REGULAR,
-      materialColor: this.getTimelineBackgroundColor(),
-      applyShadow: false,
-      interactive: false,
-      lightEffect: { color: undefined }
-    }))
+    .backdropBlur(this.isManuscriptMode ? 0 : 24)
     .shadow({
       radius: this.isManuscriptMode ? 0 : 12,
       color: this.isManuscriptMode ? Color.Transparent :
         (this.isDarkMode ? 'rgba(0, 0, 0, 0.32)' : 'rgba(15, 23, 42, 0.14)'),
       offsetX: 0,
-      offsetY: 0
+      offsetY: 3
     })
     .margin({ bottom: 8 })
     .transition(buildTimelineBlockTransition())
@@ -2969,112 +3009,131 @@ export struct MessageBubble {
           .alignItems(VerticalAlign.Center)
         }
 
-        // 内容区域 - 无气泡，全宽显示
-        Column({ space: this.isManuscriptMode ? 5 : 0 }) {
-          if (this.isManuscriptMode) {
-            Text(this.manuscriptAssistantLabel)
-              .fontFamily(MANUSCRIPT_BODY_FONT)
-              .fontSize(10)
-              .fontWeight(FontWeight.Medium)
-              .fontColor(this.manuscriptAccentDeep)
-              .letterSpacing(2)
-              .width('100%')
-              .textAlign(TextAlign.Start)
+        // 回复内容只使用一层材质背板；流式内容、工具和翻译继续由原节点绘制。
+        Stack({ alignContent: Alignment.TopStart }) {
+          if (!this.isManuscriptMode) {
+            ImmersiveMaterialAnchor({
+              surfaceWidth: this.assistantBubbleWidthVp,
+              surfaceHeight: this.assistantBubbleHeightVp,
+              cornerRadius: 16
+            })
           }
 
-          Column() {
-            // ========== 工具 / 图表 / 地图 / 搜索 / 附件 / 思考展示块 ==========
-            // 相邻的工具结果条、思考条、搜索结果条会并进同一个块，块内用分割线相隔
-            this.TimelineBlocks(TIMELINE_BLOCK_LIST_PRE_CONTENT)
+          Column({ space: this.isManuscriptMode ? 5 : 0 }) {
+            if (this.isManuscriptMode) {
+              Text(this.manuscriptAssistantLabel)
+                .fontFamily(MANUSCRIPT_BODY_FONT)
+                .fontSize(10)
+                .fontWeight(FontWeight.Medium)
+                .fontColor(this.manuscriptAccentDeep)
+                .letterSpacing(2)
+                .width('100%')
+                .textAlign(TextAlign.Start)
+            }
 
-            // ========== 加载状态或主要内容区域 ==========
-            if (getAppUiState().chatOrderedResponseHistory) {
-              if (this.getOrderedResponseSegments().length > 0) {
-                this.OrderedResponseTimeline()
-              } else if (this.message.isSearching) {
-                this.SearchingIndicatorInline()
-              }
-            } else {
-              if (this.message.content.length === 0 && this.message.reasoningContent.length === 0 &&
-                  (this.message.isGenerating || this.message.isSearching)) {
-                if (this.message.isSearching) {
+            Column() {
+              // ========== 工具 / 图表 / 地图 / 搜索 / 附件 / 思考展示块 ==========
+              // 相邻的工具结果条、思考条、搜索结果条会并进同一个块，块内用分割线相隔
+              this.TimelineBlocks(TIMELINE_BLOCK_LIST_PRE_CONTENT)
+
+              // ========== 加载状态或主要内容区域 ==========
+              if (getAppUiState().chatOrderedResponseHistory) {
+                if (this.getOrderedResponseSegments().length > 0) {
+                  this.OrderedResponseTimeline()
+                } else if (this.message.isSearching) {
                   this.SearchingIndicatorInline()
                 }
               } else {
-                if (this.hasHtmlSegments()) {
-                  ForEach(this.getContentSegments(),
-                    (segment: ContentSegment, index: number) => {
-                      if (segment.isHtml) {
-                        HtmlPreviewCard({
-                          htmlCode: segment.renderContent,
-                          onCopyCode: (code: string) => {
-                            this.copyToClipboard(code)
-                            showToast(this.getUIContext(), $r('app.string.copy_success'))
-                          }
-                        })
-                      } else {
-                        this.StaticMarkdown(segment.renderContent, false, '', '', true)
-                      }
-                    },
-                    (segment: ContentSegment, index: number) => {
-                      return 'segment_' + this.message.id + '_' + index.toString()
-                    }
-                  )
-                } else {
-                  Column() {
-                    this.MessageContentMarkdown()
+                if (this.message.content.length === 0 && this.message.reasoningContent.length === 0 &&
+                    (this.message.isGenerating || this.message.isSearching)) {
+                  if (this.message.isSearching) {
+                    this.SearchingIndicatorInline()
                   }
-                    .width('100%')
-                    .transition(TransitionEffect.OPACITY.animation({ duration: 200 }))
+                } else {
+                  if (this.hasHtmlSegments()) {
+                    ForEach(this.getContentSegments(),
+                      (segment: ContentSegment, index: number) => {
+                        if (segment.isHtml) {
+                          HtmlPreviewCard({
+                            htmlCode: segment.renderContent,
+                            onCopyCode: (code: string) => {
+                              this.copyToClipboard(code)
+                              showToast(this.getUIContext(), $r('app.string.copy_success'))
+                            }
+                          })
+                        } else {
+                          this.StaticMarkdown(segment.renderContent, false, '', '', true)
+                        }
+                      },
+                      (segment: ContentSegment, index: number) => {
+                        return 'segment_' + this.message.id + '_' + index.toString()
+                      }
+                    )
+                  } else {
+                    Column() {
+                      this.MessageContentMarkdown()
+                    }
+                      .width('100%')
+                      .transition(TransitionEffect.OPACITY.animation({ duration: 200 }))
+                  }
                 }
               }
-            }
 
-            // ========== 翻译结果区域（嵌入式可折叠卡片） ==========
-            if (this.showTranslation) {
-              this.TranslationCard()
+              // ========== 翻译结果区域（嵌入式可折叠卡片） ==========
+              if (this.showTranslation) {
+                this.TranslationCard()
+              }
             }
+            .width('100%')
+            .onClick(() => {
+              if (!this.isMultiSelectMode &&
+                (this.ttsLoadingMessageId === this.message.id || this.speakingMessageId === this.message.id)) {
+                this.onTTSStop()
+              }
+            })
+            .bindSheet($$this.showSubAgentPreviewSheet, this.SubAgentPreviewSheet(), {
+              height: '75%',
+              detents: ['75%', '100%'],
+              dragBar: false,
+              showClose: false,
+              backgroundColor: Color.Transparent,
+              systemMaterial: new uiMaterial.ImmersiveMaterial({
+                style: uiMaterial.ImmersiveStyle.REGULAR,
+                materialColor: Color.Transparent
+              })
+            })
           }
           .width('100%')
-          .onClick(() => {
-            if (!this.isMultiSelectMode &&
-              (this.ttsLoadingMessageId === this.message.id || this.speakingMessageId === this.message.id)) {
-              this.onTTSStop()
-            }
-          })
-          .bindSheet($$this.showSubAgentPreviewSheet, this.SubAgentPreviewSheet(), {
-            height: '75%',
-            detents: ['75%', '100%'],
-            dragBar: false,
-            showClose: false,
-            backgroundColor: Color.Transparent,
-            systemMaterial: new uiMaterial.ImmersiveMaterial({
-              style: uiMaterial.ImmersiveStyle.REGULAR,
-              materialColor: Color.Transparent
+          .padding(this.isManuscriptMode ? { left: 34, right: 34 } :
+            { left: 14, right: 14, top: 12, bottom: 10 })
+            .backgroundColor(this.isManuscriptMode ? (this.isMultiSelectMode && this.isSelected
+              ? this.themePrimaryLight
+              : (this.isManuscriptMode ? Color.Transparent : this.themeAiBubble)) : Color.Transparent)
+            .borderRadius(this.isManuscriptMode ? 0 : 16)
+            .border({
+              width: this.isManuscriptMode ? 0 :
+                (this.isMultiSelectMode && this.isSelected ? 1.2 : (this.hasAskUserToolCall() ? 1 : 0.5)),
+              color: this.isMultiSelectMode && this.isSelected ? this.themePrimary :
+                (this.hasAskUserToolCall() ? this.themePrimaryLight : $r('app.color.bubble_border'))
             })
-          })
+            .clip(false)
+            .onSizeChange((_oldSize: SizeOptions, size: SizeOptions) => {
+              if (this.isManuscriptMode) {
+                return
+              }
+              const width = Number(size.width)
+              const height = Number(size.height)
+              if (Number.isFinite(width) && width > 0 && Math.abs(width - this.assistantBubbleWidthVp) > 0.1) {
+                this.assistantBubbleWidthVp = width
+              }
+              if (Number.isFinite(height) && height > 0 && Math.abs(height - this.assistantBubbleHeightVp) > 0.1) {
+                this.assistantBubbleHeightVp = height
+              }
+            })
         }
         .width('100%')
         .margin({ top: this.showHeader && !this.isManuscriptMode ? 8 : 0 })
-        .padding(this.isManuscriptMode ? { left: 34, right: 34 } :
-          { left: 14, right: 14, top: 12, bottom: 10 })
-          .backgroundColor(this.isMultiSelectMode && this.isSelected
-            ? this.themePrimaryLight
-            : (this.isManuscriptMode ? Color.Transparent : this.themeAiBubble))
-          .borderRadius(this.isManuscriptMode ? 0 : 16)
-          .border({
-            width: this.isManuscriptMode ? 0 :
-              (this.isMultiSelectMode && this.isSelected ? 1.2 : (this.hasAskUserToolCall() ? 1 : 0.5)),
-            color: this.isMultiSelectMode && this.isSelected ? this.themePrimary :
-              (this.hasAskUserToolCall() ? this.themePrimaryLight : $r('app.color.bubble_border'))
-          })
-          .clip(false)
-          .systemMaterial(this.isManuscriptMode ? undefined : new uiMaterial.ImmersiveMaterial({
-            style: uiMaterial.ImmersiveStyle.REGULAR,
-            materialColor: this.isMultiSelectMode && this.isSelected
-              ? this.themePrimaryLight
-              : this.themeAiBubble
-          }))
+        .clip(false)
 
         if (this.shouldShowAssistantToolbar()) {
           Row() {
@@ -3271,19 +3330,13 @@ export struct MessageBubble {
     })
     .borderRadius(this.isManuscriptMode ? 0 : 12)
     .clip(false)
-    .systemMaterial(this.isManuscriptMode ? undefined : new uiMaterial.ImmersiveMaterial({
-      style: uiMaterial.ImmersiveStyle.REGULAR,
-      materialColor: this.getTimelineBackgroundColor(),
-      applyShadow: false,
-      interactive: false,
-      lightEffect: { color: undefined }
-    }))
+    .backdropBlur(this.isManuscriptMode ? 0 : 24)
     .shadow({
       radius: this.isManuscriptMode ? 0 : 12,
       color: this.isManuscriptMode ? Color.Transparent :
         (this.isDarkMode ? 'rgba(0, 0, 0, 0.32)' : 'rgba(15, 23, 42, 0.14)'),
       offsetX: 0,
-      offsetY: 0
+      offsetY: 3
     })
   }
 

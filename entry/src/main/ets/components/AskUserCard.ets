@@ -1,7 +1,7 @@
+import { getBlurBottomShadow } from '../utils/BlurShadowUtils'
 import { ToolCall } from '../models/ChatModels'
 import { getAppUiState } from '../state/AppUiState'
 import { withColorAlpha } from '../utils/ColorAlphaUtils'
-import { uiMaterial } from '@kit.ArkUI'
 import { VisualEffectsMode } from '../models/ThemeColors'
 import { MANUSCRIPT_COMPACT_BAR_HEIGHT } from '../utils/ManuscriptVisualUtils'
 import {
@@ -9,17 +9,7 @@ import {
   getTimelineBarExpandAnimation
 } from '../utils/TimelineBarTransitionUtils'
 import { pickLocalizedText } from '../utils/LocalizedTextUtils'
-
-interface AskUserQuestion {
-  id: string
-  question: string
-  options: string[]
-  selectionType: string
-}
-
-interface AskUserArgs {
-  questions?: Object[]
-}
+import { AskUserQuestion, AskUserQuestionParseResult, askUserQuestionRenderKey, parseAskUserQuestions } from '../utils/AskUserQuestionUtils'
 
 interface AskUserAnswerItem {
   question: string
@@ -40,11 +30,14 @@ interface AskUserAnswerPayload {
 @ComponentV2
 export struct AskUserCard {
   @Param toolCall: ToolCall = new ToolCall()
+  // 待回答弹窗显式传入 primitive 参数，避免只依赖嵌套 ToolCall 对象的更新。
+  @Param questionArguments: string | undefined = undefined
   @Param toolCalls: ToolCall[] = []
   @Param isAnswered: boolean = false
   @Param compactMode: boolean = false
   // 合并进条目块时由外层统一提供边框、材质与投影，卡片自身只出内容
   @Param embedded: boolean = false
+  @Param surfaceProvided: boolean = false
   @Param resultContent: string = ''
   @Param resultContents: string[] = []
   @Param pendingCount: number = 1
@@ -104,41 +97,27 @@ export struct AskUserCard {
     return calls.length > 0 ? calls[calls.length - 1].id : this.toolCall.id
   }
 
+  @Computed
+  private get parsedCurrentQuestions(): AskUserQuestionParseResult {
+    return parseAskUserQuestions(this.questionArguments ?? this.toolCall.arguments)
+  }
+
   private parseQuestions(): AskUserQuestion[] {
-    return this.parseQuestionsFor(this.toolCall)
+    return this.parsedCurrentQuestions.questions
   }
 
   private parseQuestionsFor(toolCall: ToolCall): AskUserQuestion[] {
-    const out: AskUserQuestion[] = []
-    try {
-      const parsed = JSON.parse(toolCall.arguments) as AskUserArgs
-      const rawQs = parsed.questions
-      if (!Array.isArray(rawQs)) {
-        return out
-      }
-      const list = rawQs as Object[]
-      for (let i = 0; i < list.length; i++) {
-        const obj = list[i] as Record<string, Object>
-        if (obj === null || obj === undefined) {
-          continue
-        }
-        const id = (obj['id'] as string | undefined) ?? `q_${i + 1}`
-        const question = (obj['question'] as string | undefined) ?? ''
-        const selectionType = (obj['selection_type'] as string | undefined) ?? 'text'
-        const options: string[] = []
-        const rawOpts = obj['options'] as Object
-        if (Array.isArray(rawOpts)) {
-          const arr = rawOpts as string[]
-          for (let j = 0; j < arr.length; j++) {
-            if (typeof arr[j] === 'string' && arr[j] !== '') {
-              options.push(arr[j])
-            }
-          }
-        }
-        out.push({ id: id, question: question, options: options, selectionType: selectionType })
-      }
-    } catch (_error) {}
-    return out
+    return parseAskUserQuestions(toolCall.arguments).questions
+  }
+
+  private getMissingQuestionMessage(): string {
+    if (this.parsedCurrentQuestions.status === 'empty') {
+      return pickLocalizedText('尚未收到问题参数，可等待更新或跳过。', 'Question arguments have not arrived. Wait for an update or skip.')
+    }
+    if (this.parsedCurrentQuestions.status === 'invalid_json') {
+      return pickLocalizedText('问题参数不完整，暂时无法解析。可等待更新或跳过。', 'Question arguments are incomplete. Wait for an update or skip.')
+    }
+    return pickLocalizedText('未找到有效的问题文本，请跳过后让 AI 重新提问。', 'No valid question text was found. Skip and ask the AI to retry.')
   }
 
   private setTextAnswer(questionId: string, value: string): void {
@@ -436,9 +415,13 @@ export struct AskUserCard {
         : 0)
 
       if (!this.compactMode) {
-        ForEach(this.parseQuestions(), (question: AskUserQuestion, index: number) => {
+        if (this.parsedCurrentQuestions.questions.length === 0) {
+          Text(this.getMissingQuestionMessage())
+            .fontSize(13).fontColor($r('app.color.text_secondary')).width('100%')
+        }
+        ForEach(this.parsedCurrentQuestions.questions, (question: AskUserQuestion, index: number) => {
           this.QuestionBlock(question, index, '')
-        }, (question: AskUserQuestion) => question.id)
+        }, (question: AskUserQuestion) => askUserQuestionRenderKey(question))
       } else if (this.isExpanded) {
         Column({ space: 8 }) {
           ForEach(this.getDisplayedToolCalls(), (toolCall: ToolCall, callIndex: number) => {
@@ -459,7 +442,7 @@ export struct AskUserCard {
 
               ForEach(this.parseQuestionsFor(toolCall), (question: AskUserQuestion, questionIndex: number) => {
                 this.QuestionBlock(question, questionIndex, this.getResultContentAt(callIndex))
-              }, (question: AskUserQuestion) => question.id)
+              }, (question: AskUserQuestion) => askUserQuestionRenderKey(question))
             }
             .width('100%')
           }, (toolCall: ToolCall) => toolCall.id)
@@ -505,28 +488,22 @@ export struct AskUserCard {
     }
     .width('100%')
     .padding(this.compactMode ? 0 : 12)
-    .backgroundColor(this.isManuscriptMode && !this.compactMode ? this.themeSurface : Color.Transparent)
+    .backgroundColor(this.embedded || this.isManuscriptMode ? (this.isManuscriptMode && !this.compactMode ? this.themeSurface : Color.Transparent) : Color.Transparent)
     .borderRadius(this.embedded || this.isManuscriptMode ? 0 : (this.compactMode ? 12 : 16))
     .border({
-      width: this.embedded ? 0 :
+      width: this.embedded || this.surfaceProvided ? 0 :
         (this.isManuscriptMode ? { top: 1, bottom: 1 } : (this.compactMode ? 0.5 : 1)),
       color: this.isManuscriptMode ? getAppUiState().themeDivider :
         (this.compactMode ? this.getCompactRailColor() : this.themePrimaryLight)
     })
-    .systemMaterial(this.embedded || this.isManuscriptMode ? undefined : new uiMaterial.ImmersiveMaterial({
-      style: uiMaterial.ImmersiveStyle.REGULAR,
-      materialColor: this.compactMode ? this.themeAiBubble : Color.Transparent,
-      applyShadow: !this.compactMode,
-      interactive: !this.compactMode,
-      lightEffect: { color: this.compactMode ? undefined : Color.White }
-    }))
+    .backdropBlur(this.embedded || this.isManuscriptMode || this.surfaceProvided ? 0 : 24)
     .shadow({
-      radius: this.embedded || this.isManuscriptMode ? 0 : (this.compactMode ? 12 : 24),
-      color: this.embedded || this.isManuscriptMode ? Color.Transparent : (this.compactMode
+      radius: this.embedded || this.isManuscriptMode || this.surfaceProvided ? 0 : (this.compactMode ? 12 : 24),
+      color: this.embedded || this.isManuscriptMode || this.surfaceProvided ? Color.Transparent : (this.compactMode
         ? (this.isDarkMode ? 'rgba(0, 0, 0, 0.32)' : 'rgba(15, 23, 42, 0.14)')
         : (this.isDarkMode ? 'rgba(0, 0, 0, 0.48)' : 'rgba(15, 23, 42, 0.22)')),
       offsetX: 0,
-      offsetY: this.compactMode ? 0 : 8
+      offsetY: this.compactMode ? 3 : 8
     })
   }
 
@@ -565,7 +542,8 @@ export struct AskUserCard {
             width: this.isManuscriptMode ? { bottom: 1 } : 0,
             color: this.isManuscriptMode ? getAppUiState().themeDivider : Color.Transparent
           })
-          .backgroundBlurStyle(this.isManuscriptMode ? undefined : BlurStyle.COMPONENT_REGULAR)
+          .backdropBlur(this.isManuscriptMode || this.surfaceProvided ? undefined : 24)
+          .shadow(getBlurBottomShadow(!this.isManuscriptMode && !this.surfaceProvided))
           .enabled(!this.isAnswered && !this.compactMode)
           .onChange((value: string) => {
             this.setTextAnswer(question.id, value)
@@ -589,7 +567,8 @@ export struct AskUserCard {
             width: this.isManuscriptMode ? { bottom: 1 } : 0,
             color: this.isManuscriptMode ? getAppUiState().themeDivider : Color.Transparent
           })
-          .backgroundBlurStyle(this.isManuscriptMode ? undefined : BlurStyle.COMPONENT_REGULAR)
+          .backdropBlur(this.isManuscriptMode || this.surfaceProvided ? undefined : 24)
+          .shadow(getBlurBottomShadow(!this.isManuscriptMode && !this.surfaceProvided))
           .enabled(!this.isAnswered && !this.compactMode)
           .onChange((value: string) => {
             this.setCustomAnswer(question.id, value)

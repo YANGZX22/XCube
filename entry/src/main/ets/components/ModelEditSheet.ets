@@ -1,3 +1,5 @@
+import { ImmersiveButtonSurface } from './ImmersiveButtonSurface'
+import { getBlurBottomShadow } from '../utils/BlurShadowUtils'
 /**
  * 模型编辑半模态组件
  * 单页滚动布局：核心信息 → 能力标签 → 可折叠高级参数
@@ -38,31 +40,39 @@ struct ModelCapabilityButton {
   }
 
   build() {
-    Button({ type: ButtonType.Capsule, stateEffect: false }) {
-      Row({ space: 6 }) {
-        SymbolGlyph(this.icon)
-          .fontSize(16)
-          .fontColor([this.selected ? this.themePrimary : $r('app.color.text_primary')])
+    Stack({ alignContent: Alignment.TopStart }) {
+      ImmersiveButtonSurface({
+        materialFactory: () => (new uiMaterial.ImmersiveMaterial({
+          style: uiMaterial.ImmersiveStyle.REGULAR,
+          materialColor: this.selected ? this.themePrimaryLight : Color.Transparent,
+          interactive: true,
+          lightEffect: { color: undefined }
+        })),
+        cornerRadius: undefined
+      }) {
+        Button({ type: ButtonType.Capsule, stateEffect: false }) {
+          Row({ space: 6 }) {
+            SymbolGlyph(this.icon)
+              .fontSize(16)
+              .fontColor([this.selected ? this.themePrimary : $r('app.color.text_primary')])
 
-        Text(this.label)
-          .fontSize(13)
-          .fontWeight(FontWeight.Regular)
-          .fontColor(this.selected ? this.themePrimary : $r('app.color.text_primary'))
+            Text(this.label)
+              .fontSize(13)
+              .fontWeight(FontWeight.Regular)
+              .fontColor(this.selected ? this.themePrimary : $r('app.color.text_primary'))
+          }
+          .alignItems(VerticalAlign.Center)
+        }
+        .height(36)
+        .padding({ left: 12, right: 14 })
+        .backgroundColor(Color.Transparent)
+        .onClick(() => {
+          this.onTap()
+        })
       }
-      .alignItems(VerticalAlign.Center)
     }
     .height(36)
-    .padding({ left: 12, right: 14 })
-    .backgroundColor(this.selected ? this.themePrimaryLight : Color.Transparent)
-    .systemMaterial(new uiMaterial.ImmersiveMaterial({
-      style: uiMaterial.ImmersiveStyle.REGULAR,
-      materialColor: this.selected ? this.themePrimaryLight : Color.Transparent,
-      interactive: true,
-      lightEffect: { color: undefined }
-    }))
-    .onClick(() => {
-      this.onTap()
-    })
+    .clip(false)
   }
 }
 
@@ -626,11 +636,8 @@ export struct ModelEditSheet {
         .height(44)
         .backgroundColor(Color.Transparent)
         .borderRadius(16)
-        .systemMaterial(new uiMaterial.ImmersiveMaterial({
-          style: uiMaterial.ImmersiveStyle.ULTRA_THIN,
-          materialColor: Color.Transparent,
-          applyShadow: false
-        }))
+        .backdropBlur(16)
+        .shadow(getBlurBottomShadow())
         .padding({ left: 16, right: 16 })
         .onChange((value: string) => {
           this.tempName = value
@@ -658,11 +665,8 @@ export struct ModelEditSheet {
         .type(InputType.Number)
         .backgroundColor(Color.Transparent)
         .borderRadius(16)
-        .systemMaterial(new uiMaterial.ImmersiveMaterial({
-          style: uiMaterial.ImmersiveStyle.ULTRA_THIN,
-          materialColor: Color.Transparent,
-          applyShadow: false
-        }))
+        .backdropBlur(16)
+        .shadow(getBlurBottomShadow())
         .padding({ left: 16, right: 16 })
         .onChange((value: string) => {
           this.contextLengthText = value
@@ -868,22 +872,30 @@ export struct ModelEditSheet {
                 .layoutWeight(1)
 
               if (this.billingPeakPeriods.length < 3) {
-                Button(pickLocalizedText('添加时段', 'Add period'))
-                  .height(30)
-                  .fontSize(11)
-                  .fontColor(this.themePrimary)
-                  .type(ButtonType.Capsule)
-                  .stateEffect(false)
-                  .backgroundColor(Color.Transparent)
-                  .systemMaterial(new uiMaterial.ImmersiveMaterial({
-                    style: uiMaterial.ImmersiveStyle.REGULAR,
-                    materialColor: Color.Transparent,
-                    interactive: true,
-                    lightEffect: { color: undefined }
-                  }))
-                  .onClick(() => {
-                    this.addBillingPeakPeriod()
-                  })
+                Stack({ alignContent: Alignment.TopStart }) {
+                  ImmersiveButtonSurface({
+                    materialFactory: () => (new uiMaterial.ImmersiveMaterial({
+                        style: uiMaterial.ImmersiveStyle.REGULAR,
+                        materialColor: Color.Transparent,
+                        interactive: true,
+                        lightEffect: { color: undefined }
+                      })),
+                    cornerRadius: undefined
+                  }) {
+                    Button(pickLocalizedText('添加时段', 'Add period'))
+                      .height(30)
+                      .fontSize(11)
+                      .fontColor(this.themePrimary)
+                      .type(ButtonType.Capsule)
+                      .stateEffect(false)
+                      .backgroundColor(Color.Transparent)
+                      .onClick(() => {
+                        this.addBillingPeakPeriod()
+                      })
+                  }
+                }
+                .height(30)
+                .clip(false)
               }
             }
             .width('100%')
@@ -1049,30 +1061,40 @@ export struct ModelEditSheet {
 
   @Builder
   BillingTimeButton(label: string, minutes: number, onTap: () => void) {
-    Button() {
-      Column({ space: 2 }) {
-        Text(label)
-          .fontSize(10)
-          .fontColor($r('app.color.text_tertiary'))
+    Stack({ alignContent: Alignment.TopStart }) {
+      ImmersiveButtonSurface({
+        materialFactory: () => (new uiMaterial.ImmersiveMaterial({
+          style: uiMaterial.ImmersiveStyle.ULTRA_THIN,
+          materialColor: Color.Transparent,
+          applyShadow: false
+        })),
+        fallbackShadow: false,
+        cornerRadius: 14
+      }) {
+        Button() {
+          Column({ space: 2 }) {
+            Text(label)
+              .fontSize(10)
+              .fontColor($r('app.color.text_tertiary'))
 
-        Text(this.formatBillingTime(minutes))
-          .fontSize(15)
-          .fontWeight(FontWeight.Medium)
-          .fontColor(this.themePrimary)
+            Text(this.formatBillingTime(minutes))
+              .fontSize(15)
+              .fontWeight(FontWeight.Medium)
+              .fontColor(this.themePrimary)
+          }
+        }
+        .height(50)
+        .backgroundColor(Color.Transparent)
+        .borderRadius(14)
+        .onClick(() => {
+          onTap()
+        })
+        .width('100%')
       }
     }
     .layoutWeight(1)
     .height(50)
-    .backgroundColor(Color.Transparent)
-    .borderRadius(14)
-    .systemMaterial(new uiMaterial.ImmersiveMaterial({
-      style: uiMaterial.ImmersiveStyle.ULTRA_THIN,
-      materialColor: Color.Transparent,
-      applyShadow: false
-    }))
-    .onClick(() => {
-      onTap()
-    })
+    .clip(false)
   }
 
   @Builder
@@ -1129,11 +1151,8 @@ export struct ModelEditSheet {
         .backgroundColor(Color.Transparent)
         .borderRadius(14)
         .padding({ left: 12, right: 12 })
-        .systemMaterial(new uiMaterial.ImmersiveMaterial({
-          style: uiMaterial.ImmersiveStyle.ULTRA_THIN,
-          materialColor: Color.Transparent,
-          applyShadow: false
-        }))
+        .backdropBlur(16)
+        .shadow(getBlurBottomShadow())
         .onChange((text: string) => {
           onChange(text)
         })
@@ -1160,11 +1179,8 @@ export struct ModelEditSheet {
         .backgroundColor(Color.Transparent)
         .borderRadius(14)
         .padding({ left: 12, right: 12 })
-        .systemMaterial(new uiMaterial.ImmersiveMaterial({
-          style: uiMaterial.ImmersiveStyle.ULTRA_THIN,
-          materialColor: Color.Transparent,
-          applyShadow: false
-        }))
+        .backdropBlur(16)
+        .shadow(getBlurBottomShadow())
         .onChange((text: string) => {
           onChange(text)
         })
@@ -1219,11 +1235,8 @@ export struct ModelEditSheet {
               .backgroundColor(Color.Transparent)
               .borderRadius(14)
               .padding({ left: 12, right: 12 })
-              .systemMaterial(new uiMaterial.ImmersiveMaterial({
-                style: uiMaterial.ImmersiveStyle.ULTRA_THIN,
-                materialColor: Color.Transparent,
-                applyShadow: false
-              }))
+              .backdropBlur(16)
+              .shadow(getBlurBottomShadow())
               .onChange((value: string) => {
                 this.maxOutputTokensText = value
               })

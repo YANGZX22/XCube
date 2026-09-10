@@ -1,3 +1,6 @@
+import { shouldUseDrawnNavigation } from '../utils/DrawnNavigationSupport'
+import { withColorAlpha } from '../utils/ColorAlphaUtils'
+import { ImmersiveButtonSurface } from '../components/ImmersiveButtonSurface'
 import { uiMaterial } from '@kit.ArkUI'
 import { picker, fileIo } from '@kit.CoreFileKit'
 import { ChatSession } from '../models/ChatModels'
@@ -115,8 +118,7 @@ struct ExportDataPage {
   }
 
   private getCompactTitleBarOptions(): HdsNavigationTitleBarOptions {
-    return buildHdsTopNavigationTitleBarOptionsForPage(this.materialType, this.materialLevel, this.windowWidthVp,
-      this.windowHeightVp, (): void => this.CompactTitleStackBuilder())
+    return buildHdsTopNavigationTitleBarOptionsForPage(this.materialType, this.materialLevel, this.windowWidthVp, this.windowHeightVp, (): void => this.CompactTitleStackBuilder(), [], this)
   }
 
   aboutToAppear(): void {
@@ -221,11 +223,9 @@ struct ExportDataPage {
         Scroll(this.compactScroller) {
           Row() {
             Column() {
-              if (!this.isDetailPaneMode()) {
-                Blank()
-                  .width('100%')
-                  .height(this.getCompactContentTopPadding())
-              }
+              Blank()
+                .width('100%')
+                .height(this.getCompactContentTopPadding())
 
               this.SectionTitle($r('app.string.export_select_sessions'))
               this.SessionPickerCard()
@@ -256,23 +256,34 @@ struct ExportDataPage {
 
         Row() {
           Column() {
-            Button($r('app.string.export_start'))
-              .width('100%')
-              .height(48)
-              .fontSize(16)
-              .fontWeight(FontWeight.Medium)
-              .backgroundColor(this.themePrimary)
-              .borderRadius(12)
-              .systemMaterial(new uiMaterial.ImmersiveMaterial({
-                style: uiMaterial.ImmersiveStyle.REGULAR,
-                materialColor: this.themePrimary,
-                interactive: true,
-                lightEffect: { color: undefined }
-              }))
-              .enabled(this.selectedSessionIds.length > 0)
-              .onClick(() => {
-                this.startExport()
-              })
+            Stack({ alignContent: Alignment.TopStart }) {
+              ImmersiveButtonSurface({
+                materialFactory: () => (new uiMaterial.ImmersiveMaterial({
+                    style: uiMaterial.ImmersiveStyle.THIN,
+                    materialColor: withColorAlpha(this.themePrimary, '26'),
+                    interactive: true,
+                    lightEffect: { color: undefined }
+                  })),
+                cornerRadius: 12
+              }) {
+                Button($r('app.string.export_start'))
+                  .fontColor(this.themePrimary)
+                  .width('100%')
+                  .height(48)
+                  .fontSize(16)
+                  .fontWeight(FontWeight.Medium)
+                  .backgroundColor(Color.Transparent)
+                  .borderRadius(12)
+                  .enabled(this.selectedSessionIds.length > 0)
+                  .onClick(() => {
+                    this.startExport()
+                  })
+              }
+            }
+            .width('100%')
+            .height(48)
+            .enabled(this.selectedSessionIds.length > 0)
+            .clip(false)
           }
           .width('100%')
           .constraintSize({ maxWidth: this.getContentMaxWidth() })
@@ -515,15 +526,7 @@ struct ExportDataPage {
     Column() {
       if (this.isDetailPaneMode()) {
         HdsNavigation() {
-          Column() {
-            Blank()
-              .width('100%')
-              .height(this.getCompactContentTopPadding())
-
-            this.PageContent()
-          }
-          .width('100%')
-          .height('100%')
+          this.PageContent()
         }
         .width('100%')
         .height('100%')
@@ -534,7 +537,7 @@ struct ExportDataPage {
           { statusBarContentColor: getHdsStatusBarContentColor() },
           { statusBarContentColor: getHdsStatusBarContentColor() }
         )
-        .hideBackButton(false)
+        .hideBackButton(shouldUseDrawnNavigation())
         .hideToolBar(true)
         .mode(NavigationMode.Stack)
         .ignoreLayoutSafeArea([LayoutSafeAreaType.SYSTEM], [LayoutSafeAreaEdge.TOP])
@@ -551,7 +554,7 @@ struct ExportDataPage {
           { statusBarContentColor: getHdsStatusBarContentColor() },
           { statusBarContentColor: getHdsStatusBarContentColor() }
         )
-        .hideBackButton(false)
+        .hideBackButton(shouldUseDrawnNavigation())
         .hideToolBar(true)
         .mode(NavigationMode.Stack)
         .ignoreLayoutSafeArea([LayoutSafeAreaType.SYSTEM], [LayoutSafeAreaEdge.TOP])

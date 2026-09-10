@@ -1,3 +1,6 @@
+import { ImmersiveButtonSurface } from './ImmersiveButtonSurface'
+import { ImmersiveListSurface, LIST_MATERIAL_CARD_RADIUS } from './ImmersiveListSurface'
+import { getBlurBottomShadow } from '../utils/BlurShadowUtils'
 import { picker } from '@kit.CoreFileKit'
 import { uiMaterial } from '@kit.ArkUI'
 import { pdfService, pdfViewManager, PdfView } from '@kit.PDFKit'
@@ -79,12 +82,12 @@ export struct KnowledgeBasePanel {
     return getAppUiState().isDarkMode
   }
 
-  private get knowledgeListImmersiveMaterial(): boolean {
-    return getAppUiState().knowledgeListImmersiveMaterial
-  }
-
   private get isManuscriptMode(): boolean {
     return getAppUiState().visualEffectsMode === VisualEffectsMode.MANUSCRIPT
+  }
+
+  private get knowledgeListImmersiveMaterial(): boolean {
+    return !this.isManuscriptMode && getAppUiState().knowledgeListImmersiveMaterial
   }
 
   aboutToAppear(): void {
@@ -916,23 +919,33 @@ export struct KnowledgeBasePanel {
   @Builder
   private UpdateSwipePanel(document: KnowledgeDocument) {
     Row() {
-      Button({ type: ButtonType.Circle, stateEffect: false }) {
-        this.UpdateSwipeContent()
+      Stack({ alignContent: Alignment.TopStart }) {
+        ImmersiveButtonSurface({
+          materialFactory: () => (new uiMaterial.ImmersiveMaterial({
+            style: uiMaterial.ImmersiveStyle.REGULAR,
+            interactive: true,
+            lightEffect: { color: undefined }
+          })),
+          cornerRadius: undefined
+        }) {
+          Button({ type: ButtonType.Circle, stateEffect: false }) {
+            this.UpdateSwipeContent()
+          }
+          .width(this.getSwipeButtonHeight())
+          .height(this.getSwipeButtonHeight())
+          .backgroundColor(Color.Transparent)
+          .padding(0)
+          .enabled(!this.isWorking)
+          .onClick(() => {
+            this.closeAllSwipeActions()
+            this.rebuildDocument(document)
+          })
+        }
       }
       .width(this.getSwipeButtonHeight())
       .height(this.getSwipeButtonHeight())
-      .backgroundColor(Color.Transparent)
-      .padding(0)
       .enabled(!this.isWorking)
-      .onClick(() => {
-        this.closeAllSwipeActions()
-        this.rebuildDocument(document)
-      })
-      .systemMaterial(new uiMaterial.ImmersiveMaterial({
-        style: uiMaterial.ImmersiveStyle.REGULAR,
-        interactive: true,
-        lightEffect: { color: undefined }
-      }))
+      .clip(false)
     }
     .width(72)
     .height('100%')
@@ -968,23 +981,33 @@ export struct KnowledgeBasePanel {
   @Builder
   private DeleteSwipePanel(document: KnowledgeDocument) {
     Row() {
-      Button({ type: ButtonType.Circle, stateEffect: false }) {
-        this.DeleteSwipeContent()
+      Stack({ alignContent: Alignment.TopStart }) {
+        ImmersiveButtonSurface({
+          materialFactory: () => (new uiMaterial.ImmersiveMaterial({
+            style: uiMaterial.ImmersiveStyle.REGULAR,
+            interactive: true,
+            lightEffect: { color: undefined }
+          })),
+          cornerRadius: undefined
+        }) {
+          Button({ type: ButtonType.Circle, stateEffect: false }) {
+            this.DeleteSwipeContent()
+          }
+          .width(this.getSwipeButtonHeight())
+          .height(this.getSwipeButtonHeight())
+          .backgroundColor(Color.Transparent)
+          .padding(0)
+          .enabled(!this.isWorking)
+          .onClick(() => {
+            this.closeAllSwipeActions()
+            this.requestDeleteDocument(document)
+          })
+        }
       }
       .width(this.getSwipeButtonHeight())
       .height(this.getSwipeButtonHeight())
-      .backgroundColor(Color.Transparent)
-      .padding(0)
       .enabled(!this.isWorking)
-      .onClick(() => {
-        this.closeAllSwipeActions()
-        this.requestDeleteDocument(document)
-      })
-      .systemMaterial(new uiMaterial.ImmersiveMaterial({
-        style: uiMaterial.ImmersiveStyle.REGULAR,
-        interactive: true,
-        lightEffect: { color: undefined }
-      }))
+      .clip(false)
     }
     .width(64)
     .height('100%')
@@ -1055,43 +1078,21 @@ export struct KnowledgeBasePanel {
   }
 
   @Builder
-  private ImmersiveDocumentCard(document: KnowledgeDocument) {
+  private StandardDocumentCard(document: KnowledgeDocument) {
     Row({ space: 10 }) {
       this.DocumentCardContent(document)
     }
     .width('100%')
     .padding({ left: 12, right: 12, top: 10, bottom: 10 })
-    .borderRadius(12)
-    .border({
-      width: 0.5,
-      color: getAppUiState().themeDivider
-    })
-    .onClick(() => {
-      this.handleDocumentTap(document)
-    })
-    .systemMaterial(new uiMaterial.ImmersiveMaterial({
-      style: uiMaterial.ImmersiveStyle.REGULAR,
-      materialColor: Color.Transparent,
-      interactive: false,
-      lightEffect: { color: undefined }
-    }))
-  }
-
-  @Builder
-  private GaussianBlurDocumentCard(document: KnowledgeDocument) {
-    Row({ space: 10 }) {
-      this.DocumentCardContent(document)
-    }
-    .width('100%')
-    .padding({ left: 12, right: 12, top: 10, bottom: 10 })
-    .borderRadius(12)
+    .borderRadius(LIST_MATERIAL_CARD_RADIUS)
     .clip(true)
     .border({
       width: 0.5,
       color: getAppUiState().themeDivider
     })
     .backgroundColor(Color.Transparent)
-    .backgroundBlurStyle(BlurStyle.COMPONENT_REGULAR)
+    .backdropBlur(this.knowledgeListImmersiveMaterial ? 0 : 24)
+    .shadow(getBlurBottomShadow(!this.knowledgeListImmersiveMaterial))
     .onClick(() => {
       this.handleDocumentTap(document)
     })
@@ -1101,10 +1102,10 @@ export struct KnowledgeBasePanel {
   private DocumentCard(document: KnowledgeDocument) {
     if (this.isManuscriptMode) {
       this.ManuscriptDocumentRow(document)
-    } else if (this.knowledgeListImmersiveMaterial) {
-      this.ImmersiveDocumentCard(document)
     } else {
-      this.GaussianBlurDocumentCard(document)
+      ImmersiveListSurface({ isImmersive: this.knowledgeListImmersiveMaterial }) {
+        this.StandardDocumentCard(document)
+      }
     }
   }
 
@@ -1181,68 +1182,56 @@ export struct KnowledgeBasePanel {
 
   @Builder
   private DocumentCategoryHeader(categoryKey: string) {
+    Column() {
+      ImmersiveListSurface({ isImmersive: this.knowledgeListImmersiveMaterial, cornerRadius: 14 }) {
+        this.DocumentCategoryHeaderRow(categoryKey)
+      }
+    }
+    .width('100%')
+    .clip(false)
+    .margin({ bottom: this.isManuscriptMode ? 0 : 8 })
+  }
+
+  @Builder
+  private DocumentCategoryHeaderRow(categoryKey: string) {
     Row({ space: 10 }) {
       this.DocumentCategoryHeaderContent(categoryKey)
     }
     .width('100%')
     .height(this.isManuscriptMode ? 64 : 60)
     .padding({ left: this.isManuscriptMode ? 4 : 12, right: this.isManuscriptMode ? 4 : 10 })
-    .margin({
-      bottom: this.isManuscriptMode ? 0 : 8
-    })
     .borderRadius(this.isManuscriptMode ? 0 : 14)
-    .backgroundColor(this.isManuscriptMode
-      ? Color.Transparent
-      : this.getCategoryCardTint(categoryKey))
+    .backgroundColor(Color.Transparent)
     .border({
       width: this.isManuscriptMode ? { bottom: 1 } : 0.5,
       color: this.isManuscriptMode
         ? getAppUiState().themeDivider
         : this.getCategoryCardBorderColor(categoryKey)
     })
-    .systemMaterial(new uiMaterial.ImmersiveMaterial({
-      style: uiMaterial.ImmersiveStyle.REGULAR,
-      materialColor: this.isManuscriptMode ? Color.Transparent : this.getCategoryCardTint(categoryKey),
-      applyShadow: !this.isManuscriptMode,
-      interactive: false,
-      lightEffect: this.isManuscriptMode ? undefined : { color: undefined }
-    }))
+    .backdropBlur(this.isManuscriptMode || this.knowledgeListImmersiveMaterial ? 0 : 24)
+    .shadow(getBlurBottomShadow(!this.isManuscriptMode && !this.knowledgeListImmersiveMaterial))
   }
 
   @Builder
-  private ImmersiveCollapsedStackLayer(categoryKey: string, layer: number) {
-    Row()
-      .width(this.getStackLayerWidth(layer))
-      .height(this.getStackLayerHeight(layer))
-      .borderRadius({ bottomLeft: 12, bottomRight: 12 })
-      .border({
-        width: { left: 0.5, right: 0.5, bottom: 0.5 },
-        color: getAppUiState().themeDivider
-      })
-      .opacity(this.getStackLayerOpacity(layer))
-      .systemMaterial(new uiMaterial.ImmersiveMaterial({
-        style: uiMaterial.ImmersiveStyle.REGULAR,
-        materialColor: Color.Transparent,
-        applyShadow: true,
-        interactive: false,
-        lightEffect: { color: undefined }
-      }))
-  }
-
-  @Builder
-  private GaussianCollapsedStackLayer(categoryKey: string, layer: number) {
-    Row()
-      .width(this.getStackLayerWidth(layer))
-      .height(this.getStackLayerHeight(layer))
-      .borderRadius({ bottomLeft: 12, bottomRight: 12 })
-      .clip(true)
-      .backgroundColor(Color.Transparent)
-      .backgroundBlurStyle(BlurStyle.COMPONENT_REGULAR)
-      .border({
-        width: { left: 0.5, right: 0.5, bottom: 0.5 },
-        color: getAppUiState().themeDivider
-      })
-      .opacity(this.getStackLayerOpacity(layer))
+  private CollapsedStackLayer(categoryKey: string, layer: number) {
+    ImmersiveListSurface({
+      isImmersive: this.knowledgeListImmersiveMaterial,
+      layoutWidth: this.getStackLayerWidth(layer),
+      cornerRadius: { topLeft: 0, topRight: 0, bottomLeft: 12, bottomRight: 12 }
+    }) {
+      Row()
+        .width('100%')
+        .height(this.getStackLayerHeight(layer))
+        .borderRadius({ bottomLeft: 12, bottomRight: 12 })
+        .clip(true)
+        .backgroundColor(Color.Transparent)
+        .backdropBlur(this.knowledgeListImmersiveMaterial ? 0 : 24)
+        .shadow(getBlurBottomShadow(!this.knowledgeListImmersiveMaterial))
+        .border({
+          width: { left: 0.5, right: 0.5, bottom: 0.5 },
+          color: getAppUiState().themeDivider
+        })
+    }
   }
 
   @Builder
@@ -1252,13 +1241,10 @@ export struct KnowledgeBasePanel {
         Column() {
           ForEach(this.getCollapsedStackLayers(categoryKey), (layer: number) => {
             Column() {
-              if (this.knowledgeListImmersiveMaterial) {
-                this.ImmersiveCollapsedStackLayer(categoryKey, layer)
-              } else {
-                this.GaussianCollapsedStackLayer(categoryKey, layer)
-              }
+              this.CollapsedStackLayer(categoryKey, layer)
             }
             .width('100%')
+            .opacity(this.getStackLayerOpacity(layer))
             .alignItems(HorizontalAlign.Center)
             .transition(this.buildStackLayerTransition(layer))
           }, (layer: number): string => `${categoryKey}_stack_${layer}`)
@@ -1293,7 +1279,7 @@ export struct KnowledgeBasePanel {
             start: this.UpdateSwipePanel(document),
             end: this.DeleteSwipePanel(document)
           })
-          .borderRadius(this.isManuscriptMode ? 0 : 12)
+          .borderRadius(this.isManuscriptMode ? 0 : LIST_MATERIAL_CARD_RADIUS)
           .clip(false)
           .transition(this.buildDocumentCardTransition(document))
         },

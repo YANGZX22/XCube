@@ -1,6 +1,7 @@
 import { getAppUiState } from '../../state/AppUiState'
 import { getHdsTopNavigationMaskExtraHeight } from '../../utils/HdsVisualEffectUtil'
 import { withColorAlpha } from '../../utils/ColorAlphaUtils'
+import { PlainNavigationButtonModifier, shouldUseDrawnNavigation } from '../../utils/DrawnNavigationSupport'
 
 @ComponentV2
 export struct SettingsCompactTitleBarContent {
@@ -10,17 +11,37 @@ export struct SettingsCompactTitleBarContent {
   @Event onBack: () => void = () => {}
 
   build() {
-    Row() {
-      Text(this.title)
-        .fontSize(18)
-        .fontWeight(FontWeight.Bold)
-        .fontColor($r('app.color.text_primary'))
-        .layoutWeight(1)
+    Stack({ alignContent: Alignment.TopStart }) {
+      Row() {
+        Text(this.title)
+          .fontSize(18)
+          .fontWeight(FontWeight.Bold)
+          .fontColor($r('app.color.text_primary'))
+          .layoutWeight(1)
+      }
+      .width('100%')
+      .height(56)
+      .padding({ left: this.titleStartInset, right: this.titleEndInset })
+      .alignItems(VerticalAlign.Center)
+      if (shouldUseDrawnNavigation()) {
+        Button({ type: ButtonType.Circle, stateEffect: false }) {
+          SymbolGlyph($r('sys.symbol.chevron_left'))
+            .fontSize(20)
+            .fontColor([$r('app.color.text_primary')])
+        }
+        .width(40)
+        .height(40)
+        .padding(0)
+        .backgroundColor(withColorAlpha(getAppUiState().themePrimary, '12'))
+        .borderRadius(20)
+        .attributeModifier(new PlainNavigationButtonModifier())
+        .position({ x: 16, y: 8 })
+        .accessibilityText($r('app.string.action_back'))
+        .onClick(() => this.onBack())
+      }
     }
     .width('100%')
     .height(56)
-    .padding({ left: this.titleStartInset, right: this.titleEndInset })
-    .alignItems(VerticalAlign.Center)
   }
 }
 

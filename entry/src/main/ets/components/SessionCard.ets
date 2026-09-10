@@ -1,3 +1,5 @@
+import { getBlurBottomShadow } from '../utils/BlurShadowUtils'
+import { ImmersiveListSurface, LIST_MATERIAL_CARD_RADIUS } from './ImmersiveListSurface'
 import { ChatSession } from '../models/ChatModels'
 import {
   getSessionDisplayPreviewText,
@@ -14,6 +16,9 @@ export struct SessionCard {
   @Param enableAnimation: boolean = true
   @Param enableContextMenu: boolean = true
   @Local scaleValue: number = 1
+  private get chatListImmersiveMaterial(): boolean {
+    return getAppUiState().chatListImmersiveMaterial
+  }
   private get isDarkMode(): boolean {
     return getAppUiState().isDarkMode
   }
@@ -37,9 +42,6 @@ export struct SessionCard {
   }
   private get themeTextTertiary(): string {
     return getAppUiState().themeTextTertiary
-  }
-  private get chatListImmersiveMaterial(): boolean {
-    return getAppUiState().chatListImmersiveMaterial
   }
   @Event onTap: () => void = () => {}
   @Event onDelete: () => void = () => {}
@@ -129,7 +131,7 @@ export struct SessionCard {
       .width(36)
       .height(36)
       .borderRadius(9)
-      .backgroundColor(this.themePrimaryLight)
+      .backgroundColor(Color.Transparent)
       .justifyContent(FlexAlign.Center)
       .alignItems(HorizontalAlign.Center)
 
@@ -177,7 +179,7 @@ export struct SessionCard {
     .width(36)
     .height(36)
     .borderRadius(9)
-    .backgroundColor(this.themePrimaryLight)
+    .backgroundColor(Color.Transparent)
     .justifyContent(FlexAlign.Center)
     .alignItems(HorizontalAlign.Center)
   }
@@ -265,42 +267,18 @@ export struct SessionCard {
   }
 
   @Builder
-  private ImmersiveSessionCard() {
+  private SessionCardRow() {
     Row() {
       this.SessionCardContent()
     }
     .width('100%')
-    .borderRadius(12)
-    .border({ width: 0.5, color: this.themeDivider })
-    .padding({ left: 12, right: 12, top: 10, bottom: 10 })
-    .onClick(() => {
-      this.onTap()
-    })
-    .bindContextMenu(this.enableContextMenu ? this.SessionContextMenu : undefined, ResponseType.LongPress, {
-      preview: this.SessionPreview,
-      systemMaterial: new uiMaterial.ImmersiveMaterial({
-        style: uiMaterial.ImmersiveStyle.THICK
-      })
-    })
-    .systemMaterial(new uiMaterial.ImmersiveMaterial({
-      style: uiMaterial.ImmersiveStyle.REGULAR,
-      interactive: false,
-      lightEffect: { color: undefined }
-    }))
-  }
-
-  @Builder
-  private GaussianBlurSessionCard() {
-    Row() {
-      this.SessionCardContent()
-    }
-    .width('100%')
-    .borderRadius(12)
+    .borderRadius(LIST_MATERIAL_CARD_RADIUS)
     .clip(true)
     .border({ width: 0.5, color: this.themeDivider })
     .padding({ left: 12, right: 12, top: 10, bottom: 10 })
     .backgroundColor(Color.Transparent)
-    .backgroundBlurStyle(BlurStyle.COMPONENT_REGULAR)
+    .backdropBlur(this.chatListImmersiveMaterial ? 0 : 24)
+    .shadow(getBlurBottomShadow(!this.chatListImmersiveMaterial))
     .onClick(() => {
       this.onTap()
     })
@@ -313,10 +291,8 @@ export struct SessionCard {
   }
 
   build() {
-    if (this.chatListImmersiveMaterial) {
-      this.ImmersiveSessionCard()
-    } else {
-      this.GaussianBlurSessionCard()
+    ImmersiveListSurface({ isImmersive: this.chatListImmersiveMaterial }) {
+      this.SessionCardRow()
     }
   }
 

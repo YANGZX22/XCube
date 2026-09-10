@@ -1,6 +1,7 @@
 import { ToolCall, ToolConfig, ToolPermissionLevel, ToolResult } from '../models/ChatModels'
 import { ASK_USER_TOOL_ID } from '../config/BuiltinTools'
 import { getToolRegistry, RegisteredTool, ToolExecutionContext, ToolRegistry } from './ToolRegistry'
+import { parseAskUserQuestions } from '../utils/AskUserQuestionUtils'
 
 interface ToolExecutionErrorLike {
   code?: number | string
@@ -428,6 +429,25 @@ export class ToolExecutionService {
       toolCall.sourceLabel = '内置工具'
     }
     toolCall.permissionLevel = 'read'
+
+    // 到执行阶段参数应已完整；坏 JSON 不能进入待回答栈，否则用户永远看不到问题。
+    // 不猜测缺失字符，只把结构化错误交回模型，让其重新提交有效的问题。
+    const parsedQuestions = parseAskUserQuestions(toolCall.arguments)
+    if (parsedQuestions.status !== 'ready') {
+      console.warn('ToolExecutionService', `Rejected ask_user arguments: ${parsedQuestions.status}`)
+      return new ToolResult(
+        toolCall.id,
+        JSON.stringify({
+          error: 'ask_user 参数无法解析，未向用户展示问题。',
+          code: 'INVALID_ASK_USER_ARGUMENTS',
+          reason: parsedQuestions.status,
+          message: '请重新调用 ask_user，arguments 必须为完整有效的 JSON 对象，包含非空 questions 数组；每项包含 id、question、selection_type，以及选择题的 options。'
+        }),
+        true,
+        toolCall.displayName,
+        toolCall.sourceLabel
+      )
+    }
 
     let answerJson: string | null = null
     try {

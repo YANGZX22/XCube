@@ -1,3 +1,7 @@
+import { DrawnFloatingTabBar } from '../components/DrawnFloatingTabBar'
+import { shouldUseDrawnNavigation } from '../utils/DrawnNavigationSupport'
+import { ImmersiveButtonSurface } from '../components/ImmersiveButtonSurface'
+import { SettingsCompactTitleBarContent } from '../components/settings/SettingsCompactPageHeader'
 import { SymbolGlyphModifier, uiMaterial } from '@kit.ArkUI'
 import { ModelProvider, ModelInfo, ProviderType } from '../models/ChatModels'
 import { ProviderViewModel } from '../viewmodels/ProviderViewModel'
@@ -17,9 +21,10 @@ import {
   HdsNavigationMenuItemOptions,
   HdsNavigationTitleBarOptions,
   HdsNavigationTitleMode,
-  HdsTabs,
-  hdsMaterial
+  HdsTabs
 } from '@kit.UIDesignKit'
+import { getHdsSystemMaterialEffect, HdsTabsBlurModifier, DrawnTabsContentModifier, getHdsMaterialLightColor } from '../utils/HdsMaterialSupport'
+import { shouldUseWrappedMaterial } from '../utils/WrappedMaterialSupport'
 import {
   buildHdsTopNavigationTitleBarOptionsForPage,
   getHdsTopNavigationContentTopPadding,
@@ -182,7 +187,7 @@ struct ModelManagePage {
   }
 
   private getFloatingListTopSpacerHeight(): number {
-    return this.isEmbeddedSettingsDetailPane() ? 0 : this.getCompactContentTopPadding()
+    return this.getCompactContentTopPadding()
   }
 
   private getCurrentTabIndex(): number {
@@ -203,8 +208,7 @@ struct ModelManagePage {
   }
 
   private getCompactTitleBarOptions(): HdsNavigationTitleBarOptions {
-    return buildHdsTopNavigationTitleBarOptionsForPage(this.materialType, this.materialLevel, this.windowWidthVp,
-      this.windowHeightVp, (): void => this.CompactTitleStackBuilder(), this.getManageMenus())
+    return buildHdsTopNavigationTitleBarOptionsForPage(this.materialType, this.materialLevel, this.windowWidthVp, this.windowHeightVp, (): void => this.CompactTitleStackBuilder(), this.getManageMenus(), this)
   }
 
   private hasExpandedDetailSelection(): boolean {
@@ -492,22 +496,10 @@ struct ModelManagePage {
   build() {
     Column() {
       if (this.showEmbeddedProviderDetailPage()) {
-        Column()
-          .width('100%')
-          .height(this.px2vp(this.topAvoidHeight))
-
         this.EmbeddedProviderDetailPage()
       } else if (this.isEmbeddedSettingsDetailPane()) {
         HdsNavigation() {
-          Column() {
-            Blank()
-              .width('100%')
-              .height(this.getCompactContentTopPadding())
-
-            this.CompactManageBody()
-          }
-          .width('100%')
-          .height('100%')
+          this.CompactManageBody()
         }
         .width('100%')
         .height('100%')
@@ -518,7 +510,7 @@ struct ModelManagePage {
           { statusBarContentColor: getHdsStatusBarContentColor() },
           { statusBarContentColor: getHdsStatusBarContentColor() }
         )
-        .hideBackButton(false)
+        .hideBackButton(shouldUseDrawnNavigation())
         .hideToolBar(true)
         .mode(NavigationMode.Stack)
         .ignoreLayoutSafeArea([LayoutSafeAreaType.SYSTEM], [LayoutSafeAreaEdge.TOP])
@@ -535,7 +527,7 @@ struct ModelManagePage {
           { statusBarContentColor: getHdsStatusBarContentColor() },
           { statusBarContentColor: getHdsStatusBarContentColor() }
         )
-        .hideBackButton(false)
+        .hideBackButton(shouldUseDrawnNavigation())
         .hideToolBar(true)
         .mode(NavigationMode.Stack)
         .ignoreLayoutSafeArea([LayoutSafeAreaType.SYSTEM], [LayoutSafeAreaEdge.TOP])
@@ -594,17 +586,11 @@ struct ModelManagePage {
 
   @Builder
   private CompactTitleStackBuilder() {
-    Row() {
-      Text($r('app.string.model_manage_title'))
-        .fontSize(18)
-        .fontWeight(FontWeight.Bold)
-        .fontColor($r('app.color.text_primary'))
-        .layoutWeight(1)
-    }
-    .width('100%')
-    .height(56)
-    .padding({ left: 64, right: 84 })
-    .alignItems(VerticalAlign.Center)
+    SettingsCompactTitleBarContent({
+      title: $r('app.string.model_manage_title'),
+      titleEndInset: 84,
+      onBack: (): void => this.handleBack()
+    })
   }
 
   @Builder
@@ -694,48 +680,74 @@ struct ModelManagePage {
   }
 
   @Builder
-  private FloatingManageTabs() {
-    HdsTabs({ barPosition: BarPosition.End, index: this.getCurrentTabIndex() }) {
-      TabContent() {
-        this.FloatingProviderList(ProviderManageTabKey.ENABLED, this.enabledProviderListScroller)
-      }
-      .tabBar(this.FloatingStatusTabBuilder(ProviderManageTabKey.ENABLED, $r('sys.symbol.checkmark_circle'),
-        $r('app.string.provider_tab_enabled')))
+  private DrawnManageTab(index: number) {
+    if (index === 0) {
+      this.FloatingStatusTabBuilder(ProviderManageTabKey.ENABLED, $r('sys.symbol.checkmark_circle'),
+        $r('app.string.provider_tab_enabled'))
+    }
+    else {
+      this.FloatingStatusTabBuilder(ProviderManageTabKey.DISABLED, $r('sys.symbol.xmark_circle'),
+        $r('app.string.provider_tab_disabled'))
+    }
+  }
 
-      TabContent() {
-        this.FloatingProviderList(ProviderManageTabKey.DISABLED, this.disabledProviderListScroller)
+  @Builder
+  private FloatingManageTabs() {
+    Stack({ alignContent: Alignment.Bottom }) {
+      HdsTabs({ barPosition: BarPosition.End, index: this.getCurrentTabIndex() }) {
+        TabContent() {
+          this.FloatingProviderList(ProviderManageTabKey.ENABLED, this.enabledProviderListScroller)
+        }
+        .tabBar(this.FloatingStatusTabBuilder(ProviderManageTabKey.ENABLED, $r('sys.symbol.checkmark_circle'),
+          $r('app.string.provider_tab_enabled')))
+
+        TabContent() {
+          this.FloatingProviderList(ProviderManageTabKey.DISABLED, this.disabledProviderListScroller)
+        }
+        .tabBar(this.FloatingStatusTabBuilder(ProviderManageTabKey.DISABLED, $r('sys.symbol.xmark_circle'),
+          $r('app.string.provider_tab_disabled')))
       }
-      .tabBar(this.FloatingStatusTabBuilder(ProviderManageTabKey.DISABLED, $r('sys.symbol.xmark_circle'),
-        $r('app.string.provider_tab_disabled')))
+      .width('100%')
+      .height('100%')
+      .barMode(BarMode.Fixed)
+      .barHeight(shouldUseDrawnNavigation() ? 0 : MODEL_MANAGE_FLOATING_TAB_BAR_HEIGHT)
+      .barOverlap(true)
+      .barPosition(BarPosition.End)
+      .vertical(false)
+      .scrollable(false)
+      .animationDuration(300)
+      .barFloatingStyle(shouldUseDrawnNavigation() ? undefined : {
+        barBottomMargin: this.getFloatingTabBottomMargin(),
+        barSideMargin: MODEL_MANAGE_FLOATING_TAB_BAR_SIDE_MARGIN,
+        barWidth: {
+          smallWidth: MODEL_MANAGE_FLOATING_TAB_BAR_WIDTH,
+          mediumWidth: MODEL_MANAGE_FLOATING_TAB_BAR_WIDTH,
+          largeWidth: MODEL_MANAGE_FLOATING_TAB_BAR_WIDTH
+        },
+        gradientMask: { maskColor: Color.Transparent },
+        lightColor: getHdsMaterialLightColor(Color.White),
+        systemMaterialEffect: getHdsSystemMaterialEffect()
+      })
+      .attributeModifier(shouldUseDrawnNavigation() ? new DrawnTabsContentModifier() : new HdsTabsBlurModifier(shouldUseWrappedMaterial()))
+      .onChange((index: number) => {
+        this.currentTabKey = this.getTabKeyByIndex(index)
+      })
+      if (shouldUseDrawnNavigation()) {
+        DrawnFloatingTabBar({
+          tabCount: 2,
+          selectedIndex: this.getCurrentTabIndex(),
+          barWidth: MODEL_MANAGE_FLOATING_TAB_BAR_WIDTH,
+          barHeight: MODEL_MANAGE_FLOATING_TAB_BAR_HEIGHT,
+          itemContent: (index: number): void => this.DrawnManageTab(index),
+          onSelect: (index: number) => {
+            this.currentTabKey = this.getTabKeyByIndex(index)
+          }
+        })
+        .margin({ bottom: this.getFloatingTabBottomMargin() })
+      }
     }
     .width('100%')
     .height('100%')
-    .barMode(BarMode.Fixed)
-    .barHeight(MODEL_MANAGE_FLOATING_TAB_BAR_HEIGHT)
-    .barOverlap(true)
-    .barPosition(BarPosition.End)
-    .vertical(false)
-    .scrollable(false)
-    .animationDuration(300)
-    .barBackgroundColor(Color.Transparent)
-    .barFloatingStyle({
-      barBottomMargin: this.getFloatingTabBottomMargin(),
-      barSideMargin: MODEL_MANAGE_FLOATING_TAB_BAR_SIDE_MARGIN,
-      barWidth: {
-        smallWidth: MODEL_MANAGE_FLOATING_TAB_BAR_WIDTH,
-        mediumWidth: MODEL_MANAGE_FLOATING_TAB_BAR_WIDTH,
-        largeWidth: MODEL_MANAGE_FLOATING_TAB_BAR_WIDTH
-      },
-      gradientMask: { maskColor: Color.Transparent },
-      lightColor: Color.White,
-      systemMaterialEffect: {
-        materialType: hdsMaterial.MaterialType.IMMERSIVE,
-        materialLevel: hdsMaterial.MaterialLevel.ADAPTIVE
-      }
-    })
-    .onChange((index: number) => {
-      this.currentTabKey = this.getTabKeyByIndex(index)
-    })
   }
 
   @Builder
@@ -743,12 +755,12 @@ struct ModelManagePage {
     Column({ space: 2 }) {
       SymbolGlyph(icon)
         .fontSize(22)
-        .fontColor([this.currentTabKey === tabKey ? this.themePrimary : $r('app.color.text_secondary')])
+        .fontColor([this.currentTabKey === tabKey ? (shouldUseDrawnNavigation() ? Color.White : this.themePrimary) : $r('app.color.text_secondary')])
 
       Text(title)
         .fontSize(10)
         .fontWeight(this.currentTabKey === tabKey ? FontWeight.Bold : FontWeight.Medium)
-        .fontColor(this.currentTabKey === tabKey ? this.themePrimary : $r('app.color.text_secondary'))
+        .fontColor(this.currentTabKey === tabKey ? (shouldUseDrawnNavigation() ? Color.White : this.themePrimary) : $r('app.color.text_secondary'))
         .maxLines(1)
         .textOverflow({ overflow: TextOverflow.Ellipsis })
     }
@@ -830,32 +842,41 @@ struct ModelManagePage {
 
         ListItem() {
           Column() {
-            Button() {
-              Row() {
-                SymbolGlyph($r('sys.symbol.plus_circle'))
-                  .fontSize(22)
-                  .fontColor([this.themePrimary])
+            Stack({ alignContent: Alignment.TopStart }) {
+              ImmersiveButtonSurface({
+                materialFactory: () => (new uiMaterial.ImmersiveMaterial({
+                  style: uiMaterial.ImmersiveStyle.REGULAR,
+                  materialColor: Color.Transparent,
+                  interactive: true,
+                  lightEffect: { color: undefined }
+                })),
+                cornerRadius: 24
+              }) {
+                Button() {
+                  Row() {
+                    SymbolGlyph($r('sys.symbol.plus_circle'))
+                      .fontSize(22)
+                      .fontColor([this.themePrimary])
 
-                Text($r('app.string.add_custom_provider'))
-                  .fontSize(15)
-                  .fontWeight(FontWeight.Medium)
-                  .fontColor(this.themePrimary)
-                  .margin({ left: 8 })
+                    Text($r('app.string.add_custom_provider'))
+                      .fontSize(15)
+                      .fontWeight(FontWeight.Medium)
+                      .fontColor(this.themePrimary)
+                      .margin({ left: 8 })
+                  }
+                }
+                .width('100%')
+                .height(56)
+                .backgroundColor(Color.Transparent)
+                .borderRadius(24)
+                .onClick(() => {
+                  this.openCreateProvider()
+                })
               }
             }
             .width('100%')
             .height(56)
-            .backgroundColor(Color.Transparent)
-            .borderRadius(24)
-            .systemMaterial(new uiMaterial.ImmersiveMaterial({
-              style: uiMaterial.ImmersiveStyle.REGULAR,
-              materialColor: Color.Transparent,
-              interactive: true,
-              lightEffect: { color: undefined }
-            }))
-            .onClick(() => {
-              this.openCreateProvider()
-            })
+            .clip(false)
           }
           .width('100%')
           .padding({ left: 16, right: 16, top: 8 })
@@ -955,32 +976,41 @@ struct ModelManagePage {
 
           ListItem() {
             Column() {
-              Button() {
-                Row() {
-                  SymbolGlyph($r('sys.symbol.plus_circle'))
-                    .fontSize(22)
-                    .fontColor([this.themePrimary])
+              Stack({ alignContent: Alignment.TopStart }) {
+                ImmersiveButtonSurface({
+                  materialFactory: () => (new uiMaterial.ImmersiveMaterial({
+                    style: uiMaterial.ImmersiveStyle.REGULAR,
+                    materialColor: Color.Transparent,
+                    interactive: true,
+                    lightEffect: { color: undefined }
+                  })),
+                  cornerRadius: 24
+                }) {
+                  Button() {
+                    Row() {
+                      SymbolGlyph($r('sys.symbol.plus_circle'))
+                        .fontSize(22)
+                        .fontColor([this.themePrimary])
 
-                  Text($r('app.string.add_custom_provider'))
-                    .fontSize(15)
-                    .fontWeight(FontWeight.Medium)
-                    .fontColor(this.themePrimary)
-                    .margin({ left: 8 })
+                      Text($r('app.string.add_custom_provider'))
+                        .fontSize(15)
+                        .fontWeight(FontWeight.Medium)
+                        .fontColor(this.themePrimary)
+                        .margin({ left: 8 })
+                    }
+                  }
+                  .width('100%')
+                  .height(56)
+                  .backgroundColor(Color.Transparent)
+                  .borderRadius(24)
+                  .onClick(() => {
+                    this.openCreateProvider()
+                  })
                 }
               }
               .width('100%')
               .height(56)
-              .backgroundColor(Color.Transparent)
-              .borderRadius(24)
-              .systemMaterial(new uiMaterial.ImmersiveMaterial({
-                style: uiMaterial.ImmersiveStyle.REGULAR,
-                materialColor: Color.Transparent,
-                interactive: true,
-                lightEffect: { color: undefined }
-              }))
-              .onClick(() => {
-                this.openCreateProvider()
-              })
+              .clip(false)
             }
             .width('100%')
             .padding({ left: 16, right: 16, top: 8 })
@@ -1069,32 +1099,41 @@ struct ModelManagePage {
 
           ListItem() {
             Column() {
-              Button() {
-                Row() {
-                  SymbolGlyph($r('sys.symbol.plus_circle'))
-                    .fontSize(22)
-                    .fontColor([this.themePrimary])
+              Stack({ alignContent: Alignment.TopStart }) {
+                ImmersiveButtonSurface({
+                  materialFactory: () => (new uiMaterial.ImmersiveMaterial({
+                    style: uiMaterial.ImmersiveStyle.REGULAR,
+                    materialColor: Color.Transparent,
+                    interactive: true,
+                    lightEffect: { color: undefined }
+                  })),
+                  cornerRadius: 24
+                }) {
+                  Button() {
+                    Row() {
+                      SymbolGlyph($r('sys.symbol.plus_circle'))
+                        .fontSize(22)
+                        .fontColor([this.themePrimary])
 
-                  Text($r('app.string.add_custom_provider'))
-                    .fontSize(15)
-                    .fontWeight(FontWeight.Medium)
-                    .fontColor(this.themePrimary)
-                    .margin({ left: 8 })
+                      Text($r('app.string.add_custom_provider'))
+                        .fontSize(15)
+                        .fontWeight(FontWeight.Medium)
+                        .fontColor(this.themePrimary)
+                        .margin({ left: 8 })
+                    }
+                  }
+                  .width('100%')
+                  .height(56)
+                  .backgroundColor(Color.Transparent)
+                  .borderRadius(24)
+                  .onClick(() => {
+                    this.openCreateProvider()
+                  })
                 }
               }
               .width('100%')
               .height(56)
-              .backgroundColor(Color.Transparent)
-              .borderRadius(24)
-              .systemMaterial(new uiMaterial.ImmersiveMaterial({
-                style: uiMaterial.ImmersiveStyle.REGULAR,
-                materialColor: Color.Transparent,
-                interactive: true,
-                lightEffect: { color: undefined }
-              }))
-              .onClick(() => {
-                this.openCreateProvider()
-              })
+              .clip(false)
             }
             .width('100%')
             .padding({ left: 16, right: 16, top: 8 })
@@ -1118,36 +1157,46 @@ struct ModelManagePage {
 
   @Builder
   private ProviderStatusTabBar(title: Resource, tabKey: ProviderManageTabKey) {
-    Button({ type: ButtonType.Normal, stateEffect: false }) {
-      Row() {
-        Text(title)
-          .fontSize(14)
-          .fontWeight(this.currentTabKey === tabKey ? FontWeight.Bold : FontWeight.Medium)
-          .fontColor(this.currentTabKey === tabKey ? this.themeUserBubbleText : $r('app.color.text_secondary'))
+    Stack({ alignContent: Alignment.TopStart }) {
+      ImmersiveButtonSurface({
+        materialFactory: () => (new uiMaterial.ImmersiveMaterial({
+          style: uiMaterial.ImmersiveStyle.ULTRA_THIN,
+          applyShadow: true,
+          interactive: true,
+          lightEffect: { color: Color.White }
+        })),
+        fallbackShadow: true,
+        cornerRadius: 20
+      }) {
+        Button({ type: ButtonType.Normal, stateEffect: false }) {
+          Row() {
+            Text(title)
+              .fontSize(14)
+              .fontWeight(this.currentTabKey === tabKey ? FontWeight.Bold : FontWeight.Medium)
+              .fontColor(this.currentTabKey === tabKey ? this.themeUserBubbleText : $r('app.color.text_secondary'))
+          }
+          .width('100%')
+          .height('100%')
+          .justifyContent(FlexAlign.Center)
+          .borderRadius(20)
+          .backgroundColor(this.currentTabKey === tabKey ? this.themePrimary : Color.Transparent)
+        }
+        .height(40)
+        .padding(0)
+        .borderRadius(20)
+        .clip(true)
+        .backgroundColor(Color.Transparent)
+        .onClick(() => {
+          if (this.currentTabKey !== tabKey) {
+            this.currentTabKey = tabKey
+          }
+        })
+        .width('100%')
       }
-      .width('100%')
-      .height('100%')
-      .justifyContent(FlexAlign.Center)
-      .borderRadius(20)
-      .backgroundColor(this.currentTabKey === tabKey ? this.themePrimary : Color.Transparent)
     }
     .layoutWeight(1)
     .height(40)
-    .padding(0)
-    .borderRadius(20)
-    .clip(true)
-    .backgroundColor(Color.Transparent)
-    .systemMaterial(new uiMaterial.ImmersiveMaterial({
-      style: uiMaterial.ImmersiveStyle.ULTRA_THIN,
-      applyShadow: true,
-      interactive: true,
-      lightEffect: { color: Color.White }
-    }))
-    .onClick(() => {
-      if (this.currentTabKey !== tabKey) {
-        this.currentTabKey = tabKey
-      }
-    })
+    .clip(false)
   }
 
   @Builder

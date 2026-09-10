@@ -11,6 +11,7 @@ import { ImmersiveSheetHeader } from './ImmersiveSheetHeader'
 import { VisualEffectsMode } from '../models/ThemeColors'
 import { MANUSCRIPT_BODY_FONT, MANUSCRIPT_COMPOSER_TOOLBAR_HEIGHT } from '../utils/ManuscriptVisualUtils'
 import { isChineseAppLanguage } from '../utils/LocalizedTextUtils'
+import { InteractiveMaterialButton } from './InteractiveMaterialButton'
 
 @ComponentV2
 export struct ChatToolbar {
@@ -170,23 +171,23 @@ export struct ChatToolbar {
 
         if (!this.isManuscriptMode) {
           if (this.showScrollTopAction) {
-            this.QuickActionImmersiveButton($r('sys.symbol.arrow_up_to_line'), false,
+            this.QuickActionImmersiveButton($r('sys.symbol.arrow_up_to_line'), (): boolean => false,
               (): void => this.onScrollTopAction())
           }
           if (this.showScrollBottomAction) {
-            this.QuickActionImmersiveButton($r('sys.symbol.chevron_down'), this.scrollBottomActionLoading,
+            this.QuickActionImmersiveButton($r('sys.symbol.chevron_down'), (): boolean => this.scrollBottomActionLoading,
               (): void => this.onScrollBottomAction())
           }
           if (this.showHistoryAction) {
-            this.QuickActionImmersiveButton($r('sys.symbol.ellipsis_message'), false,
+            this.QuickActionImmersiveButton($r('sys.symbol.ellipsis_message'), (): boolean => false,
               (): void => this.onHistoryAction())
           }
           if (this.showCanvasAction) {
-            this.QuickActionImmersiveButton($r('sys.symbol.paintbrush_pointed_waveform'), false,
+            this.QuickActionImmersiveButton($r('sys.symbol.paintbrush_pointed_waveform'), (): boolean => false,
               (): void => this.onCanvasAction())
           }
           if (this.showPlanAction) {
-            this.QuickActionImmersiveButton($r('sys.symbol.list_checkmark'), false,
+            this.QuickActionImmersiveButton($r('sys.symbol.list_checkmark'), (): boolean => false,
               (): void => this.onPlanAction())
           }
         }
@@ -209,37 +210,36 @@ export struct ChatToolbar {
   }
 
   @Builder
-  private QuickActionImmersiveButton(icon: Resource, isLoading: boolean, onClick: () => void) {
-    Button({ type: ButtonType.Circle, stateEffect: false }) {
-      Stack({ alignContent: Alignment.Center }) {
-        if (isLoading) {
-          Progress({ value: 25, total: 100, type: ProgressType.Ring })
-            .width(30)
-            .height(30)
-            .color(this.themePrimary)
-            .backgroundColor(Color.Transparent)
-            .style({ strokeWidth: 2, shadow: false, enableScanEffect: false })
-            .hitTestBehavior(HitTestMode.None)
-        }
+  private QuickActionImmersiveButton(icon: Resource, isLoading: () => boolean, onClick: () => void) {
+    Stack() {
+      InteractiveMaterialButton({
+        surfaceWidth: 36,
+        surfaceHeight: 36,
+        buttonType: ButtonType.Circle,
+        onActivate: onClick
+      }) {
+        Stack({ alignContent: Alignment.Center }) {
+          if (isLoading()) {
+            Progress({ value: 25, total: 100, type: ProgressType.Ring })
+              .width(30)
+              .height(30)
+              .color(this.themePrimary)
+              .backgroundColor(Color.Transparent)
+              .style({ strokeWidth: 2, shadow: false, enableScanEffect: false })
+              .hitTestBehavior(HitTestMode.None)
+          }
 
-        SymbolGlyph(icon)
-          .fontSize(isLoading ? 14 : 17)
-          .fontColor([this.themePrimary])
+          SymbolGlyph(icon)
+            .fontSize(isLoading() ? 14 : 17)
+            .fontColor([this.themePrimary])
+        }
+        .width(36)
+        .height(36)
       }
-      .width(36)
-      .height(36)
     }
     .width(36)
     .height(36)
-    .padding(0)
-    .backgroundColor(Color.Transparent)
-    .systemMaterial(new uiMaterial.ImmersiveMaterial({
-      style: uiMaterial.ImmersiveStyle.REGULAR,
-      applyShadow: false,
-      interactive: true,
-      lightEffect: { color: undefined }
-    }))
-    .onClick(onClick)
+    .clip(false)
     .transition(
       TransitionEffect.OPACITY.combine(
         TransitionEffect.scale({ x: 0.8, y: 0.8 })
@@ -273,23 +273,15 @@ export struct ChatToolbar {
         color: this.hasSelectedTools ? this.manuscriptAccentDeep : this.manuscriptAccent
       })
     } else {
-      Button({ type: ButtonType.Normal, stateEffect: false }) {
+      InteractiveMaterialButton({
+        surfaceWidth: this.getToolChipWidth(),
+        surfaceHeight: this.getToolbarChipBarHeight(),
+        onActivate: () => {
+          this.onOpenTools()
+        }
+      }) {
         this.ToolChipContent()
       }
-      .width(this.getToolChipWidth())
-      .height(this.getToolbarChipBarHeight())
-      .padding(0)
-      .backgroundColor(Color.Transparent)
-      .borderRadius(Math.min(this.getToolChipWidth(), this.getToolbarChipBarHeight()) / 2)
-      .onClick(() => {
-        this.onOpenTools()
-      })
-      .systemMaterial(new uiMaterial.ImmersiveMaterial({
-        style: uiMaterial.ImmersiveStyle.REGULAR,
-        applyShadow: false,
-        interactive: true,
-        lightEffect: { color: undefined }
-      }))
     }
   }
 
@@ -356,17 +348,20 @@ export struct ChatToolbar {
         }
       })
     } else {
-      Button({ type: ButtonType.Normal, stateEffect: false }) {
-        this.ReasoningChipContent()
+      Stack() {
+        InteractiveMaterialButton({
+          surfaceWidth: this.getReasoningChipWidth(),
+          surfaceHeight: this.getToolbarChipBarHeight(),
+          onActivate: () => {
+            this.showReasoningPanel = true
+          }
+        }) {
+          this.ReasoningChipContent()
+        }
       }
       .width(this.getReasoningChipWidth())
       .height(this.getToolbarChipBarHeight())
-      .padding(0)
-      .backgroundColor(Color.Transparent)
-      .borderRadius(Math.min(this.getReasoningChipWidth(), this.getToolbarChipBarHeight()) / 2)
-      .onClick(() => {
-        this.showReasoningPanel = true
-      })
+      .clip(false)
       .bindSheet($$this.showReasoningPanel, this.ReasoningSliderSheet(), {
         height: SheetSize.FIT_CONTENT,
         dragBar: true,
@@ -380,12 +375,6 @@ export struct ChatToolbar {
           this.showReasoningPanel = false
         }
       })
-      .systemMaterial(new uiMaterial.ImmersiveMaterial({
-        style: uiMaterial.ImmersiveStyle.REGULAR,
-        applyShadow: false,
-        interactive: true,
-        lightEffect: { color: undefined }
-      }))
     }
   }
 
@@ -461,27 +450,24 @@ export struct ChatToolbar {
       })
       .opacity(this.knowledgeAvailable ? 1 : 0.45)
     } else {
-      Button({ type: ButtonType.Normal, stateEffect: false }) {
-        this.KnowledgeChipContent()
+      Stack() {
+        InteractiveMaterialButton({
+          surfaceWidth: this.getKnowledgeChipWidth(),
+          surfaceHeight: this.getToolbarChipBarHeight(),
+          isEnabled: this.knowledgeAvailable,
+          onActivate: () => {
+            if (this.knowledgeAvailable) {
+              this.onKnowledgeToggle(!this.knowledgeEnabled)
+            }
+          }
+        }) {
+          this.KnowledgeChipContent()
+        }
       }
       .width(this.getKnowledgeChipWidth())
       .height(this.getToolbarChipBarHeight())
-      .padding(0)
-      .backgroundColor(Color.Transparent)
-      .borderRadius(Math.min(this.getKnowledgeChipWidth(), this.getToolbarChipBarHeight()) / 2)
-      .enabled(this.knowledgeAvailable)
+      .clip(false)
       .opacity(this.knowledgeAvailable ? 1 : 0.45)
-      .onClick(() => {
-        if (this.knowledgeAvailable) {
-          this.onKnowledgeToggle(!this.knowledgeEnabled)
-        }
-      })
-      .systemMaterial(new uiMaterial.ImmersiveMaterial({
-        style: uiMaterial.ImmersiveStyle.REGULAR,
-        applyShadow: false,
-        interactive: this.knowledgeAvailable,
-        lightEffect: { color: undefined }
-      }))
     }
   }
 
@@ -542,23 +528,15 @@ export struct ChatToolbar {
         color: this.workspaceActive ? this.manuscriptAccentDeep : this.manuscriptAccent
       })
     } else {
-      Button({ type: ButtonType.Normal, stateEffect: false }) {
+      InteractiveMaterialButton({
+        surfaceWidth: this.getWorkspaceChipWidth(),
+        surfaceHeight: this.getToolbarChipBarHeight(),
+        onActivate: () => {
+          this.onOpenWorkspace()
+        }
+      }) {
         this.WorkspaceChipContent()
       }
-      .width(this.getWorkspaceChipWidth())
-      .height(this.getToolbarChipBarHeight())
-      .padding(0)
-      .backgroundColor(Color.Transparent)
-      .borderRadius(Math.min(this.getWorkspaceChipWidth(), this.getToolbarChipBarHeight()) / 2)
-      .onClick(() => {
-        this.onOpenWorkspace()
-      })
-      .systemMaterial(new uiMaterial.ImmersiveMaterial({
-        style: uiMaterial.ImmersiveStyle.REGULAR,
-        applyShadow: false,
-        interactive: true,
-        lightEffect: { color: undefined }
-      }))
     }
   }
 

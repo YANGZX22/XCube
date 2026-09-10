@@ -1,5 +1,5 @@
+import { getBlurBottomShadow } from '../../utils/BlurShadowUtils'
 import { bundleManager } from '@kit.AbilityKit'
-import { uiMaterial } from '@kit.ArkUI'
 import { SettingsRouteName } from '../../config/SettingsRouteName'
 import { VisualEffectsMode } from '../../models/ThemeColors'
 import { getAppUiState } from '../../state/AppUiState'
@@ -68,7 +68,7 @@ export struct IndexSettingsPanel {
       this.versionName = info.versionName
     } catch (err) {
       console.error('IndexSettingsPanel', `Get version failed: ${JSON.stringify(err)}`)
-      this.versionName = '1.3.6'
+      this.versionName = '2.0.0'
     }
   }
 
@@ -440,11 +440,8 @@ export struct IndexSettingsPanel {
     .backgroundColor(Color.Transparent)
     .borderRadius(this.isManuscriptMode ? 0 : (this.sidebarMode ? 20 : 22))
     .clip(!this.isManuscriptMode)
-    .systemMaterial(this.isManuscriptMode ? undefined : new uiMaterial.ImmersiveMaterial({
-      style: uiMaterial.ImmersiveStyle.REGULAR,
-      interactive: false,
-      lightEffect: { color: undefined }
-    }))
+    .backdropBlur(this.isManuscriptMode ? 0 : 24)
+    .shadow(getBlurBottomShadow(!(this.isManuscriptMode)))
   }
 
   build() {

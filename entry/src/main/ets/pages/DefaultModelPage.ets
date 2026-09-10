@@ -1,3 +1,6 @@
+import { shouldUseDrawnNavigation } from '../utils/DrawnNavigationSupport'
+import { ImmersiveButtonSurface } from '../components/ImmersiveButtonSurface'
+import { getBlurBottomShadow } from '../utils/BlurShadowUtils'
 // 默认模型配置页面
 import { DefaultModelService } from '../services/DefaultModelService'
 import { ProviderViewModel } from '../viewmodels/ProviderViewModel'
@@ -100,8 +103,7 @@ struct DefaultModelPage {
   }
 
   private getCompactTitleBarOptions(): HdsNavigationTitleBarOptions {
-    return buildHdsTopNavigationTitleBarOptionsForPage(this.materialType, this.materialLevel, this.windowWidthVp,
-      this.windowHeightVp, (): void => this.CompactTitleStackBuilder())
+    return buildHdsTopNavigationTitleBarOptionsForPage(this.materialType, this.materialLevel, this.windowWidthVp, this.windowHeightVp, (): void => this.CompactTitleStackBuilder(), [], this)
   }
 
   aboutToAppear(): void {
@@ -129,11 +131,9 @@ struct DefaultModelPage {
     Scroll(this.compactScroller) {
       Row() {
         Column() {
-          if (!this.isDetailPaneMode()) {
-            Blank()
-              .width('100%')
-              .height(this.getCompactContentTopPadding())
-          }
+          Blank()
+            .width('100%')
+            .height(this.getCompactContentTopPadding())
 
           if (this.isExpandedLayout()) {
             this.ExpandedModelSections()
@@ -189,15 +189,7 @@ struct DefaultModelPage {
     Column() {
       if (this.isDetailPaneMode()) {
         HdsNavigation() {
-          Column() {
-            Blank()
-              .width('100%')
-              .height(this.getCompactContentTopPadding())
-
-            this.PageContent()
-          }
-          .width('100%')
-          .height('100%')
+          this.PageContent()
         }
         .width('100%')
         .height('100%')
@@ -208,7 +200,7 @@ struct DefaultModelPage {
           { statusBarContentColor: getHdsStatusBarContentColor() },
           { statusBarContentColor: getHdsStatusBarContentColor() }
         )
-        .hideBackButton(false)
+        .hideBackButton(shouldUseDrawnNavigation())
         .hideToolBar(true)
         .mode(NavigationMode.Stack)
         .ignoreLayoutSafeArea([LayoutSafeAreaType.SYSTEM], [LayoutSafeAreaEdge.TOP])
@@ -225,7 +217,7 @@ struct DefaultModelPage {
           { statusBarContentColor: getHdsStatusBarContentColor() },
           { statusBarContentColor: getHdsStatusBarContentColor() }
         )
-        .hideBackButton(false)
+        .hideBackButton(shouldUseDrawnNavigation())
         .hideToolBar(true)
         .mode(NavigationMode.Stack)
         .ignoreLayoutSafeArea([LayoutSafeAreaType.SYSTEM], [LayoutSafeAreaEdge.TOP])
@@ -489,11 +481,8 @@ struct DefaultModelPage {
         .padding(16)
         .backgroundColor(Color.Transparent)
         .borderRadius(16)
-        .systemMaterial(new uiMaterial.ImmersiveMaterial({
-          style: uiMaterial.ImmersiveStyle.ULTRA_THIN,
-          materialColor: Color.Transparent,
-          applyShadow: false
-        }))
+        .backdropBlur(16)
+        .shadow(getBlurBottomShadow())
         .margin({ left: 16, right: 16, top: 16 })
         .layoutWeight(1)
         .onChange((value: string) => {
@@ -502,24 +491,34 @@ struct DefaultModelPage {
 
       // 按钮区域
       Row() {
-        Button($r('app.string.default_model_reset_prompt'))
-          .fontSize(15)
-          .fontColor(this.themePrimary)
-          .backgroundColor(Color.Transparent)
-          .borderRadius(22)
-          .border({ width: 1, color: this.themePrimaryLight })
-          .systemMaterial(new uiMaterial.ImmersiveMaterial({
-            style: uiMaterial.ImmersiveStyle.REGULAR,
-            materialColor: Color.Transparent,
-            applyShadow: false,
-            interactive: true,
-            lightEffect: { color: undefined }
-          }))
-          .height(44)
-          .width('100%')
-          .onClick(() => {
-            this.resetPrompt()
-          })
+        Stack({ alignContent: Alignment.TopStart }) {
+          ImmersiveButtonSurface({
+            materialFactory: () => (new uiMaterial.ImmersiveMaterial({
+                style: uiMaterial.ImmersiveStyle.REGULAR,
+                materialColor: Color.Transparent,
+                applyShadow: false,
+                interactive: true,
+                lightEffect: { color: undefined }
+              })),
+            fallbackShadow: false,
+            cornerRadius: 22
+          }) {
+            Button($r('app.string.default_model_reset_prompt'))
+              .fontSize(15)
+              .fontColor(this.themePrimary)
+              .backgroundColor(Color.Transparent)
+              .borderRadius(22)
+              .border({ width: 1, color: this.themePrimaryLight })
+              .height(44)
+              .width('100%')
+              .onClick(() => {
+                this.resetPrompt()
+              })
+          }
+        }
+        .height(44)
+        .width('100%')
+        .clip(false)
       }
       .width('100%')
       .padding({ left: 16, right: 16, top: 16, bottom: 32 })

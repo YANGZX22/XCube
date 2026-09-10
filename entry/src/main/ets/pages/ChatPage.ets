@@ -1,3 +1,6 @@
+import { shouldUseDrawnNavigation } from '../utils/DrawnNavigationSupport'
+import { ImmersiveButtonSurface } from '../components/ImmersiveButtonSurface'
+import { getBlurBottomShadow } from '../utils/BlurShadowUtils'
 import { KeyboardAvoidMode, SymbolGlyphModifier, uiMaterial } from '@kit.ArkUI'
 import { common } from '@kit.AbilityKit'
 import {
@@ -61,6 +64,7 @@ import {
   registerBuiltinTools
 } from '../config/BuiltinTools'
 import { AppStorageKeys } from '../config/AppStorageKeys'
+import { getChatAiNoticeExtraInsetVp } from '../config/ChatLayout'
 import { inputMethod } from '@kit.IMEKit'
 import { pasteboard } from '@kit.BasicServicesKit'
 import { webview } from '@kit.ArkWeb'
@@ -172,7 +176,7 @@ import {
 } from '../utils/ManuscriptVisualUtils'
 import { ManuscriptWorkingMark } from '../components/chat/ManuscriptWorkingIndicator'
 import { ImmersiveSheetHeader } from '../components/ImmersiveSheetHeader'
-import { AskUserCard } from '../components/AskUserCard'
+import { AskUserPromptSurface } from '../components/AskUserPromptSurface'
 import { MapRoutePageParams } from './MapRoutePage'
 import { PythonWorkspacePageParams } from './PythonWorkspacePage'
 import {
@@ -1337,19 +1341,14 @@ export struct ChatPage {
           }
           .width(this.getCanvasPanelWidthVp())
           .height(this.getCanvasPanelHeightVp())
-          .backgroundColor(this.isManuscriptMode ? this.themeSurface : Color.Transparent)
+          .backgroundColor(this.isManuscriptMode ? (this.isManuscriptMode ? this.themeSurface : Color.Transparent) : Color.Transparent)
           .borderRadius(this.isManuscriptMode ? 3 : 18)
           .border({
             width: this.isManuscriptMode ? 1 : 0,
             color: this.isManuscriptMode ? getAppUiState().themeDivider : this.themePrimary
           })
-          .systemMaterial(this.isManuscriptMode ? undefined : new uiMaterial.ImmersiveMaterial({
-            style: uiMaterial.ImmersiveStyle.REGULAR,
-            materialColor: Color.Transparent,
-            applyShadow: false,
-            interactive: false,
-            lightEffect: undefined
-          }))
+          .backdropBlur(this.isManuscriptMode ? 0 : 24)
+          .shadow(getBlurBottomShadow(!(this.isManuscriptMode)))
           .transition(
             TransitionEffect.OPACITY.combine(
               TransitionEffect.translate({ x: 18 })
@@ -1421,107 +1420,148 @@ export struct ChatPage {
         .layoutWeight(1)
         .alignItems(HorizontalAlign.Start)
 
-        Button({ type: ButtonType.Circle }) {
-          SymbolGlyph($r('sys.symbol.arrow_2_circlepath'))
-            .fontSize(14)
-            .fontColor([this.themePrimary])
-            .rotate({ angle: this.canvasMarkdownSwitchRotation, centerX: '50%', centerY: '50%' })
+        Stack({ alignContent: Alignment.TopStart }) {
+          ImmersiveButtonSurface({
+            materialFactory: this.isManuscriptMode ? undefined : () => (new uiMaterial.ImmersiveMaterial({
+              style: uiMaterial.ImmersiveStyle.REGULAR,
+              materialColor: this.isCanvasMarkdownPreview ? this.themePrimaryLight : Color.Transparent,
+              applyShadow: false,
+              interactive: true,
+              lightEffect: { color: undefined }
+            })),
+            cornerRadius: this.isManuscriptMode ? 0 : 16
+          }) {
+            Button({ type: ButtonType.Circle }) {
+              SymbolGlyph($r('sys.symbol.arrow_2_circlepath'))
+                .fontSize(14)
+                .fontColor([this.themePrimary])
+                .rotate({ angle: this.canvasMarkdownSwitchRotation, centerX: '50%', centerY: '50%' })
+            }
+            .width(this.isManuscriptMode ? MANUSCRIPT_COMPACT_BAR_HEIGHT : 32)
+            .height(this.isManuscriptMode ? MANUSCRIPT_COMPACT_BAR_HEIGHT : 32)
+            .padding(0)
+            .backgroundColor(Color.Transparent)
+            .borderRadius(this.isManuscriptMode ? 0 : 16)
+            .border({ width: 0, color: Color.Transparent })
+            .stateEffect(this.isManuscriptMode)
+            .responseRegion(this.isManuscriptMode ? { x: -4, y: -4, width: 44, height: 44 } : undefined)
+            .onClick(() => {
+              this.setCanvasMarkdownPreview(!this.isCanvasMarkdownPreview)
+            })
+          }
         }
         .width(this.isManuscriptMode ? MANUSCRIPT_COMPACT_BAR_HEIGHT : 32)
         .height(this.isManuscriptMode ? MANUSCRIPT_COMPACT_BAR_HEIGHT : 32)
-        .padding(0)
-        .backgroundColor(Color.Transparent)
-        .borderRadius(this.isManuscriptMode ? 0 : 16)
-        .border({ width: 0, color: Color.Transparent })
-        .stateEffect(this.isManuscriptMode)
         .responseRegion(this.isManuscriptMode ? { x: -4, y: -4, width: 44, height: 44 } : undefined)
-        .systemMaterial(this.isManuscriptMode ? undefined : new uiMaterial.ImmersiveMaterial({
-          style: uiMaterial.ImmersiveStyle.REGULAR,
-          materialColor: this.isCanvasMarkdownPreview ? this.themePrimaryLight : Color.Transparent,
-          applyShadow: false,
-          interactive: true,
-          lightEffect: { color: undefined }
-        }))
-        .onClick(() => {
-          this.setCanvasMarkdownPreview(!this.isCanvasMarkdownPreview)
-        })
+        .clip(false)
 
-        Button({ type: ButtonType.Circle }) {
-          SymbolGlyph($r('sys.symbol.share'))
-            .fontSize(14)
-            .fontColor([this.themePrimary])
+        Stack({ alignContent: Alignment.TopStart }) {
+          ImmersiveButtonSurface({
+            materialFactory: this.isManuscriptMode ? undefined : () => (new uiMaterial.ImmersiveMaterial({
+              style: uiMaterial.ImmersiveStyle.REGULAR,
+              materialColor: Color.Transparent,
+              applyShadow: false,
+              interactive: true,
+              lightEffect: { color: undefined }
+            })),
+            cornerRadius: this.isManuscriptMode ? 0 : 16
+          }) {
+            Button({ type: ButtonType.Circle }) {
+              SymbolGlyph($r('sys.symbol.share'))
+                .fontSize(14)
+                .fontColor([this.themePrimary])
+            }
+            .width(this.isManuscriptMode ? MANUSCRIPT_COMPACT_BAR_HEIGHT : 32)
+            .height(this.isManuscriptMode ? MANUSCRIPT_COMPACT_BAR_HEIGHT : 32)
+            .padding(0)
+            .backgroundColor(Color.Transparent)
+            .borderRadius(this.isManuscriptMode ? 0 : 16)
+            .border({ width: 0, color: Color.Transparent })
+            .stateEffect(this.isManuscriptMode)
+            .responseRegion(this.isManuscriptMode ? { x: -4, y: -4, width: 44, height: 44 } : undefined)
+            .enabled(this.canvasDocumentContent.trim() !== '')
+            .onClick(() => {
+              this.handleCanvasShare().catch((error: Object): void => {
+                console.error('ChatPage', `Failed to open canvas share preview: ${JSON.stringify(error)}`)
+                this.showError(pickLocalizedText('Canvas 分享失败', 'Failed to share Canvas'))
+              })
+            })
+          }
         }
         .width(this.isManuscriptMode ? MANUSCRIPT_COMPACT_BAR_HEIGHT : 32)
         .height(this.isManuscriptMode ? MANUSCRIPT_COMPACT_BAR_HEIGHT : 32)
-        .padding(0)
-        .backgroundColor(Color.Transparent)
-        .borderRadius(this.isManuscriptMode ? 0 : 16)
-        .border({ width: 0, color: Color.Transparent })
-        .stateEffect(this.isManuscriptMode)
         .responseRegion(this.isManuscriptMode ? { x: -4, y: -4, width: 44, height: 44 } : undefined)
         .enabled(this.canvasDocumentContent.trim() !== '')
         .opacity(this.canvasDocumentContent.trim() !== '' ? 1 : 0.4)
-        .systemMaterial(this.isManuscriptMode ? undefined : new uiMaterial.ImmersiveMaterial({
-          style: uiMaterial.ImmersiveStyle.REGULAR,
-          materialColor: Color.Transparent,
-          applyShadow: false,
-          interactive: true,
-          lightEffect: { color: undefined }
-        }))
-        .onClick(() => {
-          this.handleCanvasShare().catch((error: Object): void => {
-            console.error('ChatPage', `Failed to open canvas share preview: ${JSON.stringify(error)}`)
-            this.showError(pickLocalizedText('Canvas 分享失败', 'Failed to share Canvas'))
-          })
-        })
+        .clip(false)
 
-        Button({ type: ButtonType.Circle }) {
-          SymbolGlyph($r('sys.symbol.trash'))
-            .fontSize(14)
-            .fontColor([$r('app.color.status_error')])
+        Stack({ alignContent: Alignment.TopStart }) {
+          ImmersiveButtonSurface({
+            materialFactory: this.isManuscriptMode ? undefined : () => (new uiMaterial.ImmersiveMaterial({
+              style: uiMaterial.ImmersiveStyle.REGULAR,
+              materialColor: Color.Transparent,
+              applyShadow: false,
+              interactive: true,
+              lightEffect: { color: undefined }
+            })),
+            cornerRadius: this.isManuscriptMode ? 0 : 16
+          }) {
+            Button({ type: ButtonType.Circle }) {
+              SymbolGlyph($r('sys.symbol.trash'))
+                .fontSize(14)
+                .fontColor([$r('app.color.status_error')])
+            }
+            .width(this.isManuscriptMode ? MANUSCRIPT_COMPACT_BAR_HEIGHT : 32)
+            .height(this.isManuscriptMode ? MANUSCRIPT_COMPACT_BAR_HEIGHT : 32)
+            .padding(0)
+            .backgroundColor(Color.Transparent)
+            .borderRadius(this.isManuscriptMode ? 0 : 16)
+            .border({ width: 0, color: Color.Transparent })
+            .stateEffect(this.isManuscriptMode)
+            .responseRegion(this.isManuscriptMode ? { x: -4, y: -4, width: 44, height: 44 } : undefined)
+            .onClick(() => {
+              this.handleCanvasClear()
+            })
+          }
         }
         .width(this.isManuscriptMode ? MANUSCRIPT_COMPACT_BAR_HEIGHT : 32)
         .height(this.isManuscriptMode ? MANUSCRIPT_COMPACT_BAR_HEIGHT : 32)
-        .padding(0)
-        .backgroundColor(Color.Transparent)
-        .borderRadius(this.isManuscriptMode ? 0 : 16)
-        .border({ width: 0, color: Color.Transparent })
-        .stateEffect(this.isManuscriptMode)
         .responseRegion(this.isManuscriptMode ? { x: -4, y: -4, width: 44, height: 44 } : undefined)
-        .systemMaterial(this.isManuscriptMode ? undefined : new uiMaterial.ImmersiveMaterial({
-          style: uiMaterial.ImmersiveStyle.REGULAR,
-          materialColor: Color.Transparent,
-          applyShadow: false,
-          interactive: true,
-          lightEffect: { color: undefined }
-        }))
-        .onClick(() => {
-          this.handleCanvasClear()
-        })
+        .clip(false)
 
-        Button({ type: ButtonType.Circle }) {
-          SymbolGlyph($r('sys.symbol.xmark'))
-            .fontSize(13)
-            .fontColor([$r('app.color.text_secondary')])
+        Stack({ alignContent: Alignment.TopStart }) {
+          ImmersiveButtonSurface({
+            materialFactory: this.isManuscriptMode ? undefined : () => (new uiMaterial.ImmersiveMaterial({
+              style: uiMaterial.ImmersiveStyle.REGULAR,
+              materialColor: Color.Transparent,
+              applyShadow: false,
+              interactive: true,
+              lightEffect: { color: undefined }
+            })),
+            cornerRadius: this.isManuscriptMode ? 0 : 16
+          }) {
+            Button({ type: ButtonType.Circle }) {
+              SymbolGlyph($r('sys.symbol.xmark'))
+                .fontSize(13)
+                .fontColor([$r('app.color.text_secondary')])
+            }
+            .width(this.isManuscriptMode ? MANUSCRIPT_COMPACT_BAR_HEIGHT : 32)
+            .height(this.isManuscriptMode ? MANUSCRIPT_COMPACT_BAR_HEIGHT : 32)
+            .padding(0)
+            .backgroundColor(Color.Transparent)
+            .borderRadius(this.isManuscriptMode ? 0 : 16)
+            .border({ width: 0, color: Color.Transparent })
+            .stateEffect(this.isManuscriptMode)
+            .responseRegion(this.isManuscriptMode ? { x: -4, y: -4, width: 44, height: 44 } : undefined)
+            .onClick(() => {
+              this.setCanvasPanelOpen(false)
+            })
+          }
         }
         .width(this.isManuscriptMode ? MANUSCRIPT_COMPACT_BAR_HEIGHT : 32)
         .height(this.isManuscriptMode ? MANUSCRIPT_COMPACT_BAR_HEIGHT : 32)
-        .padding(0)
-        .backgroundColor(Color.Transparent)
-        .borderRadius(this.isManuscriptMode ? 0 : 16)
-        .border({ width: 0, color: Color.Transparent })
-        .stateEffect(this.isManuscriptMode)
         .responseRegion(this.isManuscriptMode ? { x: -4, y: -4, width: 44, height: 44 } : undefined)
-        .systemMaterial(this.isManuscriptMode ? undefined : new uiMaterial.ImmersiveMaterial({
-          style: uiMaterial.ImmersiveStyle.REGULAR,
-          materialColor: Color.Transparent,
-          applyShadow: false,
-          interactive: true,
-          lightEffect: { color: undefined }
-        }))
-        .onClick(() => {
-          this.setCanvasPanelOpen(false)
-        })
+        .clip(false)
       }
       .width('100%')
       .height(this.isManuscriptMode ? MANUSCRIPT_COMPACT_BAR_HEIGHT : 38)
@@ -1544,12 +1584,8 @@ export struct ChatPage {
           width: this.isManuscriptMode ? { bottom: 1 } : 0,
           color: this.isManuscriptMode ? getAppUiState().themeDivider : this.themePrimary
         })
-        .systemMaterial(this.isManuscriptMode ? undefined : new uiMaterial.ImmersiveMaterial({
-          style: uiMaterial.ImmersiveStyle.ULTRA_THIN,
-          materialColor: Color.Transparent,
-          applyShadow: false,
-          lightEffect: undefined
-        }))
+        .backdropBlur(this.isManuscriptMode ? 0 : 16)
+        .shadow(getBlurBottomShadow(!(this.isManuscriptMode)))
         .padding({ left: 12, right: 12 })
         .onChange((value: string) => {
           this.handleCanvasTitleChanged(value)
@@ -1584,14 +1620,9 @@ export struct ChatPage {
           color: Color.Transparent
         })
         .margin(this.isManuscriptMode ? { left: 10, right: 10, bottom: 10 } : 0)
-        .backgroundColor(this.isManuscriptMode ? this.themeBackground : Color.Transparent)
-        .systemMaterial(this.isManuscriptMode ? undefined : new uiMaterial.ImmersiveMaterial({
-          style: uiMaterial.ImmersiveStyle.ULTRA_THIN,
-          materialColor: Color.Transparent,
-          applyShadow: false,
-          interactive: false,
-          lightEffect: undefined
-        }))
+        .backgroundColor(this.isManuscriptMode ? (this.isManuscriptMode ? this.themeBackground : Color.Transparent) : Color.Transparent)
+        .backdropBlur(this.isManuscriptMode ? 0 : 16)
+        .shadow(getBlurBottomShadow(!(this.isManuscriptMode)))
       } else {
         TextArea({
           text: this.canvasDocumentContent,
@@ -1608,12 +1639,8 @@ export struct ChatPage {
             width: 0,
             color: Color.Transparent
           })
-          .systemMaterial(this.isManuscriptMode ? undefined : new uiMaterial.ImmersiveMaterial({
-            style: uiMaterial.ImmersiveStyle.ULTRA_THIN,
-            materialColor: Color.Transparent,
-            applyShadow: false,
-            lightEffect: undefined
-          }))
+          .backdropBlur(this.isManuscriptMode ? 0 : 16)
+          .shadow(getBlurBottomShadow(!(this.isManuscriptMode)))
           .padding(this.isManuscriptMode ? { left: 18, right: 18, top: 16, bottom: 16 } : 12)
           .margin(this.isManuscriptMode ? { left: 10, right: 10, bottom: 10 } : 0)
           .onChange((value: string) => {
@@ -1636,19 +1663,14 @@ export struct ChatPage {
           }
           .width(this.getCanvasPanelWidthVp())
           .height(this.getCanvasPanelHeightVp())
-          .backgroundColor(this.isManuscriptMode ? this.themeSurface : Color.Transparent)
+          .backgroundColor(this.isManuscriptMode ? (this.isManuscriptMode ? this.themeSurface : Color.Transparent) : Color.Transparent)
           .borderRadius(this.isManuscriptMode ? 3 : 18)
           .border({
             width: this.isManuscriptMode ? 1 : 0,
             color: this.isManuscriptMode ? getAppUiState().themeDivider : this.themePrimary
           })
-          .systemMaterial(this.isManuscriptMode ? undefined : new uiMaterial.ImmersiveMaterial({
-            style: uiMaterial.ImmersiveStyle.REGULAR,
-            materialColor: Color.Transparent,
-            applyShadow: false,
-            interactive: false,
-            lightEffect: undefined
-          }))
+          .backdropBlur(this.isManuscriptMode ? 0 : 24)
+          .shadow(getBlurBottomShadow(!(this.isManuscriptMode)))
           .transition(
             TransitionEffect.OPACITY.combine(
               TransitionEffect.translate({ x: 18 })
@@ -3964,7 +3986,7 @@ export struct ChatPage {
       options.bottomBuilder = (): void => this.ChatTitleBottomExtensionBuilder()
       options.bottomBuilderHeightVp = CHAT_NAVIGATION_MANUSCRIPT_BOTTOM_EXTENSION_HEIGHT
     }
-    return buildHdsTopNavigationTitleBarOptions(options)
+    return buildHdsTopNavigationTitleBarOptions(options, this)
   }
 
   @Builder
@@ -3993,9 +4015,9 @@ export struct ChatPage {
       isTitleGenerating: this.isTitleGenerating,
       titleGenerateFailed: this.titleGenerateFailed,
       isSending: this.isSending,
-      titleStartInset: this.isManuscriptMode ? 8 : HDS_NAV_TITLE_SYSTEM_BACK_INSET,
+      titleStartInset: this.isManuscriptMode ? 8 : (shouldUseDrawnNavigation() ? 16 : HDS_NAV_TITLE_SYSTEM_BACK_INSET),
       titleEndInset: this.getTitleBarMenuEndInset(),
-      showLeadingBackAction: this.isManuscriptMode,
+      showLeadingBackAction: this.isManuscriptMode || shouldUseDrawnNavigation(),
       showNewChatAction: this.shouldShowTitleBarNewChatAction(),
       // 窗口未知时不显示进度，避免用默认值算出误导性的 100%
       showContextProgress: this.messages.length > 0 && this.contextUsage.resolved,
@@ -4038,17 +4060,16 @@ export struct ChatPage {
   private AskUserPromptOverlayBuilder() {
     ForEach(this.pendingAskUserCalls, (toolCall: ToolCall, index: number) => {
       Row() {
-        AskUserCard({
+        AskUserPromptSurface({
           toolCall: toolCall,
-          isAnswered: false,
-          compactMode: false,
+          questionArguments: toolCall.arguments,
           pendingCount: this.pendingAskUserCalls.length,
           onAnswer: (toolCallId: string, answerJson: string): void => {
             this.handleAskUserAnswer(toolCallId, answerJson)
           }
         })
-          .width('92%')
-          .constraintSize({ maxWidth: 560 })
+        .width('92%')
+        .constraintSize({ maxWidth: 560 })
       }
         .width('100%')
         .padding({ left: 12, right: 12 })
@@ -4595,7 +4616,7 @@ export struct ChatPage {
       { statusBarContentColor: this.getStatusBarContentColor() },
       { statusBarContentColor: this.getStatusBarContentColor() }
     )
-    .hideBackButton(this.isManuscriptMode)
+    .hideBackButton(this.isManuscriptMode || shouldUseDrawnNavigation())
     .ignoreLayoutSafeArea([LayoutSafeAreaType.SYSTEM], [LayoutSafeAreaEdge.TOP])
     .backgroundColor(this.themeBackground)
     .onReady((context: NavDestinationContext) => {
@@ -5090,7 +5111,8 @@ export struct ChatPage {
     if (this.inputAreaHeightVp > 0) {
       return this.inputAreaHeightVp + this.floatingButtonInputGapVp
     }
-    return this.floatingScrollButtonBottomOffsetVp + this.getFloatingOverlayBottomAvoidHeightVp()
+    return this.floatingScrollButtonBottomOffsetVp + this.getFloatingOverlayBottomAvoidHeightVp() +
+      getChatAiNoticeExtraInsetVp(this.getComposerBottomAvoidHeightVp())
   }
 
   private getScrollToTopButtonExtraOffsetY(): number {
@@ -5428,16 +5450,15 @@ export struct ChatPage {
           }
           .width(this.getHistoryPreviewSurfaceWidthVp())
           .height(this.getHistoryPreviewSurfaceHeightVp())
-          .backgroundColor(this.isManuscriptMode ? this.themeSurface : Color.Transparent)
+          .backgroundColor(this.isManuscriptMode ? (this.isManuscriptMode ? this.themeSurface : Color.Transparent) : Color.Transparent)
           .borderRadius(this.isManuscriptMode ? 3 : this.getHistoryPreviewSurfaceRadiusVp())
           .border({
             width: this.isManuscriptMode ? 1 : 0,
             color: this.isManuscriptMode ? getAppUiState().themeDivider : this.themePrimary
           })
           .clip(true)
-          .systemMaterial(this.isManuscriptMode ? undefined : new uiMaterial.ImmersiveMaterial({
-            style: uiMaterial.ImmersiveStyle.REGULAR
-          }))
+          .backdropBlur(this.isManuscriptMode ? 0 : 24)
+          .shadow(getBlurBottomShadow(!(this.isManuscriptMode)))
           .animation({ duration: 260, curve: Curve.FastOutSlowIn })
         }
       }

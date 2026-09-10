@@ -1,3 +1,6 @@
+import { shouldUseDrawnNavigation } from '../utils/DrawnNavigationSupport'
+import { ImmersiveButtonSurface } from '../components/ImmersiveButtonSurface'
+import { getBlurBottomShadow } from '../utils/BlurShadowUtils'
 import { Want, bundleManager, common } from '@kit.AbilityKit'
 import { LengthMetricsUnit, uiMaterial } from '@kit.ArkUI'
 import { hilog } from '@kit.PerformanceAnalysisKit'
@@ -60,7 +63,7 @@ let aboutPagePathStack: NavPathStack | null = null
 @Entry
 @ComponentV2
 struct AboutPage {
-  @Local versionName: string = '1.3.6'
+  @Local versionName: string = '2.0.0'
   @Local isCheckingUpdate: boolean = false
   @Local isCleaningCache: boolean = false
   @Local showLicensesSheet: boolean = false
@@ -148,29 +151,10 @@ struct AboutPage {
   }
 
   private getCompactTitleBarOptions(): HdsNavigationTitleBarOptions {
-    return buildHdsTopNavigationTitleBarOptionsForPage(this.materialType, this.materialLevel, this.windowWidthVp,
-      this.windowHeightVp, (): void => this.CompactTitleStackBuilder())
+    return buildHdsTopNavigationTitleBarOptionsForPage(this.materialType, this.materialLevel, this.windowWidthVp, this.windowHeightVp, (): void => this.CompactTitleStackBuilder(), [], this)
   }
 
-  private getAboutMaterial(interactive: boolean, applyShadow: boolean): uiMaterial.Material {
-    return new uiMaterial.ImmersiveMaterial({
-      style: uiMaterial.ImmersiveStyle.ULTRA_THIN,
-      materialColor: Color.Transparent,
-      applyShadow: applyShadow,
-      interactive: interactive,
-      lightEffect: { color: undefined }
-    })
-  }
 
-  private getAboutAccentMaterial(): uiMaterial.Material {
-    return new uiMaterial.ImmersiveMaterial({
-      style: uiMaterial.ImmersiveStyle.ULTRA_THIN,
-      materialColor: this.themePrimaryLight,
-      applyShadow: false,
-      interactive: false,
-      lightEffect: { color: undefined }
-    })
-  }
 
   @Builder
   private AnimatedLogoBuilder() {
@@ -195,38 +179,48 @@ struct AboutPage {
 
   @Builder
   private AppLogoBuilder() {
-    Button({ type: ButtonType.Normal, stateEffect: false }) {
-      if (this.isLogoAnimating) {
-        this.AnimatedLogoBuilder()
-      } else {
-        Image($r('app.media.foreground'))
-          .width(96)
-          .height(96)
+    Stack({ alignContent: Alignment.TopStart }) {
+      ImmersiveButtonSurface({
+        materialFactory: () => (new uiMaterial.ImmersiveMaterial({
+          style: uiMaterial.ImmersiveStyle.REGULAR,
+          materialColor: '#17132E',
+          applyShadow: false,
+          interactive: true,
+          lightEffect: { color: undefined }
+        })),
+        fallbackShadow: false,
+        cornerRadius: 22
+      }) {
+        Button({ type: ButtonType.Normal, stateEffect: false }) {
+          if (this.isLogoAnimating) {
+            this.AnimatedLogoBuilder()
+          } else {
+            Image($r('app.media.foreground'))
+              .width(96)
+              .height(96)
+          }
+        }
+        .width(96)
+        .height(96)
+        .padding(0)
+        .backgroundColor(Color.Transparent)
+        .borderRadius(22)
+        .clip(false)
+        .shadow({
+          radius: 22,
+          color: 'rgba(23, 19, 46, 0.32)',
+          offsetX: 0,
+          offsetY: 8
+        })
+        .accessibilityText($r('app.string.about_play_logo_animation'))
+        .onClick((): void => {
+          this.startLogoAnimation()
+        })
       }
     }
     .width(96)
     .height(96)
-    .padding(0)
-    .backgroundColor('#17132E')
-    .borderRadius(22)
     .clip(false)
-    .shadow({
-      radius: 22,
-      color: 'rgba(23, 19, 46, 0.32)',
-      offsetX: 0,
-      offsetY: 8
-    })
-    .systemMaterial(new uiMaterial.ImmersiveMaterial({
-      style: uiMaterial.ImmersiveStyle.REGULAR,
-      materialColor: '#17132E',
-      applyShadow: false,
-      interactive: true,
-      lightEffect: { color: undefined }
-    }))
-    .accessibilityText($r('app.string.about_play_logo_animation'))
-    .onClick((): void => {
-      this.startLogoAnimation()
-    })
   }
 
   @Builder
@@ -246,7 +240,8 @@ struct AboutPage {
           .padding({ left: 8, right: 8, top: 4, bottom: 4 })
           .backgroundColor(Color.Transparent)
           .borderRadius(8)
-          .systemMaterial(this.getAboutAccentMaterial())
+          .backdropBlur(16)
+          .shadow(getBlurBottomShadow())
       }
       .width('100%')
       .alignItems(VerticalAlign.Center)
@@ -263,7 +258,8 @@ struct AboutPage {
     .backgroundColor(Color.Transparent)
     .borderRadius(14)
     .border({ width: 0.5, color: this.themePrimaryLight })
-    .systemMaterial(this.getAboutMaterial(false, false))
+    .backdropBlur(16)
+    .shadow(getBlurBottomShadow())
   }
 
   @Builder
@@ -328,11 +324,9 @@ struct AboutPage {
     Scroll(this.compactScroller) {
       Row() {
         Column() {
-          if (!this.isDetailPaneMode()) {
-            Blank()
-              .width('100%')
-              .height(this.getCompactContentTopPadding())
-          }
+          Blank()
+            .width('100%')
+            .height(this.getCompactContentTopPadding())
 
           // Header: App icon + name + version + slogan
           Column({ space: 8 }) {
@@ -375,7 +369,8 @@ struct AboutPage {
               .backgroundColor(Color.Transparent)
               .justifyContent(FlexAlign.Center)
               .alignItems(HorizontalAlign.Center)
-              .systemMaterial(this.getAboutAccentMaterial())
+              .backdropBlur(16)
+              .shadow(getBlurBottomShadow())
 
               Column({ space: 2 }) {
                 Text($r('app.string.about_check_for_updates'))
@@ -414,7 +409,8 @@ struct AboutPage {
           .backgroundColor(Color.Transparent)
           .borderRadius(16)
           .border({ width: 0.5, color: this.themePrimaryLight })
-          .systemMaterial(this.getAboutMaterial(!this.isCheckingUpdate, true))
+          .backdropBlur(16)
+          .shadow(getBlurBottomShadow())
           .margin({ bottom: 24 })
 
           Text($r('app.string.about_storage_section'))
@@ -437,7 +433,8 @@ struct AboutPage {
               .backgroundColor(Color.Transparent)
               .justifyContent(FlexAlign.Center)
               .alignItems(HorizontalAlign.Center)
-              .systemMaterial(this.getAboutAccentMaterial())
+              .backdropBlur(16)
+              .shadow(getBlurBottomShadow())
 
               Column({ space: 2 }) {
                 Text($r('app.string.about_clear_cache'))
@@ -477,7 +474,8 @@ struct AboutPage {
           .backgroundColor(Color.Transparent)
           .borderRadius(16)
           .border({ width: 0.5, color: this.themePrimaryLight })
-          .systemMaterial(this.getAboutMaterial(!this.isCleaningCache, true))
+          .backdropBlur(16)
+          .shadow(getBlurBottomShadow())
           .margin({ bottom: 24 })
 
           Text($r('app.string.about_contact_section'))
@@ -500,7 +498,8 @@ struct AboutPage {
               .backgroundColor(Color.Transparent)
               .justifyContent(FlexAlign.Center)
               .alignItems(HorizontalAlign.Center)
-              .systemMaterial(this.getAboutAccentMaterial())
+              .backdropBlur(16)
+              .shadow(getBlurBottomShadow())
 
               Column({ space: 2 }) {
                 Text($r('app.string.about_github'))
@@ -531,7 +530,8 @@ struct AboutPage {
           .backgroundColor(Color.Transparent)
           .borderRadius(16)
           .border({ width: 0.5, color: this.themePrimaryLight })
-          .systemMaterial(this.getAboutMaterial(true, true))
+          .backdropBlur(16)
+          .shadow(getBlurBottomShadow())
           .margin({ bottom: 24 })
 
           Text($r('app.string.about_legal_section'))
@@ -554,7 +554,8 @@ struct AboutPage {
               .backgroundColor(Color.Transparent)
               .justifyContent(FlexAlign.Center)
               .alignItems(HorizontalAlign.Center)
-              .systemMaterial(this.getAboutAccentMaterial())
+              .backdropBlur(16)
+              .shadow(getBlurBottomShadow())
 
               Column({ space: 2 }) {
                 Text($r('app.string.about_open_source_licenses'))
@@ -585,7 +586,8 @@ struct AboutPage {
           .backgroundColor(Color.Transparent)
           .borderRadius(16)
           .border({ width: 0.5, color: this.themePrimaryLight })
-          .systemMaterial(this.getAboutMaterial(true, true))
+          .backdropBlur(16)
+          .shadow(getBlurBottomShadow())
         }
         .width('100%')
         .constraintSize({ maxWidth: this.getContentMaxWidth() })
@@ -633,15 +635,7 @@ struct AboutPage {
     Column() {
       if (this.isDetailPaneMode()) {
         HdsNavigation() {
-          Column() {
-            Blank()
-              .width('100%')
-              .height(this.getCompactContentTopPadding())
-
-            this.PageContent()
-          }
-          .width('100%')
-          .height('100%')
+          this.PageContent()
         }
         .width('100%')
         .height('100%')
@@ -652,7 +646,7 @@ struct AboutPage {
           { statusBarContentColor: getHdsStatusBarContentColor() },
           { statusBarContentColor: getHdsStatusBarContentColor() }
         )
-        .hideBackButton(false)
+        .hideBackButton(shouldUseDrawnNavigation())
         .hideToolBar(true)
         .mode(NavigationMode.Stack)
         .ignoreLayoutSafeArea([LayoutSafeAreaType.SYSTEM], [LayoutSafeAreaEdge.TOP])
@@ -669,7 +663,7 @@ struct AboutPage {
           { statusBarContentColor: getHdsStatusBarContentColor() },
           { statusBarContentColor: getHdsStatusBarContentColor() }
         )
-        .hideBackButton(false)
+        .hideBackButton(shouldUseDrawnNavigation())
         .hideToolBar(true)
         .mode(NavigationMode.Stack)
         .ignoreLayoutSafeArea([LayoutSafeAreaType.SYSTEM], [LayoutSafeAreaEdge.TOP])

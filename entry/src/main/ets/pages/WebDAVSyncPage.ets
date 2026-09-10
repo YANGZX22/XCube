@@ -1,5 +1,8 @@
-import { HdsNavigation, HdsNavigationTitleBarOptions, HdsNavigationTitleMode } from '@kit.UIDesignKit'
+import { shouldUseDrawnNavigation } from '../utils/DrawnNavigationSupport'
+import { withColorAlpha } from '../utils/ColorAlphaUtils'
+import { ImmersiveButtonSurface } from '../components/ImmersiveButtonSurface'
 import { uiMaterial } from '@kit.ArkUI'
+import { HdsNavigation, HdsNavigationTitleBarOptions, HdsNavigationTitleMode } from '@kit.UIDesignKit'
 import {
   ExportOptions,
   ImportOptions,
@@ -117,8 +120,7 @@ struct WebDAVSyncPage {
   }
 
   private getCompactTitleBarOptions(): HdsNavigationTitleBarOptions {
-    return buildHdsTopNavigationTitleBarOptionsForPage(this.materialType, this.materialLevel, this.windowWidthVp,
-      this.windowHeightVp, (): void => this.CompactTitleStackBuilder())
+    return buildHdsTopNavigationTitleBarOptionsForPage(this.materialType, this.materialLevel, this.windowWidthVp, this.windowHeightVp, (): void => this.CompactTitleStackBuilder(), [], this)
   }
 
   private showToast(message: string | Resource, duration: number = 2000,
@@ -438,36 +440,56 @@ struct WebDAVSyncPage {
         (text: string) => { this.remoteFileName = text })
 
       Row({ space: 12 }) {
-        Button($r('app.string.webdav_test_connection'))
-          .layoutWeight(1)
-          .height(42)
-          .fontSize(14)
-          .backgroundColor(this.themePrimary)
-          .fontColor(Color.White)
-          .borderRadius(12)
-          .systemMaterial(new uiMaterial.ImmersiveMaterial({
-            style: uiMaterial.ImmersiveStyle.REGULAR,
-            materialColor: this.themePrimary,
-            interactive: true,
-            lightEffect: { color: undefined }
-          }))
-          .enabled(!this.isTesting && !this.isSyncing)
-          .onClick(() => { this.testConnection() })
-        Button($r('app.string.webdav_save_config'))
-          .layoutWeight(1)
-          .height(42)
-          .fontSize(14)
-          .backgroundColor(this.themePrimary)
-          .fontColor(Color.White)
-          .borderRadius(12)
-          .systemMaterial(new uiMaterial.ImmersiveMaterial({
-            style: uiMaterial.ImmersiveStyle.REGULAR,
-            materialColor: this.themePrimary,
-            interactive: true,
-            lightEffect: { color: undefined }
-          }))
-          .enabled(!this.isSyncing)
-          .onClick(() => { this.saveConfig() })
+        Stack({ alignContent: Alignment.TopStart }) {
+          ImmersiveButtonSurface({
+            materialFactory: () => (new uiMaterial.ImmersiveMaterial({
+                style: uiMaterial.ImmersiveStyle.THIN,
+                materialColor: withColorAlpha(this.themePrimary, '26'),
+                interactive: true,
+                lightEffect: { color: undefined }
+              })),
+            cornerRadius: 12
+          }) {
+            Button($r('app.string.webdav_test_connection'))
+              .height(42)
+              .fontSize(14)
+              .backgroundColor(Color.Transparent)
+              .fontColor(this.themePrimary)
+              .borderRadius(12)
+              .enabled(!this.isTesting && !this.isSyncing)
+              .onClick(() => { this.testConnection() })
+            .width('100%')
+          }
+        }
+        .layoutWeight(1)
+        .height(42)
+        .enabled(!this.isTesting && !this.isSyncing)
+        .clip(false)
+        Stack({ alignContent: Alignment.TopStart }) {
+          ImmersiveButtonSurface({
+            materialFactory: () => (new uiMaterial.ImmersiveMaterial({
+                style: uiMaterial.ImmersiveStyle.THIN,
+                materialColor: withColorAlpha(this.themePrimary, '26'),
+                interactive: true,
+                lightEffect: { color: undefined }
+              })),
+            cornerRadius: 12
+          }) {
+            Button($r('app.string.webdav_save_config'))
+              .height(42)
+              .fontSize(14)
+              .backgroundColor(Color.Transparent)
+              .fontColor(this.themePrimary)
+              .borderRadius(12)
+              .enabled(!this.isSyncing)
+              .onClick(() => { this.saveConfig() })
+            .width('100%')
+          }
+        }
+        .layoutWeight(1)
+        .height(42)
+        .enabled(!this.isSyncing)
+        .clip(false)
       }
       .width('100%')
       .margin({ top: 4 })
@@ -539,21 +561,31 @@ struct WebDAVSyncPage {
 
       Divider().color($r('app.color.divider'))
 
-      Button($r('app.string.webdav_refresh_remote_status'))
-        .width('100%')
-        .height(42)
-        .fontSize(14)
-        .backgroundColor(Color.Transparent)
-        .fontColor(this.themePrimary)
-        .borderRadius(12)
-        .systemMaterial(new uiMaterial.ImmersiveMaterial({
-          style: uiMaterial.ImmersiveStyle.REGULAR,
-          materialColor: Color.Transparent,
-          interactive: true,
-          lightEffect: { color: undefined }
-        }))
-        .enabled(!this.refreshingStatus && !this.isSyncing)
-        .onClick(() => { this.refreshRemoteStatus() })
+      Stack({ alignContent: Alignment.TopStart }) {
+        ImmersiveButtonSurface({
+          materialFactory: () => (new uiMaterial.ImmersiveMaterial({
+              style: uiMaterial.ImmersiveStyle.REGULAR,
+              materialColor: Color.Transparent,
+              interactive: true,
+              lightEffect: { color: undefined }
+            })),
+          cornerRadius: 12
+        }) {
+          Button($r('app.string.webdav_refresh_remote_status'))
+            .width('100%')
+            .height(42)
+            .fontSize(14)
+            .backgroundColor(Color.Transparent)
+            .fontColor(this.themePrimary)
+            .borderRadius(12)
+            .enabled(!this.refreshingStatus && !this.isSyncing)
+            .onClick(() => { this.refreshRemoteStatus() })
+        }
+      }
+      .width('100%')
+      .height(42)
+      .enabled(!this.refreshingStatus && !this.isSyncing)
+      .clip(false)
     }
     .width('100%')
     .backgroundColor(getAppUiState().themeSurface)
@@ -573,22 +605,33 @@ struct WebDAVSyncPage {
       onIncludePreferencesChange: (value: boolean) => { this.includePreferences = value }
     })
 
-    Button($r('app.string.webdav_upload_backup'))
+      Stack({ alignContent: Alignment.TopStart }) {
+        ImmersiveButtonSurface({
+          materialFactory: () => (new uiMaterial.ImmersiveMaterial({
+            style: uiMaterial.ImmersiveStyle.THIN,
+            materialColor: withColorAlpha(this.themePrimary, '26'),
+            interactive: true,
+            lightEffect: { color: undefined }
+          })),
+          cornerRadius: 12
+        }) {
+          Button($r('app.string.webdav_upload_backup'))
+            .fontColor(this.themePrimary)
+          .width('100%')
+          .height(48)
+          .fontSize(16)
+          .fontWeight(FontWeight.Medium)
+          .backgroundColor(Color.Transparent)
+          .borderRadius(12)
+          .enabled(!this.isSyncing)
+          .onClick(() => { this.startUpload() })
+        }
+      }
       .width('100%')
       .height(48)
-      .fontSize(16)
-      .fontWeight(FontWeight.Medium)
-      .backgroundColor(this.themePrimary)
-      .borderRadius(12)
-      .systemMaterial(new uiMaterial.ImmersiveMaterial({
-        style: uiMaterial.ImmersiveStyle.REGULAR,
-        materialColor: this.themePrimary,
-        interactive: true,
-        lightEffect: { color: undefined }
-      }))
       .margin({ top: 16 })
       .enabled(!this.isSyncing)
-      .onClick(() => { this.startUpload() })
+      .clip(false)
   }
 
   @Builder
@@ -606,22 +649,33 @@ struct WebDAVSyncPage {
       onConflictStrategyChange: (value: ImportConflictStrategy) => { this.conflictStrategy = value }
     })
 
-    Button($r('app.string.webdav_download_backup'))
+      Stack({ alignContent: Alignment.TopStart }) {
+        ImmersiveButtonSurface({
+          materialFactory: () => (new uiMaterial.ImmersiveMaterial({
+            style: uiMaterial.ImmersiveStyle.THIN,
+            materialColor: withColorAlpha(this.themePrimary, '26'),
+            interactive: true,
+            lightEffect: { color: undefined }
+          })),
+          cornerRadius: 12
+        }) {
+          Button($r('app.string.webdav_download_backup'))
+            .fontColor(this.themePrimary)
+          .width('100%')
+          .height(48)
+          .fontSize(16)
+          .fontWeight(FontWeight.Medium)
+          .backgroundColor(Color.Transparent)
+          .borderRadius(12)
+          .enabled(!this.isSyncing)
+          .onClick(() => { this.startDownload() })
+        }
+      }
       .width('100%')
       .height(48)
-      .fontSize(16)
-      .fontWeight(FontWeight.Medium)
-      .backgroundColor(this.themePrimary)
-      .borderRadius(12)
-      .systemMaterial(new uiMaterial.ImmersiveMaterial({
-        style: uiMaterial.ImmersiveStyle.REGULAR,
-        materialColor: this.themePrimary,
-        interactive: true,
-        lightEffect: { color: undefined }
-      }))
       .margin({ top: 16 })
       .enabled(!this.isSyncing)
-      .onClick(() => { this.startDownload() })
+      .clip(false)
   }
 
   @Builder
@@ -692,34 +746,53 @@ struct WebDAVSyncPage {
       }
 
       Row({ space: 12 }) {
-        Button($r('app.string.webdav_preview_cancel'))
-          .layoutWeight(1)
-          .height(44)
-          .fontSize(15)
-          .backgroundColor(Color.Transparent)
-          .fontColor(this.themePrimary)
-          .borderRadius(12)
-          .border({ width: 1, color: this.themePrimary })
-          .systemMaterial(new uiMaterial.ImmersiveMaterial({
-            style: uiMaterial.ImmersiveStyle.REGULAR,
-            materialColor: Color.Transparent,
-            interactive: true,
-            lightEffect: { color: undefined }
-          }))
-          .onClick(() => { this.cleanupDownload() })
-        Button($r('app.string.webdav_preview_confirm'))
-          .layoutWeight(1)
-          .height(44)
-          .fontSize(15)
-          .backgroundColor(this.themePrimary)
-          .borderRadius(12)
-          .systemMaterial(new uiMaterial.ImmersiveMaterial({
-            style: uiMaterial.ImmersiveStyle.REGULAR,
-            materialColor: this.themePrimary,
-            interactive: true,
-            lightEffect: { color: undefined }
-          }))
-          .onClick(() => { this.confirmImport() })
+        Stack({ alignContent: Alignment.TopStart }) {
+          ImmersiveButtonSurface({
+            materialFactory: () => (new uiMaterial.ImmersiveMaterial({
+                style: uiMaterial.ImmersiveStyle.REGULAR,
+                materialColor: Color.Transparent,
+                interactive: true,
+                lightEffect: { color: undefined }
+              })),
+            cornerRadius: 12
+          }) {
+            Button($r('app.string.webdav_preview_cancel'))
+              .height(44)
+              .fontSize(15)
+              .backgroundColor(Color.Transparent)
+              .fontColor(this.themePrimary)
+              .borderRadius(12)
+              .border({ width: 1, color: this.themePrimary })
+              .onClick(() => { this.cleanupDownload() })
+            .width('100%')
+          }
+        }
+        .layoutWeight(1)
+        .height(44)
+        .clip(false)
+        Stack({ alignContent: Alignment.TopStart }) {
+          ImmersiveButtonSurface({
+            materialFactory: () => (new uiMaterial.ImmersiveMaterial({
+                style: uiMaterial.ImmersiveStyle.THIN,
+                materialColor: withColorAlpha(this.themePrimary, '26'),
+                interactive: true,
+                lightEffect: { color: undefined }
+              })),
+            cornerRadius: 12
+          }) {
+            Button($r('app.string.webdav_preview_confirm'))
+              .fontColor(this.themePrimary)
+              .height(44)
+              .fontSize(15)
+              .backgroundColor(Color.Transparent)
+              .borderRadius(12)
+              .onClick(() => { this.confirmImport() })
+            .width('100%')
+          }
+        }
+        .layoutWeight(1)
+        .height(44)
+        .clip(false)
       }
       .width('100%')
       .margin({ top: 20 })
@@ -751,9 +824,7 @@ struct WebDAVSyncPage {
     Scroll(this.compactScroller) {
       Row() {
         Column() {
-          if (!this.isDetailPaneMode()) {
-            Blank().width('100%').height(this.getCompactContentTopPadding())
-          }
+          Blank().width('100%').height(this.getCompactContentTopPadding())
 
           this.ConfigSection()
           this.RemoteStatusSection()
@@ -831,15 +902,7 @@ struct WebDAVSyncPage {
     Column() {
       if (this.isDetailPaneMode()) {
         HdsNavigation() {
-          Column() {
-            Blank()
-              .width('100%')
-              .height(this.getCompactContentTopPadding())
-
-            this.PageContent()
-          }
-          .width('100%')
-          .height('100%')
+          this.PageContent()
         }
         .width('100%')
         .height('100%')
@@ -850,7 +913,7 @@ struct WebDAVSyncPage {
           { statusBarContentColor: getHdsStatusBarContentColor() },
           { statusBarContentColor: getHdsStatusBarContentColor() }
         )
-        .hideBackButton(false)
+        .hideBackButton(shouldUseDrawnNavigation())
         .hideToolBar(true)
         .mode(NavigationMode.Stack)
         .ignoreLayoutSafeArea([LayoutSafeAreaType.SYSTEM], [LayoutSafeAreaEdge.TOP])
@@ -867,7 +930,7 @@ struct WebDAVSyncPage {
           { statusBarContentColor: getHdsStatusBarContentColor() },
           { statusBarContentColor: getHdsStatusBarContentColor() }
         )
-        .hideBackButton(false)
+        .hideBackButton(shouldUseDrawnNavigation())
         .hideToolBar(true)
         .mode(NavigationMode.Stack)
         .ignoreLayoutSafeArea([LayoutSafeAreaType.SYSTEM], [LayoutSafeAreaEdge.TOP])

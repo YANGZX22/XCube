@@ -15,6 +15,7 @@ export struct IndexBottomTabItem {
   @Param label: Resource = $r('app.string.tab_chat')
   @Param manuscriptLabel: string | Resource = ''
   @Param badgeCount: number = 0
+  @Param disablePressScale: boolean = false
   @Local pressed: boolean = false
   private get themePrimary(): string {
     return getAppUiState().themePrimary
@@ -108,7 +109,7 @@ export struct IndexBottomTabItem {
     .height('100%')
     .justifyContent(FlexAlign.Center)
     .alignItems(HorizontalAlign.Center)
-    .scale(getButtonScale(this.pressed, {
+    .scale(getButtonScale(this.pressed && !this.disablePressScale, {
       pressedScale: 0.92,
       animationDuration: 120,
       animationCurve: Curve.EaseOut

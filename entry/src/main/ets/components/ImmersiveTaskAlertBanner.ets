@@ -1,4 +1,3 @@
-import { uiMaterial } from '@kit.ArkUI'
 
 /**
  * 会话任务完成后的应用内提示。
@@ -79,13 +78,7 @@ export struct ImmersiveTaskAlertBanner {
       .borderRadius(22)
       .backgroundColor(Color.Transparent)
       .border({ width: 0.5, color: this.cardStrokeColor })
-      .systemMaterial(new uiMaterial.ImmersiveMaterial({
-        style: uiMaterial.ImmersiveStyle.REGULAR,
-        materialColor: Color.Transparent,
-        applyShadow: true,
-        interactive: true,
-        lightEffect: { color: undefined }
-      }))
+      .backdropBlur(24)
       .shadow({
         radius: 28,
         color: this.darkMode ? 'rgba(0, 0, 0, 0.42)' : 'rgba(31, 24, 72, 0.16)',

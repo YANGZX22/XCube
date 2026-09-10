@@ -1,8 +1,10 @@
+import { ImmersiveButtonSurface } from '../components/ImmersiveButtonSurface'
+import { uiMaterial } from '@kit.ArkUI'
+import { getBlurBottomShadow } from '../utils/BlurShadowUtils'
 import { MapVisualizationView } from '../components/map/MapVisualizationView'
 import { MapVisualizationData } from '../services/MapKitService'
 import { getAppUiState } from '../state/AppUiState'
 import { pickLocalizedText } from '../utils/LocalizedTextUtils'
-import { uiMaterial } from '@kit.ArkUI'
 
 export interface MapRoutePageParams {
   visualizationJson?: string
@@ -52,15 +54,7 @@ struct MapRoutePageContent {
     return this.bottomInsetVp + 12
   }
 
-  private getTopPanelMaterial(): uiMaterial.Material {
-    return new uiMaterial.ImmersiveMaterial({
-      style: uiMaterial.ImmersiveStyle.REGULAR,
-      materialColor: Color.Transparent,
-      applyShadow: true,
-      interactive: true,
-      lightEffect: { color: undefined }
-    })
-  }
+
 
   private getButtonMaterial(): uiMaterial.Material {
     return new uiMaterial.ImmersiveMaterial({
@@ -157,20 +151,29 @@ struct MapRoutePageContent {
 
       Column({ space: 8 }) {
         Row({ space: 6 }) {
-          Button({ type: ButtonType.Circle, stateEffect: true }) {
-            SymbolGlyph($r('sys.symbol.chevron_left'))
-              .fontSize(20)
-              .fontColor([$r('app.color.text_primary')])
+          Stack({ alignContent: Alignment.TopStart }) {
+            ImmersiveButtonSurface({
+              materialFactory: () => (this.getButtonMaterial()),
+              cornerRadius: undefined
+            }) {
+              Button({ type: ButtonType.Circle, stateEffect: true }) {
+                SymbolGlyph($r('sys.symbol.chevron_left'))
+                  .fontSize(20)
+                  .fontColor([$r('app.color.text_primary')])
+              }
+              .width(44)
+              .height(44)
+              .padding(0)
+              .backgroundColor(Color.Transparent)
+              .border({ width: 0, color: Color.Transparent })
+              .onClick((): void => {
+                this.onClose()
+              })
+            }
           }
           .width(44)
           .height(44)
-          .padding(0)
-          .backgroundColor(Color.Transparent)
-          .border({ width: 0, color: Color.Transparent })
-          .systemMaterial(this.getButtonMaterial())
-          .onClick((): void => {
-            this.onClose()
-          })
+          .clip(false)
 
           Column({ space: 2 }) {
             Text(pickLocalizedText('搜索结果', 'Search results'))
@@ -218,50 +221,68 @@ struct MapRoutePageContent {
 
         Row({ space: 10 }) {
           if (this.data.showCurrentLocation) {
-            Button() {
-              Row({ space: 6 }) {
-                SymbolGlyph($r('sys.symbol.navigation'))
-                  .fontSize(16)
-                  .fontColor([this.isFollowing ? this.themePrimary : $r('app.color.text_secondary')])
-                Text(pickLocalizedText('回到当前位置', 'My location'))
-                  .fontSize(13)
-                  .fontWeight(FontWeight.Medium)
-                  .fontColor(this.isFollowing ? this.themePrimary : $r('app.color.text_secondary'))
+            Stack({ alignContent: Alignment.TopStart }) {
+              ImmersiveButtonSurface({
+                materialFactory: () => (this.getButtonMaterial()),
+                cornerRadius: 20
+              }) {
+                Button() {
+                  Row({ space: 6 }) {
+                    SymbolGlyph($r('sys.symbol.navigation'))
+                      .fontSize(16)
+                      .fontColor([this.isFollowing ? this.themePrimary : $r('app.color.text_secondary')])
+                    Text(pickLocalizedText('回到当前位置', 'My location'))
+                      .fontSize(13)
+                      .fontWeight(FontWeight.Medium)
+                      .fontColor(this.isFollowing ? this.themePrimary : $r('app.color.text_secondary'))
+                  }
+                }
+                .height(40)
+                .borderRadius(20)
+                .backgroundColor(Color.Transparent)
+                .border({ width: 0, color: Color.Transparent })
+                .onClick((): void => {
+                  this.isFollowing = true
+                  this.followRequestId += 1
+                })
+                .width('100%')
               }
             }
             .height(40)
             .layoutWeight(1)
-            .borderRadius(20)
-            .backgroundColor(Color.Transparent)
-            .border({ width: 0, color: Color.Transparent })
-            .systemMaterial(this.getButtonMaterial())
-            .onClick((): void => {
-              this.isFollowing = true
-              this.followRequestId += 1
-            })
+            .clip(false)
           }
 
-          Button() {
-            Row({ space: 6 }) {
-              SymbolGlyph($r('sys.symbol.map'))
-                .fontSize(16)
-                .fontColor([!this.isFollowing ? this.themePrimary : $r('app.color.text_secondary')])
-              Text(pickLocalizedText('结果概览', 'Result overview'))
-                .fontSize(13)
-                .fontWeight(FontWeight.Medium)
-                .fontColor(!this.isFollowing ? this.themePrimary : $r('app.color.text_secondary'))
+          Stack({ alignContent: Alignment.TopStart }) {
+            ImmersiveButtonSurface({
+              materialFactory: () => (this.getButtonMaterial()),
+              cornerRadius: 20
+            }) {
+              Button() {
+                Row({ space: 6 }) {
+                  SymbolGlyph($r('sys.symbol.map'))
+                    .fontSize(16)
+                    .fontColor([!this.isFollowing ? this.themePrimary : $r('app.color.text_secondary')])
+                  Text(pickLocalizedText('结果概览', 'Result overview'))
+                    .fontSize(13)
+                    .fontWeight(FontWeight.Medium)
+                    .fontColor(!this.isFollowing ? this.themePrimary : $r('app.color.text_secondary'))
+                }
+              }
+              .height(40)
+              .borderRadius(20)
+              .backgroundColor(Color.Transparent)
+              .border({ width: 0, color: Color.Transparent })
+              .onClick((): void => {
+                this.isFollowing = false
+                this.overviewRequestId += 1
+              })
+              .width('100%')
             }
           }
           .height(40)
           .layoutWeight(1)
-          .borderRadius(20)
-          .backgroundColor(Color.Transparent)
-          .border({ width: 0, color: Color.Transparent })
-          .systemMaterial(this.getButtonMaterial())
-          .onClick((): void => {
-            this.isFollowing = false
-            this.overviewRequestId += 1
-          })
+          .clip(false)
         }
         .width('100%')
       }
@@ -269,7 +290,8 @@ struct MapRoutePageContent {
       .padding(12)
       .borderRadius(24)
       .backgroundColor(Color.Transparent)
-      .systemMaterial(this.getTopPanelMaterial())
+      .backdropBlur(24)
+      .shadow(getBlurBottomShadow())
       .margin({ top: this.topInsetVp + 8 })
       .hitTestBehavior(HitTestMode.Default)
       .onAreaChange((_oldArea: Area, newArea: Area): void => {

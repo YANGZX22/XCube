@@ -1,3 +1,5 @@
+import { ImmersiveButtonSurface } from '../ImmersiveButtonSurface'
+import { getBlurBottomShadow } from '../../utils/BlurShadowUtils'
 import { uiMaterial } from '@kit.ArkUI'
 import { ToolConfig, ToolPermissionLevel, ToolSourceType } from '../../models/ChatModels'
 import { getAppUiState } from '../../state/AppUiState'
@@ -216,23 +218,33 @@ export struct ChatToolPickerSheetContent {
   @Builder
   private BuiltinToolListRow(tool: ToolConfig) {
     Row({ space: 12 }) {
-      Button({ type: ButtonType.Circle, stateEffect: false }) {
-        this.ToolIcon(tool.id, 17)
+      Stack({ alignContent: Alignment.TopStart }) {
+        ImmersiveButtonSurface({
+          materialFactory: () => (new uiMaterial.ImmersiveMaterial({
+            style: uiMaterial.ImmersiveStyle.ULTRA_THIN,
+            materialColor: Color.Transparent,
+            applyShadow: false,
+            interactive: true,
+            lightEffect: { color: undefined }
+          })),
+          fallbackShadow: false,
+          cornerRadius: undefined
+        }) {
+          Button({ type: ButtonType.Circle, stateEffect: false }) {
+            this.ToolIcon(tool.id, 17)
+          }
+          .width(40)
+          .height(40)
+          .padding(0)
+          .backgroundColor(Color.Transparent)
+          .onClick(() => {
+            this.onToggleTool(tool.id, !this.isToolSelected(tool.id))
+          })
+        }
       }
       .width(40)
       .height(40)
-      .padding(0)
-      .backgroundColor(Color.Transparent)
-      .systemMaterial(new uiMaterial.ImmersiveMaterial({
-        style: uiMaterial.ImmersiveStyle.ULTRA_THIN,
-        materialColor: Color.Transparent,
-        applyShadow: false,
-        interactive: true,
-        lightEffect: { color: undefined }
-      }))
-      .onClick(() => {
-        this.onToggleTool(tool.id, !this.isToolSelected(tool.id))
-      })
+      .clip(false)
 
       Column({ space: 4 }) {
         Row({ space: 6 }) {
@@ -356,57 +368,72 @@ export struct ChatToolPickerSheetContent {
               .layoutWeight(1)
               .alignItems(HorizontalAlign.Start)
 
-              Button(pickLocalizedText('全部关闭', 'Disable All'))
-                .height(34)
-                .padding({ left: 12, right: 12 })
-                .type(ButtonType.Capsule)
-                .fontSize(11)
-                .fontColor($r('app.color.text_secondary'))
-                .backgroundColor(Color.Transparent)
-                .enabled(this.getSelectedVisibleToolCount() > 0)
-                .opacity(this.getSelectedVisibleToolCount() > 0 ? 1 : 0.45)
-                .systemMaterial(new uiMaterial.ImmersiveMaterial({
-                  style: uiMaterial.ImmersiveStyle.ULTRA_THIN,
-                  materialColor: Color.Transparent,
-                  applyShadow: false,
-                  interactive: true,
-                  lightEffect: { color: undefined }
-                }))
-                .onClick(() => {
-                  this.onToggleAll(this.getAllVisibleToolIds(), false)
-                })
+              Stack({ alignContent: Alignment.TopStart }) {
+                ImmersiveButtonSurface({
+                  materialFactory: () => (new uiMaterial.ImmersiveMaterial({
+                      style: uiMaterial.ImmersiveStyle.ULTRA_THIN,
+                      materialColor: Color.Transparent,
+                      applyShadow: false,
+                      interactive: true,
+                      lightEffect: { color: undefined }
+                    })),
+                  fallbackShadow: false,
+                  cornerRadius: undefined
+                }) {
+                  Button(pickLocalizedText('全部关闭', 'Disable All'))
+                    .height(34)
+                    .padding({ left: 12, right: 12 })
+                    .type(ButtonType.Capsule)
+                    .fontSize(11)
+                    .fontColor($r('app.color.text_secondary'))
+                    .backgroundColor(Color.Transparent)
+                    .enabled(this.getSelectedVisibleToolCount() > 0)
+                    .onClick(() => {
+                      this.onToggleAll(this.getAllVisibleToolIds(), false)
+                    })
+                }
+              }
+              .height(34)
+              .enabled(this.getSelectedVisibleToolCount() > 0)
+              .opacity(this.getSelectedVisibleToolCount() > 0 ? 1 : 0.45)
+              .clip(false)
 
-              Button(pickLocalizedText('全部开启', 'Enable All'))
-                .height(34)
-                .padding({ left: 12, right: 12 })
-                .type(ButtonType.Capsule)
-                .fontSize(11)
-                .fontColor(this.themePrimary)
-                .backgroundColor(Color.Transparent)
-                .enabled(!this.areAllVisibleToolsSelected())
-                .opacity(!this.areAllVisibleToolsSelected() ? 1 : 0.45)
-                .systemMaterial(new uiMaterial.ImmersiveMaterial({
-                  style: uiMaterial.ImmersiveStyle.ULTRA_THIN,
-                  materialColor: Color.Transparent,
-                  applyShadow: false,
-                  interactive: true,
-                  lightEffect: { color: undefined }
-                }))
-                .onClick(() => {
-                  this.onToggleAll(this.getAllVisibleToolIds(), true)
-                })
+              Stack({ alignContent: Alignment.TopStart }) {
+                ImmersiveButtonSurface({
+                  materialFactory: () => (new uiMaterial.ImmersiveMaterial({
+                      style: uiMaterial.ImmersiveStyle.ULTRA_THIN,
+                      materialColor: Color.Transparent,
+                      applyShadow: false,
+                      interactive: true,
+                      lightEffect: { color: undefined }
+                    })),
+                  fallbackShadow: false,
+                  cornerRadius: undefined
+                }) {
+                  Button(pickLocalizedText('全部开启', 'Enable All'))
+                    .height(34)
+                    .padding({ left: 12, right: 12 })
+                    .type(ButtonType.Capsule)
+                    .fontSize(11)
+                    .fontColor(this.themePrimary)
+                    .backgroundColor(Color.Transparent)
+                    .enabled(!this.areAllVisibleToolsSelected())
+                    .onClick(() => {
+                      this.onToggleAll(this.getAllVisibleToolIds(), true)
+                    })
+                }
+              }
+              .height(34)
+              .enabled(!this.areAllVisibleToolsSelected())
+              .opacity(!this.areAllVisibleToolsSelected() ? 1 : 0.45)
+              .clip(false)
             }
             .width('100%')
             .padding(12)
             .borderRadius(18)
             .backgroundColor(Color.Transparent)
-            .systemMaterial(new uiMaterial.ImmersiveMaterial({
-              style: uiMaterial.ImmersiveStyle.REGULAR,
-              materialColor: Color.Transparent,
-              applyShadow: false,
-              interactive: false,
-              lightEffect: { color: undefined }
-            }))
+            .backdropBlur(24)
+            .shadow(getBlurBottomShadow())
             .alignItems(VerticalAlign.Center)
 
             if (this.getBuiltinChatTools().length > 0) {
@@ -442,13 +469,8 @@ export struct ChatToolPickerSheetContent {
                     .borderRadius(18)
                     .backgroundColor(Color.Transparent)
                     .border({ width: 0.8, color: this.getCardBorderColor() })
-                    .systemMaterial(new uiMaterial.ImmersiveMaterial({
-                      style: uiMaterial.ImmersiveStyle.REGULAR,
-                      materialColor: Color.Transparent,
-                      applyShadow: false,
-                      interactive: false,
-                      lightEffect: { color: undefined }
-                    }))
+                    .backdropBlur(24)
+                    .shadow(getBlurBottomShadow())
                   }
                   .width('100%')
                 }, (category: BuiltinToolCategory) => category.key)
@@ -466,25 +488,35 @@ export struct ChatToolPickerSheetContent {
 
                 ForEach(this.getMcpToolGroups(), (group: McpToolGroup) => {
                   Row({ space: 12 }) {
-                    Button({ type: ButtonType.Circle, stateEffect: false }) {
-                      SymbolGlyph($r('sys.symbol.link'))
-                        .fontSize(19)
-                        .fontColor([this.themePrimary])
+                    Stack({ alignContent: Alignment.TopStart }) {
+                      ImmersiveButtonSurface({
+                        materialFactory: () => (new uiMaterial.ImmersiveMaterial({
+                          style: uiMaterial.ImmersiveStyle.ULTRA_THIN,
+                          materialColor: Color.Transparent,
+                          applyShadow: false,
+                          interactive: true,
+                          lightEffect: { color: undefined }
+                        })),
+                        fallbackShadow: false,
+                        cornerRadius: undefined
+                      }) {
+                        Button({ type: ButtonType.Circle, stateEffect: false }) {
+                          SymbolGlyph($r('sys.symbol.link'))
+                            .fontSize(19)
+                            .fontColor([this.themePrimary])
+                        }
+                        .width(40)
+                        .height(40)
+                        .padding(0)
+                        .backgroundColor(Color.Transparent)
+                        .onClick(() => {
+                          this.onToggleMcpGroup(group.toolIds, !this.isMcpToolGroupSelected(group))
+                        })
+                      }
                     }
                     .width(40)
                     .height(40)
-                    .padding(0)
-                    .backgroundColor(Color.Transparent)
-                    .systemMaterial(new uiMaterial.ImmersiveMaterial({
-                      style: uiMaterial.ImmersiveStyle.ULTRA_THIN,
-                      materialColor: Color.Transparent,
-                      applyShadow: false,
-                      interactive: true,
-                      lightEffect: { color: undefined }
-                    }))
-                    .onClick(() => {
-                      this.onToggleMcpGroup(group.toolIds, !this.isMcpToolGroupSelected(group))
-                    })
+                    .clip(false)
 
                     Column({ space: 8 }) {
                       Row({ space: 8 }) {
@@ -527,13 +559,8 @@ export struct ChatToolPickerSheetContent {
                     width: 0.8,
                     color: this.getCardBorderColor()
                   })
-                  .systemMaterial(new uiMaterial.ImmersiveMaterial({
-                    style: uiMaterial.ImmersiveStyle.REGULAR,
-                    materialColor: Color.Transparent,
-                    applyShadow: false,
-                    interactive: true,
-                    lightEffect: { color: undefined }
-                  }))
+                  .backdropBlur(24)
+                  .shadow(getBlurBottomShadow())
                 }, (group: McpToolGroup) => group.sourceId)
               }
               .width('100%')

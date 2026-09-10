@@ -1,4 +1,13 @@
-import { HdsNavigation, HdsNavigationTitleBarOptions, HdsNavigationTitleMode } from '@kit.UIDesignKit'
+import { DrawnFloatingTabBar } from '../components/DrawnFloatingTabBar'
+import { shouldUseDrawnNavigation } from '../utils/DrawnNavigationSupport'
+import {
+  HdsNavigation,
+  HdsNavigationTitleBarOptions,
+  HdsNavigationTitleMode,
+  HdsTabs
+} from '@kit.UIDesignKit'
+import { getHdsSystemMaterialEffect, HdsTabsBlurModifier, DrawnTabsContentModifier, getHdsMaterialLightColor } from '../utils/HdsMaterialSupport'
+import { shouldUseWrappedMaterial } from '../utils/WrappedMaterialSupport'
 import { SettingsCompactTitleBarContent } from '../components/settings/SettingsCompactPageHeader'
 import { SettingsPagePresentationMode } from '../config/SettingsDetailPresentation'
 import { getSettingsPageContentMaxWidth } from '../utils/SettingsPageLayoutHelper'
@@ -24,6 +33,12 @@ const RANGE_SWIPE_THRESHOLD: number = 72
 const RANGE_DRAG_MAX_OFFSET: number = 44
 const RANKING_ANIMATION_DELAY_MS: number = 40
 const RANKING_ANIMATION_DURATION_MS: number = 640
+const RANGE_FLOATING_TAB_BAR_HEIGHT: number = 52
+const RANGE_FLOATING_TAB_BAR_WIDTH: number = 220
+const RANGE_FLOATING_TAB_BAR_SIDE_MARGIN: number = 16
+const RANGE_FLOATING_TAB_BAR_BOTTOM_MARGIN: number = 12
+const RANGE_FLOATING_TAB_BAR_SAFE_BOTTOM_MARGIN: number = 24
+const RANGE_FLOATING_TAB_CONTENT_SPACING: number = 16
 
 let usageStatsPagePathStack: NavPathStack | null = null
 
@@ -96,6 +111,9 @@ struct UsageStatsPage {
   private get topAvoidHeight(): number {
     return getAppUiState().topAvoidHeight
   }
+  private get bottomAvoidHeight(): number {
+    return getAppUiState().bottomAvoidHeight
+  }
   private get themePrimary(): string {
     return getAppUiState().themePrimary
   }
@@ -138,7 +156,8 @@ struct UsageStatsPage {
   @Local rankingAnimationProgress: number = 0
   @Local rangeSwipeOffsetX: number = 0
 
-  private compactScroller: Scroller = new Scroller()
+  private allRangeScroller: Scroller = new Scroller()
+  private last30DaysRangeScroller: Scroller = new Scroller()
   private statsLoadToken: number = 0
   private rankingAnimationTimer: number = -1
   private rangePanDirection: string = 'none'
@@ -235,8 +254,7 @@ struct UsageStatsPage {
   }
 
   private getCompactTitleBarOptions(): HdsNavigationTitleBarOptions {
-    return buildHdsTopNavigationTitleBarOptionsForPage(this.materialType, this.materialLevel, this.windowWidthVp,
-      this.windowHeightVp, (): void => this.CompactTitleStackBuilder())
+    return buildHdsTopNavigationTitleBarOptionsForPage(this.materialType, this.materialLevel, this.windowWidthVp, this.windowHeightVp, (): void => this.CompactTitleStackBuilder(), [], this)
   }
 
   private getMaxRankingCount(): number {
@@ -308,6 +326,28 @@ struct UsageStatsPage {
       this.rankingAnimationProgress = 0
     })
     this.loadStats()
+  }
+
+  private getCurrentRangeIndex(): number {
+    return this.currentRange === UsageRangeKey.ALL ? 0 : 1
+  }
+
+  private getRangeByIndex(index: number): UsageRangeKey {
+    return index === 0 ? UsageRangeKey.ALL : UsageRangeKey.LAST_30D
+  }
+
+  private getRangeScroller(rangeKey: UsageRangeKey): Scroller {
+    return rangeKey === UsageRangeKey.ALL ? this.allRangeScroller : this.last30DaysRangeScroller
+  }
+
+  private getFloatingRangeTabBottomMargin(): number {
+    return this.px2vp(this.bottomAvoidHeight) > 0 ? RANGE_FLOATING_TAB_BAR_SAFE_BOTTOM_MARGIN :
+      RANGE_FLOATING_TAB_BAR_BOTTOM_MARGIN
+  }
+
+  private getRangeContentBottomPadding(): number {
+    return RANGE_FLOATING_TAB_BAR_HEIGHT + this.getFloatingRangeTabBottomMargin() +
+      RANGE_FLOATING_TAB_CONTENT_SPACING
   }
 
   private getRangeBySwipeOffset(offsetX: number): UsageRangeKey | null {
@@ -393,42 +433,19 @@ struct UsageStatsPage {
   }
 
   @Builder
-  private RangeTabButton(rangeKey: UsageRangeKey, title: ResourceStr) {
-    Button() {
-      Column({ space: 6 }) {
-        Text(title)
-          .fontSize(15)
-          .fontWeight(this.currentRange === rangeKey ? FontWeight.Bold : FontWeight.Medium)
-          .fontColor(this.currentRange === rangeKey ? $r('app.color.text_primary') : $r('app.color.text_secondary'))
-          .animation({ duration: 180, curve: Curve.EaseOut })
-
-        Column()
-          .width(this.currentRange === rangeKey ? 24 : 14)
-          .height(3)
-          .borderRadius(2)
-          .backgroundColor(this.currentRange === rangeKey ? this.themePrimary : Color.Transparent)
-          .animation({ duration: 180, curve: Curve.EaseOut })
-      }
-      .alignItems(HorizontalAlign.Start)
-    }
-    .type(ButtonType.Normal)
-    .stateEffect(false)
-    .padding({ left: 0, right: 0, top: 4, bottom: 4 })
-    .backgroundColor(Color.Transparent)
-    .onClick(() => {
-      this.switchRange(rangeKey)
-    })
-  }
-
-  @Builder
-  private RangeTabs() {
-    Row({ space: 20 }) {
-      this.RangeTabButton(UsageRangeKey.ALL, $r('app.string.usage_stats_range_all'))
-      this.RangeTabButton(UsageRangeKey.LAST_30D, $r('app.string.usage_stats_range_30d'))
-      Blank()
+  private FloatingRangeTab(rangeKey: UsageRangeKey, title: ResourceStr) {
+    Column() {
+      Text(title)
+        .fontSize(13)
+        .fontWeight(this.currentRange === rangeKey ? FontWeight.Bold : FontWeight.Medium)
+        .fontColor(this.currentRange === rangeKey ? (shouldUseDrawnNavigation() ? Color.White : this.themePrimary) : $r('app.color.text_secondary'))
+        .maxLines(1)
+        .textOverflow({ overflow: TextOverflow.Ellipsis })
     }
     .width('100%')
-    .padding({ left: 4, right: 4, top: 8, bottom: 8 })
+    .height('100%')
+    .justifyContent(FlexAlign.Center)
+    .alignItems(HorizontalAlign.Center)
   }
 
   @Builder
@@ -705,17 +722,13 @@ struct UsageStatsPage {
   }
 
   @Builder
-  private PageContent() {
-    Scroll(this.compactScroller) {
+  private RangePageContent(rangeKey: UsageRangeKey) {
+    Scroll(this.getRangeScroller(rangeKey)) {
       Row() {
         Column() {
-          if (!this.isDetailPaneMode()) {
-            Blank()
-              .width('100%')
-              .height(this.getCompactContentTopPadding())
-          }
-
-          this.RangeTabs()
+          Blank()
+            .width('100%')
+            .height(this.getCompactContentTopPadding())
 
           if (this.isEmpty() && !this.isLoading) {
             this.EmptyState()
@@ -751,7 +764,7 @@ struct UsageStatsPage {
             }
           }
 
-          Blank().width('100%').height(28)
+          Blank().width('100%').height(this.getRangeContentBottomPadding())
         }
         .width('100%')
         .constraintSize({ maxWidth: this.getContentMaxWidth() })
@@ -778,19 +791,80 @@ struct UsageStatsPage {
     )
   }
 
+  @Builder
+  private DrawnRangeTab(index: number) {
+    if (index === 0) {
+      this.FloatingRangeTab(UsageRangeKey.ALL, $r('app.string.usage_stats_range_all'))
+    }
+    else {
+      this.FloatingRangeTab(UsageRangeKey.LAST_30D, $r('app.string.usage_stats_range_30d'))
+    }
+  }
+
+  @Builder
+  private PageContent() {
+    Stack({ alignContent: Alignment.Bottom }) {
+      HdsTabs({ barPosition: BarPosition.End, index: this.getCurrentRangeIndex() }) {
+        TabContent() {
+          this.RangePageContent(UsageRangeKey.ALL)
+        }
+        .tabBar(this.FloatingRangeTab(UsageRangeKey.ALL, $r('app.string.usage_stats_range_all')))
+
+        TabContent() {
+          this.RangePageContent(UsageRangeKey.LAST_30D)
+        }
+        .tabBar(this.FloatingRangeTab(UsageRangeKey.LAST_30D, $r('app.string.usage_stats_range_30d')))
+      }
+      .width('100%')
+      .height('100%')
+      .barMode(BarMode.Fixed)
+      .barHeight(shouldUseDrawnNavigation() ? 0 : RANGE_FLOATING_TAB_BAR_HEIGHT)
+      .barOverlap(true)
+      .barPosition(BarPosition.End)
+      .vertical(false)
+      .scrollable(false)
+      .animationDuration(300)
+      .barFloatingStyle(shouldUseDrawnNavigation() ? undefined : {
+        barBottomMargin: this.getFloatingRangeTabBottomMargin(),
+        barSideMargin: RANGE_FLOATING_TAB_BAR_SIDE_MARGIN,
+        barWidth: {
+          smallWidth: RANGE_FLOATING_TAB_BAR_WIDTH,
+          mediumWidth: RANGE_FLOATING_TAB_BAR_WIDTH,
+          largeWidth: RANGE_FLOATING_TAB_BAR_WIDTH
+        },
+        gradientMask: { maskColor: Color.Transparent },
+        lightColor: getHdsMaterialLightColor(Color.White),
+        systemMaterialEffect: getHdsSystemMaterialEffect()
+      })
+      .attributeModifier(shouldUseDrawnNavigation() ? new DrawnTabsContentModifier() : new HdsTabsBlurModifier(shouldUseWrappedMaterial()))
+      .backgroundColor(Color.Transparent)
+      .clip(false)
+      .onChange((index: number) => {
+        this.switchRange(this.getRangeByIndex(index))
+      })
+      if (shouldUseDrawnNavigation()) {
+        DrawnFloatingTabBar({
+          tabCount: 2,
+          selectedIndex: this.getCurrentRangeIndex(),
+          barWidth: RANGE_FLOATING_TAB_BAR_WIDTH,
+          barHeight: RANGE_FLOATING_TAB_BAR_HEIGHT,
+          itemContent: (index: number): void => this.DrawnRangeTab(index),
+          onSelect: (index: number) => {
+            this.switchRange(this.getRangeByIndex(index))
+          }
+        })
+        .margin({ bottom: this.getFloatingRangeTabBottomMargin() })
+      }
+    }
+    .width('100%')
+    .height('100%')
+  }
+
   build() {
     Column() {
       if (this.isDetailPaneMode()) {
         HdsNavigation() {
-          Column() {
-            Blank()
-              .width('100%')
-              .height(this.getCompactContentTopPadding())
-
-            this.PageContent()
-          }
-          .width('100%')
-          .height('100%')
+          this.PageContent()
         }
         .width('100%')
         .height('100%')
@@ -801,7 +875,7 @@ struct UsageStatsPage {
           { statusBarContentColor: getHdsStatusBarContentColor() },
           { statusBarContentColor: getHdsStatusBarContentColor() }
         )
-        .hideBackButton(false)
+        .hideBackButton(shouldUseDrawnNavigation())
         .hideToolBar(true)
         .mode(NavigationMode.Stack)
         .ignoreLayoutSafeArea([LayoutSafeAreaType.SYSTEM], [LayoutSafeAreaEdge.TOP])
@@ -818,7 +892,7 @@ struct UsageStatsPage {
           { statusBarContentColor: getHdsStatusBarContentColor() },
           { statusBarContentColor: getHdsStatusBarContentColor() }
         )
-        .hideBackButton(false)
+        .hideBackButton(shouldUseDrawnNavigation())
         .hideToolBar(true)
         .mode(NavigationMode.Stack)
         .ignoreLayoutSafeArea([LayoutSafeAreaType.SYSTEM], [LayoutSafeAreaEdge.TOP])

@@ -1,5 +1,8 @@
-import { picker, fileIo } from '@kit.CoreFileKit'
+import { shouldUseDrawnNavigation } from '../utils/DrawnNavigationSupport'
+import { withColorAlpha } from '../utils/ColorAlphaUtils'
+import { ImmersiveButtonSurface } from '../components/ImmersiveButtonSurface'
 import { uiMaterial } from '@kit.ArkUI'
+import { picker, fileIo } from '@kit.CoreFileKit'
 import { getImportExportService, ImportOptions, ImportPreview } from '../services/ImportExportService'
 import { showSnackBar, SnackBarDisplayOptions, SnackBarTone } from '../utils/ToastUtil'
 import { SettingsPagePresentationMode } from '../config/SettingsDetailPresentation'
@@ -111,8 +114,7 @@ struct ImportDataPage {
   }
 
   private getCompactTitleBarOptions(): HdsNavigationTitleBarOptions {
-    return buildHdsTopNavigationTitleBarOptionsForPage(this.materialType, this.materialLevel, this.windowWidthVp,
-      this.windowHeightVp, (): void => this.CompactTitleStackBuilder())
+    return buildHdsTopNavigationTitleBarOptionsForPage(this.materialType, this.materialLevel, this.windowWidthVp, this.windowHeightVp, (): void => this.CompactTitleStackBuilder(), [], this)
   }
 
   async selectFile(): Promise<void> {
@@ -270,7 +272,7 @@ struct ImportDataPage {
         .padding({
           left: 16,
           right: 16,
-          top: this.isDetailPaneMode() ? 0 : this.getCompactContentTopPadding()
+          top: this.getCompactContentTopPadding()
         })
       } else if (!this.showPreview) {
         Row() {
@@ -285,22 +287,32 @@ struct ImportDataPage {
               .fontColor($r('app.color.text_secondary'))
               .margin({ bottom: 24 })
 
-            Button('选择 ZIP 文件')
-              .width(200)
-              .height(48)
-              .fontSize(16)
-              .fontWeight(FontWeight.Medium)
-              .backgroundColor(this.themePrimary)
-              .borderRadius(12)
-              .systemMaterial(new uiMaterial.ImmersiveMaterial({
-                style: uiMaterial.ImmersiveStyle.REGULAR,
-                materialColor: this.themePrimary,
-                interactive: true,
-                lightEffect: { color: undefined }
-              }))
-              .onClick(() => {
-                this.selectFile()
-              })
+            Stack({ alignContent: Alignment.TopStart }) {
+              ImmersiveButtonSurface({
+                materialFactory: () => (new uiMaterial.ImmersiveMaterial({
+                    style: uiMaterial.ImmersiveStyle.THIN,
+                    materialColor: withColorAlpha(this.themePrimary, '26'),
+                    interactive: true,
+                    lightEffect: { color: undefined }
+                  })),
+                cornerRadius: 12
+              }) {
+                Button('选择 ZIP 文件')
+                  .fontColor(this.themePrimary)
+                  .width(200)
+                  .height(48)
+                  .fontSize(16)
+                  .fontWeight(FontWeight.Medium)
+                  .backgroundColor(Color.Transparent)
+                  .borderRadius(12)
+                  .onClick(() => {
+                    this.selectFile()
+                  })
+              }
+            }
+            .width(200)
+            .height(48)
+            .clip(false)
           }
           .width('100%')
           .constraintSize({ maxWidth: this.getContentMaxWidth() })
@@ -312,17 +324,15 @@ struct ImportDataPage {
         .padding({
           left: 16,
           right: 16,
-          top: this.isDetailPaneMode() ? 0 : this.getCompactContentTopPadding()
+          top: this.getCompactContentTopPadding()
         })
       } else {
         Scroll(this.compactScroller) {
           Row() {
             Column() {
-              if (!this.isDetailPaneMode()) {
-                Blank()
-                  .width('100%')
-                  .height(this.getCompactContentTopPadding())
-              }
+              Blank()
+                .width('100%')
+                .height(this.getCompactContentTopPadding())
 
               this.SectionTitle($r('app.string.import_preview'))
 
@@ -386,22 +396,32 @@ struct ImportDataPage {
 
         Row() {
           Column() {
-            Button($r('app.string.import_start'))
-              .width('100%')
-              .height(48)
-              .fontSize(16)
-              .fontWeight(FontWeight.Medium)
-              .backgroundColor(this.themePrimary)
-              .borderRadius(12)
-              .systemMaterial(new uiMaterial.ImmersiveMaterial({
-                style: uiMaterial.ImmersiveStyle.REGULAR,
-                materialColor: this.themePrimary,
-                interactive: true,
-                lightEffect: { color: undefined }
-              }))
-              .onClick(() => {
-                this.startImport()
-              })
+            Stack({ alignContent: Alignment.TopStart }) {
+              ImmersiveButtonSurface({
+                materialFactory: () => (new uiMaterial.ImmersiveMaterial({
+                    style: uiMaterial.ImmersiveStyle.THIN,
+                    materialColor: withColorAlpha(this.themePrimary, '26'),
+                    interactive: true,
+                    lightEffect: { color: undefined }
+                  })),
+                cornerRadius: 12
+              }) {
+                Button($r('app.string.import_start'))
+                  .fontColor(this.themePrimary)
+                  .width('100%')
+                  .height(48)
+                  .fontSize(16)
+                  .fontWeight(FontWeight.Medium)
+                  .backgroundColor(Color.Transparent)
+                  .borderRadius(12)
+                  .onClick(() => {
+                    this.startImport()
+                  })
+              }
+            }
+            .width('100%')
+            .height(48)
+            .clip(false)
           }
           .width('100%')
           .constraintSize({ maxWidth: this.getContentMaxWidth() })
@@ -455,15 +475,7 @@ struct ImportDataPage {
     Column() {
       if (this.isDetailPaneMode()) {
         HdsNavigation() {
-          Column() {
-            Blank()
-              .width('100%')
-              .height(this.getCompactContentTopPadding())
-
-            this.PageContent()
-          }
-          .width('100%')
-          .height('100%')
+          this.PageContent()
         }
         .width('100%')
         .height('100%')
@@ -474,7 +486,7 @@ struct ImportDataPage {
           { statusBarContentColor: getHdsStatusBarContentColor() },
           { statusBarContentColor: getHdsStatusBarContentColor() }
         )
-        .hideBackButton(false)
+        .hideBackButton(shouldUseDrawnNavigation())
         .hideToolBar(true)
         .mode(NavigationMode.Stack)
         .ignoreLayoutSafeArea([LayoutSafeAreaType.SYSTEM], [LayoutSafeAreaEdge.TOP])
@@ -491,7 +503,7 @@ struct ImportDataPage {
           { statusBarContentColor: getHdsStatusBarContentColor() },
           { statusBarContentColor: getHdsStatusBarContentColor() }
         )
-        .hideBackButton(false)
+        .hideBackButton(shouldUseDrawnNavigation())
         .hideToolBar(true)
         .mode(NavigationMode.Stack)
         .ignoreLayoutSafeArea([LayoutSafeAreaType.SYSTEM], [LayoutSafeAreaEdge.TOP])

@@ -1,10 +1,12 @@
+import { ImmersiveButtonSurface } from './ImmersiveButtonSurface'
+import { uiMaterial } from '@kit.ArkUI'
+import { getBlurBottomShadow } from '../utils/BlurShadowUtils'
 import { photoAccessHelper } from '@kit.MediaLibraryKit'
 import { fileIo, fileUri } from '@kit.CoreFileKit'
 import { buffer } from '@kit.ArkTS'
 import { common } from '@kit.AbilityKit'
 import { showToast } from '../utils/ToastUtil'
 import { hilog } from '@kit.PerformanceAnalysisKit'
-import { uiMaterial } from '@kit.ArkUI'
 import { getAppUiState } from '../state/AppUiState'
 
 /**
@@ -93,6 +95,7 @@ export struct ImagePreview {
     showToast(this.getUIContext(), message, duration)
   }
 
+
   private getOverlayControlMaterial(interactive: boolean): uiMaterial.Material {
     return new uiMaterial.ImmersiveMaterial({
       style: uiMaterial.ImmersiveStyle.REGULAR,
@@ -116,62 +119,80 @@ export struct ImagePreview {
 
   @Builder
   private SaveActionButtonBuilder() {
-    Button({ type: ButtonType.Normal, stateEffect: false }) {
-      Row({ space: 8 }) {
-        if (this.isSaving) {
-          LoadingProgress()
-            .width(18)
-            .height(18)
-            .color(this.themePrimary)
-        } else {
-          Stack({ alignContent: Alignment.Center }) {
-            SymbolGlyph($r('sys.symbol.square_and_arrow_down'))
-              .fontSize(16)
-              .fontColor([this.themePrimary])
-          }
-          .width(28)
-          .height(28)
-        }
+    Stack({ alignContent: Alignment.TopStart }) {
+      ImmersiveButtonSurface({
+        materialFactory: () => (this.getOverlayControlMaterial(true)),
+        cornerRadius: this.saveButtonHeightVp / 2
+      }) {
+        Button({ type: ButtonType.Normal, stateEffect: false }) {
+          Row({ space: 8 }) {
+            if (this.isSaving) {
+              LoadingProgress()
+                .width(18)
+                .height(18)
+                .color(this.themePrimary)
+            } else {
+              Stack({ alignContent: Alignment.Center }) {
+                SymbolGlyph($r('sys.symbol.square_and_arrow_down'))
+                  .fontSize(16)
+                  .fontColor([this.themePrimary])
+              }
+              .width(28)
+              .height(28)
+            }
 
-        Text($r('app.string.save'))
-          .fontSize(14)
-          .fontColor(this.themePrimary)
-          .fontWeight(FontWeight.Medium)
+            Text($r('app.string.save'))
+              .fontSize(14)
+              .fontColor(this.themePrimary)
+              .fontWeight(FontWeight.Medium)
+          }
+          .width(this.saveButtonWidthVp)
+          .height(this.saveButtonHeightVp)
+          .padding({ left: 12, right: 14 })
+          .justifyContent(FlexAlign.Center)
+          .alignItems(VerticalAlign.Center)
+        }
+        .width(this.saveButtonWidthVp)
+        .height(this.saveButtonHeightVp)
+        .padding(0)
+        .backgroundColor(Color.Transparent)
+        .borderRadius(this.saveButtonHeightVp / 2)
+        .onClick(() => {
+          if (!this.isSaving) {
+            this.saveCurrentImage()
+          }
+        })
       }
-      .width(this.saveButtonWidthVp)
-      .height(this.saveButtonHeightVp)
-      .padding({ left: 12, right: 14 })
-      .justifyContent(FlexAlign.Center)
-      .alignItems(VerticalAlign.Center)
     }
     .width(this.saveButtonWidthVp)
     .height(this.saveButtonHeightVp)
-    .padding(0)
-    .backgroundColor(this.themePrimaryLight)
-    .borderRadius(this.saveButtonHeightVp / 2)
-    .systemMaterial(this.getOverlayControlMaterial(true))
-    .onClick(() => {
-      if (!this.isSaving) {
-        this.saveCurrentImage()
-      }
-    })
+    .clip(false)
   }
 
   @Builder
   private CloseActionButtonBuilder() {
-    Button({ type: ButtonType.Circle, stateEffect: false }) {
-      SymbolGlyph($r('sys.symbol.xmark'))
-        .fontSize(20)
-        .fontColor([this.themePrimary])
+    Stack({ alignContent: Alignment.TopStart }) {
+      ImmersiveButtonSurface({
+        materialFactory: () => (this.getOverlayControlMaterial(true)),
+        cornerRadius: undefined
+      }) {
+        Button({ type: ButtonType.Circle, stateEffect: false }) {
+          SymbolGlyph($r('sys.symbol.xmark'))
+            .fontSize(20)
+            .fontColor([this.themePrimary])
+        }
+        .width(40)
+        .height(40)
+        .padding(0)
+        .backgroundColor(Color.Transparent)
+        .onClick(() => {
+          this.dismiss()
+        })
+      }
     }
     .width(40)
     .height(40)
-    .padding(0)
-    .backgroundColor(this.themePrimaryLight)
-    .systemMaterial(this.getOverlayControlMaterial(true))
-    .onClick(() => {
-      this.dismiss()
-    })
+    .clip(false)
   }
 
   build() {
@@ -245,9 +266,10 @@ export struct ImagePreview {
             .fontColor(this.themePrimary)
             .fontWeight(FontWeight.Medium)
             .padding({ left: 12, right: 12, top: 8, bottom: 8 })
-            .backgroundColor(this.themePrimaryLight)
+            .backgroundColor(Color.Transparent)
             .borderRadius(999)
-            .systemMaterial(this.getOverlayControlMaterial(false))
+            .backdropBlur(24)
+            .shadow(getBlurBottomShadow())
         }
       }
       .width('100%')

@@ -1,4 +1,4 @@
-import { uiMaterial } from '@kit.ArkUI'
+import { getBlurBottomShadow } from '../utils/BlurShadowUtils'
 import { ModelProvider } from '../models/ChatModels'
 import { KnowledgeRerankSelection } from '../services/KnowledgeRerankService'
 import { getAppUiState } from '../state/AppUiState'
@@ -113,18 +113,13 @@ export struct KnowledgeRerankSelectSheetContent {
     .padding({ left: 12, right: 12, top: 11, bottom: 11 })
     .borderRadius(RERANK_OPTION_CORNER_RADIUS)
     .clip(true)
-    .backgroundColor(this.currentSelection.isEnabled() ? Color.Transparent : this.themePrimary)
+    .backgroundColor(Color.Transparent)
     .border({
       width: !this.currentSelection.isEnabled() ? 1 : 0.5,
       color: !this.currentSelection.isEnabled() ? this.themePrimary : getAppUiState().themePrimaryLight
     })
-    .systemMaterial(new uiMaterial.ImmersiveMaterial({
-      style: uiMaterial.ImmersiveStyle.REGULAR,
-      materialColor: this.currentSelection.isEnabled() ? Color.Transparent : this.themePrimary,
-      applyShadow: false,
-      interactive: true,
-      lightEffect: { color: undefined }
-    }))
+    .backdropBlur(24)
+    .shadow(getBlurBottomShadow())
     .hitTestBehavior(this.isApplying ? HitTestMode.None : HitTestMode.Block)
     .opacity(this.isApplying ? 0.55 : 1)
     .onClick(() => {
@@ -178,11 +173,8 @@ export struct KnowledgeRerankSelectSheetContent {
     .borderRadius(RERANK_OPTION_CORNER_RADIUS)
     .backgroundColor(Color.Transparent)
     .border({ width: 0.5, color: getAppUiState().themePrimaryLight })
-    .systemMaterial(new uiMaterial.ImmersiveMaterial({
-      style: uiMaterial.ImmersiveStyle.ULTRA_THIN,
-      materialColor: Color.Transparent,
-      applyShadow: false
-    }))
+    .backdropBlur(16)
+    .shadow(getBlurBottomShadow())
     .alignItems(VerticalAlign.Top)
   }
 
@@ -234,11 +226,8 @@ export struct KnowledgeRerankSelectSheetContent {
     .borderRadius(18)
     .backgroundColor(Color.Transparent)
     .border({ width: 0.5, color: getAppUiState().themePrimaryLight })
-    .systemMaterial(new uiMaterial.ImmersiveMaterial({
-      style: uiMaterial.ImmersiveStyle.REGULAR,
-      materialColor: Color.Transparent,
-      applyShadow: true
-    }))
+    .backdropBlur(24)
+    .shadow(getBlurBottomShadow())
   }
 
   build() {

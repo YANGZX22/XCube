@@ -1,3 +1,6 @@
+import { ImmersiveButtonSurface } from './ImmersiveButtonSurface'
+import { uiMaterial } from '@kit.ArkUI'
+import { getBlurBottomShadow } from '../utils/BlurShadowUtils'
 import {
   getSubAgentService,
   SubAgentLiveState,
@@ -13,7 +16,6 @@ import {
 import { ImmersiveSheetHeader } from './ImmersiveSheetHeader'
 import { getAppUiState } from '../state/AppUiState'
 import { withColorAlpha } from '../utils/ColorAlphaUtils'
-import { uiMaterial } from '@kit.ArkUI'
 import { pickLocalizedText } from '../utils/LocalizedTextUtils'
 
 // 子智能体实时预览面板：展示最近一批子智能体各自调用了哪些工具、生成了什么内容。
@@ -43,15 +45,7 @@ export struct SubAgentPreviewSheetContent {
     return withColorAlpha(this.themePrimary, this.isDarkMode ? '55' : '33')
   }
 
-  private getAgentCardMaterial(): uiMaterial.Material {
-    return new uiMaterial.ImmersiveMaterial({
-      style: uiMaterial.ImmersiveStyle.ULTRA_THIN,
-      materialColor: Color.Transparent,
-      applyShadow: true,
-      interactive: false,
-      lightEffect: { color: undefined }
-    })
-  }
+
 
   private getCollapseButtonMaterial(): uiMaterial.Material {
     return new uiMaterial.ImmersiveMaterial({
@@ -214,23 +208,32 @@ export struct SubAgentPreviewSheetContent {
           .layoutWeight(1)
           .alignItems(HorizontalAlign.Start)
 
-        Button({ type: ButtonType.Circle, stateEffect: false }) {
-          SymbolGlyph(this.isAgentCollapsed(agent, index)
-            ? $r('sys.symbol.chevron_down')
-            : $r('sys.symbol.chevron_up'))
-            .fontSize(13)
-            .fontColor([$r('app.color.text_secondary')])
+        Stack({ alignContent: Alignment.TopStart }) {
+          ImmersiveButtonSurface({
+            materialFactory: () => (this.getCollapseButtonMaterial()),
+            cornerRadius: 15
+          }) {
+            Button({ type: ButtonType.Circle, stateEffect: false }) {
+              SymbolGlyph(this.isAgentCollapsed(agent, index)
+                ? $r('sys.symbol.chevron_down')
+                : $r('sys.symbol.chevron_up'))
+                .fontSize(13)
+                .fontColor([$r('app.color.text_secondary')])
+            }
+            .width(30)
+            .height(30)
+            .padding(0)
+            .backgroundColor(Color.Transparent)
+            .borderRadius(15)
+            .onClick(() => {
+              this.toggleAgentCollapsed(agent, index)
+            })
+          }
         }
         .width(30)
         .height(30)
-        .padding(0)
-        .backgroundColor(Color.Transparent)
-        .borderRadius(15)
-        .systemMaterial(this.getCollapseButtonMaterial())
         .margin({ left: 8 })
-        .onClick(() => {
-          this.toggleAgentCollapsed(agent, index)
-        })
+        .clip(false)
       }
       .width('100%')
       .alignItems(VerticalAlign.Center)
@@ -290,7 +293,8 @@ export struct SubAgentPreviewSheetContent {
     .backgroundColor(Color.Transparent)
     .borderRadius(16)
     .border({ width: 0.5, color: this.getCardBorderColor() })
-    .systemMaterial(this.getAgentCardMaterial())
+    .backdropBlur(16)
+    .shadow(getBlurBottomShadow())
   }
 
   @Builder

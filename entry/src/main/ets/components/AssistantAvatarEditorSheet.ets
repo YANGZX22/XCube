@@ -1,3 +1,5 @@
+import { ImmersiveButtonSurface } from './ImmersiveButtonSurface'
+import { getBlurBottomShadow } from '../utils/BlurShadowUtils'
 import { fileIo, fileUri } from '@kit.CoreFileKit'
 import { photoAccessHelper } from '@kit.MediaLibraryKit'
 import { uiMaterial } from '@kit.ArkUI'
@@ -300,11 +302,8 @@ export struct AssistantAvatarEditorSheet {
             .placeholderColor($r('app.color.text_tertiary'))
             .backgroundColor(Color.Transparent)
             .borderRadius(16)
-            .systemMaterial(new uiMaterial.ImmersiveMaterial({
-              style: uiMaterial.ImmersiveStyle.ULTRA_THIN,
-              materialColor: Color.Transparent,
-              applyShadow: false
-            }))
+            .backdropBlur(16)
+            .shadow(getBlurBottomShadow())
             .padding({ left: 14, right: 14 })
             .onChange((text: string) => {
               this.textValue = text
@@ -330,11 +329,8 @@ export struct AssistantAvatarEditorSheet {
             .backgroundColor(Color.Transparent)
             .borderRadius(16)
             .border({ width: 1, color: this.themePrimaryLight })
-            .systemMaterial(new uiMaterial.ImmersiveMaterial({
-              style: uiMaterial.ImmersiveStyle.ULTRA_THIN,
-              materialColor: Color.Transparent,
-              applyShadow: false
-            }))
+            .backdropBlur(16)
+            .shadow(getBlurBottomShadow())
         }
         .width('100%')
         .alignItems(HorizontalAlign.Start)
@@ -353,11 +349,8 @@ export struct AssistantAvatarEditorSheet {
             .backgroundColor(Color.Transparent)
             .borderRadius(16)
             .border({ width: 1, color: this.themePrimaryLight })
-            .systemMaterial(new uiMaterial.ImmersiveMaterial({
-              style: uiMaterial.ImmersiveStyle.ULTRA_THIN,
-              materialColor: Color.Transparent,
-              applyShadow: false
-            }))
+            .backdropBlur(16)
+            .shadow(getBlurBottomShadow())
             .padding({ left: 14, right: 14 })
             .onChange((text: string) => {
               this.linkValue = text
@@ -377,34 +370,40 @@ export struct AssistantAvatarEditorSheet {
               .placeholderColor($r('app.color.text_tertiary'))
               .backgroundColor(Color.Transparent)
               .borderRadius(16)
-              .systemMaterial(new uiMaterial.ImmersiveMaterial({
-                style: uiMaterial.ImmersiveStyle.ULTRA_THIN,
-                materialColor: Color.Transparent,
-                applyShadow: false
-              }))
+              .backdropBlur(16)
+              .shadow(getBlurBottomShadow())
               .padding({ left: 14, right: 14 })
               .onChange((text: string) => {
                 this.useCustomQqAvatar(text)
               })
-            Button($r('app.string.assistant_avatar_random_qq'))
-              .height(46)
-              .fontSize(14)
-              .fontWeight(FontWeight.Medium)
-              .fontColor(this.themePrimary)
-              .backgroundColor(Color.Transparent)
-              .borderRadius(16)
-              .border({ width: 1, color: this.themePrimaryLight })
-              .systemMaterial(new uiMaterial.ImmersiveMaterial({
-                style: uiMaterial.ImmersiveStyle.REGULAR,
-                materialColor: Color.Transparent,
-                applyShadow: false,
-                interactive: true,
-                lightEffect: { color: undefined }
-              }))
-              .padding({ left: 14, right: 14 })
-              .onClick(() => {
-                this.useRandomQqAvatar()
-              })
+            Stack({ alignContent: Alignment.TopStart }) {
+              ImmersiveButtonSurface({
+                materialFactory: () => (new uiMaterial.ImmersiveMaterial({
+                    style: uiMaterial.ImmersiveStyle.REGULAR,
+                    materialColor: Color.Transparent,
+                    applyShadow: false,
+                    interactive: true,
+                    lightEffect: { color: undefined }
+                  })),
+                fallbackShadow: false,
+                cornerRadius: 16
+              }) {
+                Button($r('app.string.assistant_avatar_random_qq'))
+                  .height(46)
+                  .fontSize(14)
+                  .fontWeight(FontWeight.Medium)
+                  .fontColor(this.themePrimary)
+                  .backgroundColor(Color.Transparent)
+                  .borderRadius(16)
+                  .border({ width: 1, color: this.themePrimaryLight })
+                  .padding({ left: 14, right: 14 })
+                  .onClick(() => {
+                    this.useRandomQqAvatar()
+                  })
+              }
+            }
+            .height(46)
+            .clip(false)
           }
           .width('100%')
         }
@@ -415,26 +414,36 @@ export struct AssistantAvatarEditorSheet {
             .fontSize(13)
             .fontColor($r('app.color.text_secondary'))
             .width('100%')
-          Button(this.isPickingImage ? $r('app.string.loading') : $r('app.string.assistant_avatar_pick_gallery'))
-            .width('100%')
-            .height(46)
-            .fontSize(15)
-            .fontWeight(FontWeight.Medium)
-            .fontColor(Color.White)
-            .backgroundColor(this.themePrimary)
-            .borderRadius(18)
-            .systemMaterial(new uiMaterial.ImmersiveMaterial({
-              style: uiMaterial.ImmersiveStyle.REGULAR,
-              materialColor: this.themePrimary,
-              applyShadow: false,
-              interactive: true,
-              lightEffect: { color: undefined }
-            }))
-            .opacity(this.isPickingImage ? 0.55 : 1)
-            .hitTestBehavior(this.isPickingImage ? HitTestMode.None : HitTestMode.Block)
-            .onClick(() => {
-              this.pickGalleryImage()
-            })
+          Stack({ alignContent: Alignment.TopStart }) {
+            ImmersiveButtonSurface({
+              materialFactory: () => (new uiMaterial.ImmersiveMaterial({
+                  style: uiMaterial.ImmersiveStyle.REGULAR,
+                  materialColor: this.themePrimary,
+                  applyShadow: false,
+                  interactive: true,
+                  lightEffect: { color: undefined }
+                })),
+              fallbackShadow: false,
+              cornerRadius: 18
+            }) {
+              Button(this.isPickingImage ? $r('app.string.loading') : $r('app.string.assistant_avatar_pick_gallery'))
+                .width('100%')
+                .height(46)
+                .fontSize(15)
+                .fontWeight(FontWeight.Medium)
+                .fontColor(Color.White)
+                .backgroundColor(Color.Transparent)
+                .borderRadius(18)
+                .hitTestBehavior(this.isPickingImage ? HitTestMode.None : HitTestMode.Block)
+                .onClick(() => {
+                  this.pickGalleryImage()
+                })
+            }
+          }
+          .width('100%')
+          .height(46)
+          .opacity(this.isPickingImage ? 0.55 : 1)
+          .clip(false)
         }
         .width('100%')
         .alignItems(HorizontalAlign.Start)
@@ -455,25 +464,34 @@ export struct AssistantAvatarEditorSheet {
           .fontSize(13)
           .fontColor($r('app.color.text_secondary'))
           .layoutWeight(1)
-        Button($r('app.string.icon_random_generate'))
-          .height(32)
-          .fontSize(12)
-          .type(ButtonType.Normal)
-          .borderRadius(16)
-          .backgroundColor(Color.Transparent)
-          .fontColor($r('app.color.text_primary'))
-          .padding({ left: 12, right: 12 })
-          .stateEffect(false)
-          .systemMaterial(new uiMaterial.ImmersiveMaterial({
-            style: uiMaterial.ImmersiveStyle.REGULAR,
-            materialColor: Color.Transparent,
-            applyShadow: false,
-            interactive: true,
-            lightEffect: { color: undefined }
-          }))
-          .onClick(() => {
-            this.tempAvatarColor = generateSoftColor()
-          })
+        Stack({ alignContent: Alignment.TopStart }) {
+          ImmersiveButtonSurface({
+            materialFactory: () => (new uiMaterial.ImmersiveMaterial({
+                style: uiMaterial.ImmersiveStyle.REGULAR,
+                materialColor: Color.Transparent,
+                applyShadow: false,
+                interactive: true,
+                lightEffect: { color: undefined }
+              })),
+            fallbackShadow: false,
+            cornerRadius: 16
+          }) {
+            Button($r('app.string.icon_random_generate'))
+              .height(32)
+              .fontSize(12)
+              .type(ButtonType.Normal)
+              .borderRadius(16)
+              .backgroundColor(Color.Transparent)
+              .fontColor($r('app.color.text_primary'))
+              .padding({ left: 12, right: 12 })
+              .stateEffect(false)
+              .onClick(() => {
+                this.tempAvatarColor = generateSoftColor()
+              })
+          }
+        }
+        .height(32)
+        .clip(false)
       }
       .width('100%')
 
@@ -504,25 +522,34 @@ export struct AssistantAvatarEditorSheet {
           .fontColor($r('app.color.text_secondary'))
           .layoutWeight(1)
 
-        Button($r('app.string.icon_select_color'))
-          .height(32)
-          .fontSize(12)
-          .type(ButtonType.Normal)
-          .borderRadius(16)
-          .backgroundColor(Color.Transparent)
-          .fontColor($r('app.color.text_primary'))
-          .padding({ left: 12, right: 12 })
-          .stateEffect(false)
-          .systemMaterial(new uiMaterial.ImmersiveMaterial({
-            style: uiMaterial.ImmersiveStyle.REGULAR,
-            materialColor: Color.Transparent,
-            applyShadow: false,
-            interactive: true,
-            lightEffect: { color: undefined }
-          }))
-          .onClick(() => {
-            this.showColorPicker = true
-          })
+        Stack({ alignContent: Alignment.TopStart }) {
+          ImmersiveButtonSurface({
+            materialFactory: () => (new uiMaterial.ImmersiveMaterial({
+                style: uiMaterial.ImmersiveStyle.REGULAR,
+                materialColor: Color.Transparent,
+                applyShadow: false,
+                interactive: true,
+                lightEffect: { color: undefined }
+              })),
+            fallbackShadow: false,
+            cornerRadius: 16
+          }) {
+            Button($r('app.string.icon_select_color'))
+              .height(32)
+              .fontSize(12)
+              .type(ButtonType.Normal)
+              .borderRadius(16)
+              .backgroundColor(Color.Transparent)
+              .fontColor($r('app.color.text_primary'))
+              .padding({ left: 12, right: 12 })
+              .stateEffect(false)
+              .onClick(() => {
+                this.showColorPicker = true
+              })
+          }
+        }
+        .height(32)
+        .clip(false)
       }
       .width('100%')
     }
@@ -608,30 +635,40 @@ export struct AssistantAvatarEditorSheet {
 
   @Builder
   private SourceButton(mode: string, label: ResourceStr) {
-    Button(label)
-      .layoutWeight(1)
-      .height(38)
-      .fontSize(12)
-      .fontWeight(FontWeight.Medium)
-      .fontColor(this.editMode === mode ? Color.White : $r('app.color.text_secondary'))
-      .backgroundColor(this.editMode === mode ? this.themePrimary : Color.Transparent)
-      .borderRadius(19)
-      .border({
-        width: this.editMode === mode ? 0 : 1,
-        color: this.themePrimaryLight
-      })
-      .systemMaterial(new uiMaterial.ImmersiveMaterial({
-        style: uiMaterial.ImmersiveStyle.REGULAR,
-        materialColor: this.editMode === mode ? this.themePrimary : Color.Transparent,
-        applyShadow: false,
-        interactive: true,
-        lightEffect: { color: undefined }
-      }))
-      .onClick(() => {
-        this.editMode = mode
-        if (mode === ASSISTANT_AVATAR_MODE_SYMBOL && this.textValue === '') {
-          this.textValue = 'AI'
-        }
-      })
+    Stack({ alignContent: Alignment.TopStart }) {
+      ImmersiveButtonSurface({
+        materialFactory: () => (new uiMaterial.ImmersiveMaterial({
+            style: uiMaterial.ImmersiveStyle.REGULAR,
+            materialColor: this.editMode === mode ? this.themePrimary : Color.Transparent,
+            applyShadow: false,
+            interactive: true,
+            lightEffect: { color: undefined }
+          })),
+        fallbackShadow: false,
+        cornerRadius: 19
+      }) {
+        Button(label)
+          .height(38)
+          .fontSize(12)
+          .fontWeight(FontWeight.Medium)
+          .fontColor(this.editMode === mode ? Color.White : $r('app.color.text_secondary'))
+          .backgroundColor(Color.Transparent)
+          .borderRadius(19)
+          .border({
+            width: this.editMode === mode ? 0 : 1,
+            color: this.themePrimaryLight
+          })
+          .onClick(() => {
+            this.editMode = mode
+            if (mode === ASSISTANT_AVATAR_MODE_SYMBOL && this.textValue === '') {
+              this.textValue = 'AI'
+            }
+          })
+        .width('100%')
+      }
+    }
+    .layoutWeight(1)
+    .height(38)
+    .clip(false)
   }
 }

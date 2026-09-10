@@ -28,6 +28,7 @@ import chatInFlightMessageTest from './ChatInFlightMessage.test';
 import deepSeekWebSearchUtilsTest from './DeepSeekWebSearchUtils.test';
 import subAgentArgumentParserTest from './SubAgentArgumentParser.test';
 import openAIStreamCompatibilityTest from './OpenAIStreamCompatibility.test';
+import askUserQuestionUtilsTest from './AskUserQuestionUtils.test';
 
 export default function testsuite() {
   localUnitTest();
@@ -60,4 +61,5 @@ export default function testsuite() {
   deepSeekWebSearchUtilsTest();
   subAgentArgumentParserTest();
   openAIStreamCompatibilityTest();
+  askUserQuestionUtilsTest();
 }

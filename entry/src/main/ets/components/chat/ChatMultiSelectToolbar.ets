@@ -1,10 +1,11 @@
+import { ImmersiveButtonSurface } from '../ImmersiveButtonSurface'
+import { uiMaterial } from '@kit.ArkUI'
 import {
   createButtonTouchHandler,
   getButtonScale,
   getButtonAnimation
 } from '../../utils/ButtonAnimationUtils'
 import { getAppUiState } from '../../state/AppUiState'
-import { uiMaterial } from '@kit.ArkUI'
 import { VisualEffectsMode } from '../../models/ThemeColors'
 import {
   MANUSCRIPT_BODY_FONT,
@@ -71,27 +72,36 @@ export struct ChatMultiSelectToolbar {
   @Builder
   private CancelAction() {
     Column({ space: 6 }) {
-      Button({ type: ButtonType.Circle, stateEffect: false }) {
-        SymbolGlyph($r('sys.symbol.xmark'))
-          .fontSize(18)
-          .fontColor([$r('app.color.text_primary')])
+      Stack({ alignContent: Alignment.TopStart }) {
+        ImmersiveButtonSurface({
+          materialFactory: () => (new uiMaterial.ImmersiveMaterial({
+            style: uiMaterial.ImmersiveStyle.REGULAR,
+            interactive: true,
+            lightEffect: { color: undefined }
+          })),
+          cornerRadius: undefined
+        }) {
+          Button({ type: ButtonType.Circle, stateEffect: false }) {
+            SymbolGlyph($r('sys.symbol.xmark'))
+              .fontSize(18)
+              .fontColor([$r('app.color.text_primary')])
+          }
+          .width(42)
+          .height(42)
+          .backgroundColor(Color.Transparent)
+          .onTouch(createButtonTouchHandler((pressed: boolean): void => {
+            this.cancelPressed = pressed
+          }))
+          .onClick(() => {
+            this.onCancel()
+          })
+        }
       }
       .width(42)
       .height(42)
-      .backgroundColor(Color.Transparent)
-      .systemMaterial(new uiMaterial.ImmersiveMaterial({
-        style: uiMaterial.ImmersiveStyle.REGULAR,
-        interactive: true,
-        lightEffect: { color: undefined }
-      }))
       .scale(getButtonScale(this.cancelPressed))
       .animation(getButtonAnimation())
-      .onTouch(createButtonTouchHandler((pressed: boolean): void => {
-        this.cancelPressed = pressed
-      }))
-      .onClick(() => {
-        this.onCancel()
-      })
+      .clip(false)
 
       Text($r('app.string.cancel'))
         .fontSize(11)
@@ -104,29 +114,39 @@ export struct ChatMultiSelectToolbar {
   @Builder
   private SelectAllAction() {
     Column({ space: 6 }) {
-      Button({ type: ButtonType.Circle, stateEffect: false }) {
-        SymbolGlyph(this.isAllSelected() ? $r('sys.symbol.minus_circle') : $r('sys.symbol.checkmark_circle'))
-          .fontSize(18)
-          .fontColor([this.canToggleSelectAll() ? this.themePrimary : $r('app.color.text_tertiary')])
+      Stack({ alignContent: Alignment.TopStart }) {
+        ImmersiveButtonSurface({
+          materialFactory: () => (new uiMaterial.ImmersiveMaterial({
+            style: uiMaterial.ImmersiveStyle.REGULAR,
+            interactive: true,
+            lightEffect: { color: undefined }
+          })),
+          cornerRadius: undefined
+        }) {
+          Button({ type: ButtonType.Circle, stateEffect: false }) {
+            SymbolGlyph(this.isAllSelected() ? $r('sys.symbol.minus_circle') : $r('sys.symbol.checkmark_circle'))
+              .fontSize(18)
+              .fontColor([this.canToggleSelectAll() ? this.themePrimary : $r('app.color.text_tertiary')])
+          }
+          .width(42)
+          .height(42)
+          .enabled(this.canToggleSelectAll())
+          .backgroundColor(Color.Transparent)
+          .onTouch(createButtonTouchHandler((pressed: boolean): void => {
+            this.selectAllPressed = pressed
+          }))
+          .onClick(() => {
+            this.onSelectAll()
+          })
+        }
       }
       .width(42)
       .height(42)
       .enabled(this.canToggleSelectAll())
       .opacity(this.canToggleSelectAll() ? 1 : 0.45)
-      .backgroundColor(Color.Transparent)
-      .systemMaterial(new uiMaterial.ImmersiveMaterial({
-        style: uiMaterial.ImmersiveStyle.REGULAR,
-        interactive: true,
-        lightEffect: { color: undefined }
-      }))
       .scale(getButtonScale(this.selectAllPressed))
       .animation(getButtonAnimation())
-      .onTouch(createButtonTouchHandler((pressed: boolean): void => {
-        this.selectAllPressed = pressed
-      }))
-      .onClick(() => {
-        this.onSelectAll()
-      })
+      .clip(false)
 
       Text(this.getSelectAllLabel())
         .fontSize(11)
@@ -140,29 +160,39 @@ export struct ChatMultiSelectToolbar {
   @Builder
   private ShareAction() {
     Column({ space: 6 }) {
-      Button({ type: ButtonType.Circle, stateEffect: false }) {
-        SymbolGlyph($r('sys.symbol.share'))
-          .fontSize(18)
-          .fontColor([this.hasSelection() ? $r('app.color.text_primary') : $r('app.color.text_tertiary')])
+      Stack({ alignContent: Alignment.TopStart }) {
+        ImmersiveButtonSurface({
+          materialFactory: () => (new uiMaterial.ImmersiveMaterial({
+            style: uiMaterial.ImmersiveStyle.REGULAR,
+            interactive: true,
+            lightEffect: { color: undefined }
+          })),
+          cornerRadius: undefined
+        }) {
+          Button({ type: ButtonType.Circle, stateEffect: false }) {
+            SymbolGlyph($r('sys.symbol.share'))
+              .fontSize(18)
+              .fontColor([this.hasSelection() ? $r('app.color.text_primary') : $r('app.color.text_tertiary')])
+          }
+          .width(42)
+          .height(42)
+          .enabled(this.hasSelection())
+          .backgroundColor(Color.Transparent)
+          .onTouch(createButtonTouchHandler((pressed: boolean): void => {
+            this.sharePressed = pressed
+          }))
+          .onClick(() => {
+            this.onShare()
+          })
+        }
       }
       .width(42)
       .height(42)
       .enabled(this.hasSelection())
       .opacity(this.hasSelection() ? 1 : 0.45)
-      .backgroundColor(Color.Transparent)
-      .systemMaterial(new uiMaterial.ImmersiveMaterial({
-        style: uiMaterial.ImmersiveStyle.REGULAR,
-        interactive: true,
-        lightEffect: { color: undefined }
-      }))
       .scale(getButtonScale(this.sharePressed))
       .animation(getButtonAnimation())
-      .onTouch(createButtonTouchHandler((pressed: boolean): void => {
-        this.sharePressed = pressed
-      }))
-      .onClick(() => {
-        this.onShare()
-      })
+      .clip(false)
 
       Text($r('app.string.menu_share'))
         .fontSize(11)
@@ -176,30 +206,40 @@ export struct ChatMultiSelectToolbar {
   @Builder
   private DeleteAction() {
     Column({ space: 6 }) {
-      Button({ type: ButtonType.Circle, stateEffect: false }) {
-        SymbolGlyph($r('sys.symbol.trash'))
-          .fontSize(18)
-          .fontColor([this.hasSelection() ? $r('app.color.status_error') : $r('app.color.text_tertiary')])
+      Stack({ alignContent: Alignment.TopStart }) {
+        ImmersiveButtonSurface({
+          materialFactory: () => (new uiMaterial.ImmersiveMaterial({
+            style: uiMaterial.ImmersiveStyle.REGULAR,
+            materialColor: this.hasSelection() ? this.destructiveButtonBackground : undefined,
+            interactive: true,
+            lightEffect: { color: undefined }
+          })),
+          cornerRadius: undefined
+        }) {
+          Button({ type: ButtonType.Circle, stateEffect: false }) {
+            SymbolGlyph($r('sys.symbol.trash'))
+              .fontSize(18)
+              .fontColor([this.hasSelection() ? $r('app.color.status_error') : $r('app.color.text_tertiary')])
+          }
+          .width(42)
+          .height(42)
+          .enabled(this.hasSelection())
+          .backgroundColor(Color.Transparent)
+          .onTouch(createButtonTouchHandler((pressed: boolean): void => {
+            this.deletePressed = pressed
+          }))
+          .onClick(() => {
+            this.onDelete()
+          })
+        }
       }
       .width(42)
       .height(42)
       .enabled(this.hasSelection())
       .opacity(this.hasSelection() ? 1 : 0.45)
-      .backgroundColor(Color.Transparent)
-      .systemMaterial(new uiMaterial.ImmersiveMaterial({
-        style: uiMaterial.ImmersiveStyle.REGULAR,
-        materialColor: this.hasSelection() ? this.destructiveButtonBackground : undefined,
-        interactive: true,
-        lightEffect: { color: undefined }
-      }))
       .scale(getButtonScale(this.deletePressed))
       .animation(getButtonAnimation())
-      .onTouch(createButtonTouchHandler((pressed: boolean): void => {
-        this.deletePressed = pressed
-      }))
-      .onClick(() => {
-        this.onDelete()
-      })
+      .clip(false)
 
       Text($r('app.string.delete'))
         .fontSize(11)
@@ -292,11 +332,7 @@ export struct ChatMultiSelectToolbar {
       .alignItems(HorizontalAlign.Center)
       .padding({ left: 16, right: 16, top: 14, bottom: 14 })
       .backgroundColor(Color.Transparent)
-      .systemMaterial(new uiMaterial.ImmersiveMaterial({
-        style: uiMaterial.ImmersiveStyle.REGULAR,
-        interactive: true,
-        lightEffect: { color: undefined }
-      }))
+      .backdropBlur(24)
       .borderRadius(28)
       .border({ width: 1, color: this.panelBorderColor })
       .hitTestBehavior(HitTestMode.Default)

@@ -1,4 +1,3 @@
-import { uiMaterial } from '@kit.ArkUI'
 import { getAppUiState } from '../../state/AppUiState'
 import { pickLocalizedText } from '../../utils/LocalizedTextUtils'
 import {
@@ -146,11 +145,7 @@ export struct SlashCommandPanel {
       color: this.isManuscriptMode ? getAppUiState().themeDivider : this.themePrimary
     })
     .clip(!this.isManuscriptMode)
-    .systemMaterial(this.isManuscriptMode ? undefined : new uiMaterial.ImmersiveMaterial({
-      style: uiMaterial.ImmersiveStyle.REGULAR,
-      interactive: false,
-      lightEffect: { color: undefined }
-    }))
+    .backdropBlur(this.isManuscriptMode ? 0 : 24)
     .shadow({
       radius: this.isManuscriptMode ? 0 : 24,
       color: this.isManuscriptMode ? Color.Transparent : 'rgba(0, 0, 0, 0.12)',

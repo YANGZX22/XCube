@@ -1,10 +1,11 @@
+import { ImmersiveButtonSurface } from './ImmersiveButtonSurface'
+import { uiMaterial } from '@kit.ArkUI'
 /**
  * 带 Loading 圆环旋转动效的底部居中"回到底部"按钮
  * 仅在 AI 流式生成中且用户不在底部时显示
  */
 
 import { getAppUiState } from '../state/AppUiState'
-import { uiMaterial } from '@kit.ArkUI'
 import { VisualEffectsMode } from '../models/ThemeColors'
 
 @ComponentV2
@@ -81,26 +82,53 @@ export struct ScrollToBottomLoadingButton {
 
   build() {
     Stack({ alignContent: Alignment.Center }) {
-      Button({ type: this.isManuscriptMode ? ButtonType.Normal : ButtonType.Circle,
-        stateEffect: !this.isManuscriptMode }) {
-        SymbolGlyph($r('sys.symbol.chevron_down'))
-          .fontSize(20)
-          .fontColor([this.themePrimary])
+      Stack({ alignContent: Alignment.TopStart }) {
+        ImmersiveButtonSurface({
+          materialFactory: this.isManuscriptMode ? undefined : () => (new uiMaterial.ImmersiveMaterial({
+            style: uiMaterial.ImmersiveStyle.REGULAR,
+            materialColor: Color.Transparent,
+            applyShadow: false,
+            interactive: true,
+            lightEffect: { color: undefined }
+          })),
+          cornerRadius: this.isManuscriptMode ? 0 : 20
+        }) {
+          Button({ type: this.isManuscriptMode ? ButtonType.Normal : ButtonType.Circle,
+            stateEffect: !this.isManuscriptMode }) {
+            SymbolGlyph($r('sys.symbol.chevron_down'))
+              .fontSize(20)
+              .fontColor([this.themePrimary])
+          }
+          .width(40)
+          .height(40)
+          .padding(0)
+          .backgroundColor(Color.Transparent)
+          .borderRadius(this.isManuscriptMode ? 0 : 20)
+          .border({ width: 0, color: Color.Transparent })
+          .enabled(this.shouldKeepButtonActive())
+          .responseRegion({
+            x: -4,
+            y: -4,
+            width: 48,
+            height: 48
+          })
+          .onTouch((event: TouchEvent) => {
+            if (event.type === TouchType.Down) {
+              this.isPointerActive = true
+            } else if (event.type === TouchType.Up) {
+              this.schedulePointerRelease()
+            } else if (event.type === TouchType.Cancel) {
+              this.isPointerActive = false
+            }
+          })
+          .onClick(() => {
+            this.onScrollToBottom()
+          })
+        }
       }
       .width(40)
       .height(40)
-      .padding(0)
-      .backgroundColor(Color.Transparent)
-      .borderRadius(this.isManuscriptMode ? 0 : 20)
-      .border({ width: 0, color: Color.Transparent })
       .enabled(this.shouldKeepButtonActive())
-      .systemMaterial(this.isManuscriptMode ? undefined : new uiMaterial.ImmersiveMaterial({
-        style: uiMaterial.ImmersiveStyle.REGULAR,
-        materialColor: Color.Transparent,
-        applyShadow: false,
-        interactive: true,
-        lightEffect: { color: undefined }
-      }))
       .responseRegion({
         x: -4,
         y: -4,
@@ -108,18 +136,7 @@ export struct ScrollToBottomLoadingButton {
         height: 48
       })
       .zIndex(2)
-      .onTouch((event: TouchEvent) => {
-        if (event.type === TouchType.Down) {
-          this.isPointerActive = true
-        } else if (event.type === TouchType.Up) {
-          this.schedulePointerRelease()
-        } else if (event.type === TouchType.Cancel) {
-          this.isPointerActive = false
-        }
-      })
-      .onClick(() => {
-        this.onScrollToBottom()
-      })
+      .clip(false)
 
       // 外围 loading 圆环只参与绘制，不参与触摸命中。
       Progress({ value: 25, total: 100, type: ProgressType.Ring })

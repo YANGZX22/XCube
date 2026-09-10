@@ -1,3 +1,4 @@
+import { getBlurBottomShadow } from '../../utils/BlurShadowUtils'
 import { uiMaterial } from '@kit.ArkUI'
 import { ToolPreviewEntry } from '../../utils/ToolPayloadSummaryUtils'
 import { getAppUiState } from '../../state/AppUiState'
@@ -198,13 +199,8 @@ export struct ChatToolExecutionApprovalSheetContent {
         .padding(14)
         .borderRadius(16)
         .backgroundColor(Color.Transparent)
-        .systemMaterial(new uiMaterial.ImmersiveMaterial({
-          style: uiMaterial.ImmersiveStyle.ULTRA_THIN,
-          materialColor: Color.Transparent,
-          applyShadow: false,
-          interactive: false,
-          lightEffect: { color: undefined }
-        }))
+        .backdropBlur(16)
+        .shadow(getBlurBottomShadow())
       }
 
       Column({ space: 8 }) {
@@ -358,13 +354,8 @@ export struct ChatToolExecutionApprovalSheetContent {
         .placeholderColor($r('app.color.text_tertiary'))
         .backgroundColor(Color.Transparent)
         .borderRadius(10)
-        .systemMaterial(new uiMaterial.ImmersiveMaterial({
-          style: uiMaterial.ImmersiveStyle.ULTRA_THIN,
-          materialColor: Color.Transparent,
-          applyShadow: false,
-          interactive: true,
-          lightEffect: { color: undefined }
-        }))
+        .backdropBlur(16)
+        .shadow(getBlurBottomShadow())
         .textAlign(TextAlign.Center)
         .onChange((input: string) => {
           onChange(input)
@@ -400,13 +391,8 @@ export struct ChatToolExecutionApprovalSheetContent {
     .padding({ left: 12, right: 10 })
     .borderRadius(12)
     .backgroundColor(Color.Transparent)
-    .systemMaterial(new uiMaterial.ImmersiveMaterial({
-      style: uiMaterial.ImmersiveStyle.ULTRA_THIN,
-      materialColor: Color.Transparent,
-      applyShadow: false,
-      interactive: false,
-      lightEffect: { color: undefined }
-    }))
+    .backdropBlur(16)
+    .shadow(getBlurBottomShadow())
     .alignItems(VerticalAlign.Center)
   }
 

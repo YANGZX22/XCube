@@ -124,6 +124,7 @@ export class PreferenceKeys {
   static readonly LIGHT_COLOR_MODE: string = 'light_color_mode'
   static readonly CHAT_LIST_IMMERSIVE_MATERIAL: string = 'chat_list_immersive_material'
   static readonly KNOWLEDGE_LIST_IMMERSIVE_MATERIAL: string = 'knowledge_list_immersive_material'
+  static readonly FORCE_WRAPPED_MATERIAL_BLUR: string = 'force_wrapped_material_blur'
 
   // WebDAV 同步配置
   static readonly WEBDAV_SERVER_URL: string = 'webdav_server_url'
@@ -594,6 +595,14 @@ export class PreferencesService {
   // 设置知识库列表页是否使用沉浸材质
   async setKnowledgeListImmersiveMaterial(enabled: boolean): Promise<void> {
     await this.setBoolean(PreferenceKeys.KNOWLEDGE_LIST_IMMERSIVE_MATERIAL, enabled)
+  }
+
+  async getForceWrappedMaterialBlur(): Promise<boolean> {
+    return await this.getBoolean(PreferenceKeys.FORCE_WRAPPED_MATERIAL_BLUR, false)
+  }
+
+  async setForceWrappedMaterialBlur(enabled: boolean): Promise<void> {
+    await this.setBoolean(PreferenceKeys.FORCE_WRAPPED_MATERIAL_BLUR, enabled)
   }
 }
 
