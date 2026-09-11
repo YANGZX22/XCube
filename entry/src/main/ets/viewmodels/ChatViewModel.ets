@@ -3037,10 +3037,9 @@ ${webSearchLimitRule}
         ? `- 当前设置中，本次回答最多调用 knowledge_search ${knowledgeSearchCallLimit} 次；达到上限后基于已有证据回答。`
         : '- 当前设置不限制 knowledge_search 的固定调用次数；仍须避免重复查询，并在证据充分或已无新信息时立即停止。'
       toolUsageSystemPrompt += `
-- 以下知识库规则优先级高于前面的“普通问答不调用工具”和“纯生成任务不调用工具”规则。
-- 用户已开启知识库。在本次回答的第一步，必须先调用 knowledge_search，根据用户当前问题生成独立、具体的 query。
-- 首次 knowledge_search 返回之前，禁止直接回答用户，禁止以自然语言文本代替工具调用，也不要输出伪造的工具调用标记。
-- 只能通过模型的正式 function call 调用 knowledge_search，arguments 必须是符合工具 schema 的有效 JSON。
+- 用户已开启知识库。回答前优先根据当前问题调用 knowledge_search 检索知识库，并优先依据相关检索结果作答。这条要求优先于“普通问答通常无需工具”的默认建议；用户明确要求不检索时尊重其要求。
+- 知识库没有相关结果或证据不足时，明确说明，再按需使用通用知识或其他可用工具补充；不要把外部信息说成知识库检索结果。
+- query 应独立、具体。结果足够时停止；仅对影响答案的证据缺口进行更聚焦的续查，引用实际命中的文件与位置。`)
 ${knowledgeSearchLimitRule}`
     }
     if (hasSkillTool) {
@@ -4010,6 +4009,7 @@ ${preview}`
       requestHasKnowledgeSearch && completedKnowledgeQueryCount === 0
     // required tool_choice 与 Thinking 的兼容性按供应商协议决定。已知冲突的 DashScope
     // 首轮关闭推理；其余模型保留用户选择，以兼容只能在推理模式下工作的模型。
+    // DeepSeek 思考模式由请求层省略不兼容的 tool_choice，仍保留知识库调用校验。
     // 若首次未产生知识库调用，受控重试时才临时关闭一次推理。
     const reasoningLevelForThisRound = forceKnowledgeSearchInThisRound
       ? resolveRequiredToolReasoningLevel(

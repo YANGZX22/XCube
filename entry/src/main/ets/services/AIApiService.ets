@@ -2649,8 +2649,12 @@ export class AIApiService {
         requestBody.thinking_budget = this.getSiliconFlowThinkingTokenLimit(reasoningTokenLimit)
       }
     }
-    // 添加 Function Calling 工具定义
-    if (tools !== undefined && tools.length > 0) {
+    // DeepSeek 思考模式不接受显式 tool_choice；省略后仍可通过 tools 自动调用。
+    // required 的知识库调用由 ChatViewModel 校验并受控重试，不能以关闭思考来替代。
+    // none 则连工具定义一起省略，避免省略 tool_choice 后反而允许模型调用工具。
+    const useImplicitToolChoice = reasoningRequestStrategy === ReasoningRequestStrategy.DEEPSEEK_THINKING &&
+      normalizedReasoningLevel !== ReasoningLevel.OFF
+    if (tools !== undefined && tools.length > 0 && !(useImplicitToolChoice && toolChoice === 'none')) {
       const openaiTools: OpenAITool[] = []
       for (let i = 0; i < tools.length; i++) {
         const tool = tools[i]
@@ -2665,7 +2669,7 @@ export class AIApiService {
         openaiTools.push(openaiTool)
       }
       requestBody.tools = openaiTools
-      if (toolChoice !== undefined && toolChoice !== '') {
+      if (!useImplicitToolChoice && toolChoice !== undefined && toolChoice !== '') {
         requestBody.tool_choice = toolChoice
       }
     }
