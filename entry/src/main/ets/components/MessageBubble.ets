@@ -1806,6 +1806,11 @@ export struct MessageBubble {
               bottomRight: 6
             })
             .clip(true)
+            // 宽度约束必须作用于实际气泡；仅约束外层 Stack 会在短图文右侧留下空白。
+            .constraintSize({
+              minWidth: this.hasDisplayAttachments() || this.shouldShowDocumentToolHint() ? 280 : 0,
+              maxWidth: this.hasDisplayAttachments() || this.shouldShowDocumentToolHint() ? '88%' : '75%'
+            })
             .border({
               width: this.isEditing ? 2 : (this.isMultiSelectMode && this.isSelected ? 1.2 : 0.5),
               color: this.isEditing
@@ -1823,10 +1828,6 @@ export struct MessageBubble {
               }
             })
           }
-          .constraintSize({
-            minWidth: this.hasDisplayAttachments() || this.shouldShowDocumentToolHint() ? 280 : 0,
-            maxWidth: this.hasDisplayAttachments() || this.shouldShowDocumentToolHint() ? '88%' : '75%'
-          })
           .clip(false)
 
           // 多选选中竖条

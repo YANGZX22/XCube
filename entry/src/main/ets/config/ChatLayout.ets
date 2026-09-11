@@ -1,5 +1,6 @@
 export const CHAT_NAVIGATION_BAR_DEFAULT_HEIGHT: number = 44
 export const CHAT_NAVIGATION_BAR_MIN_HEIGHT: number = 44
+export const CHAT_COMPOSER_HORIZONTAL_INSET_VP: number = 16
 // 提示优先占用输入栏原有底部留白；不足时仅补齐差额，避免进入键盘/附件按钮区域。
 export const CHAT_AI_NOTICE_MIN_HEIGHT_VP: number = 28
 

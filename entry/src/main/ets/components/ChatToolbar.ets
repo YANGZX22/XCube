@@ -12,9 +12,12 @@ import { VisualEffectsMode } from '../models/ThemeColors'
 import { MANUSCRIPT_BODY_FONT, MANUSCRIPT_COMPOSER_TOOLBAR_HEIGHT } from '../utils/ManuscriptVisualUtils'
 import { isChineseAppLanguage } from '../utils/LocalizedTextUtils'
 import { InteractiveMaterialButton } from './InteractiveMaterialButton'
+import { shouldUseWrappedMaterial } from '../utils/WrappedMaterialSupport'
 
 @ComponentV2
 export struct ChatToolbar {
+  // 外扩滚动视口抵消输入区内边距，让渐隐贴近页面边缘。
+  @Param horizontalViewportOutsetVp: number = 0
   @Param toolSelectionAvailable: boolean = false
   @Param hasSelectedTools: boolean = false
   @Event onOpenTools: () => void = (): void => {}
@@ -96,6 +99,10 @@ export struct ChatToolbar {
 
   private getToolbarChipBarHeight(): number {
     return this.isManuscriptMode ? MANUSCRIPT_COMPOSER_TOOLBAR_HEIGHT : 36
+  }
+
+  private get viewportOutsetVp(): number {
+    return this.isManuscriptMode ? 0 : Math.max(0, this.horizontalViewportOutsetVp)
   }
 
   private getToolChipWidth(): number {
@@ -193,10 +200,13 @@ export struct ChatToolbar {
         }
       }
       .height(this.isManuscriptMode ? MANUSCRIPT_COMPOSER_TOOLBAR_HEIGHT : 44)
-      .padding(this.isManuscriptMode ? 0 : { left: 18, right: 18, top: 4, bottom: 4 })
+      .padding(this.isManuscriptMode ? 0 : {
+        // 左侧只补回输入区内边距，使首个按钮与输入栏左边缘对齐。
+        left: this.viewportOutsetVp, right: 18 + this.viewportOutsetVp, top: 4, bottom: 4
+      })
       .clip(false)
     }
-    .width('100%')
+    .width(this.viewportOutsetVp > 0 ? `calc(100% + ${this.viewportOutsetVp * 2}vp)` : '100%')
     .height(this.isManuscriptMode ? MANUSCRIPT_COMPOSER_TOOLBAR_HEIGHT : 44)
     .scrollable(ScrollDirection.Horizontal)
     .scrollBar(BarState.Off)
@@ -206,7 +216,10 @@ export struct ChatToolbar {
       height: this.isManuscriptMode ? MANUSCRIPT_COMPOSER_TOOLBAR_HEIGHT : 68
     }).offset({ x: 0, y: this.isManuscriptMode ? 0 : -12 }))
     .clip(false)
-    .margin({ bottom: this.isManuscriptMode ? 6 : 4 })
+    .margin({
+      left: -this.viewportOutsetVp, right: -this.viewportOutsetVp,
+      bottom: this.isManuscriptMode ? 6 : 4
+    })
   }
 
   @Builder
@@ -216,6 +229,7 @@ export struct ChatToolbar {
         surfaceWidth: 36,
         surfaceHeight: 36,
         buttonType: ButtonType.Circle,
+        applyShadow: !shouldUseWrappedMaterial(),
         onActivate: onClick
       }) {
         Stack({ alignContent: Alignment.Center }) {
@@ -276,6 +290,7 @@ export struct ChatToolbar {
       InteractiveMaterialButton({
         surfaceWidth: this.getToolChipWidth(),
         surfaceHeight: this.getToolbarChipBarHeight(),
+        applyShadow: !shouldUseWrappedMaterial(),
         onActivate: () => {
           this.onOpenTools()
         }
@@ -352,6 +367,7 @@ export struct ChatToolbar {
         InteractiveMaterialButton({
           surfaceWidth: this.getReasoningChipWidth(),
           surfaceHeight: this.getToolbarChipBarHeight(),
+          applyShadow: !shouldUseWrappedMaterial(),
           onActivate: () => {
             this.showReasoningPanel = true
           }
@@ -455,6 +471,7 @@ export struct ChatToolbar {
           surfaceWidth: this.getKnowledgeChipWidth(),
           surfaceHeight: this.getToolbarChipBarHeight(),
           isEnabled: this.knowledgeAvailable,
+          applyShadow: !shouldUseWrappedMaterial(),
           onActivate: () => {
             if (this.knowledgeAvailable) {
               this.onKnowledgeToggle(!this.knowledgeEnabled)
@@ -531,6 +548,7 @@ export struct ChatToolbar {
       InteractiveMaterialButton({
         surfaceWidth: this.getWorkspaceChipWidth(),
         surfaceHeight: this.getToolbarChipBarHeight(),
+        applyShadow: !shouldUseWrappedMaterial(),
         onActivate: () => {
           this.onOpenWorkspace()
         }

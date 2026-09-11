@@ -8,7 +8,7 @@ import { ReasoningControlMode } from '../../services/ProviderCompatibilityRegist
 import { matchSlashCommands, SlashCommandItem } from '../../utils/SlashCommandUtils'
 import { getAppUiState } from '../../state/AppUiState'
 import { VisualEffectsMode } from '../../models/ThemeColors'
-import { CHAT_AI_NOTICE_MIN_HEIGHT_VP } from '../../config/ChatLayout'
+import { CHAT_AI_NOTICE_MIN_HEIGHT_VP, CHAT_COMPOSER_HORIZONTAL_INSET_VP } from '../../config/ChatLayout'
 
 @ComponentV2
 export struct ChatInputAreaSection {
@@ -182,6 +182,7 @@ export struct ChatInputAreaSection {
         }
 
         ChatToolbar({
+          horizontalViewportOutsetVp: this.isManuscriptMode ? 0 : CHAT_COMPOSER_HORIZONTAL_INSET_VP,
           toolSelectionAvailable: this.toolSelectionAvailable,
           hasSelectedTools: this.hasSelectedTools,
           onOpenTools: (): void => {
@@ -344,7 +345,9 @@ export struct ChatInputAreaSection {
     }
     .width('100%')
     .alignItems(HorizontalAlign.Center)
-    .padding(this.isManuscriptMode ? { left: 20, right: 20, top: 14 } : { left: 16, right: 16, top: 6 })
+    .padding(this.isManuscriptMode ? { left: 20, right: 20, top: 14 } : {
+      left: CHAT_COMPOSER_HORIZONTAL_INSET_VP, right: CHAT_COMPOSER_HORIZONTAL_INSET_VP, top: 6
+    })
     .backgroundColor(this.isManuscriptMode ? getAppUiState().themeBackground : Color.Transparent)
     .border({
       width: this.isManuscriptMode ? { top: 1 } : 0,
