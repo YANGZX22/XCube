@@ -12,16 +12,17 @@ function walk(n, predicate, result = []) { if (predicate(n)) result.push(n); ts.
 function runtime(api = 'yes') {
   const ui = { forceWrappedMaterialBlur: true, visualEffectsMode: 'off', themePrimary: '#405080', topAvoidHeight: 72, isDarkMode: false };
   const records = [], created = [], cache = new Map(), empty = {};
+  let attributeAnimation;
   const enums = new Proxy({}, { get: (_t, name) => name });
   const context = { px2vp: n => n / 3, getHostContext: () => ({ resourceManager: { getStringSync: id => String(id) } }),
     animateTo: (_options, action) => action() };
   const decorator = () => undefined;
   class View {
-    constructor(parent) { this.parent = parent; }
+    constructor(parent) { this.parent = parent; this.componentUpdates = []; }
     initParam(name, value) { this[name] = value; }
     updateParam(name, value) { this[name] = value; }
     finalizeConstruction() {}
-    observeComponentCreation2(action) { action(1, true); }
+    observeComponentCreation2(action) { this.componentUpdates.push(action); action(this.componentUpdates.length, true); }
     ifElseBranchUpdateFunction(_index, action) { action(); }
     forEachUpdateFunction(_id, items, action) { items.forEach(action); }
     getUIContext() { return context; }
@@ -31,10 +32,11 @@ function runtime(api = 'yes') {
     Monitor: () => decorator, Color: enums, BlurStyle: enums, Alignment: enums, HitTestMode: enums, FlexAlign: enums,
     VerticalAlign: enums, HorizontalAlign: enums, ButtonType: enums, ImageFit: enums,
     $r: id => ({ id }) };
+  globals.Context = { animation: options => { attributeAnimation = options; } };
   function native(type) {
     let proxy;
     proxy = new Proxy({}, { get: (_t, name) => (...args) => {
-      records.push({ type, name, args });
+      records.push({ type, name, args, animation: attributeAnimation });
       if (name === 'attributeModifier') args[0]?.applyNormalAttribute?.(proxy);
       return proxy;
     } });
@@ -133,13 +135,54 @@ for (const count of [2, 3, 4]) {
   const rendered = [], clicked = [];
   const bar = new TabBar(new env.View(), { selectedIndex: count - 1, showSelectionBubble: count !== 4, tabCount: count, barWidth: 280,
     barHeight: 56, itemContent: index => rendered.push(index), onSelect: index => clicked.push(index) });
-  bar.aboutToAppear(); bar.initialRender();
+  bar.aboutToAppear?.(); bar.initialRender();
   check(rendered.join(',') === Array.from({ length: count }, (_, i) => i).join(','), 'One foreground per tab');
   env.records.filter(r => r.name === 'onClick').forEach(r => r.args[0]());
   check(clicked.join(',') === rendered.join(','), 'Plain clicks retain tab indices');
   check(env.records.filter(r => r.name === 'backdropBlur').length === 1, 'One blur surface per bottom bar');
   check(!env.records.some(r => ['scale', 'gesture', 'onTouch'].includes(r.name)), 'No deformation or long-press/drag interception');
   check(env.records.some(r => r.name === 'position') === (count !== 4), 'Only the four-option home preview omits its selected capsule');
+}
+
+// The indicator's transform must carry its animation on every update, not depend on
+// animateTo opened by a Monitor after parent parameters have already been updated.
+for (const count of [2, 3]) {
+  const env = runtime(), TabBar = env.load('components/DrawnFloatingTabBar').DrawnFloatingTabBar;
+  const bar = new TabBar(new env.View(), { selectedIndex: count - 1, tabCount: count, barWidth: 280,
+    itemContent: () => {}, onSelect: () => { throw Error('Parameter updates must not emit clicks'); } });
+  bar.aboutToAppear?.(); bar.initialRender();
+  const indicatorUpdate = bar.componentUpdates.find(action => action.toString().includes('Row.translate'));
+  check(!!indicatorUpdate, 'Indicator uses a render transform, not a separately synchronized layout position');
+  function verifyIndicator(label) {
+    const translate = env.records.findLast(r => r.type === 'Row' && r.name === 'translate');
+    const position = env.records.findLast(r => r.type === 'Row' && r.name === 'position');
+    const index = Math.max(0, Math.min(bar.tabCount - 1, bar.selectedIndex));
+    check(position.args[0].x === 9 && position.args[0].y === 5, label + ': fixed capsule origin');
+    check(translate.args[0].x === index * Math.max(0, bar.barWidth - 12) / Math.max(1, bar.tabCount),
+      label + ': target derives directly from the current selection and geometry');
+    check(translate.animation?.duration === 500 && translate.animation?.curve === 'spring',
+      label + ': transform always carries the spring animation');
+    check(env.records.filter(r => ['Button', 'Stack'].includes(r.type)).every(r => r.animation == null),
+      label + ': no animation leaks to button hit targets or the blur surface');
+  }
+  verifyIndicator('Initial nonzero selection');
+  for (const index of [0, count - 1, 0, 1, 1, count - 1]) {
+    bar.updateStateVars({ selectedIndex: index });
+    env.records.length = 0;
+    indicatorUpdate(1, false);
+    verifyIndicator('Repeated/rapid selection update');
+  }
+  for (const geometryFirst of [true, false]) {
+    const geometry = { barWidth: geometryFirst ? 320 : 240, tabCount: geometryFirst ? 3 : 2 };
+    for (const params of geometryFirst ? [geometry, { selectedIndex: 1 }] : [{ selectedIndex: 0 }, geometry]) {
+      bar.updateStateVars(params);
+    }
+    env.records.length = 0;
+    indicatorUpdate(1, false);
+    verifyIndicator('Batched geometry/selection update');
+  }
+  const property = Object.getOwnPropertyDescriptor(bar, 'indicatorX');
+  check(property === undefined, 'No mutable duplicate coordinate remains for a geometry monitor to overwrite');
 }
 
 // Only the native HDS tab bar needs its original upward visual compensation.

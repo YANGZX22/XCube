@@ -14,10 +14,13 @@ export struct DrawnFloatingTabBar {
   @Param barHeight: number = 56
   @BuilderParam itemContent: (index: number) => void
   @Event onSelect: (index: number) => void = (): void => {}
-  @Local indicatorX: number = 9
 
   private get itemWidth(): number {
     return Math.max(0, this.barWidth - 12) / Math.max(1, this.tabCount)
+  }
+
+  private get indicatorOffsetX(): number {
+    return Math.max(0, Math.min(this.tabCount - 1, this.selectedIndex)) * this.itemWidth
   }
 
   private get indexes(): number[] {
@@ -26,26 +29,6 @@ export struct DrawnFloatingTabBar {
       indexes.push(index)
     }
     return indexes
-  }
-
-  private syncIndicator(): void {
-    this.indicatorX = 9 + Math.max(0, Math.min(this.tabCount - 1, this.selectedIndex)) * this.itemWidth
-  }
-
-  aboutToAppear(): void {
-    this.syncIndicator()
-  }
-
-  @Monitor('barWidth', 'tabCount')
-  private onGeometryChanged(): void {
-    this.syncIndicator()
-  }
-
-  @Monitor('selectedIndex')
-  private onSelectionChanged(): void {
-    this.getUIContext().animateTo({ duration: 500, curve: curves.springMotion(0.68, 0.88) }, () => {
-      this.syncIndicator()
-    })
   }
 
   build() {
@@ -58,7 +41,12 @@ export struct DrawnFloatingTabBar {
           .backgroundColor(withColorAlpha(getAppUiState().themePrimary, getAppUiState().isDarkMode ? 'CC' : 'AA'))
           .border({ width: 0.5, color: getAppUiState().isDarkMode ? '#40FFFFFF' : '#35FFFFFF' })
           .shadow({ radius: 20, color: withColorAlpha(getAppUiState().themePrimary, '35'), offsetY: 4, fill: false })
-          .position({ x: this.indicatorX, y: 5 })
+          .position({ x: 9, y: 5 })
+          .animation(undefined)
+          // 动画直接绑定位移，避免 Monitor 二次更新坐标时丢失动画上下文，
+          // 或尺寸同步先把坐标写到终点。仅滑块移动，不动画化背景和按钮命中区域。
+          .translate({ x: this.indicatorOffsetX })
+          .animation({ duration: 500, curve: curves.springMotion(0.68, 0.88) })
           .hitTestBehavior(HitTestMode.None)
       }
 
