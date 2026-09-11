@@ -2,7 +2,7 @@ import { ImmersiveButtonSurface } from './ImmersiveButtonSurface'
 import { ImmersiveListSurface, LIST_MATERIAL_CARD_RADIUS } from './ImmersiveListSurface'
 import { getBlurBottomShadow } from '../utils/BlurShadowUtils'
 import { picker } from '@kit.CoreFileKit'
-import { uiMaterial } from '@kit.ArkUI'
+import { curves, uiMaterial } from '@kit.ArkUI'
 import { pdfService, pdfViewManager, PdfView } from '@kit.PDFKit'
 import {
   KnowledgeDocument,
@@ -28,7 +28,15 @@ import { ManuscriptPageTitle } from './index/ManuscriptPageTitle'
 
 const KNOWLEDGE_CATEGORY_COLLAPSED_VISIBLE_COUNT: number = 1
 const KNOWLEDGE_CATEGORY_STACK_LIMIT: number = 3
-const KNOWLEDGE_CATEGORY_STACK_LAYER_HEIGHT: number = 11
+const KNOWLEDGE_CATEGORY_STACK_STEP: number = 14
+const KNOWLEDGE_DOCUMENT_CARD_HEIGHT: number = 58
+const KNOWLEDGE_DOCUMENT_CARD_GAP: number = 8
+
+interface KnowledgeCardMeasurement {
+  documentId: string
+  height: number
+}
+
 const KNOWLEDGE_CATEGORY_PDF: string = 'pdf'
 const KNOWLEDGE_CATEGORY_WORD: string = 'word'
 const KNOWLEDGE_CATEGORY_SPREADSHEET: string = 'spreadsheet'
@@ -67,11 +75,13 @@ export struct KnowledgeBasePanel {
   @Local previewLoading: boolean = false
   @Local previewError: string = ''
   @Local expandedCategoryKeys: string[] = []
+  @Local cardMeasurements: KnowledgeCardMeasurement[] = []
 
   private service: KnowledgeDocumentService = ServiceRegistry.knowledgeDocuments()
   private handledUploadRequestTick: number = 0
   private handledRefreshRequestTick: number = 0
   private previewDocumentId: string = ''
+  private deckScrollers: Map<string, ListScroller> = new Map<string, ListScroller>()
   private pdfPreviewController: pdfViewManager.PdfController = new pdfViewManager.PdfController()
 
   private get themePrimary(): string {
@@ -626,15 +636,57 @@ export struct KnowledgeBasePanel {
     return categoryDocuments.slice(0, KNOWLEDGE_CATEGORY_COLLAPSED_VISIBLE_COUNT)
   }
 
-  private getCollapsedStackCount(categoryKey: string): number {
-    if (this.isCategoryExpanded(categoryKey)) {
-      return 0
+  private isDocumentStacked(document: KnowledgeDocument): boolean {
+    return !this.isManuscriptMode &&
+      !this.isCategoryExpanded(this.getDocumentCategoryKey(document)) &&
+      this.getDocumentsForCategory(this.getDocumentCategoryKey(document)).length > 1
+  }
+
+  private getDocumentCardHeight(document: KnowledgeDocument): number {
+    const measurement = this.cardMeasurements.find((item: KnowledgeCardMeasurement): boolean => {
+      return item.documentId === document.id
+    })
+    return measurement?.height ?? KNOWLEDGE_DOCUMENT_CARD_HEIGHT
+  }
+
+  private measureDocumentCard(document: KnowledgeDocument, size: SizeOptions): void {
+    const height = Number(size.height)
+    if (!Number.isFinite(height) || height <= 0 ||
+      Math.abs(height - this.getDocumentCardHeight(document)) < 0.5) {
+      return
     }
-    return Math.min(
-      KNOWLEDGE_CATEGORY_STACK_LIMIT,
-      Math.max(0, this.getDocumentsForCategory(categoryKey).length -
-        KNOWLEDGE_CATEGORY_COLLAPSED_VISIBLE_COUNT)
-    )
+    this.cardMeasurements = this.cardMeasurements.filter((item: KnowledgeCardMeasurement): boolean => {
+      return item.documentId !== document.id
+    }).concat([{ documentId: document.id, height: height }])
+  }
+
+  private getDeckCardOffset(categoryKey: string, index: number): number {
+    if (!this.isCategoryExpanded(categoryKey)) {
+      return Math.min(index, KNOWLEDGE_CATEGORY_STACK_LIMIT) * KNOWLEDGE_CATEGORY_STACK_STEP
+    }
+    const documents = this.getDocumentsForCategory(categoryKey)
+    let offset = 0
+    for (let i = 0; i < index; i++) {
+      offset += this.getDocumentCardHeight(documents[i]) + KNOWLEDGE_DOCUMENT_CARD_GAP
+    }
+    return offset
+  }
+
+  private getDeckHeight(categoryKey: string): number {
+    const documents = this.getDocumentsForCategory(categoryKey)
+    const expanded = this.isCategoryExpanded(categoryKey)
+    let height = 0
+    for (let index = 0; index < documents.length; index++) {
+      if (expanded) {
+        height += this.getDocumentCardHeight(documents[index]) + KNOWLEDGE_DOCUMENT_CARD_GAP
+      } else if (index <= KNOWLEDGE_CATEGORY_STACK_LIMIT) {
+        height = Math.max(height, index * KNOWLEDGE_CATEGORY_STACK_STEP +
+          this.getDocumentCardHeight(documents[index]) + KNOWLEDGE_DOCUMENT_CARD_GAP)
+      } else {
+        break
+      }
+    }
+    return height
   }
 
   private toggleCategoryExpanded(categoryKey: string): void {
@@ -642,7 +694,7 @@ export struct KnowledgeBasePanel {
       return
     }
     this.closeAllSwipeActions()
-    this.getUIContext().animateTo({ duration: 240, curve: Curve.EaseInOut }, (): void => {
+    this.getUIContext().animateTo({ duration: 460, curve: curves.springMotion(0.42, 0.9) }, (): void => {
       if (this.isCategoryExpanded(categoryKey)) {
         this.expandedCategoryKeys = this.expandedCategoryKeys.filter((key: string): boolean => {
           return key !== categoryKey
@@ -674,14 +726,9 @@ export struct KnowledgeBasePanel {
 
   private getCategorySummary(categoryKey: string): string {
     const count = this.getDocumentsForCategory(categoryKey).length
-    if (count > KNOWLEDGE_CATEGORY_COLLAPSED_VISIBLE_COUNT && this.isCategoryExpanded(categoryKey)) {
-      return pickLocalizedText(`${count} 个文档 · 已展开全部`, `${count} documents · Showing all`)
-    }
-    if (count > KNOWLEDGE_CATEGORY_COLLAPSED_VISIBLE_COUNT) {
-      return pickLocalizedText(
-        `${count} 个文档 · 显示最新 1 个`,
-        `${count} documents · Latest 1`
-      )
+    if (count > KNOWLEDGE_CATEGORY_COLLAPSED_VISIBLE_COUNT && this.isManuscriptMode &&
+      !this.isCategoryExpanded(categoryKey)) {
+      return pickLocalizedText(`${count} 个文档 · 显示最新 1 个`, `${count} documents · Latest 1`)
     }
     return pickLocalizedText(`${count} 个文档`, `${count} document${count === 1 ? '' : 's'}`)
   }
@@ -712,56 +759,6 @@ export struct KnowledgeBasePanel {
 
   private getCategoryCardBorderColor(categoryKey: string): string {
     return withColorAlpha(this.getCategoryColor(categoryKey), this.isDarkMode ? '40' : '2E')
-  }
-
-  private getCollapsedStackLayers(categoryKey: string): number[] {
-    const layers: number[] = []
-    const stackCount = this.getCollapsedStackCount(categoryKey)
-    for (let layer = 1; layer <= stackCount; layer++) {
-      layers.push(layer)
-    }
-    return layers
-  }
-
-  private getStackLayerWidth(layer: number): string {
-    return `${100 - layer * 4}%`
-  }
-
-  private getStackLayerHeight(layer: number): number {
-    return KNOWLEDGE_CATEGORY_STACK_LAYER_HEIGHT - (layer - 1) * 2
-  }
-
-  private getStackLayerOpacity(layer: number): number {
-    return 1 - (layer - 1) * 0.16
-  }
-
-  private buildDocumentCardTransition(document: KnowledgeDocument): TransitionEffect {
-    const order = Math.min(Math.max(this.getDocumentOrdinal(document) - 1, 0), 5)
-    return TransitionEffect.asymmetric(
-      TransitionEffect.OPACITY
-        .combine(TransitionEffect.translate({ y: -10 }))
-        .combine(TransitionEffect.scale({ x: 0.96, y: 0.94, centerX: '50%', centerY: '0%' }))
-        .animation({ duration: 260, delay: order * 45, curve: Curve.EaseOut }),
-      TransitionEffect.OPACITY
-        .combine(TransitionEffect.translate({ y: -6 }))
-        .combine(TransitionEffect.scale({ x: 0.96, y: 0.94, centerX: '50%', centerY: '0%' }))
-        .animation({ duration: 160, delay: (5 - order) * 15, curve: Curve.EaseIn })
-    )
-  }
-
-  private buildStackLayerTransition(layer: number): TransitionEffect {
-    return TransitionEffect.asymmetric(
-      TransitionEffect.OPACITY
-        .combine(TransitionEffect.scale({ x: 0.94, y: 0.05, centerX: '50%', centerY: '0%' }))
-        .animation({ duration: 260, delay: (layer - 1) * 60, curve: Curve.EaseOut }),
-      TransitionEffect.OPACITY
-        .combine(TransitionEffect.scale({ x: 0.94, y: 0.05, centerX: '50%', centerY: '0%' }))
-        .animation({
-          duration: 170,
-          delay: (KNOWLEDGE_CATEGORY_STACK_LIMIT - layer) * 45,
-          curve: Curve.EaseIn
-        })
-    )
   }
 
   @Builder
@@ -885,11 +882,29 @@ export struct KnowledgeBasePanel {
     return 56
   }
 
+  private getDeckScroller(documentId: string): ListScroller {
+    let scroller = this.deckScrollers.get(documentId)
+    if (scroller === undefined) {
+      scroller = new ListScroller()
+      this.deckScrollers.set(documentId, scroller)
+    }
+    return scroller
+  }
+
   private closeAllSwipeActions(): void {
     try {
       this.listScroller.closeAllSwipeActions()
     } catch (_error) {
     }
+    this.deckScrollers.forEach((scroller: ListScroller, documentId: string): void => {
+      try {
+        scroller.closeAllSwipeActions()
+      } catch (_error) {
+      }
+      if (!this.documents.some((document: KnowledgeDocument): boolean => document.id === documentId)) {
+        this.deckScrollers.delete(documentId)
+      }
+    })
   }
 
   @Builder
@@ -1083,16 +1098,17 @@ export struct KnowledgeBasePanel {
       this.DocumentCardContent(document)
     }
     .width('100%')
+    .constraintSize({ minHeight: KNOWLEDGE_DOCUMENT_CARD_HEIGHT, maxHeight: 4096 })
     .padding({ left: 12, right: 12, top: 10, bottom: 10 })
     .borderRadius(LIST_MATERIAL_CARD_RADIUS)
-    .clip(true)
-    .border({
-      width: 0.5,
-      color: getAppUiState().themeDivider
-    })
+    .border({ width: 0.5, color: getAppUiState().themeDivider })
+    // 与对话卡片一致：前景始终透明，折叠/展开不切换背景色或材质类型。
     .backgroundColor(Color.Transparent)
     .backdropBlur(this.knowledgeListImmersiveMaterial ? 0 : 24)
     .shadow(getBlurBottomShadow(!this.knowledgeListImmersiveMaterial))
+    .onSizeChange((_oldSize: SizeOptions, size: SizeOptions): void => {
+      this.measureDocumentCard(document, size)
+    })
     .onClick(() => {
       this.handleDocumentTap(document)
     })
@@ -1103,6 +1119,7 @@ export struct KnowledgeBasePanel {
     if (this.isManuscriptMode) {
       this.ManuscriptDocumentRow(document)
     } else {
+      // 材质背板与完整卡片一起常驻在堆叠中；使用对话列表的同款 REGULAR 沉浸表面。
       ImmersiveListSurface({ isImmersive: this.knowledgeListImmersiveMaterial }) {
         this.StandardDocumentCard(document)
       }
@@ -1213,51 +1230,68 @@ export struct KnowledgeBasePanel {
   }
 
   @Builder
-  private CollapsedStackLayer(categoryKey: string, layer: number) {
-    ImmersiveListSurface({
-      isImmersive: this.knowledgeListImmersiveMaterial,
-      layoutWidth: this.getStackLayerWidth(layer),
-      cornerRadius: { topLeft: 0, topRight: 0, bottomLeft: 12, bottomRight: 12 }
-    }) {
-      Row()
-        .width('100%')
-        .height(this.getStackLayerHeight(layer))
-        .borderRadius({ bottomLeft: 12, bottomRight: 12 })
-        .clip(true)
-        .backgroundColor(Color.Transparent)
-        .backdropBlur(this.knowledgeListImmersiveMaterial ? 0 : 24)
-        .shadow(getBlurBottomShadow(!this.knowledgeListImmersiveMaterial))
-        .border({
-          width: { left: 0.5, right: 0.5, bottom: 0.5 },
-          color: getAppUiState().themeDivider
+  private DeckDocumentCard(categoryKey: string, document: KnowledgeDocument, index: number, count: number) {
+    // 每张卡片保留完整高度的原生侧滑行；层叠由外面的同一个 Stack 统一绘制。
+    // 内层列表只承载水平侧滑，纵向滚动交给知识库的外层列表。
+    Column() {
+      List({ scroller: this.getDeckScroller(document.id) }) {
+        ListItem({ style: ListItemStyle.NONE }) {
+          this.DocumentCard(document)
+        }
+        .swipeAction({
+          start: this.UpdateSwipePanel(document),
+          end: this.DeleteSwipePanel(document)
         })
+        .borderRadius(LIST_MATERIAL_CARD_RADIUS)
+        .clip(false)
+      }
+      .width('100%')
+      .height(this.getDocumentCardHeight(document))
+      .backgroundColor(Color.Transparent)
+      .scrollBar(BarState.Off)
+      .edgeEffect(EdgeEffect.None)
+      .enableScrollInteraction(false)
+      .nestedScroll({ scrollForward: NestedScrollMode.PARENT_FIRST, scrollBackward: NestedScrollMode.PARENT_FIRST })
+      .clip(false)
+      .hitTestBehavior(this.isDocumentStacked(document) && index > 0
+        ? HitTestMode.BLOCK_DESCENDANTS : HitTestMode.Default)
     }
+    .width('100%')
+    .height(this.getDocumentCardHeight(document))
+    .position({ x: 0, y: 0 })
+    .translate({ y: this.getDeckCardOffset(categoryKey, index) })
+    .scale({
+      x: this.isDocumentStacked(document) ? 1 - Math.min(index, KNOWLEDGE_CATEGORY_STACK_LIMIT) * 0.04 : 1,
+      y: 1,
+      centerX: '50%',
+      centerY: '0%'
+    })
+    .zIndex(count - index)
+    .opacity(this.isDocumentStacked(document) && index > KNOWLEDGE_CATEGORY_STACK_LIMIT ? 0 : 1)
+    .hitTestBehavior(this.isDocumentStacked(document) && index > KNOWLEDGE_CATEGORY_STACK_LIMIT
+      ? HitTestMode.BLOCK_DESCENDANTS : HitTestMode.Default)
+    .accessibilityLevel(this.isDocumentStacked(document) && index > 0 ? 'no-hide-descendants' : 'auto')
+    .clip(false)
+    .onClick((): void => {
+      if (this.isDocumentStacked(document) && index > 0) {
+        this.toggleCategoryExpanded(categoryKey)
+      }
+    })
   }
 
   @Builder
-  private CollapsedCategoryStack(categoryKey: string) {
-    if (!this.isManuscriptMode) {
-      ListItem({ style: ListItemStyle.NONE }) {
-        Column() {
-          ForEach(this.getCollapsedStackLayers(categoryKey), (layer: number) => {
-            Column() {
-              this.CollapsedStackLayer(categoryKey, layer)
-            }
-            .width('100%')
-            .opacity(this.getStackLayerOpacity(layer))
-            .alignItems(HorizontalAlign.Center)
-            .transition(this.buildStackLayerTransition(layer))
-          }, (layer: number): string => `${categoryKey}_stack_${layer}`)
-        }
-        .width('100%')
-        .alignItems(HorizontalAlign.Center)
-        .onClick((): void => {
-          this.toggleCategoryExpanded(categoryKey)
-        })
+  private DocumentCategoryDeck(categoryKey: string) {
+    ListItem({ style: ListItemStyle.NONE }) {
+      Stack({ alignContent: Alignment.TopStart }) {
+        ForEach(this.getDocumentsForCategory(categoryKey), (document: KnowledgeDocument, index: number) => {
+          this.DeckDocumentCard(categoryKey, document, index, this.getDocumentsForCategory(categoryKey).length)
+        }, (document: KnowledgeDocument): string => document.id)
       }
+      .width('100%')
+      .height(this.getDeckHeight(categoryKey))
       .clip(false)
-      .margin({ bottom: this.getCollapsedStackCount(categoryKey) > 0 ? 8 : 0 })
     }
+    .clip(false)
   }
 
   @Builder
@@ -1265,28 +1299,20 @@ export struct KnowledgeBasePanel {
     ListItemGroup({
       header: this.DocumentCategoryHeader(categoryKey)
     }) {
-      ForEach(this.getVisibleCategoryDocuments(categoryKey),
-        (document: KnowledgeDocument) => {
+      if (this.isManuscriptMode) {
+        ForEach(this.getVisibleCategoryDocuments(categoryKey), (document: KnowledgeDocument) => {
           ListItem({ style: ListItemStyle.NONE }) {
             this.DocumentCard(document)
           }
-          .margin({
-            top: 0,
-            bottom: this.isManuscriptMode ? 0 :
-              (this.getCollapsedStackCount(categoryKey) > 0 ? 0 : 8)
-          })
           .swipeAction({
             start: this.UpdateSwipePanel(document),
             end: this.DeleteSwipePanel(document)
           })
-          .borderRadius(this.isManuscriptMode ? 0 : LIST_MATERIAL_CARD_RADIUS)
-          .clip(false)
-          .transition(this.buildDocumentCardTransition(document))
-        },
-        (document: KnowledgeDocument): string => `${categoryKey}_${document.id}`
-      )
-
-      this.CollapsedCategoryStack(categoryKey)
+          .transition(TransitionEffect.OPACITY)
+        }, (document: KnowledgeDocument): string => `${categoryKey}_${document.id}`)
+      } else {
+        this.DocumentCategoryDeck(categoryKey)
+      }
     }
     .divider(null)
     .margin({

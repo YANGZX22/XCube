@@ -1,7 +1,7 @@
 import { ImmersiveButtonSurface } from './ImmersiveButtonSurface'
 import { ImmersiveListSurface, LIST_MATERIAL_CARD_RADIUS } from './ImmersiveListSurface'
 import { getBlurBottomShadow } from '../utils/BlurShadowUtils'
-import { uiMaterial } from '@kit.ArkUI'
+import { curves, uiMaterial } from '@kit.ArkUI'
 import {
   EmailAccountConfig,
   EmailAttachmentPart,
@@ -27,7 +27,14 @@ import { ImmersiveSheetHeader } from './ImmersiveSheetHeader'
 
 const EMAIL_CATEGORY_COLLAPSED_VISIBLE_COUNT: number = 1
 const EMAIL_CATEGORY_STACK_LIMIT: number = 3
-const EMAIL_CATEGORY_STACK_LAYER_HEIGHT: number = 11
+const EMAIL_CATEGORY_STACK_STEP: number = 14
+const EMAIL_DOCUMENT_CARD_HEIGHT: number = 58
+const EMAIL_DOCUMENT_CARD_GAP: number = 8
+
+interface EmailCardMeasurement {
+  documentId: string
+  height: number
+}
 
 /** Email is presented as one knowledge-source category beside PDF, Word, spreadsheets, and images. */
 @ComponentV2
@@ -54,8 +61,10 @@ export struct EmailKnowledgeCategory {
   @Local importStatusMessage: string = ''
   @Local importStatusError: boolean = false
   @Local isCategoryExpanded: boolean = false
+  @Local cardMeasurements: EmailCardMeasurement[] = []
 
   private service: EmailService = ServiceRegistry.email()
+  private deckScrollers: Map<string, ListScroller> = new Map<string, ListScroller>()
 
   private get themePrimary(): string {
     return getAppUiState().themePrimary
@@ -287,14 +296,55 @@ export struct EmailKnowledgeCategory {
     return this.importedDocuments.slice(0, EMAIL_CATEGORY_COLLAPSED_VISIBLE_COUNT)
   }
 
-  private getCollapsedStackCount(): number {
-    if (this.isCategoryExpanded) {
-      return 0
+  private isDocumentStacked(): boolean {
+    return !this.isManuscriptMode && !this.isCategoryExpanded && this.importedDocuments.length > 1
+  }
+
+  private getDocumentCardHeight(document: KnowledgeDocument): number {
+    const measurement = this.cardMeasurements.find((item: EmailCardMeasurement): boolean => {
+      return item.documentId === document.id
+    })
+    return measurement?.height ?? EMAIL_DOCUMENT_CARD_HEIGHT
+  }
+
+  private measureDocumentCard(document: KnowledgeDocument, size: SizeOptions): void {
+    const height = Number(size.height)
+    if (!Number.isFinite(height) || height <= 0 ||
+      Math.abs(height - this.getDocumentCardHeight(document)) < 0.5) {
+      return
     }
-    return Math.min(
-      EMAIL_CATEGORY_STACK_LIMIT,
-      Math.max(0, this.importedDocuments.length - EMAIL_CATEGORY_COLLAPSED_VISIBLE_COUNT)
-    )
+    this.cardMeasurements = this.cardMeasurements.filter((item: EmailCardMeasurement): boolean => {
+      return item.documentId !== document.id
+    }).concat([{ documentId: document.id, height: height }])
+  }
+
+  private getDeckCardOffset(index: number): number {
+    if (!this.isCategoryExpanded) {
+      return Math.min(index, EMAIL_CATEGORY_STACK_LIMIT) * EMAIL_CATEGORY_STACK_STEP
+    }
+    const documents = this.importedDocuments
+    let offset = 0
+    for (let i = 0; i < index; i++) {
+      offset += this.getDocumentCardHeight(documents[i]) + EMAIL_DOCUMENT_CARD_GAP
+    }
+    return offset
+  }
+
+  private getDeckHeight(): number {
+    const documents = this.importedDocuments
+    const expanded = this.isCategoryExpanded
+    let height = 0
+    for (let index = 0; index < documents.length; index++) {
+      if (expanded) {
+        height += this.getDocumentCardHeight(documents[index]) + EMAIL_DOCUMENT_CARD_GAP
+      } else if (index <= EMAIL_CATEGORY_STACK_LIMIT) {
+        height = Math.max(height, index * EMAIL_CATEGORY_STACK_STEP +
+          this.getDocumentCardHeight(documents[index]) + EMAIL_DOCUMENT_CARD_GAP)
+      } else {
+        break
+      }
+    }
+    return height
   }
 
   private getCategoryColor(): string {
@@ -309,71 +359,12 @@ export struct EmailKnowledgeCategory {
     return withColorAlpha(this.getCategoryColor(), this.isDarkMode ? '40' : '2E')
   }
 
-  private getCollapsedStackLayers(): number[] {
-    const layers: number[] = []
-    const stackCount = this.getCollapsedStackCount()
-    for (let layer = 1; layer <= stackCount; layer++) {
-      layers.push(layer)
-    }
-    return layers
-  }
-
-  private getStackLayerWidth(layer: number): string {
-    return `${100 - layer * 4}%`
-  }
-
-  private getStackLayerHeight(layer: number): number {
-    return EMAIL_CATEGORY_STACK_LAYER_HEIGHT - (layer - 1) * 2
-  }
-
-  private getStackLayerOpacity(layer: number): number {
-    return 1 - (layer - 1) * 0.16
-  }
-
-  private getDocumentOrdinal(document: KnowledgeDocument): number {
-    for (let index = 0; index < this.importedDocuments.length; index++) {
-      if (this.importedDocuments[index].id === document.id) {
-        return index + 1
-      }
-    }
-    return 1
-  }
-
-  private buildDocumentCardTransition(document: KnowledgeDocument): TransitionEffect {
-    const order = Math.min(Math.max(this.getDocumentOrdinal(document) - 1, 0), 5)
-    return TransitionEffect.asymmetric(
-      TransitionEffect.OPACITY
-        .combine(TransitionEffect.translate({ y: -10 }))
-        .combine(TransitionEffect.scale({ x: 0.96, y: 0.94, centerX: '50%', centerY: '0%' }))
-        .animation({ duration: 260, delay: order * 45, curve: Curve.EaseOut }),
-      TransitionEffect.OPACITY
-        .combine(TransitionEffect.translate({ y: -6 }))
-        .combine(TransitionEffect.scale({ x: 0.96, y: 0.94, centerX: '50%', centerY: '0%' }))
-        .animation({ duration: 160, delay: (5 - order) * 15, curve: Curve.EaseIn })
-    )
-  }
-
-  private buildStackLayerTransition(layer: number): TransitionEffect {
-    return TransitionEffect.asymmetric(
-      TransitionEffect.OPACITY
-        .combine(TransitionEffect.scale({ x: 0.94, y: 0.05, centerX: '50%', centerY: '0%' }))
-        .animation({ duration: 260, delay: (layer - 1) * 60, curve: Curve.EaseOut }),
-      TransitionEffect.OPACITY
-        .combine(TransitionEffect.scale({ x: 0.94, y: 0.05, centerX: '50%', centerY: '0%' }))
-        .animation({
-          duration: 170,
-          delay: (EMAIL_CATEGORY_STACK_LIMIT - layer) * 45,
-          curve: Curve.EaseIn
-        })
-    )
-  }
-
   private toggleCategoryExpanded(): void {
     if (this.importedDocuments.length <= EMAIL_CATEGORY_COLLAPSED_VISIBLE_COUNT) {
       return
     }
     this.closeAllSwipeActions()
-    this.getUIContext().animateTo({ duration: 240, curve: Curve.EaseInOut }, (): void => {
+    this.getUIContext().animateTo({ duration: 460, curve: curves.springMotion(0.42, 0.9) }, (): void => {
       this.isCategoryExpanded = !this.isCategoryExpanded
     })
   }
@@ -389,13 +380,7 @@ export struct EmailKnowledgeCategory {
         `Authorized ${this.account.emailAddress}`
       )
     }
-    if (count > EMAIL_CATEGORY_COLLAPSED_VISIBLE_COUNT && this.isCategoryExpanded) {
-      return pickLocalizedText(`${count} 个知识文件 · 已展开全部`, `${count} knowledge files · Showing all`)
-    }
-    if (count > EMAIL_CATEGORY_COLLAPSED_VISIBLE_COUNT) {
-      return pickLocalizedText(`${count} 个知识文件 · 显示最新 1 个`, `${count} knowledge files · Latest 1`)
-    }
-    return pickLocalizedText('已导入 1 个知识文件', '1 knowledge file imported')
+    return pickLocalizedText(`${count} 封邮件`, `${count} email${count === 1 ? '' : 's'}`)
   }
 
   @Builder
@@ -502,22 +487,6 @@ export struct EmailKnowledgeCategory {
     })
     .backdropBlur(this.isManuscriptMode || this.knowledgeListImmersiveMaterial ? 0 : 24)
     .shadow(getBlurBottomShadow(!this.isManuscriptMode && !this.knowledgeListImmersiveMaterial))
-  }
-
-  @Builder
-  private AccountHint() {
-    Column({ space: 8 }) {
-      Text(pickLocalizedText('尚未授权邮箱', 'No mailbox authorized'))
-        .fontSize(13).fontWeight(FontWeight.Medium).fontColor($r('app.color.text_primary'))
-      Text(pickLocalizedText('请在“设置 → 工具 → 邮件”中配置 SMTP 与 IMAP 授权。',
-        'Configure SMTP and IMAP under Settings → Tools → Email.'))
-        .fontSize(11).lineHeight(17).fontColor($r('app.color.text_secondary')).textAlign(TextAlign.Center)
-    }
-    .width('100%')
-    .padding(18)
-    .borderRadius(this.isManuscriptMode ? 0 : 12)
-    .backgroundColor(this.isManuscriptMode ? Color.Transparent : Color.Transparent)
-    .border({ width: 0.5, color: getAppUiState().themeDivider })
   }
 
   @Builder
@@ -772,10 +741,29 @@ export struct EmailKnowledgeCategory {
     }
   }
 
+  private getDeckScroller(documentId: string): ListScroller {
+    let scroller = this.deckScrollers.get(documentId)
+    if (scroller === undefined) {
+      scroller = new ListScroller()
+      this.deckScrollers.set(documentId, scroller)
+    }
+    return scroller
+  }
+
   private closeAllSwipeActions(): void {
     try {
       this.listScroller.closeAllSwipeActions()
-    } catch (_error) {}
+    } catch (_error) {
+    }
+    this.deckScrollers.forEach((scroller: ListScroller, documentId: string): void => {
+      try {
+        scroller.closeAllSwipeActions()
+      } catch (_error) {
+      }
+      if (!this.importedDocuments.some((document: KnowledgeDocument): boolean => document.id === documentId)) {
+        this.deckScrollers.delete(documentId)
+      }
+    })
   }
 
   private handleDocumentTap(document: KnowledgeDocument): void {
@@ -787,13 +775,16 @@ export struct EmailKnowledgeCategory {
   private StandardDocumentCard(document: KnowledgeDocument) {
     Row({ space: 10 }) { this.DocumentCardContent(document) }
       .width('100%')
+      .constraintSize({ minHeight: EMAIL_DOCUMENT_CARD_HEIGHT, maxHeight: 4096 })
       .padding({ left: 12, right: 12, top: 10, bottom: 10 })
       .borderRadius(LIST_MATERIAL_CARD_RADIUS)
-      .clip(true)
       .border({ width: 0.5, color: getAppUiState().themeDivider })
       .backgroundColor(Color.Transparent)
       .backdropBlur(this.knowledgeListImmersiveMaterial ? 0 : 24)
       .shadow(getBlurBottomShadow(!this.knowledgeListImmersiveMaterial))
+      .onSizeChange((_oldSize: SizeOptions, size: SizeOptions): void => {
+        this.measureDocumentCard(document, size)
+      })
       .onClick(() => this.handleDocumentTap(document))
   }
 
@@ -862,51 +853,68 @@ export struct EmailKnowledgeCategory {
   }
 
   @Builder
-  private CollapsedStackLayer(layer: number) {
-    ImmersiveListSurface({
-      isImmersive: this.knowledgeListImmersiveMaterial,
-      layoutWidth: this.getStackLayerWidth(layer),
-      cornerRadius: { topLeft: 0, topRight: 0, bottomLeft: 12, bottomRight: 12 }
-    }) {
-      Row()
-        .width('100%')
-        .height(this.getStackLayerHeight(layer))
-        .borderRadius({ bottomLeft: 12, bottomRight: 12 })
-        .clip(true)
-        .backgroundColor(Color.Transparent)
-        .backdropBlur(this.knowledgeListImmersiveMaterial ? 0 : 24)
-        .shadow(getBlurBottomShadow(!this.knowledgeListImmersiveMaterial))
-        .border({
-          width: { left: 0.5, right: 0.5, bottom: 0.5 },
-          color: getAppUiState().themeDivider
+  private DeckDocumentCard(document: KnowledgeDocument, index: number, count: number) {
+    // 每张卡片保留完整高度的原生侧滑行；层叠由外面的同一个 Stack 统一绘制。
+    // 内层列表只承载水平侧滑，纵向滚动交给知识库的外层列表。
+    Column() {
+      List({ scroller: this.getDeckScroller(document.id) }) {
+        ListItem({ style: ListItemStyle.NONE }) {
+          this.ImportedDocumentRow(document)
+        }
+        .swipeAction({
+          start: this.RebuildSwipePanel(document),
+          end: this.DeleteSwipePanel(document)
         })
+        .borderRadius(LIST_MATERIAL_CARD_RADIUS)
+        .clip(false)
+      }
+      .width('100%')
+      .height(this.getDocumentCardHeight(document))
+      .backgroundColor(Color.Transparent)
+      .scrollBar(BarState.Off)
+      .edgeEffect(EdgeEffect.None)
+      .enableScrollInteraction(false)
+      .nestedScroll({ scrollForward: NestedScrollMode.PARENT_FIRST, scrollBackward: NestedScrollMode.PARENT_FIRST })
+      .clip(false)
+      .hitTestBehavior(this.isDocumentStacked() && index > 0
+        ? HitTestMode.BLOCK_DESCENDANTS : HitTestMode.Default)
     }
+    .width('100%')
+    .height(this.getDocumentCardHeight(document))
+    .position({ x: 0, y: 0 })
+    .translate({ y: this.getDeckCardOffset(index) })
+    .scale({
+      x: this.isDocumentStacked() ? 1 - Math.min(index, EMAIL_CATEGORY_STACK_LIMIT) * 0.04 : 1,
+      y: 1,
+      centerX: '50%',
+      centerY: '0%'
+    })
+    .zIndex(count - index)
+    .opacity(this.isDocumentStacked() && index > EMAIL_CATEGORY_STACK_LIMIT ? 0 : 1)
+    .hitTestBehavior(this.isDocumentStacked() && index > EMAIL_CATEGORY_STACK_LIMIT
+      ? HitTestMode.BLOCK_DESCENDANTS : HitTestMode.Default)
+    .accessibilityLevel(this.isDocumentStacked() && index > 0 ? 'no-hide-descendants' : 'auto')
+    .clip(false)
+    .onClick((): void => {
+      if (this.isDocumentStacked() && index > 0) {
+        this.toggleCategoryExpanded()
+      }
+    })
   }
 
   @Builder
-  private CollapsedCategoryStack() {
-    if (!this.isManuscriptMode) {
-      ListItem({ style: ListItemStyle.NONE }) {
-        Column() {
-          ForEach(this.getCollapsedStackLayers(), (layer: number) => {
-            Column() {
-              this.CollapsedStackLayer(layer)
-            }
-            .width('100%')
-            .opacity(this.getStackLayerOpacity(layer))
-            .alignItems(HorizontalAlign.Center)
-            .transition(this.buildStackLayerTransition(layer))
-          }, (layer: number): string => `email_stack_${layer}`)
-        }
-        .width('100%')
-        .alignItems(HorizontalAlign.Center)
-        .onClick((): void => {
-          this.toggleCategoryExpanded()
-        })
+  private DocumentCategoryDeck() {
+    ListItem({ style: ListItemStyle.NONE }) {
+      Stack({ alignContent: Alignment.TopStart }) {
+        ForEach(this.importedDocuments, (document: KnowledgeDocument, index: number) => {
+          this.DeckDocumentCard(document, index, this.importedDocuments.length)
+        }, (document: KnowledgeDocument): string => document.id)
       }
+      .width('100%')
+      .height(this.getDeckHeight())
       .clip(false)
-      .margin({ bottom: this.getCollapsedStackCount() > 0 ? 8 : 0 })
     }
+    .clip(false)
   }
 
   @Builder
@@ -1171,25 +1179,20 @@ export struct EmailKnowledgeCategory {
           Row() { LoadingProgress().width(24).height(24).color(this.themePrimary) }
             .width('100%').height(90).justifyContent(FlexAlign.Center)
         }
-      } else if (!this.account.configured) {
-        ListItem() { this.AccountHint() }
       }
       if (this.importedDocuments.length > 0) {
-        ForEach(this.getVisibleImportedDocuments(), (document: KnowledgeDocument) => {
-          ListItem({ style: ListItemStyle.NONE }) { this.ImportedDocumentRow(document) }
-            .margin({
-              bottom: this.isManuscriptMode ? 0 : (this.getCollapsedStackCount() > 0 ? 0 : 8)
-            })
-            .swipeAction({
-              start: this.RebuildSwipePanel(document),
-              end: this.DeleteSwipePanel(document)
-            })
-            .borderRadius(this.isManuscriptMode ? 0 : LIST_MATERIAL_CARD_RADIUS)
-            .clip(false)
-            .transition(this.buildDocumentCardTransition(document))
-        }, (document: KnowledgeDocument): string => `email_document_${document.id}`)
-
-        this.CollapsedCategoryStack()
+        if (this.isManuscriptMode) {
+          ForEach(this.getVisibleImportedDocuments(), (document: KnowledgeDocument) => {
+            ListItem({ style: ListItemStyle.NONE }) { this.ImportedDocumentRow(document) }
+              .swipeAction({
+                start: this.RebuildSwipePanel(document),
+                end: this.DeleteSwipePanel(document)
+              })
+              .transition(TransitionEffect.OPACITY)
+          }, (document: KnowledgeDocument): string => `email_document_${document.id}`)
+        } else {
+          this.DocumentCategoryDeck()
+        }
       }
     }
     .divider(null)
