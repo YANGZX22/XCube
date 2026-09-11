@@ -56,6 +56,8 @@ class SelectionHighlightRect {
 @Component
 export struct Markdown {
   controller: MarkdownController = new MarkdownController()
+  // 每次返回新的原生菜单配置，供组件补充定位及生命周期；库不依赖应用的主题或材质逻辑。
+  selectionMenuOptions: () => MenuOptions = (): MenuOptions => ({})
   @Provide markdownUnion: string = ""
   @Provide selectionUnion: string = generateRandomString()
   @Provide pluginUnion: string = generateRandomString()
@@ -98,7 +100,7 @@ export struct Markdown {
   private lastSelectionUpdateTime: number = 0
   private readonly selectionUpdateInterval: number = 24
   private readonly initialSelectionLength: number = 3
-  private readonly selectionActionBarWidth: number = 184
+  private readonly selectionActionBarWidth: number = 188
   private readonly selectionActionBarHeight: number = 40
   private readonly selectionActionBarSpacing: number = 12
   private readonly selectionActionBarEdgeInset: number = 8
@@ -998,12 +1000,16 @@ export struct Markdown {
     return this.isSelectionDarkTheme() ? '#F9FAFB' : '#111827'
   }
 
-  private getSelectionActionBarBackgroundColor(): ResourceColor {
-    return this.isSelectionDarkTheme() ? '#24262B' : '#FFFFFF'
-  }
-
-  private getSelectionActionBarShadowColor(): ResourceColor {
-    return this.isSelectionDarkTheme() ? '#66000000' : '#20000000'
+  private getSelectionMenuOptions(): MenuOptions {
+    const options: MenuOptions = this.selectionMenuOptions()
+    const onDisappear = options.onDisappear
+    options.placement = Placement.BottomLeft
+    options.enableArrow = false
+    options.onDisappear = (): void => {
+      this.hideSelectionActionBar()
+      onDisappear?.()
+    }
+    return options
   }
 
   private getSelectedTextValue(): string {
@@ -1188,7 +1194,7 @@ export struct Markdown {
   }
 
   @Builder
-  private selectionActionBar() {
+  private selectionActionMenu() {
     Row() {
       if (this.controller.getTextSelectionActionItems().length > 0) {
         ForEach(this.controller.getTextSelectionActionItems(), (item: TextSelectionActionItem) => {
@@ -1210,18 +1216,22 @@ export struct Markdown {
     }
     .alignItems(VerticalAlign.Center)
     .padding(4)
-    // .width(this.selectionActionBarWidth)
+    .width(this.selectionActionBarWidth)
     .height(this.selectionActionBarHeight)
-    .borderRadius(26)
-    .backgroundColor(this.getSelectionActionBarBackgroundColor())
-    .shadow({
-      radius: 28,
-      color: this.getSelectionActionBarShadowColor(),
-      offsetX: 0,
-      offsetY: 10
-    })
+    // 只绘制操作内容，背景、阴影和材质由原生菜单层负责。
+    .backgroundColor(Color.Transparent)
+  }
+
+  @Builder
+  private selectionActionBar() {
+    Row()
+    .width(this.selectionActionBarWidth)
+    .height(0)
     .position(this.getSelectionActionBarPosition())
     .zIndex(30)
+    .focusable(false)
+    .accessibilityLevel('no')
+    .bindMenu(this.selectionActionBarVisible, this.selectionActionMenu(), this.getSelectionMenuOptions())
   }
 
   build() {
@@ -1304,9 +1314,8 @@ export struct Markdown {
               this.showSelectionActionBar()
             }
           })
-          if (this.selectionActionBarVisible) {
-            this.selectionActionBar()
-          }
+          // 手柄拖动时只关闭菜单，保留锚点，结束拖动后可重新打开原生菜单。
+          this.selectionActionBar()
         }
       }
       .id(this.selectionRootId)

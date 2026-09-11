@@ -4,6 +4,7 @@ import { AppStorageKeys } from '../config/AppStorageKeys'
 import { MarkdownRenderer } from '../services/PreferencesService'
 import { getAppUiState, observeAppUiState } from '../state/AppUiState'
 import { ensureLvMarkdownCodeFont } from '../utils/LvMarkdownFontUtils'
+import { getLvMarkdownSelectionMenuOptions } from '../utils/LvMarkdownMenuUtils'
 import {
   getMarkdownBlockSpacing,
   getMarkdownQuotePadding,
@@ -209,6 +210,7 @@ struct ChatLvMarkdownRenderer {
     if (this.themeRefreshVersion >= 0) {
       Markdown({
         controller: this.configureController(),
+        selectionMenuOptions: getLvMarkdownSelectionMenuOptions,
         text: this.content
       })
         .width('100%')

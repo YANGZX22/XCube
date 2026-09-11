@@ -67,6 +67,9 @@ export function SpanRenderBuilder(markdownUnion: string, pluginUnion: string, da
               }
             } else if (item2.type == 'latex') {
               SpanRenderBuilder(markdownUnion, pluginUnion, item2, ctx, _refreshKey, rootBase)
+            } else if (item2.type == 'inlineCode') {
+              // 保留嵌套强调/链接内的代码节点类型，避免丢失代码字体和背景。
+              BaseSpanRenderBuilder(markdownUnion, item2, (rootBase || data) as TreeNode)
             } else {
               BaseSpanRenderBuilder(markdownUnion, {
                 text: (item2 as TextNode).text,

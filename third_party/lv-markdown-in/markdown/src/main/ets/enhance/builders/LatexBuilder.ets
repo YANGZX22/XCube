@@ -44,7 +44,8 @@ export function LatexBlockSpanBuilder(markdownUnion: string, latexText: string, 
 
 @Builder
 export function LatexInlineSpanBuilder(markdownUnion: string, latexText: string, image: LatexInfo, ctx: UIContext) {
-  LatexImageSpanBuilder(markdownUnion, latexText, image, ctx)
+  // 行内公式等比缩小 10%，同时缩小排版占位；独立公式保持原尺寸。
+  LatexImageSpanBuilder(markdownUnion, latexText, image, ctx, 0.9)
 }
 
 @Builder
@@ -53,11 +54,12 @@ export function LatexTextFallbackSpanBuilder(latexText: string) {
 }
 
 @Builder
-export function LatexImageSpanBuilder(markdownUnion: string, latexText: string, image: LatexInfo, ctx: UIContext) {
+export function LatexImageSpanBuilder(markdownUnion: string, latexText: string, image: LatexInfo, ctx: UIContext,
+  sizeScale: number = 1) {
   ImageSpan(image.pixelMap)
     .objectFit(ImageFit.Contain)
-    .width(ctx.px2vp(image.width))
-    .height(ctx.px2vp(image.height))
+    .width(ctx.px2vp(image.width) * sizeScale)
+    .height(ctx.px2vp(image.height) * sizeScale)
     .onClick(() => {
       LatexImpl.handleClick(markdownUnion, latexText, image.pixelMap)
     })

@@ -221,6 +221,17 @@ export namespace TextImpl {
 
   export function handleFontFamily(markdownUnion: string, data?: BaseNode | undefined,
     base?: TreeNode | undefined): ResourceStr {
+    // 拉丁字符优先使用等宽字体；等宽字体缺少的中文字形继续使用所在段落/标题的字体。
+    if (data?.type == "inlineCode") {
+      const codeFontFamily =
+        MDBaseController.getMarkdownController(markdownUnion).getCodeBlockFontFamily() || 'monospace'
+      const inheritedFontFamily = handleFontFamily(markdownUnion, undefined, base)
+      if (typeof codeFontFamily === 'string' && typeof inheritedFontFamily === 'string' &&
+        inheritedFontFamily.length > 0 && inheritedFontFamily !== codeFontFamily) {
+        return `${codeFontFamily}, ${inheritedFontFamily}`
+      }
+      return codeFontFamily
+    }
     const inlineFontFace = (data as InlineHtmlFontNode | undefined)?.face
     if (data?.type == "inlineHtmlFont" && typeof inlineFontFace === 'string' && inlineFontFace.length > 0) {
       return inlineFontFace
