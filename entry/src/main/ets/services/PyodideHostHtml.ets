@@ -155,11 +155,30 @@ export const PYODIDE_HOST_HTML: string = `<!DOCTYPE html>
     const segments = normalized.split('/');
     if (segments.length > 8) return '';
     for (const segment of segments) {
-      if (segment === '' || segment === '.' || segment === '..' || !/^[A-Za-z0-9._-]+$/.test(segment)) {
+      if (segment === '' || segment === '.' || segment === '..' ||
+          Array.from(segment).some((ch) => ch.charCodeAt(0) < 32 || ch.charCodeAt(0) === 127 ||
+            '\\\\/:*?"<>|'.includes(ch))) {
         return '';
       }
     }
     return segments.join('/');
+  }
+
+  function workspaceFileBytes(source) {
+    const content = source && typeof source.content === 'string' ? source.content : null;
+    const encoding = source && source.encoding === undefined ? 'utf8' : source.encoding;
+    if (content === null) throw new Error('工作区文件缺少内容');
+    if (encoding === 'utf8') return new TextEncoder().encode(content);
+    const padding = content.endsWith('==') ? 2 : content.endsWith('=') ? 1 : 0;
+    const firstPadding = content.indexOf('=');
+    if (encoding !== 'base64' || content.length > 4 * Math.ceil(MAX_WORKSPACE_FILE_BYTES / 3) ||
+        content.length % 4 !== 0 || /[^A-Za-z0-9+/=]/.test(content) ||
+        (firstPadding >= 0 && firstPadding !== content.length - padding)) {
+      throw new Error('工作区文件编码无效');
+    }
+    const bytes = Uint8Array.from(atob(content), (char) => char.charCodeAt(0));
+    if (bytes.byteLength !== source.size) throw new Error('工作区文件大小不匹配');
+    return bytes;
   }
 
   function parseWorkspacePayload(workspaceB64) {
@@ -181,14 +200,14 @@ export const PYODIDE_HOST_HTML: string = `<!DOCTYPE html>
     let totalBytes = 0;
     for (const source of parsed.files) {
       const path = normalizeWorkspacePath(source && source.path);
-      const content = source && typeof source.content === 'string' ? source.content : '';
       if (path === '' || paths.has(path)) throw new Error('Python 工作区包含无效或重复路径');
-      const size = new TextEncoder().encode(content).byteLength;
+      const bytes = workspaceFileBytes(source);
+      const size = bytes.byteLength;
       if (size > MAX_WORKSPACE_FILE_BYTES) throw new Error('Python 工作区单文件超过大小限制');
       totalBytes += size;
       if (totalBytes > MAX_WORKSPACE_TOTAL_BYTES) throw new Error('Python 工作区超过总大小限制');
       paths.add(path);
-      files.push({ path: path, content: content, size: size });
+      files.push({ path: path, bytes: bytes, size: size });
     }
     const runFiles = [];
     for (const sourcePath of parsed.runFiles) {
@@ -198,7 +217,7 @@ export const PYODIDE_HOST_HTML: string = `<!DOCTYPE html>
       }
       if (!runFiles.includes(path)) runFiles.push(path);
     }
-    if (runFiles.length === 0) throw new Error('至少需要指定一个待运行的 Python 文件');
+    // An inline action=run mounts the same files, but has no .py entry list.
     return { files: files, runFiles: runFiles };
   }
 
@@ -480,7 +499,7 @@ export const PYODIDE_HOST_HTML: string = `<!DOCTYPE html>
       }
       pyodide.FS.writeFile(
         joinOutputPath(PYTHON_WORKSPACE_ROOT, file.path),
-        new TextEncoder().encode(file.content)
+        file.bytes
       );
     }
     pyodide.globals.set('PYTHON_WORKSPACE_DIR', PYTHON_WORKSPACE_ROOT);
@@ -540,15 +559,8 @@ export const PYODIDE_HOST_HTML: string = `<!DOCTYPE html>
               continue;
             }
             const bytes = pyodide.FS.readFile(childPath, { encoding: 'binary' });
-            let content = '';
-            try {
-              content = new TextDecoder('utf-8', { fatal: true }).decode(bytes);
-            } catch (e) {
-              warnings.push('Python 工作区文件不是有效 UTF-8，已保留运行前版本: ' + childRelativePath);
-              complete = false;
-              continue;
-            }
-            files.push({ path: childRelativePath, content: content, size: bytes.byteLength });
+            files.push({ path: childRelativePath, content: bytesToBase64(bytes),
+              size: bytes.byteLength, encoding: 'base64' });
             totalBytes += bytes.byteLength;
           } else {
             warnings.push('Python 工作区包含不支持的文件类型: ' + childRelativePath);
@@ -574,7 +586,9 @@ export const PYODIDE_HOST_HTML: string = `<!DOCTYPE html>
     if (workspacePayload === null) return code;
     let combined = code;
     for (const file of workspacePayload.files) {
-      if (file.path.toLowerCase().endsWith('.py')) combined += '\\n' + file.content;
+      if (file.path.toLowerCase().endsWith('.py')) {
+        combined += '\\n' + new TextDecoder('utf-8', { fatal: true }).decode(file.bytes);
+      }
     }
     return combined;
   }
@@ -946,6 +960,7 @@ export const PYODIDE_HOST_HTML: string = `<!DOCTYPE html>
 
     let outputContext = null;
     let workspacePayload = null;
+    let workspacePrepared = false;
     try {
       const code = b64ToUtf8(request.codeB64);
       const variablesJson = b64ToUtf8(request.varsB64);
@@ -973,6 +988,7 @@ export const PYODIDE_HOST_HTML: string = `<!DOCTYPE html>
       outputContext = prepareOutputDirectory(request.requestId);
       if (workspacePayload !== null) {
         prepareWorkspace(workspacePayload);
+        workspacePrepared = true;
       }
 
       if (variablesJson) {
@@ -1007,7 +1023,7 @@ export const PYODIDE_HOST_HTML: string = `<!DOCTYPE html>
         } catch (e) {
           result.warnings.push('收集 Python 文件产物失败: ' + (e && e.message ? e.message : String(e)));
         }
-        if (workspacePayload !== null) {
+        if (workspacePrepared) {
           try {
             const workspaceCapture = collectWorkspaceFiles(result.warnings);
             result.workspaceFiles = workspaceCapture.files;

@@ -1,4 +1,4 @@
-import { getBlurBottomShadow } from '../../utils/BlurShadowUtils'
+import { ImmersiveListSurface, LIST_MATERIAL_CARD_RADIUS } from '../ImmersiveListSurface'
 import { bundleManager } from '@kit.AbilityKit'
 import { SettingsRouteName } from '../../config/SettingsRouteName'
 import { VisualEffectsMode } from '../../models/ThemeColors'
@@ -431,17 +431,22 @@ export struct IndexSettingsPanel {
 
   @Builder
   private SettingsGroupCard(group: SettingsGroupModel) {
-    Column() {
-      ForEach(group.items, (item: SettingsListItemModel) => {
-        this.SettingsItemRow(item, item.key === group.items[group.items.length - 1].key)
-      }, (item: SettingsListItemModel) => item.key)
+    // 每个分组共用一块静态背板，由包装层统一选择沉浸材质或透明模糊。
+    // 前景保留原生布局与点击；手稿模式不绘制材质背板。
+    ImmersiveListSurface({
+      isImmersive: !this.isManuscriptMode,
+      cornerRadius: this.sidebarMode ? 20 : LIST_MATERIAL_CARD_RADIUS
+    }) {
+      Column() {
+        ForEach(group.items, (item: SettingsListItemModel) => {
+          this.SettingsItemRow(item, item.key === group.items[group.items.length - 1].key)
+        }, (item: SettingsListItemModel) => item.key)
+      }
+      .width('100%')
+      .backgroundColor(Color.Transparent)
+      .borderRadius(this.isManuscriptMode ? 0 : (this.sidebarMode ? 20 : LIST_MATERIAL_CARD_RADIUS))
+      .clip(!this.isManuscriptMode)
     }
-    .width('100%')
-    .backgroundColor(Color.Transparent)
-    .borderRadius(this.isManuscriptMode ? 0 : (this.sidebarMode ? 20 : 22))
-    .clip(!this.isManuscriptMode)
-    .backdropBlur(this.isManuscriptMode ? 0 : 24)
-    .shadow(getBlurBottomShadow(!(this.isManuscriptMode)))
   }
 
   build() {

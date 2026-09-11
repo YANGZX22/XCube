@@ -9,6 +9,7 @@ import {
 } from '../utils/ChatSessionDisplayHelper'
 import { uiMaterial } from '@kit.ArkUI'
 import { getAppUiState } from '../state/AppUiState'
+import { withColorAlpha } from '../utils/ColorAlphaUtils'
 
 @ComponentV2
 export struct SessionCard {
@@ -123,17 +124,7 @@ export struct SessionCard {
   @Builder
   SessionPreview() {
     Row() {
-      Column() {
-        SymbolGlyph($r('sys.symbol.ellipsis_message_fill'))
-          .fontSize(18)
-          .fontColor([this.themePrimary])
-      }
-      .width(36)
-      .height(36)
-      .borderRadius(9)
-      .backgroundColor(Color.Transparent)
-      .justifyContent(FlexAlign.Center)
-      .alignItems(HorizontalAlign.Center)
+      this.PrefixContent()
 
       Column() {
         Text(this.session.title)
@@ -166,7 +157,7 @@ export struct SessionCard {
     .padding(12)
     .backgroundColor(this.themeSurface)
     .border({ width: 1, color: this.themeDivider })
-    .borderRadius(12)
+    .borderRadius(LIST_MATERIAL_CARD_RADIUS)
   }
 
   @Builder
@@ -178,8 +169,8 @@ export struct SessionCard {
     }
     .width(36)
     .height(36)
-    .borderRadius(9)
-    .backgroundColor(Color.Transparent)
+    .borderRadius(LIST_MATERIAL_CARD_RADIUS)
+    .backgroundColor(withColorAlpha(this.themePrimary, this.isDarkMode ? '2E' : '1A'))
     .justifyContent(FlexAlign.Center)
     .alignItems(HorizontalAlign.Center)
   }

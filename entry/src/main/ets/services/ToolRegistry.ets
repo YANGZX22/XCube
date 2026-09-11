@@ -1,19 +1,33 @@
-import { ToolDefinition, ToolConfig, ToolSourceType } from '../models/ChatModels'
+import { ToolDefinition, ToolConfig, ToolSourceType, MessageAttachment } from '../models/ChatModels'
 
 // 工具调用必须绑定请求开始时的会话，而不能在执行中途重新读取当前 UI 页面。
 export class ToolExecutionContext {
   sessionId: string = ''
   requestId: string = ''
   actorId: string = 'main'
+  supportsVision: boolean = false
+  supportsDocuments: boolean = false
+  // 原生文件输入是否可用要按供应商+模型判定：能力开关是用户手填的，接口不一定真的收。
+  providerId: string = ''
+  modelId: string = ''
+  // Per-call side channel: never serialize raw file bytes into tool JSON/history.
+  inputAttachments: MessageAttachment[] = []
 
-  constructor(sessionId: string = '', requestId: string = '', actorId: string = 'main') {
+  constructor(sessionId: string = '', requestId: string = '', actorId: string = 'main',
+    supportsVision: boolean = false, supportsDocuments: boolean = false,
+    providerId: string = '', modelId: string = '') {
     this.sessionId = sessionId.trim()
     this.requestId = requestId.trim()
     this.actorId = actorId.trim() !== '' ? actorId.trim() : 'main'
+    this.supportsVision = supportsVision
+    this.supportsDocuments = supportsDocuments
+    this.providerId = providerId.trim()
+    this.modelId = modelId.trim()
   }
 
   withActor(actorId: string): ToolExecutionContext {
-    return new ToolExecutionContext(this.sessionId, this.requestId, actorId)
+    return new ToolExecutionContext(this.sessionId, this.requestId, actorId,
+      this.supportsVision, this.supportsDocuments, this.providerId, this.modelId)
   }
 }
 

@@ -299,7 +299,7 @@ export struct ToolsCenterPanel {
         }
         this.enableModLensAfterSave = false
         this.showModLensConfigSheet = false
-        this.showToolsSnack(pickLocalizedText('ModLens 配置已保存', 'ModLens configuration saved'),
+        this.showToolsSnack(pickLocalizedText('视觉理解配置已保存', 'Vision configuration saved'),
           2000, SnackBarTone.SUCCESS)
       })
       .catch((error: Object): void => {
@@ -1572,7 +1572,7 @@ export struct ToolsCenterPanel {
   ModLensConfigSheetBuilder() {
     Column() {
       ImmersiveSheetHeader({
-        title: pickLocalizedText('ModLens 视觉理解', 'ModLens Vision'),
+        title: pickLocalizedText('视觉理解', 'Vision'),
         showTrailing: true,
         trailingColor: this.themePrimary,
         onLeadingClick: (): void => {
@@ -1665,8 +1665,8 @@ export struct ToolsCenterPanel {
           .shadow(getBlurBottomShadow())
 
           Text(pickLocalizedText(
-            '隐私提示：启用后，当前会话中由模型选择读取的图片会发送到该网关，并继续发送给 ModLens 配置的视觉 provider。原有“图片转文本”工具仍只在设备本地执行 OCR。',
-            'Privacy: once enabled, images the model chooses to read are sent to this gateway and then to the vision provider configured in ModLens. The existing Image to Text tool continues to run OCR only on device.'
+            '隐私提示：启用后，当前会话中由模型选择读取的图片会发送到该网关，并继续发送给 ModLens 配置的视觉 provider。原有“图片工具包”仍只在设备本地执行 OCR。',
+            'Privacy: once enabled, images the model chooses to read are sent to this gateway and then to the vision provider configured in ModLens. The existing Image Toolkit continues to run OCR only on device.'
           ))
             .fontSize(11)
             .lineHeight(17)
@@ -3895,12 +3895,12 @@ struct BuiltinToolCardItem {
 
   @Builder
   private ToolIcon(toolId: string, size: number) {
-    if (toolId === 'docx_to_text') {
+    if (toolId === 'docx_toolkit') {
       Image($r('app.media.doc_docx'))
         .width(size)
         .height(size)
         .fillColor(this.themePrimary)
-    } else if (toolId === 'xlsx_to_text') {
+    } else if (toolId === 'xlsx_toolkit') {
       Image($r('app.media.doc_xlsx'))
         .width(size)
         .height(size)

@@ -245,9 +245,9 @@ export class ModLensVisionService {
     const config = await this.loadConfig()
     if (config.endpoint === '') {
       return this.buildError(attachment.attachmentId, attachment.name,
-        'ModLens 尚未配置。请在“设置 → 工具中心 → ModLens 视觉理解”中填写网关地址。')
+        'ModLens 网关尚未配置。请在“设置 → 工具中心 → 视觉理解”中填写网关地址。')
     }
-    const cacheKey = `${config.endpoint}:${attachment.filePath}:${attachment.size}:${normalizedPrompt}`
+    const cacheKey = `${config.endpoint}:${attachment.filePath}:${attachment.size}:${attachment.attachmentId}:${normalizedPrompt}`
     const cached = this.cache.get(cacheKey)
     if (cached !== undefined) {
       return cached

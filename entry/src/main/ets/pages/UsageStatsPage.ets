@@ -1,4 +1,6 @@
 import { DrawnFloatingTabBar } from '../components/DrawnFloatingTabBar'
+import { UsageActivityCard } from '../components/UsageActivityCard'
+import { DailyUsageActivity, getUsageActivityPeriod } from '../utils/UsageActivityUtils'
 import { shouldUseDrawnNavigation } from '../utils/DrawnNavigationSupport'
 import {
   HdsNavigation,
@@ -155,12 +157,19 @@ struct UsageStatsPage {
   @Local isLoading: boolean = true
   @Local rankingAnimationProgress: number = 0
   @Local rangeSwipeOffsetX: number = 0
+  @Local activityDays: DailyUsageActivity[] = []
+  @Local activityStartMs: number = 0
+  @Local activityEndMs: number = 0
+  @Local activityLoading: boolean = true
+  @Local activityLoadFailed: boolean = false
 
   private allRangeScroller: Scroller = new Scroller()
   private last30DaysRangeScroller: Scroller = new Scroller()
   private statsLoadToken: number = 0
   private rankingAnimationTimer: number = -1
   private rangePanDirection: string = 'none'
+  private activityLoadToken: number = 0
+  private activityTouching: boolean = false
 
   private px2vp(px: number): number {
     return px / (this.getUIContext().getHostContext()?.resourceManager.getDeviceCapabilitySync().screenDensity ?? 3) * 160
@@ -168,10 +177,38 @@ struct UsageStatsPage {
 
   aboutToAppear(): void {
     this.loadStats()
+    this.loadActivity()
   }
 
   aboutToDisappear(): void {
     this.clearRankingAnimationTimer()
+    this.statsLoadToken += 1
+    this.activityLoadToken += 1
+  }
+
+  // The annual activity calendar is independent of the overview's All / 30-day tabs.
+  private async loadActivity(): Promise<void> {
+    const loadToken = ++this.activityLoadToken
+    const period = getUsageActivityPeriod()
+    this.activityStartMs = period.startMs
+    this.activityEndMs = period.endMs
+    this.activityLoading = true
+    this.activityLoadFailed = false
+    try {
+      const days = await getDatabaseService().getDailyUsageActivity(period.startMs, period.endMs)
+      if (loadToken === this.activityLoadToken) {
+        this.activityDays = days
+      }
+    } catch (error) {
+      if (loadToken === this.activityLoadToken) {
+        this.activityLoadFailed = true
+      }
+      console.error(TAG, `Failed to load usage activity: ${JSON.stringify(error)}`)
+    } finally {
+      if (loadToken === this.activityLoadToken) {
+        this.activityLoading = false
+      }
+    }
   }
 
   private getRangeStartMs(): number {
@@ -376,7 +413,8 @@ struct UsageStatsPage {
   }
 
   private handleRangeSwipeStart(): void {
-    this.rangePanDirection = 'none'
+    // Latch the touch origin until the gesture ends, even after the finger lifts.
+    this.rangePanDirection = this.activityTouching ? 'activity' : 'none'
   }
 
   private handleRangeSwipeUpdate(event: GestureEvent): void {
@@ -729,6 +767,18 @@ struct UsageStatsPage {
           Blank()
             .width('100%')
             .height(this.getCompactContentTopPadding())
+
+          UsageActivityCard({
+            days: this.activityDays,
+            startMs: this.activityStartMs,
+            endMs: this.activityEndMs,
+            loading: this.activityLoading,
+            loadFailed: this.activityLoadFailed,
+            active: this.currentRange === rangeKey,
+            onRetry: (): void => { this.loadActivity() },
+            onHeatmapTouchChanged: (touching: boolean): void => { this.activityTouching = touching }
+          })
+            .margin({ top: 6, bottom: 18 })
 
           if (this.isEmpty() && !this.isLoading) {
             this.EmptyState()

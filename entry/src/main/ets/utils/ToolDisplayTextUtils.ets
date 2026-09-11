@@ -1,7 +1,9 @@
 import { pickLocalizedText } from './LocalizedTextUtils'
+import { resolveLegacyToolId } from './ToolIdAliases'
 
 function normalizeToolId(value: string): string {
-  return value.trim().toLowerCase().replace(/[\s\-]+/g, '_')
+  // 历史消息里的工具调用仍带 *_to_text，映射后才能显示当前的名字和说明。
+  return resolveLegacyToolId(value.trim().toLowerCase().replace(/[\s\-]+/g, '_'))
 }
 
 function extractPythonSandboxAction(payload: string): string {
@@ -64,16 +66,16 @@ export function getLocalizedBuiltinToolName(toolId: string, fallback: string = '
     case 'plan_mode':
     case 'plan':
       return pickLocalizedText('计划模式', 'Plan Mode')
-    case 'pdf_to_text':
-      return pickLocalizedText('PDF 转文本', 'PDF to Text')
-    case 'image_to_text':
-      return pickLocalizedText('图片转文本', 'Image to Text')
+    case 'pdf_toolkit':
+      return pickLocalizedText('PDF 工具包', 'PDF Toolkit')
+    case 'image_toolkit':
+      return pickLocalizedText('图片工具包', 'Image Toolkit')
     case 'vision_read_image':
-      return pickLocalizedText('ModLens 视觉理解', 'ModLens Vision')
-    case 'docx_to_text':
-      return pickLocalizedText('DOCX 转文本', 'DOCX to Text')
-    case 'xlsx_to_text':
-      return pickLocalizedText('XLSX 转文本', 'XLSX to Text')
+      return pickLocalizedText('视觉理解', 'Vision')
+    case 'docx_toolkit':
+      return pickLocalizedText('DOCX 工具包', 'DOCX Toolkit')
+    case 'xlsx_toolkit':
+      return pickLocalizedText('XLSX 工具包', 'XLSX Toolkit')
     case 'use_skill':
       return 'Skill'
     case 'python_sandbox':
@@ -129,21 +131,21 @@ export function getLocalizedBuiltinToolDescription(toolId: string, fallback: str
     case 'plan':
       return pickLocalizedText('列出多步任务的计划，并在完成时逐条勾选',
         'Lay out a multi-step plan and tick each step off on completion.')
-    case 'pdf_to_text':
-      return pickLocalizedText('读取 PDF 文本，扫描件可自动使用 OCR',
-        'Extract text from PDFs, with OCR fallback for scans.')
-    case 'image_to_text':
-      return pickLocalizedText('使用本地 OCR 读取图片中的文字',
-        'Extract text from images with local OCR.')
+    case 'pdf_toolkit':
+      return pickLocalizedText('模型可原生读文档时直接给出原始 PDF，否则读取文本并按需 OCR',
+        'Hand the model the original PDF when it reads documents natively, else extract text with OCR fallback.')
+    case 'image_toolkit':
+      return pickLocalizedText('模型可原生看图时直接给出原图，否则用本地 OCR 读取文字',
+        'Hand the model the original image when it has vision, else extract text with local OCR.')
     case 'vision_read_image':
-      return pickLocalizedText('通过 ModLens 获取图片 OCR、布局与语义证据',
-        'Get image OCR, layout, and semantic evidence through ModLens.')
-    case 'docx_to_text':
-      return pickLocalizedText('在本地读取 DOCX 中的标题、段落、列表和表格',
-        'Extract headings, paragraphs, lists, and tables from DOCX files locally.')
-    case 'xlsx_to_text':
-      return pickLocalizedText('在本地读取 XLSX 工作表和单元格内容',
-        'Extract worksheets and cell content from XLSX files locally.')
+      return pickLocalizedText('模型可原生看图时直接给出原图，否则通过 ModLens 获取 OCR、布局与语义证据',
+        'Hand the model the original image when it has vision, else get OCR, layout, and semantics via ModLens.')
+    case 'docx_toolkit':
+      return pickLocalizedText('模型可原生读文档时直接给出原始 DOCX，否则在本地读取标题、段落、列表和表格',
+        'Hand the model the original DOCX when it reads documents natively, else extract its text locally.')
+    case 'xlsx_toolkit':
+      return pickLocalizedText('模型可原生读文档时直接给出原始 XLSX，否则在本地读取工作表和单元格内容',
+        'Hand the model the original XLSX when it reads documents natively, else extract its cells locally.')
     case 'use_skill':
       return pickLocalizedText('读取用户已启用的技能说明',
         'Read instructions from enabled user skills.')

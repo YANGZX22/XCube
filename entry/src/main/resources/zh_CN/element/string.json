@@ -30,7 +30,7 @@
     },
     {
       "name": "chat_ai_generation_notice",
-      "value": "内容由 AI 生成；AI 也可能犯错，务必仔细斟酌"
+      "value": "内容由 AI 生成；AI 也可能出错，务必仔细斟酌"
     },
     {
       "name": "chat_ai_notice_show_hint",

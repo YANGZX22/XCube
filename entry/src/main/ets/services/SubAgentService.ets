@@ -926,6 +926,7 @@ export class SubAgentService {
       // 执行工具调用并把结果拼回上下文，继续下一轮
       const assistantMsg = RequestMessage.createAssistantWithToolCalls(outcome.content, outcome.toolCalls)
       session.messages.push(assistantMsg)
+      const nativeToolInputs: RequestMessage[] = []
       for (let i = 0; i < outcome.toolCalls.length; i++) {
         report.toolCallCount += 1
         session.totalToolCallCount += 1
@@ -962,6 +963,13 @@ export class SubAgentService {
           `[${report.name}] tool ${toolCall.functionName} -> ${toolResult.isError ? 'error' : 'ok'}`
         )
         session.messages.push(RequestMessage.createToolResultMessage(toolResult.toolCallId, toolResult.content))
+        const inputs = RequestMessage.consumeToolInputMessages([toolResult])
+        for (let j = 0; j < inputs.length; j++) {
+          nativeToolInputs.push(inputs[j])
+        }
+      }
+      for (let i = 0; i < nativeToolInputs.length; i++) {
+        session.messages.push(nativeToolInputs[i])
       }
       // 工具轮次之间用空行分隔流式正文，预览里更易读
       if (live.liveContent !== '' && !live.liveContent.endsWith('\n\n')) {

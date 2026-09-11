@@ -1,3 +1,4 @@
+import { util } from '@kit.ArkTS'
 import { image } from '@kit.ImageKit'
 import { pdfService } from '@kit.PDFKit'
 import { textRecognition } from '@kit.CoreVisionKit'
@@ -43,6 +44,69 @@ export class PdfTextExtractionResult {
   }
 }
 
+export class PdfPageImage {
+  pageNumber: number = 0
+  mimeType: string = 'image/jpeg'
+  base64Data: string = ''
+  width: number = 0
+  height: number = 0
+  text: string = ''
+}
+
+export class PdfPageRenderResult {
+  ok: boolean = false
+  fileName: string = ''
+  pageCount: number = 0
+  pages: PdfPageImage[] = []
+  message: string = ''
+}
+
+// 接受 "1-5"、"2,4,7-9"、"3" 三种写法；页码 1 基，越界页直接丢弃，最多返回 maxPages 页。
+// 空 spec 表示“从第一页开始取满 maxPages 页”。
+export function parsePdfPageSelection(spec: string, pageCount: number, maxPages: number): number[] {
+  const pages: number[] = []
+  const limit = Math.max(1, maxPages)
+  const addPage = (page: number): void => {
+    if (page >= 1 && page <= pageCount && !pages.includes(page) && pages.length < limit) {
+      pages.push(page)
+    }
+  }
+
+  const trimmed = spec.trim()
+  if (trimmed === '') {
+    for (let page = 1; page <= pageCount && pages.length < limit; page++) {
+      addPage(page)
+    }
+    return pages
+  }
+
+  const segments = trimmed.split(',')
+  for (let i = 0; i < segments.length; i++) {
+    const segment = segments[i].trim()
+    if (segment === '') {
+      continue
+    }
+    const dashIndex = segment.indexOf('-')
+    if (dashIndex > 0) {
+      const start = Number.parseInt(segment.substring(0, dashIndex).trim(), 10)
+      const end = Number.parseInt(segment.substring(dashIndex + 1).trim(), 10)
+      if (!Number.isNaN(start) && !Number.isNaN(end)) {
+        const from = Math.min(start, end)
+        const to = Math.max(start, end)
+        for (let page = from; page <= to; page++) {
+          addPage(page)
+        }
+      }
+      continue
+    }
+    const single = Number.parseInt(segment, 10)
+    if (!Number.isNaN(single)) {
+      addPage(single)
+    }
+  }
+  return pages
+}
+
 class PdfTextExtractionOutput {
   text: string = ''
   source: string = 'none'
@@ -59,6 +123,10 @@ export class PdfTextExtractionService {
   private static instance: PdfTextExtractionService | null = null
   private static readonly OCR_TARGET_LONG_EDGE: number = 2200
   private static readonly OCR_MAX_SCALE: number = 3
+  // 供模型直接观看的页面图：2200px 对视觉输入是浪费，JPEG 体积也翻倍。
+  private static readonly VIEW_TARGET_LONG_EDGE: number = 1600
+  private static readonly VIEW_JPEG_QUALITY: number = 85
+  static readonly MAX_RENDER_PAGES: number = 8
   private cache: Map<string, PdfTextExtractionOutput> = new Map()
   private ocrInitialized: boolean = false
 
@@ -92,7 +160,7 @@ export class PdfTextExtractionService {
     maxChars: number,
     useOcr: boolean = false
   ): Promise<PdfTextExtractionResult> {
-    const cacheKey = `${attachment.filePath}:${attachment.size}:${useOcr ? 'ocr-v7' : 'text'}`
+    const cacheKey = `${attachment.filePath}:${attachment.size}:${attachment.attachmentId}:${useOcr ? 'ocr-v7' : 'text'}`
     let output = this.cache.get(cacheKey)
     if (output === undefined) {
       output = await this.extractTextFromPdfPath(attachment.filePath, useOcr)
@@ -117,6 +185,112 @@ export class PdfTextExtractionService {
     }
     return new PdfTextExtractionResult(text.trim() !== '', attachment.attachmentId, attachment.name,
       resultText, truncated, message, output.source)
+  }
+
+  // 把指定页码渲染成图片。视觉模型可以直接看这些页面图；没有视觉能力时用 recognizeText
+  // 就地做 OCR，两条路共用同一次渲染，不会把整份 PDF 重新解码两遍。
+  async renderPages(
+    attachment: RegisteredDocumentAttachment,
+    pageSpec: string,
+    maxPages: number,
+    recognizeText: boolean
+  ): Promise<PdfPageRenderResult> {
+    const result = new PdfPageRenderResult()
+    result.fileName = attachment.name
+    const document = new pdfService.PdfDocument()
+    let loaded = false
+    try {
+      if (recognizeText) {
+        await this.ensureOcrInitialized()
+      }
+      const parseResult = document.loadDocument(attachment.filePath)
+      if (parseResult !== pdfService.ParseResult.PARSE_SUCCESS) {
+        result.message = `PDF 解析失败 (parse=${parseResult})`
+        return result
+      }
+      loaded = true
+      result.pageCount = document.getPageCount()
+      const pageNumbers = parsePdfPageSelection(pageSpec, result.pageCount,
+        Math.min(Math.max(1, maxPages), PdfTextExtractionService.MAX_RENDER_PAGES))
+      if (pageNumbers.length === 0) {
+        result.message = `未选中任何页面。该 PDF 共 ${result.pageCount} 页，请在 1-${result.pageCount} 范围内指定。`
+        return result
+      }
+
+      for (let i = 0; i < pageNumbers.length; i++) {
+        const pageNumber = pageNumbers[i]
+        const page = document.getPage(pageNumber - 1)
+        let renderedPixelMap: image.PixelMap | null = null
+        let pixelMap: image.PixelMap | null = null
+        try {
+          renderedPixelMap = this.renderPagePixelMapForOcr(page,
+            PdfTextExtractionService.VIEW_TARGET_LONG_EDGE)
+          pixelMap = await this.createRgbaPixelMap(renderedPixelMap)
+          if (pixelMap !== renderedPixelMap) {
+            renderedPixelMap.release()
+          }
+          renderedPixelMap = null
+
+          const pageImage = new PdfPageImage()
+          pageImage.pageNumber = pageNumber
+          const imageInfo = pixelMap.getImageInfoSync()
+          pageImage.width = imageInfo.size.width
+          pageImage.height = imageInfo.size.height
+          pageImage.base64Data = await this.packPixelMapToJpegBase64(pixelMap)
+          if (recognizeText) {
+            pageImage.text = await this.recognizePixelMapText(pixelMap)
+          }
+          if (pageImage.base64Data !== '') {
+            result.pages.push(pageImage)
+          }
+        } catch (error) {
+          console.warn('PdfTextExtractionService',
+            `PDF page render failed: page=${pageNumber}, error=${JSON.stringify(error)}`)
+        } finally {
+          if (pixelMap !== null) {
+            pixelMap.release()
+          }
+          if (renderedPixelMap !== null) {
+            renderedPixelMap.release()
+          }
+          page.release()
+        }
+      }
+
+      result.ok = result.pages.length > 0
+      result.message = result.ok
+        ? `已渲染 ${result.pages.length} 页（全文共 ${result.pageCount} 页）`
+        : '页面渲染失败，未产生可用图片'
+      return result
+    } catch (error) {
+      console.error('PdfTextExtractionService', `PDF page render failed: ${JSON.stringify(error)}`)
+      result.message = `PDF 页面渲染失败: ${JSON.stringify(error)}`
+      return result
+    } finally {
+      if (loaded) {
+        document.releaseDocument()
+      }
+    }
+  }
+
+  private async packPixelMapToJpegBase64(pixelMap: image.PixelMap): Promise<string> {
+    let packer: image.ImagePacker | null = null
+    try {
+      packer = image.createImagePacker()
+      const packOptions: image.PackingOption = {
+        format: 'image/jpeg',
+        quality: PdfTextExtractionService.VIEW_JPEG_QUALITY
+      }
+      const encoded = await packer.packToData(pixelMap, packOptions)
+      return new util.Base64Helper().encodeToStringSync(new Uint8Array(encoded))
+    } catch (error) {
+      console.warn('PdfTextExtractionService', `Failed to pack PDF page image: ${JSON.stringify(error)}`)
+      return ''
+    } finally {
+      if (packer !== null) {
+        packer.release()
+      }
+    }
   }
 
   private async extractTextFromPdfPath(filePath: string, useOcr: boolean): Promise<PdfTextExtractionOutput> {
@@ -272,14 +446,14 @@ export class PdfTextExtractionService {
     return this.renderPagePixelMapForOcr(page)
   }
 
-  private renderPagePixelMapForOcr(page: pdfService.PdfPage): image.PixelMap {
+  private renderPagePixelMapForOcr(page: pdfService.PdfPage,
+    targetLongEdge: number = PdfTextExtractionService.OCR_TARGET_LONG_EDGE): image.PixelMap {
     const pageWidth = Math.max(1, page.getWidth())
     const pageHeight = Math.max(1, page.getHeight())
     const longEdge = Math.max(pageWidth, pageHeight)
     // Upscale ordinary pages for OCR, but also allow unusually large pages to
     // shrink instead of forcing a potentially huge full-resolution PixelMap.
-    const scale = Math.min(PdfTextExtractionService.OCR_MAX_SCALE,
-      PdfTextExtractionService.OCR_TARGET_LONG_EDGE / longEdge)
+    const scale = Math.min(PdfTextExtractionService.OCR_MAX_SCALE, targetLongEdge / longEdge)
     const bitmapWidth = Math.max(1, Math.round(pageWidth * scale))
     const bitmapHeight = Math.max(1, Math.round(pageHeight * scale))
 

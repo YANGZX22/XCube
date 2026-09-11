@@ -26,6 +26,10 @@ import { getProviderViewModel, ProviderViewModel } from './ProviderViewModel'
 import { getAssistantService, AssistantService, AssistantRuntimeConfig } from '../services/AssistantService'
 import { getSkillService, SkillConfig } from '../services/SkillService'
 import { ChatMessage, ChatSession, MessageRole, ProviderType, ApiStyle, OpenAITransport, MessageAttachment, AttachmentType, ContextCompactionUiState, ReasoningLevel, ToolDefinition, ToolCall, ToolResult, SearchReference, ModelParameters, ModelProvider, AssistantResponseSegment, AssistantResponseSegmentType } from '../models/ChatModels'
+import {
+  extractNativeAttachmentText,
+  markNativeFileInputRejected
+} from '../services/NativeFileInputService'
 import { WebSearchResult, SearchResult, getWebSearchService } from '../services/WebSearchService'
 import { http } from '@kit.NetworkKit'
 import { HttpRequestController } from '../services/HttpService'
@@ -3065,6 +3069,8 @@ ${knowledgeSearchLimitRule}`
     apiConfig.modelReasoningStrategyOverride = this.getCurrentModelReasoningStrategyOverride(providerId, modelId)
     apiConfig.modelSupportsReasoning = this.getCurrentModelSupportsReasoning(providerId, modelId)
 
+    apiConfig.modelSupportsVision = modelSupportsVision
+    apiConfig.modelSupportsDocuments = modelSupportsDocuments
     // 上下文检查使用“最终系统提示 + 摘要后的历史 + 本轮用户输入 + 工具 schema”。
     const compactionService = getContextCompactionService()
     await compactionService.ensurePreferencesLoaded()
@@ -3247,7 +3253,9 @@ ${knowledgeSearchLimitRule}`
       reasoningLevel,
       requestTools,
       currentTime,
-      new ToolExecutionContext(snapshotSessionId, requestId, 'main'),
+      new ToolExecutionContext(snapshotSessionId, requestId, 'main',
+        apiConfig.modelSupportsVision === true, apiConfig.modelSupportsDocuments === true,
+        apiConfig.providerId, modelId),
       async (
         toolCall: ToolCall,
         allowedFunctionNames: string[],
@@ -3942,7 +3950,8 @@ ${preview}`
     usageTracker: RequestTokenUsageTracker,
     automaticCompactionState: AutomaticCompactionState,
     compactionSourceMessages: ChatMessage[],
-    retryRequiredKnowledgeWithoutReasoning: boolean = false
+    retryRequiredKnowledgeWithoutReasoning: boolean = false,
+    retriedWithoutNativeToolInputs: boolean = false
   ): Promise<void> {
     if (isCancelledFn()) {
       return
@@ -4084,6 +4093,9 @@ ${preview}`
     }
     automaticCompactionState.mergeNextContentSegment = false
     let roundInterruptedForCompaction = false
+    // 同一轮可能收到多次错误投递：SSE 错误体一次，非 2xx 收尾再一次。降级只能跑一遍，
+    // 且开始降级后后续投递不得再弹 toast——否则用户会在一次成功的回答旁看到报错。
+    let nativeToolInputFallbackStarted = false
     let roundCompactionResumeStarted = false
     let roundHttpRequest: http.HttpRequest | null = null
     let maybeInterruptForAutomaticCompaction = (): void => {}
@@ -4599,7 +4611,9 @@ ${preview}`
             this.buildAllowedToolFunctionNames(toolsForThisRound),
             webSearchCallLimit,
             knowledgeSearchCallLimit,
-            new ToolExecutionContext(snapshotSessionId, requestId, 'main')
+            new ToolExecutionContext(snapshotSessionId, requestId, 'main',
+              apiConfig.modelSupportsVision === true, apiConfig.modelSupportsDocuments === true,
+              apiConfig.providerId, modelId)
           )
           if (isCancelledFn()) {
             return
@@ -4715,6 +4729,10 @@ ${preview}`
               toolResults[i].content
             )
             requestMessages.push(toolResultMsg)
+          }
+          const nativeToolInputs = RequestMessage.consumeToolInputMessages(toolResults)
+          for (let i = 0; i < nativeToolInputs.length; i++) {
+            requestMessages.push(nativeToolInputs[i])
           }
 
           // 清空 AI 消息内容，准备接收新的回复
@@ -4886,7 +4904,7 @@ ${preview}`
         }
       },
       (error: string) => {
-        if (isRoundInactive()) {
+        if (isRoundInactive() || nativeToolInputFallbackStarted) {
           return
         }
         localContentThrottle.flush((throttledContent: string) => {
@@ -4915,6 +4933,73 @@ ${preview}`
           estimateTextTokens(roundGeneratedContent) + estimateTextTokens(roundGeneratedReasoning)
         )
         usageTracker.applyToMessage(aiMessage)
+
+        // 模型能力被标成支持原生文档/图片，但该接口并不接受对应的 content part 时，整轮会
+        // 直接 400。工具本身已经成功，丢掉原生文件重试一次比让这一轮彻底失败更有用。
+        if (!isUserCancelledFn() && !isCancelledFn() && !retriedWithoutNativeToolInputs &&
+          this.isNativeToolInputRejection(error) &&
+          this.hasNativeToolInputs(requestMessages)) {
+          nativeToolInputFallbackStarted = true
+          console.warn('ChatViewModel',
+            `Provider rejected tool-supplied native file input; falling back to text: ${error}`)
+          rollbackStreamedRoundOutput()
+          discardCurrentRoundResponseSegments()
+          roundContentBuffer = ''
+          roundReasoningBuffer = ''
+          aiMessage.content = ''
+          aiMessage.reasoningContent = ''
+          onAIMessageUpdated(aiMessage)
+          this.degradeNativeToolInputsToText(requestMessages, snapshotSessionId,
+            apiConfig.providerId, modelId).then((): void => {
+            if (isCancelledFn()) {
+              return
+            }
+            this.executeToolCallLoop(
+              apiConfig,
+              requestMessages,
+              modelId,
+              aiMessage,
+              onAIMessageUpdated,
+              onComplete,
+              onError,
+              tools,
+              toolCallbacks,
+              reasoningLevel,
+              requestTemperature,
+              iteration + 1,
+              webSearchCallLimit,
+              knowledgeSearchCallLimit,
+              snapshotSessionId,
+              snapshotSession,
+              shouldAutoGenerateTitle,
+              requestId,
+              isCancelledFn,
+              isUserCancelledFn,
+              isToolCancelledFn,
+              setUserCancelled,
+              getHasReceivedFirstChunk,
+              setHasReceivedFirstChunk,
+              localFirstChunkThrottle,
+              localContentThrottle,
+              localReasoningThrottle,
+              usageTracker,
+              automaticCompactionState,
+              compactionSourceMessages,
+              retryRequiredKnowledgeWithoutReasoning,
+              true
+            ).catch((retryError: Object): void => {
+              console.error('ChatViewModel',
+                `Retry without native tool input failed: ${JSON.stringify(retryError)}`)
+              onError(error)
+            })
+          }).catch((degradeError: Object): void => {
+            console.error('ChatViewModel',
+              `Failed to fall back to text for native tool input: ${JSON.stringify(degradeError)}`)
+            onError(error)
+          })
+          return
+        }
+
         this.fillEmptyAIContentPlaceholder(aiMessage, error)
         aiMessage.isGenerating = false
         aiMessage.isSearching = false
@@ -5887,6 +5972,82 @@ ${context !== '' ? context : '(无历史对话)'}
     return false
   }
 
+  private hasNativeToolInputs(messages: RequestMessage[]): boolean {
+    for (let i = 0; i < messages.length; i++) {
+      if (messages[i].sourceToolCallId !== '' && messages[i].attachments.length > 0) {
+        return true
+      }
+    }
+    return false
+  }
+
+  // 接口拒收原生文件后，由 APP 就地把原文件换成本地提取的文本，并改写配对的工具结果，
+  // 使这段历史看起来就像该工具本来就返回了文本。模型不需要知道降级发生过，也就不必
+  // 多花一轮重新调用工具；否则实现细节会漏进模型的思考过程。
+  private async degradeNativeToolInputsToText(
+    messages: RequestMessage[],
+    sessionId: string,
+    providerId: string,
+    modelId: string
+  ): Promise<void> {
+    const removalIndexes: number[] = []
+    for (let i = 0; i < messages.length; i++) {
+      const message = messages[i]
+      if (message.sourceToolCallId === '' || message.attachments.length === 0) {
+        continue
+      }
+      const sections: string[] = []
+      for (let j = 0; j < message.attachments.length; j++) {
+        const attachment = message.attachments[j]
+        markNativeFileInputRejected(providerId, modelId, attachment.type === AttachmentType.IMAGE)
+        const text = await extractNativeAttachmentText(attachment, sessionId)
+        sections.push(this.buildDegradedToolText(attachment.name, text))
+      }
+      this.rewriteToolResultWithText(messages, message.sourceToolCallId, sections.join('\n\n'))
+      message.attachments = []
+      removalIndexes.push(i)
+    }
+    for (let i = removalIndexes.length - 1; i >= 0; i--) {
+      messages.splice(removalIndexes[i], 1)
+    }
+  }
+
+  private buildDegradedToolText(fileName: string, text: string): string {
+    if (text.trim() === '') {
+      return `[${fileName}] 未能提取出可用文本。该文件可能是扫描件或纯图形内容。`
+    }
+    return `[${fileName}]\n${text}`
+  }
+
+  // 工具结果里原本写着 nativeInput=true、text 为空；换成文本后必须一并改写，
+  // 否则模型会按“文件已随附”去找一个并不存在的附件。
+  private rewriteToolResultWithText(messages: RequestMessage[], toolCallId: string, text: string): void {
+    for (let i = 0; i < messages.length; i++) {
+      const message = messages[i]
+      if (!message.isToolResultMessage() || message.toolCallId !== toolCallId) {
+        continue
+      }
+      const output = new DegradedToolTextOutput()
+      output.text = text
+      output.chars = text.length
+      message.content = JSON.stringify(output)
+      return
+    }
+  }
+
+  // 一次失败会投递两遍：SSE 错误体里的裸消息（如 ".messages[6]: file must have a file_id
+  // or file_data"）先到，非 2xx 收尾的 "HTTP 400: {...}" 后到。两种形态都必须识别，
+  // 否则先到的那条会先弹 toast，用户就会在一次成功的回答旁看到报错。
+  // 只认请求被判为非法的状态码/错误类型；超时、网络中断等瞬时错误不能触发降级，
+  // 否则一次抖动就会让模型永久看不到原文件。
+  private isNativeToolInputRejection(error: string): boolean {
+    const normalized = error.toLowerCase()
+    return normalized.includes('400') || normalized.includes('413') ||
+      normalized.includes('415') || normalized.includes('422') ||
+      normalized.includes('invalid_request') ||
+      normalized.includes('file_id') || normalized.includes('file_data')
+  }
+
   // 懒加载历史附件（从后向前扫描，只加载最后 N 条用户消息的附件）
   private async prepareHistoryAttachments(messages: RequestMessage[]): Promise<void> {
     let loadedCount = 0
@@ -5922,6 +6083,17 @@ ${context !== '' ? context : '(无历史对话)'}
 
     console.info('ChatViewModel', `Prepared history attachments: ${loadedCount} messages, ${totalSize} bytes`)
   }
+}
+
+// 与各读取工具的文本结果同构：模型分不出这段文本是工具直接返回的，还是原生输入被拒后补的。
+class DegradedToolTextOutput {
+  ok: boolean = true
+  nativeInput: boolean = false
+  source: string = 'text'
+  text: string = ''
+  chars: number = 0
+  truncated: boolean = false
+  message: string = '已提取文件文本'
 }
 
 let chatViewModelInstance: ChatViewModel | null = null

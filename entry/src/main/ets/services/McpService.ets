@@ -19,6 +19,7 @@ import {
 import { HttpService } from './HttpService'
 import { getPreferencesService, PreferenceKeys, PreferencesService } from './PreferencesService'
 import { getToolRegistry, RegisteredTool, ToolExecutor, ToolRegistry } from './ToolRegistry'
+import { resolveLegacyToolId } from '../utils/ToolIdAliases'
 
 const MCP_PROTOCOL_VERSION = '2025-06-18'
 const MCP_DEFAULT_TIMEOUT_MS = 30000
@@ -225,7 +226,8 @@ export class McpService {
   private normalizeStoredSelectedToolIds(toolIds: string[]): string[] {
     const ids: string[] = []
     for (let i = 0; i < toolIds.length; i++) {
-      const toolId = toolIds[i].trim()
+      // 升级前存下的 *_to_text 勾选必须迁移，否则用户已开启的工具会静默消失。
+      const toolId = resolveLegacyToolId(toolIds[i].trim())
       if (toolId === '') {
         continue
       }

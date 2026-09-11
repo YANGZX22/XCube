@@ -4,6 +4,8 @@
  * 避免同一个工具在不同入口长得不一样。
  */
 
+import { resolveLegacyToolId } from './ToolIdAliases'
+
 export function normalizeToolIconId(value: string): string {
   const normalized = value.trim().toLowerCase().replace(/[\s\-]+/g, '_')
   if (normalized === 'exa_search' || normalized === 'websearch' || normalized === 'search_web' ||
@@ -22,7 +24,7 @@ export function normalizeToolIconId(value: string): string {
   if (normalized === 'compact' || normalized === 'context_compaction') {
     return 'compact_context'
   }
-  return normalized
+  return resolveLegacyToolId(normalized)
 }
 
 // 少数工具用位图图标（Symbol 里没有对应字形），调用方据此改走 Image 渲染
@@ -31,10 +33,10 @@ export const TOOL_ICON_IMAGE_XLSX: string = 'xlsx'
 
 export function resolveToolIconImageKind(toolId: string): string {
   const normalized = normalizeToolIconId(toolId)
-  if (normalized === 'docx_to_text') {
+  if (normalized === 'docx_toolkit') {
     return TOOL_ICON_IMAGE_DOCX
   }
-  if (normalized === 'xlsx_to_text') {
+  if (normalized === 'xlsx_toolkit') {
     return TOOL_ICON_IMAGE_XLSX
   }
   return ''
@@ -52,9 +54,9 @@ export function resolveToolSymbolResource(toolId: string): Resource {
       return $r('sys.symbol.doc_text')
     case 'canvas_document':
       return $r('sys.symbol.paintbrush_pointed_waveform')
-    case 'pdf_to_text':
+    case 'pdf_toolkit':
       return $r('sys.symbol.pdf_doc')
-    case 'image_to_text':
+    case 'image_toolkit':
       return $r('sys.symbol.picture')
     case 'vision_read_image':
       return $r('sys.symbol.hi_vison')

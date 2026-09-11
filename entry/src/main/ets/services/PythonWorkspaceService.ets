@@ -4,6 +4,7 @@ import { util } from '@kit.ArkTS'
 import { AppStorageKeys } from '../config/AppStorageKeys'
 import { getAppUiState, setAppUiStateValue } from '../state/AppUiState'
 import { PythonWorkspaceSessionCoordinator } from './PythonWorkspaceSessionCoordinator'
+import { decodeWorkspaceContent, decodeWorkspaceText, encodeWorkspaceBytes, getWorkspaceMimeType } from '../utils/WorkspaceFileCodec'
 import {
   PYTHON_MAX_WORKSPACE_FILES,
   PYTHON_MAX_WORKSPACE_FILE_BYTES,
@@ -25,11 +26,13 @@ export class PythonWorkspaceFileData {
   path: string = ''
   content: string = ''
   size: number = 0
+  encoding: string = 'utf8'
 
-  constructor(path: string = '', content: string = '', size: number = 0) {
+  constructor(path: string = '', content: string = '', size: number = 0, encoding: string = 'utf8') {
     this.path = path
     this.content = content
     this.size = size
+    this.encoding = encoding
   }
 }
 
@@ -37,11 +40,13 @@ export class PythonWorkspaceFileInfo {
   path: string = ''
   size: number = 0
   modifiedAt: number = 0
+  mimeType: string = ''
 
   constructor(path: string, size: number, modifiedAt: number) {
     this.path = path
     this.size = size
     this.modifiedAt = modifiedAt
+    this.mimeType = getWorkspaceMimeType(path)
   }
 }
 
@@ -53,6 +58,9 @@ export class PythonWorkspaceReadResult {
   endLine: number = 0
   totalLines: number = 0
   truncated: boolean = false
+  binary: boolean = false
+  size: number = 0
+  mimeType: string = ''
 }
 
 export class PythonWorkspaceCleanupResult {
@@ -174,10 +182,14 @@ export class PythonWorkspaceService {
 
   writeFile(sessionId: string, rawPath: string, content: string,
     expectedModifiedAt?: number): PythonWorkspaceFileInfo {
+    return this.writeBytes(sessionId, rawPath, this.encodeContent(content), expectedModifiedAt)
+  }
+
+  writeBytes(sessionId: string, rawPath: string, contentBytes: Uint8Array,
+    expectedModifiedAt?: number): PythonWorkspaceFileInfo {
     this.ensureReady()
     this.assertSessionWritable(sessionId)
     const path = normalizePythonWorkspacePath(rawPath)
-    const contentBytes = this.encodeContent(content)
     this.validateFileSize(contentBytes.byteLength)
     const existing = this.listFiles(sessionId)
     let existingSize = 0
@@ -215,7 +227,14 @@ export class PythonWorkspaceService {
       fileIo.OpenMode.CREATE | fileIo.OpenMode.WRITE_ONLY | fileIo.OpenMode.TRUNC
     )
     try {
-      fileIo.writeSync(file.fd, contentBytes.buffer)
+      let offset = 0
+      while (offset < contentBytes.byteLength) {
+        const written = fileIo.writeSync(file.fd, contentBytes.slice(offset, offset + 1024 * 1024).buffer)
+        if (written <= 0) {
+          throw new Error('工作区文件写入不完整')
+        }
+        offset += written
+      }
     } finally {
       fileIo.closeSync(file)
     }
@@ -252,7 +271,17 @@ export class PythonWorkspaceService {
   readFile(sessionId: string, rawPath: string, requestedStartLine: number = 1,
     requestedEndLine: number = 0): PythonWorkspaceReadResult {
     const path = normalizePythonWorkspacePath(rawPath)
-    const content = this.readWholeFile(sessionId, path)
+    const bytes = this.readBytes(sessionId, path)
+    const content = decodeWorkspaceText(bytes, path)
+    const result = new PythonWorkspaceReadResult()
+    result.path = path
+    result.size = bytes.byteLength
+    result.mimeType = getWorkspaceMimeType(path)
+    result.modifiedAt = this.getFileModifiedAt(sessionId, path)
+    if (content === undefined) {
+      result.binary = true
+      return result
+    }
     const lines = content.split('\n')
     const startLine = Math.max(1, Math.floor(requestedStartLine))
     const defaultEndLine = startLine + PYTHON_WORKSPACE_MAX_READ_LINES - 1
@@ -264,7 +293,6 @@ export class PythonWorkspaceService {
       selected = selected.substring(0, PYTHON_WORKSPACE_MAX_READ_CHARACTERS)
       truncatedByCharacters = true
     }
-    const result = new PythonWorkspaceReadResult()
     result.path = path
     result.content = selected
     result.modifiedAt = this.getFileModifiedAt(sessionId, path)
@@ -339,8 +367,9 @@ export class PythonWorkspaceService {
     for (let i = 0; i < infos.length; i++) {
       snapshot.push(new PythonWorkspaceFileData(
         infos[i].path,
-        this.readWholeFile(sessionId, infos[i].path),
-        infos[i].size
+        encodeWorkspaceBytes(this.readBytes(sessionId, infos[i].path)),
+        infos[i].size,
+        'base64'
       ))
     }
     return snapshot
@@ -356,7 +385,7 @@ export class PythonWorkspaceService {
       const incomingSizes: number[] = []
       for (let i = 0; i < files.length; i++) {
         incomingPaths.push(normalizePythonWorkspacePath(files[i].path))
-        incomingSizes.push(this.encodeContent(files[i].content).byteLength)
+        incomingSizes.push(decodeWorkspaceContent(files[i].content, files[i].encoding).byteLength)
       }
       for (let i = 0; i < existing.length; i++) {
         if (!incomingPaths.includes(existing[i].path)) {
@@ -375,7 +404,8 @@ export class PythonWorkspaceService {
           this.fileSizeDelta(incomingPaths[right], incomingSizes[right], existing))
       for (let i = 0; i < writeOrder.length; i++) {
         const index = writeOrder[i]
-        this.writeFile(sessionId, incomingPaths[index], files[index].content)
+        this.writeBytes(sessionId, incomingPaths[index],
+          decodeWorkspaceContent(files[index].content, files[index].encoding))
       }
     } finally {
       this.finishMutationBatch()
@@ -505,8 +535,16 @@ export class PythonWorkspaceService {
       if (paths.includes(path)) {
         throw new Error(`Python 工作区包含重复路径: ${path}`)
       }
+      for (let j = 0; j < paths.length; j++) {
+        if (paths[j].startsWith(path + '/') || path.startsWith(paths[j] + '/')) {
+          throw new Error('工作区快照文件与文件夹路径冲突')
+        }
+      }
       paths.push(path)
-      const size = this.encodeContent(files[i].content).byteLength
+      const size = decodeWorkspaceContent(files[i].content, files[i].encoding).byteLength
+      if (files[i].encoding === 'base64' && files[i].size !== size) {
+        throw new Error('工作区快照文件大小不匹配')
+      }
       this.validateFileSize(size)
       totalBytes += size
     }
@@ -552,15 +590,50 @@ export class PythonWorkspaceService {
   }
 
   private readWholeFile(sessionId: string, path: string): string {
+    const content = decodeWorkspaceText(this.readBytes(sessionId, path), path)
+    if (content === undefined) {
+      throw new Error('此文件不是 UTF-8 文本；请使用 Python 二进制读写或对应的文档/图片工具')
+    }
+    return content
+  }
+
+  getFilePath(sessionId: string, path: string): string {
     this.ensureReady()
+    this.assertSessionWritable(sessionId)
     const normalizedPath = normalizePythonWorkspacePath(path)
     const filePath = `${this.getSessionDirectory(sessionId)}/${normalizedPath}`
     if (!this.pathExists(filePath)) {
       throw new Error(`工作区文件不存在: ${normalizedPath}`)
     }
     const stat = fileIo.statSync(filePath)
+    if (!stat.isFile()) {
+      throw new Error('工作区路径不是普通文件')
+    }
     this.validateFileSize(stat.size)
-    return fileIo.readTextSync(filePath)
+    return filePath
+  }
+
+  readBytes(sessionId: string, path: string): Uint8Array {
+    const filePath = this.getFilePath(sessionId, path)
+    const file = fileIo.openSync(filePath, fileIo.OpenMode.READ_ONLY)
+    try {
+      const size = fileIo.statSync(file.fd).size
+      this.validateFileSize(size)
+      const bytes = new Uint8Array(size)
+      let offset = 0
+      while (offset < size) {
+        const chunk = new ArrayBuffer(Math.min(1024 * 1024, size - offset))
+        const count = fileIo.readSync(file.fd, chunk)
+        if (count <= 0) {
+          throw new Error('工作区文件读取不完整')
+        }
+        bytes.set(new Uint8Array(chunk, 0, count), offset)
+        offset += count
+      }
+      return bytes
+    } finally {
+      fileIo.closeSync(file)
+    }
   }
 
   private fileExists(sessionId: string, path: string): boolean {

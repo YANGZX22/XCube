@@ -386,7 +386,9 @@ export struct EmailKnowledgeCategory {
   @Builder
   private CategoryHeader() {
     Column() {
-      ImmersiveListSurface({ isImmersive: this.knowledgeListImmersiveMaterial, cornerRadius: 14 }) {
+      ImmersiveListSurface({
+        isImmersive: this.knowledgeListImmersiveMaterial, cornerRadius: LIST_MATERIAL_CARD_RADIUS
+      }) {
         this.CategoryHeaderRow()
       }
     }
@@ -406,7 +408,7 @@ export struct EmailKnowledgeCategory {
       }
       .width(36)
       .height(36)
-      .borderRadius(this.isManuscriptMode ? 0 : 12)
+      .borderRadius(this.isManuscriptMode ? 0 : LIST_MATERIAL_CARD_RADIUS)
       .backgroundColor(this.isManuscriptMode ? Color.Transparent : withColorAlpha('#C97936',
         this.isDarkMode ? '26' : '14'))
       .justifyContent(FlexAlign.Center)
@@ -479,7 +481,7 @@ export struct EmailKnowledgeCategory {
     .width('100%')
     .height(this.isManuscriptMode ? 64 : 60)
     .padding({ left: this.isManuscriptMode ? 4 : 12, right: this.isManuscriptMode ? 4 : 10 })
-    .borderRadius(this.isManuscriptMode ? 0 : 14)
+    .borderRadius(this.isManuscriptMode ? 0 : LIST_MATERIAL_CARD_RADIUS)
     .backgroundColor(Color.Transparent)
     .border({
       width: this.isManuscriptMode ? { bottom: 1 } : 0.5,
@@ -705,7 +707,7 @@ export struct EmailKnowledgeCategory {
     }
     .width(38)
     .height(38)
-    .borderRadius(12)
+    .borderRadius(LIST_MATERIAL_CARD_RADIUS)
     .backgroundColor(withColorAlpha(this.getCategoryColor(), this.isDarkMode ? '2E' : '1A'))
     .justifyContent(FlexAlign.Center)
 

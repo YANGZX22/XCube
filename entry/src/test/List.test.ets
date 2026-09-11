@@ -29,6 +29,10 @@ import deepSeekWebSearchUtilsTest from './DeepSeekWebSearchUtils.test';
 import subAgentArgumentParserTest from './SubAgentArgumentParser.test';
 import openAIStreamCompatibilityTest from './OpenAIStreamCompatibility.test';
 import askUserQuestionUtilsTest from './AskUserQuestionUtils.test';
+import usageActivityTest from './UsageActivity.test';
+import workspaceFileCodecTest from './WorkspaceFileCodec.test';
+import nativeFileInputTest from './NativeFileInput.test';
+import pdfPageSelectionTest from './PdfPageSelection.test';
 
 export default function testsuite() {
   localUnitTest();
@@ -62,4 +66,8 @@ export default function testsuite() {
   subAgentArgumentParserTest();
   openAIStreamCompatibilityTest();
   askUserQuestionUtilsTest();
+  usageActivityTest();
+  workspaceFileCodecTest();
+  nativeFileInputTest();
+  pdfPageSelectionTest();
 }

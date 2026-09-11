@@ -21,10 +21,10 @@
 ## 最新信息
 
 > [!IMPORTANT]
-> **Immersive Light 兼容性问题**: 自 `HarmonyOS 7.0.0.105` (API 26) 起，[普通 ArkUI 组件通过应用级开启或者组件级开启方式开启沉浸光感被限制](https://developer.huawei.com/consumer/cn/doc/harmonyos-guides/arkts-immersive-light-sense-overview#约束与限制)，我们已对此限制进行兼容，并尝试恢复到和限制前同等效果。即便如此，兼容性适配仍需时间。
+> **Immersive Light 兼容性问题**: 自 `HarmonyOS 7.0.0.105` (API 26) 起，普通 ArkUI 组件通过应用级开启或者组件级开启方式开启沉浸光感被[限制](https://developer.huawei.com/consumer/cn/doc/harmonyos-guides/arkts-immersive-light-sense-overview#约束与限制)，我们已对此限制进行兼容，并尝试恢复到和限制前同等效果。即便如此，兼容性适配仍需时间。
 
 > [!IMPORTANT]
-> XCube 已对 HarmonyOS 6 及更早版本进行兼容，但仍可能存在 UI 问题。将设备版本升至 HarmonyOS 7 及以上版本以获得最佳体验。
+> XCube 已对 HarmonyOS 6 及更早版本进行 UI 兼容，但仍可能存在 UI 问题。将设备版本升至 HarmonyOS 7 及以上版本以获得最佳体验。
 
 > [!NOTE]
 > XCube 延续自 [YANGZX22/chatcube](https://github.com/YANGZX22/chatcube)，该项目最初由 [LongLiveY96/ChatCube](https://github.com/LongLiveY96/ChatCube) 分支而来。两个早期版本的版权与 MIT 许可证声明均完整保留。
@@ -52,8 +52,8 @@
 - 🔍 **联网搜索与 MCP** —— 支持 Bing（本地）、Brave、Tavily、Exa、博查和 DeepSeek Web Search，以及远程 Streamable MCP Server
 - 🧩 **多轮子智能体协作** —— 主智能体可将复杂任务分配给最多 3 个子智能体，并在多轮交互后统一汇总结果
 - 📚 **本地知识库** —— 结合关键词与向量的混合 RAG，内置 DOCX／XLSX 解析与 OCR；文件始终保留在应用沙箱内
-- 🛠️ **内置工具** —— Canvas 文档、计划模式、Python 沙箱、图表、日历、地图与常用地点，以及 PDF／图片／DOCX／XLSX 转文本功能
-- 🔊 **回复播报** —— 支持 HarmonyOS 离线 TTS 或 ElevenLabs
+- 🛠️ **内置工具** —— Canvas 文档、计划模式、Python 沙箱、图表、日历、地图与常用地点，以及交付原文件、页面图或提取文本的 PDF／图片／DOCX／XLSX 工具包
+- 🔊 **回复播报** —— 支持 HarmonyOS 原生 TTS 或 ElevenLabs
 - 🔒 **隐私保护** —— 所有工具均设置明确的权限控制与用户确认流程
 
 项目完全使用 ArkTS 构建，致力于打磨 HarmonyOS 原生交互与沉浸光感材质。
@@ -105,46 +105,39 @@ DeepSeek Web Search 默认在每次搜索时读取当前 DeepSeek 服务商的 A
 | 工具                           | 功能                                                                                                            |
 |------------------------------|---------------------------------------------------------------------------------------------------------------|
 | **上下文压缩**                    | 将较早对话压缩为摘要以节省上下文                                                                                              |
-| **联网搜索**                     | 通过 Bing（本地）、Brave、Tavily、Exa、博查或 DeepSeek 获取实时信息；超出搜索预算时请求用户确认                                                     |
+| **联网搜索**                     | 通过 Bing（本地）、Brave、Tavily、Exa、博查或 DeepSeek 获取实时信息；超出搜索预算时请求用户确认                                                |
 | **向用户提问**                    | 模型遇到关键歧义时，可通过确认卡片请求用户补充信息                                                                                     |
 | **子智能体**                     | 派出并行子智能体处理独立子任务                                                                                               |
 | **Python**                   | 运行 Python 进行计算、数据处理和中间推导                                                                                      |
-| **PDF 转文本**                  | 提取 PDF 文本层；扫描件自动回退到本地 Core Vision Kit OCR                                                                     |
-| **图片转文本**                    | 使用本地 Core Vision Kit OCR 识别图片文字                                                                               |
-| **ModLens 视觉理解**<sup>*</sup> | 通过 [ModLens](https://github.com/liustack/modlens) 为无视觉模型提供图片 OCR、布局、语义与视觉线索，需要单独部署                            |
-| **DOCX 转文本**                 | 在本地提取 DOCX 的标题、段落、列表和表格，不把原始文件交给不支持文档输入的模型                                                                    |
-| **XLSX 转文本**                 | 在本地提取 XLSX 的工作表、单元格、日期及公式结果，不把原始文件交给不支持文档输入的模型                                                                |
+| **PDF 工具包**                  | 模型支持原生文档输入时直接交付原始 PDF；也可将指定页码渲染成图片交给有视觉能力的模型；否则提取 PDF 文本层，扫描件自动回退到本地 Core Vision Kit OCR                |
+| **图片工具包**                    | 模型支持原生视觉输入时直接交付原图；否则使用本地 Core Vision Kit OCR 识别图片文字                                                          |
+| **视觉理解**<sup>*</sup>         | 模型支持原生视觉输入时直接交付原图；否则通过 [ModLens](https://github.com/liustack/modlens) 提供图片 OCR、布局、语义与视觉线索，需要单独部署              |
+| **DOCX 工具包**                 | 模型支持原生文档输入时直接交付原始 DOCX；否则在本地提取标题、段落、列表和表格，不把原始文件交给模型                                                         |
+| **XLSX 工具包**                 | 模型支持原生文档输入时直接交付原始 XLSX；否则在本地提取工作表、单元格、日期及公式结果，不把原始文件交给模型                                                    |
 | **Skill**                    | 读取用户已启用的技能说明                                                                                                  |
 | **Canvas 文档**                | 在对话区域旁维护用户与 AI 均可编辑的共享文档，并支持 Markdown 预览                                                                      |
 | **计划模式**                     | 由模型创建多步骤任务计划，并在各步骤实际完成后更新状态。计划状态仅允许模型修改；用户可通过 `/plan` 打开只读面板查看当前执行项与总体进度。计划按会话保存在本地，并在再次进入会话时自动恢复             |
 | **数学绘图**                     | 生成基于 [VChart](https://ohpm.openharmony.cn/#/cn/detail/@visactor%2Fharmony-vchart) 的折线图、柱状图、饼图、散点图、桑基图、词云图等可视化 |
 | **读取日程**                     | 经用户确认后读取系统日历事件                                                                                                |
 | **写入日程**                     | 经用户确认后写入系统日历事件                                                                                                |
-| **读取邮件**                     | 通过 IMAP 搜索并读取已授权邮箱，并向模型返回受支持附件的本地文本提取或 OCR 结果。AI 发起的每次读取都需用户明确批准；邮箱凭据保存在系统安全资产存储中，且不会提供给模型                                               |
+| **读取邮件**                     | 通过 IMAP 搜索并读取已授权邮箱，并向模型返回受支持附件的本地文本提取或 OCR 结果。AI 发起的每次读取都需用户明确批准；邮箱凭据保存在系统安全资产存储中，且不会提供给模型                    |
 | **发送邮件**                     | 通过 SMTP 向指定邮箱发送邮件。AI 发起的每次发送都需用户明确确认收件人、主题与正文；邮箱凭据不会提供给模型                                                     |
 | **常用地点**<sup>#</sup>         | 在 **设置 → 工具 → 常用地点** 中通过地点搜索、地图选点或当前精确位置保存任意数量的标签（如“家”“公司”），供模型按标签读取和使用                                       |
 | **地图**                       | 使用 HarmonyOS Map Kit 搜索地点，并在聊天中展示当前位置、目的地、路线折线、精确位置与地图跟随                                                      |
 | **花瓣导航**                     | 将搜索地点、坐标或已保存的常用地点标签交给花瓣地图进行路线导航                                                                               |
 
 > [!IMPORTANT]
-> 使用地图相关功能前，必须在 DevEco Studio 中打开 **File → Project Structure → Signing Configs → Enable open capabilities**，启用 **Map Kit** 并应用配置。如果调试 Profile 早于该能力生成，还需重新申请或下载 Profile 并更新签名配置。未启用 Map Kit 通常会返回错误码 `1002600004`。完整步骤参见[Map Kit 集成说明](docs/map-kit-integration.md#上线前必须完成的控制台配置)。
+> 使用地图相关功能前，必须在 DevEco Studio 中打开 **File → Project Structure → Signing Configs → Enable open capabilities**，启用 **Map Kit** 并应用配置。如果调试 Profile 早于该能力生成，还需重新申请或下载 Profile 并更新签名配置。完整步骤参见[Map Kit 集成说明](docs/map-kit-integration.md#上线前必须完成的控制台配置)。
 
-#### <sup>*</sup>[可选] 为文本模型启用 ModLens 视觉理解
+#### <sup>*</sup>[可选] 为文本模型在视觉理解工具背后启用 ModLens
 
-HarmonyOS 应用无法直接运行 ModLens 所需的 Node.js CLI，因此项目提供可选的轻量伴随网关，供用户部署至计算机或服务器。请按照 [`tools/modlens-gateway/README.md`](tools/modlens-gateway/README.md) 启动网关，再进入 **设置 → 工具中心 → ModLens 视觉理解** 填写地址、测试连接并启用工具。
+HarmonyOS 应用无法直接运行 ModLens 所需的 Node.js CLI，因此项目提供可选的轻量伴随网关，供用户部署至计算机或服务器。请按照 [`tools/modlens-gateway/README.md`](tools/modlens-gateway/README.md) 启动网关，再进入 **设置 → 工具中心 → 视觉理解** 填写地址、测试连接并启用工具。
 
 - 仅在完成显式配置并启用工具后，图片才会发送至网关及 ModLens 中配置的视觉服务商
-- 当前模型已有原生视觉能力时，应用会自动隐藏该回退工具
-- 网关不可用、未启用或模型不支持工具调用时，可选用 `image_to_text`
+- 当前模型已有原生视觉能力时，该工具仍可使用，但会在同一轮直接返回原图作为原生输入，不再经过网关
+- 网关不可用、未启用或模型不支持工具调用时，可选用 `image_toolkit`
 
 #### <sup>#</sup>常用地点及其坐标保存在应用本地，只有启用对应工具后模型才能读取；获取当前精确位置和使用 Map Kit 时需要授予应用位置与地图权限。
-
-### 🔊 回复播报
-
-消息工具栏支持播报模型回复（**设置 → 播报**）：
-
-- **本地 TTS** —— 使用 HarmonyOS 离线语音引擎；无需 API Key，播报内容仅在设备本地处理
-- **ElevenLabs** —— 使用用户配置的 API Key，可选择账号中的音色并调整稳定性、相似度和语速
 
 ## 快速开始
 

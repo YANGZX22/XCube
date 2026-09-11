@@ -1,8 +1,8 @@
 import { uiMaterial } from '@kit.ArkUI'
 import { ImmersiveMaterialAnchor } from './ImmersiveMaterialBackdrop'
 
-// 与列表左右两侧 56vp 圆形侧滑按钮的半径一致。
-export const LIST_MATERIAL_CARD_RADIUS: number = 28
+// 对话、知识库卡片及常规设置分组共用的圆角。
+export const LIST_MATERIAL_CARD_RADIUS: number = 22
 
 // 列表只替换背板，前景和原生点击、长按、侧滑仍留在原有 Row/ListItem 上。
 @ComponentV2
@@ -25,7 +25,9 @@ export struct ImmersiveListSurface {
             style: uiMaterial.ImmersiveStyle.REGULAR,
             materialColor: Color.Transparent,
             applyShadow: true,
-            interactive: false
+            // 列表和设置分组的背板不承担交互反馈。
+            interactive: false,
+            lightEffect: null
           })
         })
       }

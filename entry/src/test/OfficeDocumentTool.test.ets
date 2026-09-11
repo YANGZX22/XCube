@@ -5,9 +5,9 @@ import {
   isOfficeOpenXmlDocumentAttachment
 } from '../main/ets/services/DocumentAttachmentRegistryService'
 import {
-  DOCX_TO_TEXT_TOOL_ID,
+  DOCX_TOOLKIT_TOOL_ID,
   getBuiltinToolIds,
-  XLSX_TO_TEXT_TOOL_ID
+  XLSX_TOOLKIT_TOOL_ID
 } from '../main/ets/config/BuiltinTools'
 
 export default function officeDocumentToolTest() {
@@ -15,8 +15,8 @@ export default function officeDocumentToolTest() {
     it('exposes_docx_and_xlsx_as_builtin_tools', 0, () => {
       const toolIds = getBuiltinToolIds()
 
-      expect(toolIds.includes(DOCX_TO_TEXT_TOOL_ID)).assertTrue()
-      expect(toolIds.includes(XLSX_TO_TEXT_TOOL_ID)).assertTrue()
+      expect(toolIds.includes(DOCX_TOOLKIT_TOOL_ID)).assertTrue()
+      expect(toolIds.includes(XLSX_TOOLKIT_TOOL_ID)).assertTrue()
     })
 
     it('registers_only_supported_office_attachments_for_the_session', 0, () => {

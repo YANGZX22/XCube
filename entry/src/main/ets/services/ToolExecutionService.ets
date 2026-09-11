@@ -2,6 +2,7 @@ import { ToolCall, ToolConfig, ToolPermissionLevel, ToolResult } from '../models
 import { ASK_USER_TOOL_ID } from '../config/BuiltinTools'
 import { getToolRegistry, RegisteredTool, ToolExecutionContext, ToolRegistry } from './ToolRegistry'
 import { parseAskUserQuestions } from '../utils/AskUserQuestionUtils'
+import { resolveLegacyToolId } from '../utils/ToolIdAliases'
 
 interface ToolExecutionErrorLike {
   code?: number | string
@@ -251,6 +252,11 @@ export class ToolExecutionService {
       || normalized === 'internet_search' || normalized === 'web_search_exa')
       && this.registry.isToolRegistered('web_search')) {
       return 'web_search'
+    }
+    // 模型沿用旧的 *_to_text 名字时，仍然路由到改名后的工具，而不是判为未提供。
+    const aliased = resolveLegacyToolId(normalized)
+    if (aliased !== normalized && this.registry.isToolRegistered(aliased)) {
+      return aliased
     }
     return undefined
   }
@@ -573,7 +579,8 @@ export class ToolExecutionService {
     try {
       // 执行工具
       const startTime = Date.now()
-      const result = await executor.execute(toolCall.arguments, context)
+      const callContext = context.withActor(context.actorId)
+      const result = await executor.execute(toolCall.arguments, callContext)
 
       // 执行完成后再次检查是否取消（避免返回已取消的结果）
       if (this.isCancelled()) {
@@ -593,13 +600,17 @@ export class ToolExecutionService {
         isError = parsed.isError === true || hasError
       } catch (_error) {}
 
-      return new ToolResult(
+      const toolResult = new ToolResult(
         toolCall.id,
         result,
         isError,
         registeredTool.config.name,
         registeredTool.config.sourceLabel
       )
+      if (!isError) {
+        toolResult.inputAttachments = callContext.inputAttachments
+      }
+      return toolResult
     } catch (error) {
       const errorDetail = formatToolExecutionError(error)
       console.error('ToolExecutionService', `Tool execution error: ${errorDetail}`)

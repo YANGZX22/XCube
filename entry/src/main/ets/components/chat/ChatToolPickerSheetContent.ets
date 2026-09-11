@@ -81,8 +81,8 @@ export struct ChatToolPickerSheetContent {
       toolId === 'math_chart') {
       return 'schedule_content'
     }
-    if (toolId === 'pdf_to_text' || toolId === 'image_to_text' || toolId === 'vision_read_image' ||
-      toolId === 'docx_to_text' || toolId === 'xlsx_to_text') {
+    if (toolId === 'pdf_toolkit' || toolId === 'image_toolkit' || toolId === 'vision_read_image' ||
+      toolId === 'docx_toolkit' || toolId === 'xlsx_toolkit') {
       return 'file_recognition'
     }
     return 'intelligence_development'
@@ -198,12 +198,12 @@ export struct ChatToolPickerSheetContent {
 
   @Builder
   private ToolIcon(toolId: string, size: number) {
-    if (toolId === 'docx_to_text') {
+    if (toolId === 'docx_toolkit') {
       Image($r('app.media.doc_docx'))
         .width(size)
         .height(size)
         .fillColor(this.themePrimary)
-    } else if (toolId === 'xlsx_to_text') {
+    } else if (toolId === 'xlsx_toolkit') {
       Image($r('app.media.doc_xlsx'))
         .width(size)
         .height(size)

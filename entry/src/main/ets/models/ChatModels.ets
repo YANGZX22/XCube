@@ -169,6 +169,8 @@ export class ToolResult {
   isError: boolean = false
   displayName: string = ''
   sourceLabel: string = ''
+  // Runtime-only model inputs; consumed by the next request, not tool-event JSON.
+  inputAttachments: MessageAttachment[] = []
 
   constructor(
     toolCallId: string = '',

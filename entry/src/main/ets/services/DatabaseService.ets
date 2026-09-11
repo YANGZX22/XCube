@@ -26,6 +26,7 @@ import { setAppUiStateValue } from '../state/AppUiState'
 import { getAttachmentStorageService } from './AttachmentStorageService'
 import { getDocumentAttachmentRegistryService } from './DocumentAttachmentRegistryService'
 import { getPythonWorkspaceService, PythonWorkspaceService } from './PythonWorkspaceService'
+import { aggregateDailyUsageActivity, DailyUsageActivity, UsageActivityRecord } from '../utils/UsageActivityUtils'
 
 // 数据库配置
 const DB_CONFIG: relationalStore.StoreConfig = {
@@ -3404,13 +3405,16 @@ export class DatabaseService {
     return `${year}-${month}-${day}`
   }
 
-  private async collectMessageUsageRows(rangeStartMs: number): Promise<UsageMessageRow[]> {
+  private async collectMessageUsageRows(rangeStartMs: number, rangeEndMs: number = 0): Promise<UsageMessageRow[]> {
     const rows: UsageMessageRow[] = []
     if (this.rdbStore === null) {
       return rows
     }
     const predicates = new relationalStore.RdbPredicates(TableNames.MESSAGES)
     this.applyUsageRange(predicates, 'timestamp', rangeStartMs)
+    if (rangeEndMs > 0) {
+      predicates.lessThan('timestamp', rangeEndMs)
+    }
     const resultSet = await this.rdbStore.query(predicates, [
       'role',
       'model_name',
@@ -3473,6 +3477,16 @@ export class DatabaseService {
     })
     const safeLimit = limit > 0 ? limit : 10
     return items.slice(0, safeLimit)
+  }
+
+  // 按设备本地自然日汇总，失败向上传递，避免活动图把读取错误显示为零用量。
+  async getDailyUsageActivity(rangeStartMs: number, rangeEndMs: number): Promise<DailyUsageActivity[]> {
+    await this.waitForInitialization()
+    if (this.rdbStore === null) {
+      throw new Error('Usage database is unavailable')
+    }
+    const rows = await this.collectMessageUsageRows(rangeStartMs, rangeEndMs)
+    return aggregateDailyUsageActivity(rows, rangeStartMs, rangeEndMs)
   }
 
   // 获取总览统计数据(总会话/总消息/独立模型数/活跃天数)
@@ -3599,16 +3613,9 @@ export interface UsageBillingSummary {
   messageCount: number
 }
 
-interface UsageMessageRow {
-  role: string
+interface UsageMessageRow extends UsageActivityRecord {
   modelName: string
   modelId: string
-  timestamp: number
-  billingEnabled: boolean
-  billingCurrency: string
-  estimatedInputTokens: number
-  estimatedOutputTokens: number
-  estimatedCost: number
 }
 
 // 工具事件数据接口

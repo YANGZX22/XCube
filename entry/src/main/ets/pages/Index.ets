@@ -155,7 +155,7 @@ struct Index {
   private static readonly TAB_TITLE_BAR_HORIZONTAL_PADDING: number = 16
   private static readonly TAB_TITLE_CONTENT_HORIZONTAL_PADDING: number = 8
   private static readonly COMPACT_TABS_FLOATING_SIDE_MARGIN: number = 16
-  private static readonly COMPACT_TABS_FLOATING_TAB_OUTER_MARGIN: number = 12
+  private static readonly COMPACT_TABS_FLOATING_TAB_OUTER_MARGIN: number = Index.COMPACT_TABS_FLOATING_SIDE_MARGIN
   private static readonly COMPACT_TABS_WITH_ACTION_SMALL_WIDTH: number = 284
   private static readonly COMPACT_TABS_WITH_ACTION_MEDIUM_WIDTH: number = 316
   private static readonly COMPACT_TABS_WITH_ACTION_LARGE_WIDTH: number = 348

@@ -11,8 +11,9 @@ export const PYTHON_MAX_OUTPUT_FILES: number = 8
 export const PYTHON_MAX_OUTPUT_FILE_BYTES: number = 16 * 1024 * 1024
 export const PYTHON_MAX_OUTPUT_FILE_TOTAL_BYTES: number = 32 * 1024 * 1024
 export const PYTHON_MAX_WORKSPACE_FILES: number = 64
-export const PYTHON_MAX_WORKSPACE_FILE_BYTES: number = 256 * 1024
-export const PYTHON_MAX_WORKSPACE_TOTAL_BYTES: number = 2 * 1024 * 1024
+// Bounded for the WebView bridge, but large enough for PDFs, images and Office files.
+export const PYTHON_MAX_WORKSPACE_FILE_BYTES: number = 16 * 1024 * 1024
+export const PYTHON_MAX_WORKSPACE_TOTAL_BYTES: number = 32 * 1024 * 1024
 export const PYTHON_MAX_WORKSPACE_RUN_FILES: number = 16
 
 const PYTHON_PACKAGE_SPEC_PATTERN: RegExp =

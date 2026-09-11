@@ -195,17 +195,21 @@ export class PyodideRuntimeService {
         parsed.artifacts.push(artifact)
       }
       const workspaceFiles = raw.workspaceFiles ?? []
+      if (!Array.isArray(workspaceFiles)) {
+        throw new Error('工作区回写数据结构无效')
+      }
       for (let i = 0; i < workspaceFiles.length; i++) {
         const source = workspaceFiles[i]
         if (typeof source.path !== 'string' || typeof source.content !== 'string' ||
           typeof source.size !== 'number') {
-          continue
+          throw new Error('工作区回写文件数据无效')
         }
-        parsed.workspaceFiles.push(new PythonWorkspaceFileData(source.path, source.content, source.size))
+        parsed.workspaceFiles.push(new PythonWorkspaceFileData(source.path, source.content, source.size,
+          source.encoding === undefined ? 'utf8' : source.encoding))
       }
     } catch (e) {
       parsed = new PyodideRunResult(false)
-      parsed.error = `结果解析失败: ${json}`
+      parsed.error = 'Python 结果数据无效，未回写工作区'
     }
     entry.resolve(parsed)
   }

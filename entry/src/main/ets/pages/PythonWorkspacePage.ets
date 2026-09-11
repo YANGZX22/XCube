@@ -11,6 +11,8 @@
 import {
   PythonWorkspaceFileInfo,
   PYTHON_WORKSPACE_MAX_FILE_BYTES,
+  PYTHON_WORKSPACE_MAX_FILES,
+  PYTHON_WORKSPACE_MAX_TOTAL_BYTES,
   PythonWorkspaceReadResult,
   PythonWorkspaceService,
   normalizePythonWorkspacePath
@@ -22,7 +24,8 @@ import { withColorAlpha } from '../utils/ColorAlphaUtils'
 import { showToast } from '../utils/ToastUtil'
 import { pasteboard } from '@kit.BasicServicesKit'
 import { fileIo, picker } from '@kit.CoreFileKit'
-import { util } from '@kit.ArkTS'
+import { pdfService, pdfViewManager, PdfView } from '@kit.PDFKit'
+import { getWorkspaceMimeType } from '../utils/WorkspaceFileCodec'
 import { uiMaterial } from '@kit.ArkUI'
 import {
   buildWorkspaceExplorerRows,
@@ -72,11 +75,11 @@ class WorkspaceCodeLine {
 
 class WorkspaceUploadData {
   path: string = ''
-  content: string = ''
+  bytes: Uint8Array = new Uint8Array(0)
 
-  constructor(path: string, content: string) {
+  constructor(path: string, bytes: Uint8Array) {
     this.path = path
-    this.content = content
+    this.bytes = bytes
   }
 }
 
@@ -99,6 +102,9 @@ struct PythonWorkspacePageContent {
   @Local previewTotalLines: number = 0
   @Local previewTruncated: boolean = false
   @Local previewError: string = ''
+  @Local previewKind: string = 'text'
+  @Local previewFilePath: string = ''
+  @Local previewLoading: boolean = false
   @Local createItemName: string = ''
   @Local createItemDirectory: string = ''
   @Local createItemKind: string = 'file'
@@ -106,6 +112,8 @@ struct PythonWorkspacePageContent {
   private workspaceService: PythonWorkspaceService = ServiceRegistry.pythonWorkspace()
   private previewContent: string = ''
   private createItemDialogId: number = -1
+  private pdfPreviewController: pdfViewManager.PdfController = new pdfViewManager.PdfController()
+  private previewSequence: number = 0
 
   private get themePrimary(): string {
     return getAppUiState().themePrimary
@@ -131,6 +139,10 @@ struct PythonWorkspacePageContent {
 
   aboutToAppear(): void {
     this.loadWorkspace()
+  }
+
+  aboutToDisappear(): void {
+    this.closeFile()
   }
 
   @Monitor('sessionId')
@@ -190,6 +202,9 @@ struct PythonWorkspacePageContent {
   }
 
   private readSelectedFile(): void {
+    this.releasePreview()
+    this.previewKind = 'text'
+    this.previewFilePath = ''
     this.previewError = ''
     this.previewContent = ''
     this.previewLines = []
@@ -198,7 +213,24 @@ struct PythonWorkspacePageContent {
     this.previewTotalLines = 0
     this.previewTruncated = false
     try {
+      const mime = getWorkspaceMimeType(this.selectedPath)
+      this.previewFilePath = this.workspaceService.getFilePath(this.sessionId, this.selectedPath)
+      if (mime.startsWith('image/') && mime !== 'image/svg+xml') {
+        this.previewKind = 'image'
+        return
+      }
+      if (mime === 'application/pdf') {
+        this.previewKind = 'pdf'
+        this.previewLoading = true
+        this.pdfPreviewController = new pdfViewManager.PdfController()
+        this.loadPdfPreview(this.pdfPreviewController, this.previewFilePath, this.previewSequence)
+        return
+      }
       const result: PythonWorkspaceReadResult = this.workspaceService.readFile(this.sessionId, this.selectedPath)
+      if (result.binary) {
+        this.previewKind = 'binary'
+        return
+      }
       this.previewContent = result.content
       this.previewStartLine = result.startLine
       this.previewEndLine = result.endLine
@@ -207,6 +239,38 @@ struct PythonWorkspacePageContent {
       this.previewLines = this.buildCodeLines(result.content, result.startLine)
     } catch (error) {
       this.previewError = this.stringifyError(error)
+    }
+  }
+
+  private async loadPdfPreview(controller: pdfViewManager.PdfController, path: string,
+    sequence: number): Promise<void> {
+    try {
+      const result = await controller.loadDocument(path)
+      if (sequence !== this.previewSequence) {
+        controller.releaseDocument()
+        return
+      }
+      if (result !== pdfService.ParseResult.PARSE_SUCCESS) {
+        this.previewError = pickLocalizedText(`PDF 预览失败 (${result})`, `PDF preview failed (${result})`)
+      }
+    } catch (_error) {
+      if (sequence === this.previewSequence) {
+        this.previewError = pickLocalizedText('PDF 预览失败，原文件仍保留在工作区',
+          'PDF preview failed; the original file remains in the workspace')
+      }
+    } finally {
+      if (sequence === this.previewSequence) {
+        this.previewLoading = false
+      }
+    }
+  }
+
+  private releasePreview(): void {
+    this.previewSequence += 1
+    this.previewLoading = false
+    try {
+      this.pdfPreviewController.releaseDocument()
+    } catch (_error) {
     }
   }
 
@@ -220,6 +284,9 @@ struct PythonWorkspacePageContent {
   }
 
   private closeFile(): void {
+    this.releasePreview()
+    this.previewFilePath = ''
+    this.previewKind = 'text'
     this.selectedPath = ''
     this.previewContent = ''
     this.previewLines = []
@@ -333,6 +400,7 @@ struct PythonWorkspacePageContent {
   }
 
   private async performChooseWorkspaceFiles(directory: string): Promise<void> {
+    const sessionId = this.sessionId
     const context = this.getUIContext().getHostContext()
     if (context === undefined) {
       throw new Error(pickLocalizedText('当前页面上下文不可用', 'The current page context is unavailable'))
@@ -344,12 +412,21 @@ struct PythonWorkspacePageContent {
       return
     }
     const uploads: WorkspaceUploadData[] = []
+    let uploadBytes = 0
     for (let i = 0; i < uris.length; i++) {
-      uploads.push(this.readWorkspaceUpload(uris[i], directory))
+      const upload = this.readWorkspaceUpload(uris[i], directory, PYTHON_WORKSPACE_MAX_TOTAL_BYTES - uploadBytes)
+      uploadBytes += upload.bytes.byteLength
+      uploads.push(upload)
     }
-    await this.workspaceService.runSessionExclusive(this.sessionId, async (): Promise<void> => {
-      this.workspaceService.assertSessionWritable(this.sessionId)
-      const existing = this.workspaceService.listFiles(this.sessionId)
+    await this.workspaceService.runSessionExclusive(sessionId, async (): Promise<void> => {
+      this.workspaceService.assertSessionWritable(sessionId)
+      const existing = this.workspaceService.listFiles(sessionId)
+      const existingBytes = existing.reduce((total: number, file: PythonWorkspaceFileInfo): number => total + file.size, 0)
+      if (existing.length + uploads.length > PYTHON_WORKSPACE_MAX_FILES ||
+        existingBytes + uploadBytes > PYTHON_WORKSPACE_MAX_TOTAL_BYTES) {
+        throw new Error(pickLocalizedText('工作区最多 64 个文件，总大小不能超过 32 MiB',
+          'The workspace supports up to 64 files and 32 MiB total'))
+      }
       const pendingPaths: string[] = []
       for (let i = 0; i < uploads.length; i++) {
         const path = uploads[i].path
@@ -364,7 +441,7 @@ struct PythonWorkspacePageContent {
         }
       }
       for (let i = 0; i < uploads.length; i++) {
-        this.workspaceService.writeFile(this.sessionId, uploads[i].path, uploads[i].content, 0)
+        this.workspaceService.writeBytes(sessionId, uploads[i].path, uploads[i].bytes, 0)
       }
     })
     this.loadWorkspace()
@@ -372,23 +449,28 @@ struct PythonWorkspacePageContent {
       `已上传 ${uploads.length} 个文件`, `Uploaded ${uploads.length} file(s)`))
   }
 
-  private readWorkspaceUpload(uri: string, directory: string): WorkspaceUploadData {
+  private readWorkspaceUpload(uri: string, directory: string, remainingBytes: number): WorkspaceUploadData {
     const fileName = this.getFileNameFromUri(uri)
     const path = this.buildChildPath(directory, fileName)
     const file = fileIo.openSync(uri, fileIo.OpenMode.READ_ONLY)
     try {
       const stat = fileIo.statSync(file.fd)
-      if (stat.size > PYTHON_WORKSPACE_MAX_FILE_BYTES) {
-        throw new Error(`${fileName} 超过工作区单文件大小限制`)
+      if (stat.size > PYTHON_WORKSPACE_MAX_FILE_BYTES || stat.size > remainingBytes) {
+        throw new Error(pickLocalizedText(`${fileName} 超过容量限制：单文件 16 MiB，工作区总计 32 MiB`,
+          `${fileName} exceeds the limit: 16 MiB per file, 32 MiB total`))
       }
-      const buffer = new ArrayBuffer(stat.size)
-      fileIo.readSync(file.fd, buffer)
-      const content = util.TextDecoder.create('utf-8')
-        .decodeToString(new Uint8Array(buffer), { stream: false })
-      if (content.includes('\uFFFD')) {
-        throw new Error(`${fileName} 不是有效的 UTF-8 文本，无法加入 Python 文本工作区`)
+      const bytes = new Uint8Array(stat.size)
+      let offset = 0
+      while (offset < stat.size) {
+        const chunk = new ArrayBuffer(Math.min(1024 * 1024, stat.size - offset))
+        const count = fileIo.readSync(file.fd, chunk)
+        if (count <= 0) {
+          throw new Error(pickLocalizedText(`${fileName} 未读取完整，未导入`, `${fileName} was not read completely; not imported`))
+        }
+        bytes.set(new Uint8Array(chunk, 0, count), offset)
+        offset += count
       }
-      return new WorkspaceUploadData(path, content)
+      return new WorkspaceUploadData(path, bytes)
     } finally {
       fileIo.closeSync(file)
     }
@@ -893,8 +975,8 @@ struct PythonWorkspacePageContent {
         this.EmptyState(
           $r('sys.symbol.folder'),
           pickLocalizedText('工作区暂无文件', 'Workspace is empty'),
-          pickLocalizedText('模型创建的内容会显示在这里；长按空白处可上传或新建。',
-            'Model-created content appears here; long-press empty space to upload or create.')
+          pickLocalizedText('可存放 PDF、图片及任意格式文件，供模型调用工具读取。长按空白处上传或新建。单文件 16 MiB，总计 32 MiB。',
+            'Store PDFs, images or any file for model tools. Long-press to upload or create. 16 MiB per file, 32 MiB total.')
         )
       } else if (this.getExplorerRows().length === 0) {
         this.EmptyState(
@@ -960,9 +1042,11 @@ struct PythonWorkspacePageContent {
         .layoutWeight(1)
         .alignItems(HorizontalAlign.Start)
 
-        this.IconButton($r('sys.symbol.checkmark_square_on_square'), (): void => {
-          this.copyPreviewContent()
-        })
+        if (this.previewKind === 'text') {
+          this.IconButton($r('sys.symbol.checkmark_square_on_square'), (): void => {
+            this.copyPreviewContent()
+          })
+        }
       }
       .width('100%')
       .height(52)
@@ -970,7 +1054,9 @@ struct PythonWorkspacePageContent {
       .alignItems(VerticalAlign.Center)
 
       Row({ space: 8 }) {
-        Text(pickLocalizedText(`${this.previewTotalLines} 行`, `${this.previewTotalLines} lines`))
+        Text(this.previewKind === 'text' ?
+          pickLocalizedText(`${this.previewTotalLines} 行`, `${this.previewTotalLines} lines`) :
+          getWorkspaceFileExtension(this.selectedPath).toUpperCase())
           .fontSize(10)
           .fontColor($r('app.color.text_tertiary'))
 
@@ -1047,6 +1133,38 @@ struct PythonWorkspacePageContent {
             pickLocalizedText('无法读取文件', 'Unable to read file'),
             this.previewError
           )
+        } else if (this.previewKind === 'image') {
+          Image(`file://${this.previewFilePath}`)
+            .width('100%')
+            .layoutWeight(1)
+            .objectFit(ImageFit.Contain)
+            .draggable(false)
+            .onError(() => {
+              this.previewError = pickLocalizedText('图片预览失败，原文件仍保留在工作区',
+                'Image preview failed; the original file remains in the workspace')
+            })
+        } else if (this.previewKind === 'pdf') {
+          Stack() {
+            PdfView({
+              controller: this.pdfPreviewController,
+              pageLayout: pdfService.PageLayout.LAYOUT_SINGLE,
+              isContinuous: true,
+              showScroll: true,
+              pageFit: pdfService.PageFit.FIT_WIDTH
+            })
+              .width('100%')
+              .height('100%')
+            if (this.previewLoading) {
+              LoadingProgress().width(28).height(28).color(this.themePrimary)
+            }
+          }
+          .width('100%')
+          .layoutWeight(1)
+        } else if (this.previewKind === 'binary') {
+          this.EmptyState($r('sys.symbol.doc'),
+            pickLocalizedText('文件已按原始格式保存', 'Original file preserved'),
+            pickLocalizedText('此格式不提供文本预览。模型可通过 Python 或已开启的相应工具读取和处理此文件。',
+              'No text preview for this format. Model tools can read and process the original file.'))
         } else {
           List() {
             ForEach(this.previewLines, (line: WorkspaceCodeLine) => {

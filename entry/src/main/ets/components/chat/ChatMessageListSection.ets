@@ -1,4 +1,5 @@
 import { ChatMessage, MessageAttachment, MessageRole } from '../../models/ChatModels'
+import { CHAT_COMPOSER_HORIZONTAL_INSET_VP } from '../../config/ChatLayout'
 import { DraftPreviewBubble } from './DraftPreviewBubble'
 import { shouldShowMessageHeader } from '../../utils/MessageListUtils'
 import { CHAT_MESSAGE_LIST_ITEM_REUSE_ID, ChatMessageListItem } from './ChatMessageListItem'
@@ -454,7 +455,9 @@ export struct ChatMessageListSection {
               .width('100%')
               .justifyContent(FlexAlign.Center)
             }
-            .padding({ left: 14, right: 14, top: 5, bottom: 5 })
+            .padding(getAppUiState().visualEffectsMode === VisualEffectsMode.MANUSCRIPT ?
+              { left: 14, right: 14, top: 5, bottom: 5 } :
+              { left: CHAT_COMPOSER_HORIZONTAL_INSET_VP, right: CHAT_COMPOSER_HORIZONTAL_INSET_VP, top: 5, bottom: 5 })
             .onAreaChange((_oldArea: Area, _newArea: Area) => {
               this.onContentAreaChange()
             })

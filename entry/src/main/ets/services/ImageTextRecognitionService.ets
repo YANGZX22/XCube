@@ -1,3 +1,4 @@
+import { util } from '@kit.ArkTS'
 import { fileIo } from '@kit.CoreFileKit'
 import { image } from '@kit.ImageKit'
 import { textRecognition } from '@kit.CoreVisionKit'
@@ -73,7 +74,7 @@ export class ImageTextRecognitionService {
     attachment: RegisteredDocumentAttachment,
     maxChars: number
   ): Promise<ImageTextRecognitionResult> {
-    const cacheKey = `${attachment.filePath}:${attachment.size}`
+    const cacheKey = `${attachment.filePath}:${attachment.size}:${attachment.attachmentId}`
     let text = this.cache.get(cacheKey)
     if (text === undefined) {
       text = await this.recognizeTextFromImagePath(attachment.filePath)
@@ -91,6 +92,43 @@ export class ImageTextRecognitionService {
       : '已识别图片文本'
     return new ImageTextRecognitionResult(text.trim() !== '', attachment.attachmentId, attachment.name,
       resultText, truncated, message)
+  }
+
+  // 渲染出来的 PDF 页面图只存在于内存里，没有沙箱路径；接口拒收原生图片输入时，
+  // 仍要能就地把这些字节 OCR 成文本。
+  async recognizeBase64Image(base64Data: string, maxChars: number = 12000): Promise<string> {
+    if (base64Data === '') {
+      return ''
+    }
+    let imageSource: image.ImageSource | null = null
+    let pixelMap: image.PixelMap | null = null
+    try {
+      await this.ensureInitialized()
+      const bytes = new util.Base64Helper().decodeSync(base64Data)
+      imageSource = image.createImageSource(bytes.buffer as ArrayBuffer)
+      pixelMap = await imageSource.createPixelMap()
+      const visionInfo: textRecognition.VisionInfo = {
+        pixelMap: pixelMap
+      }
+      const configuration: textRecognition.TextRecognitionConfiguration = {
+        isDirectionDetectionSupported: false
+      }
+      const result = await textRecognition.recognizeText(visionInfo, configuration)
+      const text = this.normalizeText(result.value)
+      const limit = Math.max(1000, maxChars > 0 ? maxChars : 12000)
+      return text.length > limit ? text.substring(0, limit) : text
+    } catch (error) {
+      console.error('ImageTextRecognitionService',
+        `Failed to recognize in-memory image: ${JSON.stringify(error)}`)
+      return ''
+    } finally {
+      if (pixelMap !== null) {
+        pixelMap.release()
+      }
+      if (imageSource !== null) {
+        imageSource.release()
+      }
+    }
   }
 
   private async recognizeTextFromImagePath(filePath: string): Promise<string> {

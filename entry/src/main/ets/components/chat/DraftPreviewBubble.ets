@@ -165,6 +165,8 @@ export struct DraftPreviewBubble {
             bottomRight: 6
           })
           .clip(true)
+          // Match the sent user bubble: cap the visible content, not an empty wrapper.
+          .constraintSize({ maxWidth: this.isManuscriptMode ? undefined : '75%' })
           .opacity(0.55)
           .onSizeChange((_oldSize: SizeOptions, size: SizeOptions) => {
             if (this.isManuscriptMode) {
@@ -180,7 +182,7 @@ export struct DraftPreviewBubble {
             }
           })
         }
-        .constraintSize({ maxWidth: '75%' })
+        .constraintSize({ maxWidth: this.isManuscriptMode ? '75%' : undefined })
         .clip(false)
       }
       .width('100%')

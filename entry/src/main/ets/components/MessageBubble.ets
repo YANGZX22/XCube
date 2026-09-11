@@ -1761,8 +1761,6 @@ export struct MessageBubble {
   UserMessage() {
     Column() {
       Row() {
-        Blank()
-
         Row() {
           Stack({ alignContent: Alignment.TopStart }) {
             ImmersiveMaterialAnchor({
@@ -1807,10 +1805,7 @@ export struct MessageBubble {
             })
             .clip(true)
             // 宽度约束必须作用于实际气泡；仅约束外层 Stack 会在短图文右侧留下空白。
-            .constraintSize({
-              minWidth: this.hasDisplayAttachments() || this.shouldShowDocumentToolHint() ? 280 : 0,
-              maxWidth: this.hasDisplayAttachments() || this.shouldShowDocumentToolHint() ? '88%' : '75%'
-            })
+            .constraintSize({ maxWidth: '75%' })
             .border({
               width: this.isEditing ? 2 : (this.isMultiSelectMode && this.isSelected ? 1.2 : 0.5),
               color: this.isEditing
@@ -1844,6 +1839,7 @@ export struct MessageBubble {
         .enabled(!this.isMultiSelectMode)
       }
       .width('100%')
+      .justifyContent(FlexAlign.End)
       .alignItems(VerticalAlign.Top)
 
       // 用户消息工具栏
@@ -3151,7 +3147,8 @@ export struct MessageBubble {
       .alignItems(HorizontalAlign.Start)
     }
     .width('100%')
-    .constraintSize({ maxWidth: this.isManuscriptMode ? '100%' : '92%' })
+    // Fill the shared content width so the assistant bubble aligns with the composer.
+    .constraintSize({ maxWidth: '100%' })
     .alignItems(VerticalAlign.Top)
     .onTouch((event: TouchEvent) => {
       this.handleMultiSelectTouch(event)

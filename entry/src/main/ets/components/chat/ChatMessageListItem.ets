@@ -3,6 +3,7 @@ import { DateDivider } from '../DateDivider'
 import { MessageBubble } from '../MessageBubble'
 import { getAppUiState } from '../../state/AppUiState'
 import { VisualEffectsMode } from '../../models/ThemeColors'
+import { CHAT_COMPOSER_HORIZONTAL_INSET_VP } from '../../config/ChatLayout'
 
 export const CHAT_MESSAGE_LIST_ITEM_REUSE_ID: string = 'chat_message_list_item'
 
@@ -55,6 +56,12 @@ export struct ChatMessageListItem {
 
   private getEffectiveContentMaxWidth(): number {
     return this.contentMaxWidth > 0 ? this.contentMaxWidth : 99999
+  }
+
+  private getMessageHorizontalInset(): number {
+    // Both conversation roles share the composer's edges; user content is capped inside.
+    return this.message.role === MessageRole.ASSISTANT || this.message.role === MessageRole.USER ?
+      CHAT_COMPOSER_HORIZONTAL_INSET_VP : 14
   }
 
   build() {
@@ -149,7 +156,7 @@ export struct ChatMessageListItem {
     .justifyContent(FlexAlign.Center)
     .padding(getAppUiState().visualEffectsMode === VisualEffectsMode.MANUSCRIPT ?
       { left: 0, right: 0, top: 11, bottom: 11 } :
-      { left: 14, right: 14, top: 5, bottom: 5 })
+      { left: this.getMessageHorizontalInset(), right: this.getMessageHorizontalInset(), top: 5, bottom: 5 })
     .opacity(this.isDimmed ? 0.4 : 1)
   }
 }
