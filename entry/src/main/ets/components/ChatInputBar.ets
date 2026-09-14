@@ -1,6 +1,7 @@
 import { ImmersiveInputSurface } from './ImmersiveInputSurface'
 import { InteractiveMaterialButton } from './InteractiveMaterialButton'
 import { getModelIconPath, buildIconResourcePath } from '../utils/ProviderIconUtils'
+import { FileIcon } from './FileIcon'
 import { MessageAttachment, AttachmentType } from '../models/ChatModels'
 import {
   BaseItemInfo,
@@ -787,9 +788,7 @@ export struct ChatInputBar {
       } else {
         // 文件预览
         Column() {
-          SymbolGlyph($r('sys.symbol.doc'))
-            .fontSize(24)
-            .fontColor([$r('app.color.text_secondary')])
+          FileIcon({ fileName: attachment.name, mimeType: attachment.mimeType, iconSize: 24 })
 
           Text(attachment.name)
             .fontSize(10)

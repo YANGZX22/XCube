@@ -64,6 +64,11 @@ export const RUNTIME_LICENSES: LicenseCatalogItem[] = [
 
 export const ASSET_LICENSES: LicenseCatalogItem[] = [
   new LicenseCatalogItem(
+    'Material Icon Theme', '5.38.1', 'MIT',
+    'VS Code 文件图标与文件关联规则；Copyright © 2025 Material Extensions。完整许可证与来源随应用图标资源打包。',
+    'VS Code file icons and associations; Copyright © 2025 Material Extensions. The full license and source notice are bundled with the icon assets.'
+  ),
+  new LicenseCatalogItem(
     'SenseVoice Small', '2024-07-17', 'FunASR Model License v1.1',
     '离线语音识别模型，由 FunASR / FunAudioLLM 发布，适用《FunASR 模型开源许可协议》v1.1；保留 SenseVoice 模型名称与来源标注。',
     'Offline speech-recognition model by FunASR / FunAudioLLM under the FunASR Model Open Source License Agreement v1.1; the SenseVoice name and attribution are retained.'

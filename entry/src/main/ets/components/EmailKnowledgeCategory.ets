@@ -1,4 +1,5 @@
 import { ImmersiveButtonSurface } from './ImmersiveButtonSurface'
+import { FileIcon } from './FileIcon'
 import { ImmersiveListSurface, LIST_MATERIAL_CARD_RADIUS } from './ImmersiveListSurface'
 import { getBlurBottomShadow } from '../utils/BlurShadowUtils'
 import { curves, uiMaterial } from '@kit.ArkUI'
@@ -655,55 +656,15 @@ export struct EmailKnowledgeCategory {
     return this.themePrimary
   }
 
-  private isPdfDocument(document: KnowledgeDocument): boolean {
-    return document.originalName.toLowerCase().endsWith('.pdf') ||
-      document.mimeType.toLowerCase() === 'application/pdf'
-  }
-
-  private isImageDocument(document: KnowledgeDocument): boolean {
-    return document.mimeType.toLowerCase().startsWith('image/')
-  }
-
-  private isDocxDocument(document: KnowledgeDocument): boolean {
-    return document.originalName.toLowerCase().endsWith('.docx') ||
-      document.mimeType.toLowerCase() ===
-        'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
-  }
-
-  private isXlsxDocument(document: KnowledgeDocument): boolean {
-    return document.originalName.toLowerCase().endsWith('.xlsx') ||
-      document.mimeType.toLowerCase() ===
-        'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
-  }
-
-  private getDocumentSymbol(document: KnowledgeDocument): Resource {
-    if (this.isPdfDocument(document)) {
-      return $r('sys.symbol.pdf_doc')
-    }
-    if (this.isImageDocument(document)) {
-      return $r('sys.symbol.picture')
-    }
-    return $r('sys.symbol.doc_text')
-  }
-
   @Builder
-  private DocumentIcon(document: KnowledgeDocument, size: number, color: ResourceColor) {
-    if (this.isDocxDocument(document)) {
-      Image($r('app.media.doc_docx')).width(size).height(size).fillColor(color)
-    } else if (this.isXlsxDocument(document)) {
-      Image($r('app.media.doc_xlsx')).width(size).height(size).fillColor(color)
-    } else {
-      SymbolGlyph(this.getDocumentSymbol(document))
-        .renderingStrategy(SymbolRenderingStrategy.SINGLE)
-        .fontSize(size)
-        .fontColor([color])
-    }
+  private DocumentIcon(document: KnowledgeDocument, size: number) {
+    FileIcon({ fileName: document.originalName, mimeType: document.mimeType, iconSize: size })
   }
 
   @Builder
   private DocumentCardContent(document: KnowledgeDocument) {
     Column() {
-      this.DocumentIcon(document, 18, this.getCategoryColor())
+      this.DocumentIcon(document, 18)
     }
     .width(38)
     .height(38)
@@ -826,7 +787,7 @@ export struct EmailKnowledgeCategory {
         }
       }.width('100%').alignItems(VerticalAlign.Center)
       Row({ space: 7 }) {
-        this.DocumentIcon(document, 12, this.getKnowledgeStatusColor(document))
+        this.DocumentIcon(document, 12)
         Text(this.getKnowledgeStatusText(document))
           .fontFamily(MANUSCRIPT_BODY_FONT)
           .fontSize(12.5)
@@ -1046,8 +1007,7 @@ export struct EmailKnowledgeCategory {
                 ForEach(this.previewMessage.attachments, (item: EmailAttachmentPart, index: number) => {
                   Column() {
                     Row({ space: 10 }) {
-                      SymbolGlyph(item.inline ? $r('sys.symbol.picture') : $r('sys.symbol.doc'))
-                        .fontSize(18).fontColor([this.themePrimary])
+                      FileIcon({ fileName: item.name, mimeType: item.mimeType, iconSize: 18 })
                       Column({ space: 2 }) {
                         Text(item.name).fontSize(13).fontColor($r('app.color.text_primary')).maxLines(1)
                           .textOverflow({ overflow: TextOverflow.Ellipsis }).width('100%')

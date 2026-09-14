@@ -4,6 +4,7 @@
  */
 
 import { ReasoningLevel, MessageAttachment, AttachmentType } from '../models/ChatModels'
+import { FileIcon } from './FileIcon'
 import { getAppUiState } from '../state/AppUiState'
 import { ReasoningControlMode } from '../services/ProviderCompatibilityRegistry'
 
@@ -266,9 +267,7 @@ export struct EditMessageSheet {
         } else {
           // 文件附件
           Column() {
-            SymbolGlyph($r('sys.symbol.doc'))
-              .fontSize(24)
-              .fontColor([$r('app.color.text_secondary')])
+            FileIcon({ fileName: attachment.name, mimeType: attachment.mimeType, iconSize: 24 })
             Text(this.getFileExtension(attachment.name))
               .fontSize(10)
               .fontColor($r('app.color.text_secondary'))

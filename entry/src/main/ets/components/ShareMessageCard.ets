@@ -1,3 +1,4 @@
+import { FileIcon } from './FileIcon'
 /**
  * 分享消息卡片组件
  * 用于渲染分享图片的卡片样式
@@ -338,9 +339,7 @@ export struct ShareMessageCard {
         } else {
           // 文件附件：图标+文件名
           Row() {
-            SymbolGlyph($r('sys.symbol.doc'))
-              .fontSize(18)
-              .fontColor([isUserMessage ? 'rgba(255,255,255,0.8)' : $r('app.color.text_tertiary')])
+            FileIcon({ fileName: attachment.name, mimeType: attachment.mimeType, iconSize: 18, synchronousLoad: true })
 
             Text(attachment.name)
               .fontSize(12)

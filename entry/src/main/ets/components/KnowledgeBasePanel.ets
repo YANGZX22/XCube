@@ -1,4 +1,5 @@
 import { ImmersiveButtonSurface } from './ImmersiveButtonSurface'
+import { FileIcon } from './FileIcon'
 import { ImmersiveListSurface, LIST_MATERIAL_CARD_RADIUS } from './ImmersiveListSurface'
 import { getBlurBottomShadow } from '../utils/BlurShadowUtils'
 import { picker } from '@kit.CoreFileKit'
@@ -837,34 +838,9 @@ export struct KnowledgeBasePanel {
     return `${(size / 1024 / 1024).toFixed(1)} MB`
   }
 
-  private getDocumentSymbol(document: KnowledgeDocument): Resource {
-    if (this.isPdfDocument(document)) {
-      return $r('sys.symbol.pdf_doc')
-    }
-    if (this.isImageDocument(document)) {
-      return $r('sys.symbol.picture')
-    }
-    return $r('sys.symbol.doc_text')
-  }
-
   @Builder
-  private DocumentIcon(document: KnowledgeDocument, size: number, color: ResourceColor) {
-    if (this.isDocxDocument(document)) {
-      Image($r('app.media.doc_docx'))
-        .width(size)
-        .height(size)
-        .fillColor(color)
-    } else if (this.isXlsxDocument(document)) {
-      Image($r('app.media.doc_xlsx'))
-        .width(size)
-        .height(size)
-        .fillColor(color)
-    } else {
-      SymbolGlyph(this.getDocumentSymbol(document))
-        .renderingStrategy(SymbolRenderingStrategy.SINGLE)
-        .fontSize(size)
-        .fontColor([color])
-    }
+  private DocumentIcon(document: KnowledgeDocument, size: number) {
+    FileIcon({ fileName: document.originalName, mimeType: document.mimeType, iconSize: size })
   }
 
   private showKnowledgeSnack(
@@ -1034,7 +1010,7 @@ export struct KnowledgeBasePanel {
   @Builder
   private DocumentCardContent(document: KnowledgeDocument) {
     Column() {
-      this.DocumentIcon(document, 18, this.getDocumentCategoryColor(document))
+      this.DocumentIcon(document, 18)
     }
     .width(38)
     .height(38)
@@ -1383,7 +1359,7 @@ export struct KnowledgeBasePanel {
       .alignItems(VerticalAlign.Center)
 
       Row({ space: 7 }) {
-        this.DocumentIcon(document, 12, this.getStatusColor(document))
+        this.DocumentIcon(document, 12)
 
         Text(this.getStatusText(document))
           .fontFamily(MANUSCRIPT_BODY_FONT)

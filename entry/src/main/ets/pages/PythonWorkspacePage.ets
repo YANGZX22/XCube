@@ -36,13 +36,7 @@ import {
   getWorkspaceFileName,
   WorkspaceExplorerRow
 } from '../utils/WorkspaceExplorerTree'
-import {
-  WORKSPACE_FILE_KIND_SHEET,
-  classifyWorkspaceFile,
-  hasWorkspaceFileImageIcon,
-  resolveWorkspaceFileIconColor,
-  resolveWorkspaceFileSymbol
-} from '../utils/WorkspaceFileIconUtils'
+import { FileIcon } from '../components/FileIcon'
 
 export interface PythonWorkspacePageParams {
   sessionId?: string
@@ -556,10 +550,6 @@ struct PythonWorkspacePageContent {
     return total
   }
 
-  private getFileAccentColor(path: string): string {
-    return resolveWorkspaceFileIconColor(path, this.isDarkMode, this.themePrimary)
-  }
-
   // 行号槽宽度跟着最大行号走，位数变了也不会挤到代码
   private getGutterWidth(): number {
     const digits = Math.max(2, this.previewEndLine.toString().length)
@@ -582,24 +572,10 @@ struct PythonWorkspacePageContent {
     return !row.isDirectory && this.selectedPath === row.path
   }
 
-  // 文件类型图标：docx/xlsx 走位图，其余用按类别选出的系统字形，统一按类别上色。
+  // 与消息附件、知识库使用同一套 Material 文件类型图标。
   @Builder
   private FileTypeIcon(path: string, size: number) {
-    if (hasWorkspaceFileImageIcon(path)) {
-      Image(classifyWorkspaceFile(path) === WORKSPACE_FILE_KIND_SHEET
-        ? $r('app.media.doc_xlsx')
-        : $r('app.media.doc_docx'))
-        .width(size)
-        .height(size)
-        .fillColor(this.getFileAccentColor(path))
-        .flexShrink(0)
-        .draggable(false)
-    } else {
-      SymbolGlyph(resolveWorkspaceFileSymbol(path))
-        .fontSize(size)
-        .fontColor([this.getFileAccentColor(path)])
-        .flexShrink(0)
-    }
+    FileIcon({ fileName: path, iconSize: size })
   }
 
   @Builder
@@ -851,7 +827,7 @@ struct PythonWorkspacePageContent {
         // 文件行左侧留出与目录箭头等宽的位置，同级的名字才对得齐
         Row().width(11)
 
-        this.FileTypeIcon(row.path, 14)
+        this.FileTypeIcon(row.path, 16)
       }
 
       Column({ space: 1 }) {

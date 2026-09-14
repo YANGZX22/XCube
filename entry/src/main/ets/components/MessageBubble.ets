@@ -1,4 +1,5 @@
 import { InteractiveMaterialRow } from './InteractiveMaterialRow'
+import { FileIcon } from './FileIcon'
 import { ImmersiveMaterialAnchor } from './ImmersiveMaterialBackdrop'
 import { AssistantResponseSegment, AssistantResponseSegmentType, ChatMessage, MessageRole, MessageAttachment, AttachmentType, ContextCompactionUiState, ToolCall, ToolResult } from '../models/ChatModels'
 import { VisualEffectsMode } from '../models/ThemeColors'
@@ -1182,10 +1183,6 @@ export struct MessageBubble {
     return mimeType === 'application/pdf' || name.endsWith('.pdf')
   }
 
-  private getFileAttachmentSymbol(attachment: MessageAttachment): Resource {
-    return this.isPdfAttachment(attachment) ? $r('sys.symbol.pdf_doc') : $r('sys.symbol.doc')
-  }
-
   private getPreviewImageEntries(): ImageAttachmentEntry[] {
     this.ensureDerivedRenderCaches()
     return this.cachedPreviewImageEntries
@@ -2040,9 +2037,7 @@ export struct MessageBubble {
 
       ForEach(this.getMessageFileAttachments(), (attachment: MessageAttachment, index: number) => {
         Row() {
-          SymbolGlyph(this.getFileAttachmentSymbol(attachment))
-            .fontSize(18)
-            .fontColor([this.isManuscriptMode ? this.manuscriptAccentDeep : 'rgba(255,255,255,0.8)'])
+          FileIcon({ fileName: attachment.name, mimeType: attachment.mimeType, iconSize: 18 })
 
           Text(attachment.name)
             .fontFamily(this.isManuscriptMode ? MANUSCRIPT_BODY_FONT : 'HarmonyOS Sans')
@@ -2112,9 +2107,7 @@ export struct MessageBubble {
 
       ForEach(this.getMessageFileAttachments(), (attachment: MessageAttachment, index: number) => {
         Row() {
-          SymbolGlyph(this.getFileAttachmentSymbol(attachment))
-            .fontSize(18)
-            .fontColor([$r('app.color.text_tertiary')])
+          FileIcon({ fileName: attachment.name, mimeType: attachment.mimeType, iconSize: 18 })
 
           Text(attachment.name)
             .fontSize(12)
