@@ -21,15 +21,12 @@
 ## 最新信息
 
 > [!IMPORTANT]
-> **Immersive Light 兼容性问题**: 自 `HarmonyOS 7.0.0.105` (API 26) 起，普通 ArkUI 组件通过应用级开启或者组件级开启方式开启沉浸光感被[限制](https://developer.huawei.com/consumer/cn/doc/harmonyos-guides/arkts-immersive-light-sense-overview#约束与限制)，我们已对此限制进行兼容，并尝试恢复到和限制前同等效果。即便如此，兼容性适配仍需时间。
-
-> [!IMPORTANT]
-> XCube 已对 HarmonyOS 6 及更早版本进行 UI 兼容，但仍可能存在 UI 问题。将设备版本升至 HarmonyOS 7 及以上版本以获得最佳体验。
+> **Immersive Light 兼容性问题**: 自 `HarmonyOS 7.0.0.105` (API 26) 起，普通 ArkUI 组件通过应用级开启或者组件级开启方式开启沉浸光感被[限制](https://developer.huawei.com/consumer/cn/doc/harmonyos-guides/arkts-immersive-light-sense-overview#约束与限制)，XCube 已对此限制进行兼容，并尝试恢复到和限制前同等视觉效果。将设备版本升至 HarmonyOS 7 及以上版本以获得最佳体验。兼容性适配仍需时间。
 
 > [!NOTE]
 > XCube 延续自 [YANGZX22/chatcube](https://github.com/YANGZX22/chatcube)，该项目最初由 [LongLiveY96/ChatCube](https://github.com/LongLiveY96/ChatCube) 分支而来。两个早期版本的版权与 MIT 许可证声明均完整保留。
 
-## 界面截图
+## 界面截图1
 
 <table>
   <tr>
