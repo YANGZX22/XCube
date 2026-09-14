@@ -123,6 +123,12 @@ export class TimelineBlock {
   // 非 BARS 块把自身内容签名编进 key，内容一变就重建；BARS 块留空以保持稳定
   contentKey: string = ''
   bars: TimelineBar[] = []
+  // 合并栏只读预汇总状态，不在每次流式刷新时遍历全部历史条目。
+  hasPendingQuestion: boolean = false
+  hasExecutingTools: boolean = false
+  lastReasoningSegmentId: string = ''
+  hasLegacyReasoning: boolean = false
+  hasSearch: boolean = false
   segment: AssistantResponseSegment = EMPTY_SEGMENT
   vchart: MessageVChartPayload = EMPTY_VCHART_PAYLOAD
   map: MessageMapPayload = EMPTY_MAP_PAYLOAD

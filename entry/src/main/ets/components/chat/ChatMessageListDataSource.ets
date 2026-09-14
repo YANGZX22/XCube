@@ -1,4 +1,5 @@
 import { AssistantResponseSegment, ChatMessage, MessageAttachment, SearchReference, ToolCall, ToolResult } from '../../models/ChatModels'
+import { encodeRenderText } from '../../utils/RenderTextSignatureUtils'
 
 function encodeValue(value: string): string {
   return `${value.length}:${value};`
@@ -17,7 +18,7 @@ function buildSearchReferenceSignature(reference: SearchReference): string {
     encodeValue(reference.id),
     encodeValue(reference.title),
     encodeValue(reference.url),
-    encodeValue(reference.snippet),
+    encodeRenderText(reference, 'snippet', reference.snippet),
     encodeNumber(reference.timestamp)
   ].join('')
 }
@@ -27,7 +28,7 @@ function buildToolCallSignature(toolCall: ToolCall): string {
     encodeValue(toolCall.id),
     encodeValue(toolCall.type),
     encodeValue(toolCall.functionName),
-    encodeValue(toolCall.arguments),
+    encodeRenderText(toolCall, 'arguments', toolCall.arguments),
     encodeValue(toolCall.toolId),
     encodeValue(toolCall.displayName),
     encodeValue(toolCall.sourceType),
@@ -39,7 +40,7 @@ function buildToolCallSignature(toolCall: ToolCall): string {
 function buildToolResultSignature(toolResult: ToolResult): string {
   return [
     encodeValue(toolResult.toolCallId),
-    encodeValue(toolResult.content),
+    encodeRenderText(toolResult, 'content', toolResult.content),
     encodeBoolean(toolResult.isError),
     encodeValue(toolResult.displayName),
     encodeValue(toolResult.sourceLabel)
@@ -101,7 +102,7 @@ function buildResponseTimelineSignature(segments: AssistantResponseSegment[]): s
     signatures.push([
       encodeValue(segments[i].id),
       encodeValue(segments[i].type),
-      encodeValue(segments[i].content),
+      encodeRenderText(segments[i], 'content', segments[i].content),
       buildStringListSignature(segments[i].toolCallIds)
     ].join(''))
   }
@@ -123,9 +124,10 @@ export function buildChatMessageRowRenderSignature(
   previewAttachments: MessageAttachment[] = [],
   assistantAvatarSymbol: string = '',
   assistantAvatarColor: string = '',
-  assistantAvatarCacheKey: number = 0
+  assistantAvatarCacheKey: number = 0,
+  precomputedContentSignature: string = ''
 ): string {
-  const contentRenderSignature = buildChatMessageContentRenderSignature(
+  const contentRenderSignature = precomputedContentSignature || buildChatMessageContentRenderSignature(
     message,
     isEditing,
     currentModelId,
@@ -180,9 +182,9 @@ export function buildChatMessageContentRenderSignature(
     encodeNumber(message.cacheWriteTokens),
     encodeNumber(message.versionIndex),
     encodeNumber(message.versionCount),
-    encodeValue(message.content),
-    encodeValue(message.reasoningContent),
-    encodeValue(message.translatedText),
+    encodeRenderText(message, 'content', message.content),
+    encodeRenderText(message, 'reasoningContent', message.reasoningContent),
+    encodeRenderText(message, 'translatedText', message.translatedText),
     encodeValue(message.translatedLang),
     encodeValue(message.searchQuery),
     encodeValue(message.searchEngine),
@@ -194,7 +196,7 @@ export function buildChatMessageContentRenderSignature(
     buildToolResultListSignature(message.toolResults),
     buildResponseTimelineSignature(message.responseSegments),
     encodeValue(message.toolCallId),
-    encodeValue(isEditing ? previewContent : ''),
+    encodeRenderText(message, 'previewContent', isEditing ? previewContent : ''),
     isEditing ? buildAttachmentSignature(previewAttachments) : buildAttachmentSignature([])
   ].join('')
 }

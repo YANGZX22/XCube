@@ -7,6 +7,8 @@ import { image } from '@kit.ImageKit'
 import { showToast } from '../utils/ToastUtil'
 import { getModelIconPath, buildIconResourcePath } from '../utils/ProviderIconUtils'
 import { shouldShowAssistantMessageToolbar } from '../utils/MessageBubbleDisplayUtils'
+import { encodeRenderText } from '../utils/RenderTextSignatureUtils'
+import { TimelineToolIndex } from '../utils/TimelineToolIndex'
 import { SearchReferenceCard } from './SearchReferenceCard'
 import { ToolCallCard, ToolCallCardEntry } from './ToolCallCard'
 import { SubAgentPreviewSheetContent } from './SubAgentPreviewSheetContent'
@@ -268,8 +270,6 @@ export struct MessageBubble {
   private cachedReadonlyTranslatedText: string = ''
   private cachedHasHtmlSegments: boolean = false
   private cachedContentSegments: ContentSegment[] = []
-  private cachedToolResultIndexKey: string = ''
-  private cachedToolResultIndex: Map<string, ToolResult> = new Map()
   private cachedPreContentBlockSignature: string = ''
   private cachedPreContentBlocks: TimelineBlock[] = []
   private cachedPreContentBlockIndex: Map<string, TimelineBlock> = new Map()
@@ -500,18 +500,6 @@ export struct MessageBubble {
     return segments.join('|')
   }
 
-  // 派生缓存签名只用来判断"要不要重算"，不需要逐字符比对全文。流式期间正文与思考
-  // 会长到几万字，把全文拼进签名再做一次字符串比较，等于每个分片都把整段文本多扫
-  // 两遍——思考越长越明显。长度加首尾采样足以覆盖真实会发生的变化：流式是纯追加，
-  // 其余场景（回滚、翻译、编辑预览）都是整体替换，长度或首尾必然跟着变。
-  private buildTextSignature(text: string): string {
-    if (text.length <= 64) {
-      return text
-    }
-    return text.length.toString() + '\u0002' + text.substring(0, 24) +
-      '\u0002' + text.substring(text.length - 24)
-  }
-
   private buildDerivedCacheSignature(): string {
     return [
       this.message.id,
@@ -527,15 +515,15 @@ export struct MessageBubble {
       this.message.uncachedInputTokens.toString(),
       this.message.cacheReadTokens.toString(),
       this.message.cacheWriteTokens.toString(),
-      this.buildTextSignature(this.message.content),
-      this.buildTextSignature(this.message.reasoningContent),
+      encodeRenderText(this.message, 'content', this.message.content),
+      encodeRenderText(this.message, 'reasoningContent', this.message.reasoningContent),
       this.message.isGenerating ? '1' : '0',
       this.message.isSearching ? '1' : '0',
       this.message.contextCompactionState,
       this.currentModelId,
       this.isEditing ? '1' : '0',
-      this.buildTextSignature(this.previewContent),
-      this.buildTextSignature(this.translatedText),
+      encodeRenderText(this.message, 'bubblePreviewContent', this.previewContent),
+      encodeRenderText(this.message, 'bubbleTranslatedText', this.translatedText),
       this.message.documentToolHint,
       this.buildAttachmentSignature(this.previewAttachments),
       this.buildAttachmentSignature(this.message.attachments)
@@ -547,11 +535,11 @@ export struct MessageBubble {
     if (nextSignature === this.derivedCacheSignature) {
       return
     }
-    this.derivedCacheSignature = nextSignature
     this.syncDerivedRenderCaches()
   }
 
   private syncDerivedRenderCaches(): void {
+    this.derivedCacheSignature = this.buildDerivedCacheSignature()
     this.cachedDisplayContent = this.computeDisplayContent()
     this.cachedHasDisplayAttachments = this.isEditing
       ? this.hasRenderableAttachments(this.previewAttachments)
@@ -1388,11 +1376,9 @@ export struct MessageBubble {
     const groups: ToolCallRenderGroup[] = []
     const groupIndex = new Map<string, ToolCallRenderGroup>()
     let askGroup: ToolCallRenderGroup | undefined = undefined
-    for (let i = 0; i < this.message.toolCalls.length; i++) {
-      const toolCall = this.message.toolCalls[i]
-      if (!this.containsToolCallId(toolCallIds, toolCall.id)) {
-        continue
-      }
+    const calls = this.timelineToolIndex.getCalls(toolCallIds)
+    for (let i = 0; i < calls.length; i++) {
+      const toolCall = calls[i]
       if (this.isAskUserToolCall(toolCall)) {
         if (askGroup === undefined) {
           askGroup = new ToolCallRenderGroup()
@@ -1426,46 +1412,46 @@ export struct MessageBubble {
   }
 
   // 分组卡片的入参是本次 build 里临时创建的普通对象，不具备 @Trace 可观察性；
-  // 把结果数量与执行状态编入 ForEach 键值，状态变化时重建卡片以保证刷新
+  // 键只带紧凑的内容版本，结果与参数更新时刷新卡片，不复制长载荷。
   private buildToolCallRenderGroupKey(group: ToolCallRenderGroup, index: number): string {
+    let contentSignature = ''
     if (group.isAskUser) {
       let resolvedResults = 0
       for (let i = 0; i < group.askUserCalls.length; i++) {
-        if (this.findToolResultForCall(group.askUserCalls[i].id) !== null) {
+        const call = group.askUserCalls[i]
+        const result = this.findToolResultForCall(call.id)
+        contentSignature += call.id + ':' + encodeRenderText(call, 'arguments', call.arguments)
+        if (result !== null) {
           resolvedResults++
+          contentSignature += encodeRenderText(result, 'content', result.content)
         }
       }
       return group.key + '_' + group.askUserCalls.length.toString() + '_' + resolvedResults.toString() + '_' +
-        index.toString()
+        index.toString() + '_' + contentSignature
     }
     let resolvedResults = 0
     for (let i = 0; i < group.entries.length; i++) {
-      if (group.entries[i].toolResult !== null) {
+      const entry = group.entries[i]
+      contentSignature += entry.toolCall.id + ':' + entry.toolCall.displayName + ':' +
+        encodeRenderText(entry.toolCall, 'arguments', entry.toolCall.arguments)
+      if (entry.toolResult !== null) {
         resolvedResults++
+        contentSignature += (entry.toolResult.isError ? '1' : '0') + ':' +
+          encodeRenderText(entry.toolResult, 'content', entry.toolResult.content)
       }
     }
     return group.key + '_' + group.entries.length.toString() + '_' + resolvedResults.toString() +
-      (group.anyExecuting ? '_e' : '_d') + '_' + index.toString()
+      (group.anyExecuting ? '_e' : '_d') + '_' + index.toString() + '_' + contentSignature
   }
 
-  // 结果表按 toolCallId 建索引：分组、分组键、图表/地图载荷都要按 id 找结果，
-  // 逐次线性扫描会让工具多的消息变成 O(调用数 × 结果数)
+  @Computed
+  private get timelineToolIndex(): TimelineToolIndex {
+    return new TimelineToolIndex(this.message.toolCalls, this.message.toolResults)
+  }
+
+  // 工具集合变化时才重建，分组和结果查询共用同一份索引。
   private findToolResultForCall(toolCallId: string): ToolResult | null {
-    const indexKey = this.message.id + '_' + this.message.toolResults.length.toString()
-    if (indexKey !== this.cachedToolResultIndexKey) {
-      const index = new Map<string, ToolResult>()
-      for (let i = 0; i < this.message.toolResults.length; i++) {
-        const result = this.message.toolResults[i]
-        // 保留首个匹配，与原先的线性查找语义一致
-        if (!index.has(result.toolCallId)) {
-          index.set(result.toolCallId, result)
-        }
-      }
-      this.cachedToolResultIndex = index
-      this.cachedToolResultIndexKey = indexKey
-    }
-    const found = this.cachedToolResultIndex.get(toolCallId)
-    return found === undefined ? null : found
+    return this.timelineToolIndex.getResult(toolCallId)
   }
 
   private getToolResultContentForCall(toolCallId: string): string {
@@ -1503,11 +1489,9 @@ export struct MessageBubble {
 
   private getVChartPayloads(toolCallIds: string[] = []): MessageVChartPayload[] {
     const payloads: MessageVChartPayload[] = []
-    for (let i = 0; i < this.message.toolCalls.length; i++) {
-      const toolCall = this.message.toolCalls[i]
-      if (!this.containsToolCallId(toolCallIds, toolCall.id)) {
-        continue
-      }
+    const calls = this.timelineToolIndex.getCalls(toolCallIds)
+    for (let i = 0; i < calls.length; i++) {
+      const toolCall = calls[i]
       if (!this.isMathChartToolCall(toolCall)) {
         continue
       }
@@ -1535,9 +1519,10 @@ export struct MessageBubble {
 
   private getMapPayloads(toolCallIds: string[] = []): MessageMapPayload[] {
     const payloads: MessageMapPayload[] = []
-    for (let i = 0; i < this.message.toolCalls.length; i++) {
-      const toolCall = this.message.toolCalls[i]
-      if (!this.containsToolCallId(toolCallIds, toolCall.id) || !this.isMapSearchToolCall(toolCall)) {
+    const calls = this.timelineToolIndex.getCalls(toolCallIds)
+    for (let i = 0; i < calls.length; i++) {
+      const toolCall = calls[i]
+      if (!this.isMapSearchToolCall(toolCall)) {
         continue
       }
       const toolResult = this.findToolResultForCall(toolCall.id)
@@ -2460,7 +2445,8 @@ export struct MessageBubble {
     })
   }
 
-  private getOrderedResponseSegments(): AssistantResponseSegment[] {
+  @Computed
+  private get orderedResponseSegments(): AssistantResponseSegment[] {
     if (this.message.responseSegments.length > 0) {
       let hasCompactionSegment = false
       for (let i = 0; i < this.message.responseSegments.length; i++) {
@@ -2540,8 +2526,13 @@ export struct MessageBubble {
   }
 
   private isActiveTimelineSegment(segment: AssistantResponseSegment): boolean {
-    const segments = this.getOrderedResponseSegments()
-    return this.message.isGenerating && segments.length > 0 && segments[segments.length - 1].id === segment.id
+    return this.message.isGenerating && this.activeTimelineSegmentId === segment.id
+  }
+
+  @Computed
+  private get activeTimelineSegmentId(): string {
+    const segments = this.orderedResponseSegments
+    return segments.length > 0 ? segments[segments.length - 1].id : ''
   }
 
   // 以当前实际展示状态为准取反，保证一次点击就有可见变化
@@ -2557,29 +2548,32 @@ export struct MessageBubble {
     })
   }
 
-  private shouldShowTimelineSearchReferences(segment: AssistantResponseSegment): boolean {
-    if (!this.message.hasSearchReferences()) {
-      return false
-    }
+  @Computed
+  private get lastWebSearchCallId(): string {
     let lastWebSearchCallId = ''
     for (let i = 0; i < this.message.toolCalls.length; i++) {
       if (this.isWebSearchToolCall(this.message.toolCalls[i])) {
         lastWebSearchCallId = this.message.toolCalls[i].id
       }
     }
-    return lastWebSearchCallId !== '' && this.containsToolCallId(segment.toolCallIds, lastWebSearchCallId)
+    return lastWebSearchCallId
+  }
+
+  private shouldShowTimelineSearchReferences(segment: AssistantResponseSegment): boolean {
+    return this.message.hasSearchReferences() && this.lastWebSearchCallId !== '' &&
+      this.containsToolCallId(segment.toolCallIds, this.lastWebSearchCallId)
   }
 
   // ========== 展示块编排 ==========
   // 相邻的工具结果条 / 思考条 / 搜索结果条 / 追问条并进同一个 BARS 块；
   // 三条及以上默认收为单栏。图表、地图、附件等富卡片各自成块。
   //
-  // 外层块列表、块内条目、条目内容三处 ForEach 都要取一次编排结果，条目多时
-  // 每次渲染会重算 N+2 遍（每遍都要重新分组、解析图表载荷）。这里按结构签名缓存：
-  // 签名只覆盖"会改变结构的量"，其余字段仍挂在可观察的模型对象上照常刷新。
-  private buildTimelineStructureSignature(listId: string): string {
+  // @Computed 在同一轮更新中只计算一次结构签名，内外层所有条目共用。
+  // 普通方法即使命中块缓存，也会让每一行重新扫描所有段落，退化为 O(N²)。
+  @Computed
+  private get timelineStructureSignature(): string {
     const message = this.message
-    let signature = listId + '|' + message.id +
+    let signature = message.id +
       '|' + message.toolCalls.length.toString() +
       '|' + message.toolResults.length.toString() +
       '|' + message.searchReferences.length.toString() +
@@ -2593,14 +2587,25 @@ export struct MessageBubble {
     // 正文流式期间因此不会反复重算。
     for (let i = 0; i < message.responseSegments.length; i++) {
       const segment = message.responseSegments[i]
-      signature += segment.type.charAt(0) + (segment.content.length > 0 ? '1' : '0')
+      signature += segment.id + ':' + segment.type + ':' + (hasNonWhitespace(segment.content) ? '1' : '0') +
+        ':' + segment.toolCallIds.join(',') + '|'
+    }
+    for (let i = 0; i < message.toolCalls.length; i++) {
+      const call = message.toolCalls[i]
+      signature += call.id + ':' + call.functionName + ':' + call.toolId + ':' + call.displayName + ':' + call.sourceLabel + ':' +
+        encodeRenderText(call, 'arguments', call.arguments) + '|'
+    }
+    for (let i = 0; i < message.toolResults.length; i++) {
+      const result = message.toolResults[i]
+      signature += result.toolCallId + ':' + (result.isError ? '1' : '0') + ':' +
+        encodeRenderText(result, 'content', result.content) + '|'
     }
     return signature
   }
 
   private getTimelineBlocks(listId: string): TimelineBlock[] {
     const ordered = listId === TIMELINE_BLOCK_LIST_ORDERED
-    const signature = this.buildTimelineStructureSignature(listId)
+    const signature = this.timelineStructureSignature
     if (signature === (ordered ? this.cachedOrderedBlockSignature : this.cachedPreContentBlockSignature)) {
       return ordered ? this.cachedOrderedBlocks : this.cachedPreContentBlocks
     }
@@ -2612,7 +2617,20 @@ export struct MessageBubble {
       blockIndex.set(blocks[i].key, blocks[i])
       const bars = blocks[i].bars
       for (let j = 0; j < bars.length; j++) {
-        barIndex.set(bars[j].key, bars[j])
+        const bar = bars[j]
+        barIndex.set(bar.key, bar)
+        if (bar.kind === TimelineBarKind.ASK_USER) {
+          blocks[i].hasPendingQuestion = blocks[i].hasPendingQuestion ||
+            !this.areAllAskUserCallsAnswered(bar.askUserCalls)
+        } else if (bar.kind === TimelineBarKind.TOOL) {
+          blocks[i].hasExecutingTools = blocks[i].hasExecutingTools || bar.toolGroup.anyExecuting
+        } else if (bar.kind === TimelineBarKind.REASONING) {
+          blocks[i].lastReasoningSegmentId = bar.segment.id
+        } else if (bar.kind === TimelineBarKind.LEGACY_REASONING) {
+          blocks[i].hasLegacyReasoning = true
+        } else if (bar.kind === TimelineBarKind.SEARCH) {
+          blocks[i].hasSearch = true
+        }
       }
     }
 
@@ -2631,12 +2649,15 @@ export struct MessageBubble {
   }
 
   // 块本身的 key 只认位置，块内条目要靠这里重新取一次，流式追加才只重建新增的那条
-  private getTimelineBarsForBlock(block: TimelineBlock): TimelineBar[] {
+  private getCurrentTimelineBlock(block: TimelineBlock): TimelineBlock | undefined {
     const ordered = block.listId === TIMELINE_BLOCK_LIST_ORDERED
     this.getTimelineBlocks(block.listId)
     const index = ordered ? this.cachedOrderedBlockIndex : this.cachedPreContentBlockIndex
-    const found = index.get(block.key)
-    return found === undefined ? [] : found.bars
+    return index.get(block.key)
+  }
+
+  private getTimelineBarsForBlock(block: TimelineBlock): TimelineBar[] {
+    return this.getCurrentTimelineBlock(block)?.bars ?? []
   }
 
   private shouldMergeTimelineBarGroup(block: TimelineBlock): boolean {
@@ -2658,31 +2679,23 @@ export struct MessageBubble {
   }
 
   private getTimelineBarGroupTitle(block: TimelineBlock): string {
-    const bars = this.getTimelineBarsForBlock(block)
+    const current = this.getCurrentTimelineBlock(block)
+    if (current === undefined) {
+      return ''
+    }
     let status = pickLocalizedText('执行过程', 'Activity')
     // 等待用户操作时优先提示，避免折叠后看不出回复为何暂停。
-    for (let i = 0; i < bars.length; i++) {
-      if (bars[i].kind === TimelineBarKind.ASK_USER && !this.areAllAskUserCallsAnswered(bars[i].askUserCalls)) {
-        return pickLocalizedText(`等待回答 · ${bars.length} 项`, `Awaiting answer · ${bars.length} items`)
-      }
+    if (current.hasPendingQuestion) {
+      status = pickLocalizedText('等待回答', 'Awaiting answer')
+    } else if (current.hasExecutingTools) {
+      status = pickLocalizedText('执行中', 'Running')
+    } else if (this.message.isGenerating && (current.hasLegacyReasoning ||
+      (current.lastReasoningSegmentId !== '' && current.lastReasoningSegmentId === this.activeTimelineSegmentId))) {
+      status = pickLocalizedText('思考中', 'Thinking')
+    } else if (current.hasSearch && this.message.isSearching) {
+      status = pickLocalizedText('搜索中', 'Searching')
     }
-    for (let i = bars.length - 1; i >= 0; i--) {
-      const bar = bars[i]
-      if (bar.kind === TimelineBarKind.TOOL && bar.toolGroup.anyExecuting) {
-        status = pickLocalizedText('执行中', 'Running')
-        break
-      }
-      if ((bar.kind === TimelineBarKind.REASONING && this.isActiveTimelineSegment(bar.segment)) ||
-        (bar.kind === TimelineBarKind.LEGACY_REASONING && this.message.isGenerating)) {
-        status = pickLocalizedText('思考中', 'Thinking')
-        break
-      }
-      if (bar.kind === TimelineBarKind.SEARCH && this.message.isSearching) {
-        status = pickLocalizedText('搜索中', 'Searching')
-        break
-      }
-    }
-    return status + pickLocalizedText(` · ${bars.length} 项`, ` · ${bars.length} items`)
+    return status + pickLocalizedText(` · ${current.bars.length} 项`, ` · ${current.bars.length} items`)
   }
 
   // 同一工具在不同段里可能凑出完全相同的分组 key，按段落作用域加前缀避免块内撞键
@@ -2723,7 +2736,7 @@ export struct MessageBubble {
 
   private buildOrderedTimelineBlocks(): TimelineBlock[] {
     const blocks: TimelineBlock[] = []
-    const segments = this.getOrderedResponseSegments()
+    const segments = this.orderedResponseSegments
     for (let i = 0; i < segments.length; i++) {
       const segment = segments[i]
       if (segment.type === AssistantResponseSegmentType.REASONING) {
@@ -3177,7 +3190,7 @@ export struct MessageBubble {
 
               // ========== 加载状态或主要内容区域 ==========
               if (getAppUiState().chatOrderedResponseHistory) {
-                if (this.getOrderedResponseSegments().length > 0) {
+                if (this.orderedResponseSegments.length > 0) {
                   this.OrderedResponseTimeline()
                 } else if (this.message.isSearching) {
                   this.SearchingIndicatorInline()

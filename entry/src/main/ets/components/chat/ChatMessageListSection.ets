@@ -278,7 +278,8 @@ export struct ChatMessageListSection {
         this.pendingAttachments,
         this.assistantAvatarSymbol,
         this.assistantAvatarColor,
-        this.assistantAvatarCacheKey
+        this.assistantAvatarCacheKey,
+        contentRenderSignature
       )
       const existingRow = existingRowMap.get(message.id)
       if (existingRow !== undefined) {

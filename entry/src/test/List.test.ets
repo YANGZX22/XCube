@@ -17,6 +17,7 @@ import presetProvidersTest from './PresetProviders.test';
 import officeOpenXmlTextParserTest from './OfficeOpenXmlTextParser.test';
 import officeDocumentToolTest from './OfficeDocumentTool.test';
 import responseTimelineTest from './ResponseTimeline.test';
+import chatTimelinePerformanceTest from './ChatTimelinePerformance.test';
 import modLensVisionServiceTest from './ModLensVisionService.test';
 import mapToolTest from './MapTool.test';
 import savedPlacesServiceTest from './SavedPlacesService.test';
@@ -56,6 +57,7 @@ export default function testsuite() {
   officeOpenXmlTextParserTest();
   officeDocumentToolTest();
   responseTimelineTest();
+  chatTimelinePerformanceTest();
   modLensVisionServiceTest();
   mapToolTest();
   savedPlacesServiceTest();
