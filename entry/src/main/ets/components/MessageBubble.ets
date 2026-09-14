@@ -154,6 +154,8 @@ export struct MessageBubble {
   // 只记录"展开过"就无法表达"用户主动折叠了正在生成的推理段"。
   @Local expandedTimelineReasoningIds: string[] = []
   @Local collapsedTimelineReasoningIds: string[] = []
+  // 三条及以上的展示块默认合并成单栏，按块记住用户的展开选择。
+  @Local expandedTimelineBlockKeys: string[] = []
   @Local translatedText: string = ''  // 翻译结果
   @Local isTranslating: boolean = false  // 是否正在翻译
   @Local showTranslation: boolean = false  // 是否显示翻译结果
@@ -410,6 +412,7 @@ export struct MessageBubble {
     this.isReasoningExpanded = false
     this.expandedTimelineReasoningIds = []
     this.collapsedTimelineReasoningIds = []
+    this.expandedTimelineBlockKeys = []
   }
 
   // 消息状态变化回调（优化跳动点动画性能）
@@ -463,6 +466,7 @@ export struct MessageBubble {
     this.isReasoningExpanded = false
     this.expandedTimelineReasoningIds = []
     this.collapsedTimelineReasoningIds = []
+    this.expandedTimelineBlockKeys = []
     this.translatedText = this.message.translatedText
     this.isTranslating = false
     this.showTranslation = this.message.translatedText !== ''
@@ -2567,8 +2571,8 @@ export struct MessageBubble {
   }
 
   // ========== 展示块编排 ==========
-  // 相邻的工具结果条 / 思考条 / 搜索结果条并进同一个 BARS 块，块内用分割线相隔；
-  // 追问、图表、地图、附件这类富卡片各自成块，并把前面攒着的条收口。
+  // 相邻的工具结果条 / 思考条 / 搜索结果条 / 追问条并进同一个 BARS 块；
+  // 三条及以上默认收为单栏。图表、地图、附件等富卡片各自成块。
   //
   // 外层块列表、块内条目、条目内容三处 ForEach 都要取一次编排结果，条目多时
   // 每次渲染会重算 N+2 遍（每遍都要重新分组、解析图表载荷）。这里按结构签名缓存：
@@ -2633,6 +2637,52 @@ export struct MessageBubble {
     const index = ordered ? this.cachedOrderedBlockIndex : this.cachedPreContentBlockIndex
     const found = index.get(block.key)
     return found === undefined ? [] : found.bars
+  }
+
+  private shouldMergeTimelineBarGroup(block: TimelineBlock): boolean {
+    // 必须取缓存中的最新条目，才能在流式输出从两条增加到三条时立即合并。
+    return this.getTimelineBarsForBlock(block).length >= 3
+  }
+
+  private isTimelineBarGroupExpanded(block: TimelineBlock): boolean {
+    return this.expandedTimelineBlockKeys.includes(block.key)
+  }
+
+  private toggleTimelineBarGroup(block: TimelineBlock): void {
+    const shouldExpand = !this.isTimelineBarGroupExpanded(block)
+    this.getUIContext().animateTo(getTimelineBarExpandAnimation(), () => {
+      this.expandedTimelineBlockKeys = shouldExpand
+        ? appendUniqueId(this.expandedTimelineBlockKeys, block.key)
+        : removeId(this.expandedTimelineBlockKeys, block.key)
+    })
+  }
+
+  private getTimelineBarGroupTitle(block: TimelineBlock): string {
+    const bars = this.getTimelineBarsForBlock(block)
+    let status = pickLocalizedText('执行过程', 'Activity')
+    // 等待用户操作时优先提示，避免折叠后看不出回复为何暂停。
+    for (let i = 0; i < bars.length; i++) {
+      if (bars[i].kind === TimelineBarKind.ASK_USER && !this.areAllAskUserCallsAnswered(bars[i].askUserCalls)) {
+        return pickLocalizedText(`等待回答 · ${bars.length} 项`, `Awaiting answer · ${bars.length} items`)
+      }
+    }
+    for (let i = bars.length - 1; i >= 0; i--) {
+      const bar = bars[i]
+      if (bar.kind === TimelineBarKind.TOOL && bar.toolGroup.anyExecuting) {
+        status = pickLocalizedText('执行中', 'Running')
+        break
+      }
+      if ((bar.kind === TimelineBarKind.REASONING && this.isActiveTimelineSegment(bar.segment)) ||
+        (bar.kind === TimelineBarKind.LEGACY_REASONING && this.message.isGenerating)) {
+        status = pickLocalizedText('思考中', 'Thinking')
+        break
+      }
+      if (bar.kind === TimelineBarKind.SEARCH && this.message.isSearching) {
+        status = pickLocalizedText('搜索中', 'Searching')
+        break
+      }
+    }
+    return status + pickLocalizedText(` · ${bars.length} 项`, ` · ${bars.length} items`)
   }
 
   // 同一工具在不同段里可能凑出完全相同的分组 key，按段落作用域加前缀避免块内撞键
@@ -2833,22 +2883,77 @@ export struct MessageBubble {
   }
 
 
-  // 一个条目块：多条工具结果 / 思考 / 搜索结果共用一层边框与材质，块内用分割线相隔
+  // 合并后的单栏入口，展开后保留各条记录原有的详情与操作。
+  @Builder
+  private TimelineBarGroupHeader(block: TimelineBlock) {
+    Row() {
+      SymbolGlyph($r('sys.symbol.square_stack_3d'))
+        .fontSize(14)
+        .fontColor([this.themePrimary])
+
+      Text(this.getTimelineBarGroupTitle(block))
+        .fontSize(13)
+        .fontWeight(FontWeight.Medium)
+        .fontColor(this.isManuscriptMode ? this.themePrimary : $r('app.color.text_secondary'))
+        .maxLines(1)
+        .textOverflow({ overflow: TextOverflow.Ellipsis })
+        .layoutWeight(1)
+        .margin({ left: 6, right: 8 })
+
+      Row() {
+        Text(this.isTimelineBarGroupExpanded(block) ?
+          $r('app.string.common_collapse') : $r('app.string.common_details'))
+          .fontSize(11)
+          .fontColor(this.isManuscriptMode ? this.themePrimary : $r('app.color.text_tertiary'))
+
+        SymbolGlyph($r('sys.symbol.chevron_down'))
+          .fontSize(12)
+          .fontColor([this.isManuscriptMode ? this.themePrimary : $r('app.color.text_tertiary')])
+          .rotate({ angle: this.isTimelineBarGroupExpanded(block) ? 180 : 0 })
+          .animation(getTimelineBarExpandAnimation())
+          .margin({ left: 2 })
+      }
+    }
+    .width('100%')
+    .height(this.isManuscriptMode ? MANUSCRIPT_COMPACT_BAR_HEIGHT : 36)
+    .padding({ left: this.isManuscriptMode ? 14 : 10, right: this.isManuscriptMode ? 14 : 10 })
+    .alignItems(VerticalAlign.Center)
+    .accessibilityText(this.getTimelineBarGroupTitle(block))
+    .accessibilityDescription(this.isTimelineBarGroupExpanded(block) ?
+      pickLocalizedText('收起全部记录', 'Collapse all records') : pickLocalizedText('展开全部记录', 'Expand all records'))
+    .onClick(() => {
+      this.toggleTimelineBarGroup(block)
+    })
+  }
+
+  // 一个条目块：三条及以上默认合并为单栏，一到两条直接展示。
   @Builder
   private TimelineBarGroupBlock(block: TimelineBlock) {
     Column() {
-      ForEach(this.getTimelineBarsForBlock(block), (bar: TimelineBar) => {
+      if (this.shouldMergeTimelineBarGroup(block)) {
+        this.TimelineBarGroupHeader(block)
+      }
+      if (!this.shouldMergeTimelineBarGroup(block) || this.isTimelineBarGroupExpanded(block)) {
         Column() {
-          if (!bar.isFirst) {
+          if (this.shouldMergeTimelineBarGroup(block)) {
             this.TimelineBarSeparator()
           }
-          ForEach(this.getTimelineBarRenderStates(bar), (state: TimelineBar) => {
-            this.TimelineBarBody(state)
-          }, (state: TimelineBar) => state.contentKey)
+          ForEach(this.getTimelineBarsForBlock(block), (bar: TimelineBar) => {
+            Column() {
+              if (!bar.isFirst) {
+                this.TimelineBarSeparator()
+              }
+              ForEach(this.getTimelineBarRenderStates(bar), (state: TimelineBar) => {
+                this.TimelineBarBody(state)
+              }, (state: TimelineBar) => state.contentKey)
+            }
+            .width('100%')
+            .transition(buildTimelineBarTransition())
+          }, (bar: TimelineBar) => bar.key)
         }
         .width('100%')
-        .transition(buildTimelineBarTransition())
-      }, (bar: TimelineBar) => bar.key)
+        .transition(buildTimelineBarExpandTransition())
+      }
     }
     .width('100%')
     .backgroundColor(Color.Transparent)
