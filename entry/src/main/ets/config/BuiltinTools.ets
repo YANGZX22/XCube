@@ -2691,7 +2691,7 @@ function createSubAgentToolDefinition(): ToolDefinition {
 
   const func = new ToolFunction(
     SUB_AGENT_TOOL_ID,
-    `Dispatch 1-${SUB_AGENT_MAX_TASKS} autonomous sub-agents for genuinely independent parallel work. ARGUMENT SHAPE: use flat string fields only. task_1_prompt is required; task_2_prompt and task_3_prompt add optional parallel tasks. Pair them with the matching task_N_name and task_N_expected_output fields. Do not send a tasks array or stringify the arguments object. SCHEDULING CONTRACT: before calling, reserve a concrete deliverable for the main thread and define acceptance criteria for every sub-task. This call returns IMMEDIATELY with a batchId and stable agentIds. After dispatch, work on the reserved main-thread deliverable; sub_agent_result (even wait=false) MUST NOT be your next tool call, and you must not poll. Only collect after useful main-thread work is complete and further progress depends on the replies. Collection keeps sessions alive. Quality-check every reply and promptly use sub_agent_message to correct specific gaps, request evidence, verify, or deepen the same agent. Do not use sub-agents when there is no useful main-thread work to overlap, for simple tasks, or for strongly sequential tasks.`,
+    `Dispatch 1-${SUB_AGENT_MAX_TASKS} independent sub-tasks when useful main-thread work can run alongside them. Provide self-contained task instructions and acceptance criteria using flat task_N_prompt/name/expected_output fields. main_thread_work names the work you will do while they run. Returns immediately with batchId and agentIds. Complete the reserved work, then collect the needed replies with sub_agent_result. Integrate sufficient results directly; follow up only for a material gap. Simple or sequential tasks do not need delegation.`,
     parameters
   )
 
@@ -2725,7 +2725,7 @@ function createSubAgentResultToolDefinition(): ToolDefinition {
       },
       "wait": {
         "type": "boolean",
-        "description": "Default true. true BLOCKS until the targeted replies finish and is allowed only after all useful main-thread work is complete. false returns a non-blocking status, but use it only when that status determines a concrete next action; never poll repeatedly or call it immediately after dispatch."
+        "description": "Default true: wait for the targeted replies. false returns current status; use only when it determines a concrete next action, not for repeated polling."
       }
     },
     "required": []
@@ -2734,7 +2734,7 @@ function createSubAgentResultToolDefinition(): ToolDefinition {
 
   const func = new ToolFunction(
     SUB_AGENT_RESULT_TOOL_ID,
-    'COLLECTION BARRIER for replies from sub_agent/sub_agent_message. Do not call this immediately after dispatch and do not use blocking wait=true as a substitute for main-thread work. First finish every useful task you can do independently. Use wait=false only when the status changes a concrete decision; never poll it consecutively. After collection, immediately run a quality gate against the goal, evidence, constraints, consistency, and required format. If a specific fixable gap exists, the next coordination action should be sub_agent_message to that agentId before drafting the final answer. Collection does not close sessions.',
+    'Collect replies from sub_agent or sub_agent_message. Prefer wait=true when further work depends on the replies; do useful independent work first if any remains. Use wait=false only for a concrete scheduling decision, never repeated polling. Integrate results that satisfy the task. Collection keeps sessions available for a targeted follow-up if a material gap remains.',
     parameters
   )
 
@@ -2764,7 +2764,7 @@ function createSubAgentMessageToolDefinition(): ToolDefinition {
     "properties": {
       "main_thread_work": {
         "type": "string",
-        "description": "Required scheduling commitment: concrete useful work the main agent will do after sending these follow-ups and before collecting the new batch."
+        "description": "Optional useful independent work to do while waiting. Omit when no such work remains; do not invent extra work to fill the wait."
       },
       "messages": {
         "type": "array",
@@ -2789,13 +2789,13 @@ function createSubAgentMessageToolDefinition(): ToolDefinition {
         }
       }
     },
-    "required": ["main_thread_work", "messages"]
+    "required": ["messages"]
   }`
   parameters.setRawSchema(JSON.parse(rawSchemaJson) as object)
 
   const func = new ToolFunction(
     SUB_AGENT_MESSAGE_TOOL_ID,
-    'QUALITY-GATE FOLLOW-UP for existing sub-agent conversations. Use this promptly after collection when a reply has a concrete, material gap: missing coverage or evidence, wrong direction, contradiction, shallow analysis, failed format, or a verification need. Address the original agentId, name the exact gap, provide any new context, and define what a satisfactory next reply must contain. Preserve good work and request only the needed delta instead of restarting the task. This returns immediately with a new batchId; continue useful main-thread work before collecting again. Repeat only while another round offers material value.',
+    'Send a targeted follow-up to an existing agent only for a material gap in its reply or a user-requested continuation. State the missing evidence or correction and the required delta. Fix minor wording or formatting directly. Returns immediately with a new batchId; continue useful independent work if any remains, otherwise collect with wait=true. Stop when the requested result is sufficient.',
     parameters
   )
   return new ToolDefinition(func)
@@ -3317,18 +3317,10 @@ function createUseSkillToolConfig(): ToolConfig {
 
 export function buildPythonSandboxRawSchema(): object {
   const codeDescription: string =
-    `action=run 时要执行的内联 Python 3 代码。支持完整 Python 语法与标准库；import pandas、numpy、scipy、` +
-      `scikit-learn、matplotlib、Pillow 等 Pyodide 官方包时会在执行前自动加载，import fpdf 时会自动安装 ` +
-      `fpdf2。${PYTHON_PLOTTING_USAGE_GUIDANCE}沙箱内置 CMU Serif 英文与思源宋体中文的 Regular、Bold、` +
-      `Italic、Bold Italic 四套字形；Pillow 可通过 PYTHON_FONT_EN_*、PYTHON_FONT_CJK_* 获取对应路径。` +
-      `${PYTHON_FONT_USAGE_GUIDANCE}${PYTHON_PDF_USAGE_GUIDANCE}${PYTHON_WORKSPACE_USAGE_GUIDANCE}可用 print 输出，最后一个表达式的值会作为 ` +
-      `result 返回。写入 PYTHON_OUTPUT_DIR 的 PNG、JPEG、GIF、WebP 会在 images 中返回；PDF、` +
-      `CSV、JSON、Office、ZIP 等任意其他文件会在 files 中返回。要在气泡中交付普通文件，必须在最终回复` +
-      `原样输出 files 中的 markdown 字段，即 [文件名](xcube-file://attachmentId)；不要臆造 attachmentId 或` +
-      `内部链接。要展示生成图片，必须在最终回复需要出现的位置原样输出 images 中的 markdown 字段，即 ` +
-      `![说明](xcube-image://attachmentId)；不要只报告图片已生成，也不要臆造或改写内部链接，图片不会在气泡顶部` +
-      `自动展示。图片最多 4 张，单张 4 MiB、合计 8 MiB；普通文件最多 8 个，单个 16 MiB、合计 32 MiB。` +
-      `代码不能访问应用或系统文件、直接发起网络请求或运行系统命令。`
+    'action=run 时执行的 Python 3 代码。简短计算可内联；长代码使用 write_file/append_file 后 run_files。' +
+    '遵循本工具描述中的依赖、绘图、工作区和交付规则；用 print 或最后一个表达式返回计算结果。' +
+    '交付物写入 PYTHON_OUTPUT_DIR；图片最多 4 张、单张 4 MiB、合计 8 MiB，其他文件最多 8 个、单个 16 MiB、合计 32 MiB。' +
+    '最终回复使用结果 images/files 中的 markdown 展示图片或下载链接，不臆造 attachmentId 或内部链接。'
   const packagesDescription: string =
     '可选。代码需要但 Pyodide 未内置的 PyPI 包名或版本约束，例如 ["seaborn", ' +
       '"snowballstemmer==2.2.0"]。仅支持纯 Python wheel 或兼容当前 Pyodide 的 PyEmscripten wheel；' +
@@ -3545,7 +3537,7 @@ function createMathChartToolDefinition(): ToolDefinition {
 
   const func = new ToolFunction(
     MATH_CHART_TOOL_ID,
-    '本地数学分析与图表绘制工具，在应用沙箱内根据结构化数据生成统计结果和 VChart 图表配置。支持折线图、柱状图、面积图、散点/气泡图、饼图、环形图、玫瑰图、漏斗图、词云图、桑基图、双轴/柱线组合图，以及基础统计和趋势分析。桑基图请使用 chart_type="sankey" 和 links:[{source,target,value}]。不要传任意 Python 代码；如用户要求用 Python 绘图，请将需求转换为结构化 labels/values/series/x_values/y_values/links/sources/targets 后调用本工具。',
+    '本地数学分析与图表绘制工具，在应用沙箱内根据结构化数据生成统计结果和 VChart 图表配置。支持折线图、柱状图、面积图、散点/气泡图、饼图、环形图、玫瑰图、漏斗图、词云图、桑基图、双轴/柱线组合图，以及基础统计和趋势分析。桑基图请使用 chart_type="sankey" 和 links:[{source,target,value}]。本工具只接收结构化数据，不执行 Python。简单交互图表可使用本工具；用户明确要求 Python、Matplotlib、Seaborn、代码执行或自定义图片文件时，使用已启用的 python_sandbox。Python 工具不可用时说明限制，不把 VChart 冒充 Python 绘图。',
     parameters
   )
 

@@ -1,3 +1,5 @@
+import { TOOL_PROGRESS_STOP } from '../utils/ToolProgressGuard'
+import { COLLECTED_SUB_AGENT_GUIDANCE, TASK_EXECUTION_PROMPT } from '../config/AgentPrompts'
 import { http } from '@kit.NetworkKit'
 import { AIApiConfig, AIApiService, RequestMessage, UsageInfo } from './AIApiService'
 import { ReasoningLevel, ToolCall, ToolDefinition, ToolResult } from '../models/ChatModels'
@@ -90,6 +92,8 @@ export class SubAgentRuntimeConfig {
   timeContext: string
   toolExecutionContext: ToolExecutionContext
   toolRunner: SubAgentToolRunner
+  onToolTurnStarted: (actorId: string) => void
+  shouldStopTools: (actorId: string) => boolean
   onToolCallStarted: SubAgentToolCallStarted
   onToolCallCompleted: SubAgentToolCallCompleted
   isCancelled: () => boolean
@@ -108,6 +112,8 @@ export class SubAgentRuntimeConfig {
     timeContext: string,
     toolExecutionContext: ToolExecutionContext,
     toolRunner: SubAgentToolRunner,
+    onToolTurnStarted: (actorId: string) => void,
+    shouldStopTools: (actorId: string) => boolean,
     onToolCallStarted: SubAgentToolCallStarted,
     onToolCallCompleted: SubAgentToolCallCompleted,
     isCancelled: () => boolean,
@@ -125,6 +131,8 @@ export class SubAgentRuntimeConfig {
     this.timeContext = timeContext
     this.toolExecutionContext = toolExecutionContext
     this.toolRunner = toolRunner
+    this.onToolTurnStarted = onToolTurnStarted
+    this.shouldStopTools = shouldStopTools
     this.onToolCallStarted = onToolCallStarted
     this.onToolCallCompleted = onToolCallCompleted
     this.isCancelled = isCancelled
@@ -183,7 +191,7 @@ class SubAgentDispatchResponse {
 // sub_agent_result（wait=true）的返回：汇总一个或多个批次的当前轮回复
 class SubAgentCollectResponse {
   status: string = 'completed'
-  nextAction: string = 'quality_gate_then_follow_up_or_finalize'
+  nextAction: string = 'integrate_results_or_resolve_material_gap'
   batchIds: string[] = []
   results: SubAgentTaskReport[] = []
   note: string = ''
@@ -221,6 +229,7 @@ class SubAgentErrorResponse {
 // 单轮流式请求的产出
 class SubAgentRoundOutcome {
   content: string = ''
+  reasoningContent: string = ''
   toolCalls: ToolCall[] = []
   error: string = ''
 }
@@ -505,12 +514,6 @@ export class SubAgentService {
       ))
     }
     const mainThreadWork = parsedArgs.main_thread_work !== undefined ? parsedArgs.main_thread_work.trim() : ''
-    if (mainThreadWork === '') {
-      return JSON.stringify(new SubAgentErrorResponse(
-        'sub_agent_message 必须提供非空 main_thread_work，明确续发后主线程要先完成的具体交付物'
-      ))
-    }
-
     const targetSessions: SubAgentSession[] = []
     const followUpPrompts: string[] = []
     for (let i = 0; i < rawMessages.length; i++) {
@@ -562,9 +565,9 @@ export class SubAgentService {
       response.agents.push(targetSessions[i].name)
     }
     response.sessions = this.buildSessionDescriptors(targetSessions)
-    response.note = `已向 ${targetSessions.length} 个子智能体续发消息，它们正在沿用原有上下文生成新回复。` +
-      `不要立即阻塞收取或查看进度；先完成你承诺的主线程交付物：“${mainThreadWork}”。` +
-      '之后用 sub_agent_result 收取本轮 batch，并再次执行质量门；主从对话轮数不设上限。'
+    response.note = `已向 ${targetSessions.length} 个子智能体续发消息，原上下文已保留。` +
+      (mainThreadWork !== '' ? `等待期间可继续：“${mainThreadWork}”。` : '') +
+      '需要回复时用 sub_agent_result(wait=true) 收取；没有可独立推进的工作时直接等待，不要制造新任务或反复轮询。'
     return JSON.stringify(response)
   }
 
@@ -627,10 +630,7 @@ export class SubAgentService {
     if (runtime !== null && runtime.isCancelled()) {
       return JSON.stringify(new SubAgentErrorResponse('子智能体执行已取消', true))
     }
-    response.note = (response.note !== '' ? response.note + ' ' : '') +
-      '立即执行质量门：逐项检查目标覆盖、事实/证据、约束、内部一致性与格式。' +
-      '若有可修正的实质缺口，应在撰写最终回答前将结果中的 agentId 作为 agent_id 调用 ' +
-      'sub_agent_message，明确指出缺口和本轮验收目标；通过质量门后再综合作答。'
+    response.note = (response.note !== '' ? response.note + ' ' : '') + COLLECTED_SUB_AGENT_GUIDANCE
     return JSON.stringify(response)
   }
 
@@ -863,7 +863,14 @@ export class SubAgentService {
     // 会话必须同时盯住运行时代号：
     // 请求正常结束或出错时 clearRuntime() 递增代号，后台子智能体据此自行退出
     const isCancelled = (): boolean => runtime.isCancelled() || this.generation !== session.generation
+    // 上轮的停止通知不能约束新的续发指令；工具结果和推理历史仍保留。
+    for (let i = session.messages.length - 1; i >= 0; i--) {
+      if (session.messages[i].role === 'system' && session.messages[i].content === TOOL_PROGRESS_STOP) {
+        session.messages.splice(i, 1)
+      }
+    }
     session.messages.push(new RequestMessage('user', userMessage))
+    runtime.onToolTurnStarted(session.id)
     // 流式内容按 150ms 节流写入预览状态，避免高频 UI 刷新
     const liveContentThrottle = createThrottle(150)
     const appendLiveContent = (chunk: string): void => {
@@ -904,11 +911,15 @@ export class SubAgentService {
         'SubAgentService',
         `[${report.name}] conversation ${report.conversationTurn}, model round ${report.rounds}`
       )
+      const stopTools = runtime.shouldStopTools(session.id)
+      if (stopTools) {
+        session.messages.push(new RequestMessage('system', TOOL_PROGRESS_STOP))
+      }
       const outcome = await this.performStreamRound(
         runtime,
         session.apiService,
         session.messages,
-        session.tools,
+        stopTools ? [] : session.tools,
         appendLiveContent,
         isCancelled
       )
@@ -932,10 +943,13 @@ export class SubAgentService {
         return report
       }
 
-      if (outcome.toolCalls.length === 0) {
+      if (outcome.toolCalls.length === 0 || stopTools) {
         report.status = SUB_AGENT_STATUS_COMPLETED
-        report.result = outcome.content !== '' ? outcome.content : '(子智能体没有输出内容)'
-        session.messages.push(new RequestMessage('assistant', outcome.content))
+        report.result = outcome.content !== '' ? outcome.content :
+          (stopTools ? TOOL_PROGRESS_STOP : '(子智能体没有输出内容)')
+        const assistantMessage = new RequestMessage('assistant', outcome.content)
+        assistantMessage.reasoningContent = outcome.reasoningContent
+        session.messages.push(assistantMessage)
         live.status = SUB_AGENT_STATUS_COMPLETED
         session.busy = false
         return report
@@ -950,6 +964,7 @@ export class SubAgentService {
 
       // 执行工具调用并把结果拼回上下文，继续下一轮
       const assistantMsg = RequestMessage.createAssistantWithToolCalls(outcome.content, outcome.toolCalls)
+      assistantMsg.reasoningContent = outcome.reasoningContent
       session.messages.push(assistantMsg)
       const nativeToolInputs: RequestMessage[] = []
       for (let i = 0; i < outcome.toolCalls.length; i++) {
@@ -1035,13 +1050,13 @@ export class SubAgentService {
 执行规则:
 - 你与主助手之间是可持续多轮的协作会话。每次回复都会作为工具结果返回给主助手；主助手之后可能继续追问、纠正方向或要求深化，你必须结合此前完整上下文继续工作。
 - 每一轮都应输出简洁、结构化、信息完整的阶段回复；不要因为可能有下一轮而省略当前已能完成的内容。
-- 请自主完成任务；确实需要外部信息或外部系统时，使用提供的工具。
+${TASK_EXECUTION_PROMPT}
 ${askUserRule}
 ${webSearchRule}
 ${knowledgeSearchRule}
 - 引用外部信息时保留关键来源（标题/URL），方便主助手复核。
 - 本轮任务完成后直接输出结果，不要输出与任务无关的寒暄。
-- 每轮回复末尾附上简短“交付自检”：标明完成度（complete/partial/blocked）、仍缺少的证据或风险（没有则写“无”），以及主助手下一轮最值得追问的一个点（无需追问则写“无”）。不要虚报完成度。`
+- 交付当前子任务的结果与必要依据；未完成时明确剩余工作或阻塞。任务完成后结束，不附加例行自检或建议主助手继续追问。`
   }
 
   private buildSubAgentTaskPrompt(task: SubAgentTaskArguments): string {
@@ -1391,7 +1406,7 @@ ${knowledgeSearchRule}
           return
         }
         settled = true
-        let estimatedOutputTokens = estimateTextTokens(outcome.content)
+        let estimatedOutputTokens = estimateTextTokens(outcome.content) + estimateTextTokens(outcome.reasoningContent)
         for (let i = 0; i < outcome.toolCalls.length; i++) {
           estimatedOutputTokens += estimateTextTokens(outcome.toolCalls[i].functionName)
           estimatedOutputTokens += estimateTextTokens(outcome.toolCalls[i].arguments)
@@ -1434,7 +1449,9 @@ ${knowledgeSearchRule}
         },
         runtime.temperature,
         safeMaxOutputTokens,
-        undefined,
+        (reasoningChunk: string): void => {
+          outcome.reasoningContent += reasoningChunk
+        },
         undefined,
         runtime.reasoningLevel,
         tools.length > 0 ? tools : undefined,

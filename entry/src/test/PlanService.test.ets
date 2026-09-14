@@ -8,6 +8,8 @@ import {
   PLAN_STEP_DONE,
   PLAN_STEP_PENDING,
   PlanStep,
+  PlanState,
+  applyPlanStepStatusUpdate,
   resolvePlanStepIndex
 } from '../main/ets/services/PlanService'
 
@@ -17,6 +19,33 @@ function makeSteps(titles: string[]): PlanStep[] {
 
 export default function planServiceTest() {
   describe('planServiceTest', () => {
+    it('updates_several_steps_once_without_changing_other_steps', 0, () => {
+      const current = new PlanState('Task', makeSteps(['Read', 'Implement', 'Test']), 10, 'assistant', 3)
+      const result = applyPlanStepStatusUpdate(current, ['1', '2', 's2'], PLAN_STEP_DONE, 'assistant', 20)
+      expect(result.ok).assertTrue()
+      expect(result.plan.steps[0].status).assertEqual(PLAN_STEP_DONE)
+      expect(result.plan.steps[1].status).assertEqual(PLAN_STEP_DONE)
+      expect(result.plan.steps[2].status).assertEqual(PLAN_STEP_PENDING)
+      expect(result.plan.revision).assertEqual(4)
+      expect(current.steps[0].status).assertEqual(PLAN_STEP_PENDING)
+    })
+
+    it('rejects_a_batch_atomically_if_any_reference_is_invalid', 0, () => {
+      const current = new PlanState('Task', makeSteps(['Read', 'Implement']), 10, 'assistant', 3)
+      const result = applyPlanStepStatusUpdate(current, ['1', 'missing'], PLAN_STEP_DONE)
+      expect(result.ok).assertFalse()
+      expect(result.plan).assertEqual(current)
+      expect(result.plan.steps[0].status).assertEqual(PLAN_STEP_PENDING)
+      expect(result.plan.revision).assertEqual(3)
+    })
+
+    it('does_not_rewrite_a_plan_when_status_is_unchanged', 0, () => {
+      const current = new PlanState('Task', buildPlanSteps(['Read'], ['done']), 10, 'assistant', 3)
+      const result = applyPlanStepStatusUpdate(current, ['1'], PLAN_STEP_DONE, 'assistant', 20)
+      expect(result.ok).assertTrue()
+      expect(result.plan).assertEqual(current)
+      expect(result.plan.updatedAt).assertEqual(10)
+    })
     it('normalizes_the_status_words_models_actually_emit', 0, () => {
       expect(normalizePlanStepStatus('done')).assertEqual(PLAN_STEP_DONE)
       expect(normalizePlanStepStatus('Completed')).assertEqual(PLAN_STEP_DONE)

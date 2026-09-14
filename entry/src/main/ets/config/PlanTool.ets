@@ -42,6 +42,7 @@ interface PlanToolArgs {
   plan?: (string | PlanStepArg)[]
   items?: (string | PlanStepArg)[]
   step?: string | number
+  step_refs?: string[]
   index?: string | number
   status?: string
 }
@@ -122,14 +123,32 @@ export class PlanModeExecutor implements ToolExecutor {
       }
 
       const reference = this.resolveStepReference(params)
-      if (reference === '') {
+      const references: string[] = []
+      if (params.step_refs !== undefined) {
+        if (params.step !== undefined || params.index !== undefined) {
+          return JSON.stringify(new PlanToolErrorOutput('step 与 step_refs 只能提供其中一个'))
+        }
+        if (!Array.isArray(params.step_refs) || params.step_refs.length === 0 ||
+          params.step_refs.length > PLAN_MAX_STEPS) {
+          return JSON.stringify(new PlanToolErrorOutput(`step_refs 必须包含 1-${PLAN_MAX_STEPS} 个步骤引用`))
+        }
+        for (let i = 0; i < params.step_refs.length; i++) {
+          if (typeof params.step_refs[i] !== 'string' || params.step_refs[i].trim() === '') {
+            return JSON.stringify(new PlanToolErrorOutput('step_refs 中的每项必须是非空字符串'))
+          }
+          references.push(params.step_refs[i])
+        }
+      } else if (reference !== '') {
+        references.push(reference)
+      }
+      if (references.length === 0) {
         const current = await service.loadPlan()
         return JSON.stringify(new PlanToolOutput(false, operation,
-          '请用 step 指明要更新的步骤（步骤序号或步骤标题）', current))
+          '请用 step 或 step_refs 指明要更新的步骤（序号或标题）', current))
       }
       const status = operation === 'check' ? PLAN_STEP_DONE
         : (operation === 'start' ? PLAN_STEP_ACTIVE : PLAN_STEP_PENDING)
-      const result: PlanMutationResult = await service.updateStepStatus(reference, status, 'assistant')
+      const result: PlanMutationResult = await service.updateStepsStatus(references, status, 'assistant')
       return JSON.stringify(new PlanToolOutput(result.ok, operation, result.message, result.plan))
     } catch (error) {
       return JSON.stringify(new PlanToolErrorOutput(`计划操作失败: ${this.stringifyError(error)}`))
@@ -145,7 +164,7 @@ export class PlanModeExecutor implements ToolExecutor {
       if (this.resolveStepTitles(params).length > 0) {
         return 'set'
       }
-      return this.resolveStepReference(params) !== '' ? 'check' : 'read'
+      return this.resolveStepReference(params) !== '' || params.step_refs !== undefined ? 'check' : 'read'
     }
     if (normalized === 'write' || normalized === 'create' || normalized === 'update' ||
       normalized === 'replace' || normalized === 'plan' || normalized === 'rewrite' ||
@@ -281,7 +300,7 @@ export function createPlanModeToolDefinition(): ToolDefinition {
       "operation": {
         "type": "string",
         "enum": ["set", "check", "start", "uncheck", "read", "clear"],
-        "description": "set=写入或重写整个计划；check=把某一步标记为已完成；start=把某一步标记为进行中；uncheck=撤销某一步的完成标记；read=读取当前计划；clear=清空计划。省略时按载荷推断。每完成一步都必须立即用 check 勾选，不要拖到最后一起补。"
+        "description": "set=写入或重写整个计划；check=把某一步标记为已完成；start=把某一步标记为进行中；uncheck=撤销某一步的完成标记；read=读取当前计划；clear=清空计划。省略时按载荷推断。在有实质进度时更新，可一次批量更新多个已完成步骤。"
       },
       "title": {
         "type": "string",
@@ -290,11 +309,18 @@ export function createPlanModeToolDefinition(): ToolDefinition {
       "steps": {
         "type": "array",
         "items": { "type": "string" },
-        "description": "operation=set 时必填，最多 ${PLAN_MAX_STEPS} 步。按执行顺序给出步骤，每步一句祈使句，描述一个可验证的产出（例如'迁移 users 表并跑通回归测试'），不要写成'思考一下'这类无法判断完成的条目。重写会覆盖整份计划，包括已勾选的状态，因此推进过程中只用 check 推进，不要重新 set。写完计划后就要开始按计划执行，并在每完成一步时立即 check。"
+        "description": "operation=set 时必填，最多 ${PLAN_MAX_STEPS} 步。按执行顺序给出步骤，每步一句祈使句，描述一个可验证的产出（例如'迁移 users 表并跑通回归测试'），不要写成'思考一下'这类无法判断完成的条目。set 会替换整个计划；仅在范围变化时重写，普通进度使用 check 更新。步骤应按交付物分组，不为思考、读一次结果或修改一句话拆出步骤。"
+      },
+      "step_refs": {
+        "type": "array",
+        "items": { "type": "string" },
+        "minItems": 1,
+        "maxItems": ${PLAN_MAX_STEPS},
+        "description": "check/start/uncheck 时可批量更新的步骤序号或标题，例如第 1、2 步。任一引用无效则整批不修改；与 step 二选一。"
       },
       "step": {
         "type": "string",
-        "description": "operation 为 check/start/uncheck 时必填。用步骤序号（如 \\"2\\"）指明目标步骤最可靠；也接受步骤标题原文。标题匹配不唯一时会返回失败而不是猜测。一次调用只更新一个步骤；完成了多步就连续调用多次，不要合并。"
+        "description": "check/start/uncheck 时用 step 或 step_refs 指定目标。用步骤序号（如 \\"2\\"）指明目标步骤最可靠；也接受步骤标题原文。标题匹配不唯一时会返回失败而不是猜测。批量更新时改用 step_refs。"
       }
     },
     "additionalProperties": false
@@ -303,16 +329,11 @@ export function createPlanModeToolDefinition(): ToolDefinition {
 
   const func = new ToolFunction(
     PLAN_MODE_TOOL_ID,
-    '维护当前对话的任务计划，并把它显示在聊天界面的计划面板里，让用户随时看到进度。' +
-      '适用于需要多个步骤、跨多轮才能完成的任务：先用 operation="set" 写下完整步骤。\n' +
-      '【必须遵守】勾选计划是你自己的职责，用户不会替你勾，系统也不会自动勾。' +
-      '每完成一个步骤，必须在完成的那一刻立即调用一次 operation="check" 勾掉它，然后才继续下一步。' +
-      '不允许攒到任务结束时一次性补勾；不允许只在回复正文里写"已完成"而不调用本工具——' +
-      '没有调用，面板就不会更新，用户看到的进度就是错的。' +
-      '如果你发现自己已经做完了好几步却还没勾，先把它们逐一勾上再继续。\n' +
-      '勾选的前提是该步骤的产出已经真实存在且可验证：不要提前勾选，也不要把失败或跳过的步骤标成完成。' +
-      '开始动手做某一步时先用 operation="start" 把它标记为进行中，让用户知道你在做哪一步。\n' +
-      '一两步就能答完的简单问题不要建计划。计划面板只影响界面显示，不会改动聊天记录。',
+    '为确实需要多步工作的任务维护简短计划；简单问答、翻译或一两步可完成的任务直接处理。' +
+      '先 set 列出按交付物分组的步骤，再执行工作。在有实质进度时用 check 更新完成状态，' +
+      '多个已完成步骤可通过 step_refs 一次更新；start 只在有助于展示长步骤进度时使用。' +
+      '不要为每个细小动作单独更新，不重复读写未变化的计划。只有产出真实存在的步骤才能标记完成，' +
+      '失败或跳过的步骤保持未完成。任务范围未改变时不要重建计划。',
     parameters
   )
 

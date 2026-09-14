@@ -1,3 +1,5 @@
+import { selectToolRound, ToolRoundOptions } from '../utils/ToolRoundPolicy'
+import { TOOL_PROGRESS_STOP } from '../utils/ToolProgressGuard'
 import { getDatabaseService, DatabaseService } from '../services/DatabaseService'
 import {
   getAIApiService,
@@ -68,6 +70,7 @@ import {
   normalizeRetrievalCallLimit,
   UNLIMITED_RETRIEVAL_CALL_LIMIT
 } from '../config/RetrievalCallLimit'
+import { buildToolUsagePrompt, ToolPromptOptions, TASK_EXECUTION_PROMPT, COLLECTED_SUB_AGENT_GUIDANCE } from '../config/AgentPrompts'
 import { COMPACT_TOOL_ID } from '../config/CompactTool'
 import {
   COMPACT_SUMMARY_PROMPT_MARKER,
@@ -79,8 +82,7 @@ import {
   getContextCompactionService
 } from '../services/ContextCompactionService'
 import {
-  ReasoningRequestStrategy,
-  resolveRequiredToolReasoningLevel
+  ReasoningRequestStrategy
 } from '../services/ProviderCompatibilityRegistry'
 import {
   buildContextUsageFromRequestTokens,
@@ -443,7 +445,8 @@ export class ChatViewModel {
 	    const globalPrompt = await this.getRenderedSystemPrompt()
 	    const assistantConfig = await this.getAssistantRuntimeConfig()
 	    const basePrompt = this.assistantService.combineSystemPrompts(globalPrompt, assistantConfig.systemPrompt)
-	    const promptWithRuntimeContext = this.assistantService.combineSystemPrompts(basePrompt, extraPrompt)
+	    const promptWithRuntimeContext = this.assistantService.combineSystemPrompts(
+        this.assistantService.combineSystemPrompts(TASK_EXECUTION_PROMPT, basePrompt), extraPrompt)
       const currentSession = this.sessionStore.getCurrentSession()
       const effectiveGoal = conversationGoal !== undefined
         ? conversationGoal : (currentSession !== null ? currentSession.conversationGoal : '')
@@ -1072,26 +1075,6 @@ export class ChatViewModel {
     return functionName.trim() === COMPACT_TOOL_ID
   }
 
-  private hasCompactTool(tools: ToolDefinition[]): boolean {
-    for (let i = 0; i < tools.length; i++) {
-      if (this.isCompactFunction(tools[i].function.name)) {
-        return true
-      }
-    }
-    return false
-  }
-
-  private getToolsWithoutCompact(tools: ToolDefinition[]): ToolDefinition[] {
-    const remainingTools: ToolDefinition[] = []
-    for (let i = 0; i < tools.length; i++) {
-      if (!this.isCompactFunction(tools[i].function.name)) {
-        remainingTools.push(tools[i])
-      }
-    }
-    return remainingTools
-  }
-
-  // 本轮回答中是否已经完成过一次压缩（每次用户提问最多压缩一次）
   private hasCompletedCompactCall(aiMessage: ChatMessage): boolean {
     for (let i = 0; i < aiMessage.toolCalls.length; i++) {
       if (!this.isCompactFunction(aiMessage.toolCalls[i].functionName)) {
@@ -1704,6 +1687,7 @@ export class ChatViewModel {
   }
 
   private unregisterActiveRequest(requestId: string): void {
+    this.toolExecutionService.endToolRequest(requestId)
     this.activeRequests.delete(requestId)
   }
 
@@ -3109,66 +3093,21 @@ ${limitedSearchContext}
     // 构建请求消息列表
     const requestMessages: RequestMessage[] = []
     const currentTime = this.getCurrentTimeContext()
-    let toolUsageSystemPrompt = `当前时间: ${currentTime}
-
-你是一个智能助手。你的首要任务是直接完成用户请求，只在确实需要访问外部信息或外部系统时才调用工具。
-
-工具使用规则(非常重要):
-- 绝大多数普通问答不需要调用工具，请优先用自身知识直接回答。
-- 只有在用户请求明确依赖外部实时信息、外部文档、外部仓库、外部笔记或其他外部系统状态时才调用工具。
-- 对外部系统有副作用的工具（例如创建、修改、删除、提交、上传）必须先确认用户意图与目标对象，不要擅自操作。
-- 编程、写作、翻译、数学、创意等纯生成任务，若不依赖外部状态，绝对不要调用任何工具。`
-    if (hasWebSearchTool) {
-      const webSearchLimitRule = hasFiniteRetrievalCallLimit(webSearchCallLimit)
-        ? `- 当前设置中，针对同一个用户问题最多调用 web_search ${webSearchCallLimit} 次；达到上限后基于已有信息回答并说明必要的不确定性。`
-        : '- 当前设置不限制 web_search 的固定调用次数；仍须在证据充分、结果重复或已无新信息时立即停止搜索。'
-      toolUsageSystemPrompt += `
-${webSearchLimitRule}
-- 不要把搜索摘要或工具结果原样返回给用户。
-- 生成 web_search.query 时优先保留用户原始关键词，不要擅自改写实体、地点和时间。
-- 如果需要继续搜索，必须主动更换搜索词角度，优先换关键词而不是只增加 page；不要连续提交完全相同或只差空格/标点的 query。
-- 多次搜索同一问题时，每次 query 应尽量覆盖不同信息源或不同角度，例如: 精确短语、官方/作品页、歌词/资料站、作者/制作人、排除百科字典类结果、site: 限定站点。
-- 当工具提示结果为空、重复或已无更多新结果时，下一次 web_search 必须换一组更具体的关键词，或加入 site:/-site:/引号短语等约束来寻找不同来源。
-- 当用户输入只包含一个 URL，或明确要求读取、总结、分析某个网页时，必须调用 web_search。
-- URL 读取场景下，web_search.query 必须原样传入该 URL，不要改写成标题、关键词或搜索语句。`
-    }
-    if (hasAskUserTool) {
-      toolUsageSystemPrompt += `
-- 当用户需求存在关键歧义，且自行假设会导致明显返工时，可以调用 ask_user 一次性向用户提出 1-3 个澄清问题。
-- 不要为了无关紧要的偏好或可以合理默认的细节调用 ask_user；能继续完成时优先继续完成。`
-    }
-    if (hasSubAgentTool) {
-      toolUsageSystemPrompt += `
-子智能体协作协议（必须按阶段执行）:
-1. 派发阶段：只在任务确实能拆成独立并行工作时调用 sub_agent。派发前先确定验收标准，并给主线程保留一项明确交付物（例如补充检索、建立比较框架、核对事实、分析关键部分、设计验收清单或起草答案骨架），把它写入 main_thread_work。如果主线程没有任何可并行完成的工作，就不要使用子智能体。
-2. 子任务提示必须自包含：写清目标、背景、约束、验收标准和期望输出。sub_agent 返回 batchId 与稳定 agentId 后，子智能体在后台运行。
-3. 主线程工作阶段：派发后立即完成你保留的交付物。禁止把 sub_agent_result（包括 wait=false）作为 sub_agent 之后的下一个工具调用；禁止原地轮询。只有已经产出实质性的主线程工作后，才能进入收取阶段。
-4. 收取阶段：只在“主线程能做的工作已经完成，且继续推进确实依赖子智能体回复”时调用 sub_agent_result(wait=true)。wait=true 会阻塞等待，不能用来代替自己的工作。wait=false 仅在状态会决定一项具体后续动作时使用；不得连续调用 wait=false，收到 running 后必须先继续其它工作，不能再次查看进度。
-5. 质量门阶段：每次拿到子智能体回复后，立即逐项检查目标覆盖、事实/证据、约束遵守、内部一致性和输出格式。不要直接把回复当成合格最终结果，也不要先写最终回答再回头检查。
-6. 及时引导：若发现可由原子智能体修正的明确缺口（遗漏、证据不足、方向偏差、矛盾、过于笼统、格式不符或需要复核），下一步应优先调用 sub_agent_message，而不是由主线程默默替它补写或重新创建子智能体。续发消息要指出具体缺口、补充必要信息并给出本轮验收目标；将结果中的 agentId 作为 agent_id，并在 main_thread_work 中写明等待新回复期间主线程要完成的工作。多个独立缺口可在同一次调用中并行发给不同 agentId。
-7. 停止条件：回复通过验收标准，或继续追问不会带来实质增益时，停止引导并综合作答；否则重复“续发 → 主线程继续工作 → 收取 → 质量门”。每个子智能体同一时刻只能处理一条消息，必须先收取上一轮再续发。
-8. 在拿到所有被最终答案依赖的子智能体回复之前，不得给出最终回答。简单任务或强依赖前后顺序的任务不要使用 sub_agent。`
-    }
-    if (hasKnowledgeSearchTool) {
-      const knowledgeSearchLimitRule = hasFiniteRetrievalCallLimit(knowledgeSearchCallLimit)
-        ? `- 当前设置中，本次回答最多调用 knowledge_search ${knowledgeSearchCallLimit} 次；达到上限后基于已有证据回答。`
-        : '- 当前设置不限制 knowledge_search 的固定调用次数；仍须避免重复查询，并在证据充分或已无新信息时立即停止。'
-      toolUsageSystemPrompt += `
-- 用户已开启知识库。回答前优先根据当前问题调用 knowledge_search 检索知识库，并优先依据相关检索结果作答。这条要求优先于“普通问答通常无需工具”的默认建议；用户明确要求不检索时尊重其要求。
-- 知识库没有相关结果或证据不足时，明确说明，再按需使用通用知识或其他可用工具补充；不要把外部信息说成知识库检索结果。
-- query 应独立、具体。结果足够时停止；仅对影响答案的证据缺口进行更聚焦的续查，引用实际命中的文件与位置。`)
-${knowledgeSearchLimitRule}`
-    }
+    const promptOptions = new ToolPromptOptions()
+    promptOptions.currentTime = currentTime
+    promptOptions.webSearch = hasWebSearchTool
+    promptOptions.askUser = hasAskUserTool
+    promptOptions.subAgent = hasSubAgentTool
+    promptOptions.knowledgeSearch = hasKnowledgeSearchTool
+    promptOptions.webSearchCallLimit = webSearchCallLimit
+    promptOptions.knowledgeSearchCallLimit = knowledgeSearchCallLimit
+    let toolUsageSystemPrompt = buildToolUsagePrompt(promptOptions)
     if (hasSkillTool) {
       const skillContext = await this.buildEnabledSkillSystemContext()
       if (skillContext !== '') {
         toolUsageSystemPrompt += skillContext
       }
     }
-    toolUsageSystemPrompt += `
-- 若用户提到“今天/昨天/明天/现在/最新”等相对时间，请以当前时间为基准理解，不要编造不一致的绝对日期。
-- 工具返回后必须给出最终回答，不要在没有必要的情况下重复调用工具。`
-
     const apiConfig: AIApiConfig = {
       providerId: providerId,
       providerType: providerType,
@@ -3291,6 +3230,8 @@ ${knowledgeSearchLimitRule}`
       localReasoningThrottle.reset()
     })
 
+    this.toolExecutionService.beginToolTurn(requestId)
+
     // 注册本次请求的压缩运行时：compact 执行器据此计算锚点。
     // 传入的是已持久化的活跃路径（含本轮用户消息），锚点必须是真实存在的消息 ID。
     const compactionSourceMessages: ChatMessage[] = [...historySource]
@@ -3412,6 +3353,8 @@ ${knowledgeSearchLimitRule}`
         onAIMessageUpdated(aiMessage)
         return subToolResult
       },
+      (actorId: string): void => this.toolExecutionService.beginToolTurn(requestId, actorId),
+      (actorId: string): boolean => this.toolExecutionService.shouldStopToolLoop(requestId, actorId),
       // 镜像子智能体的工具调用到主对话消息：ask_user 结果栏、图表由此渲染并可交互，
       // 普通工具卡片会按“子智能体”来源标签在 MessageBubble 中隐藏（活动见实时预览面板）；
       // 配对与图表提取均按 toolCallId 关联
@@ -3777,53 +3720,6 @@ ${preview}`
     return functionName.trim() === KNOWLEDGE_SEARCH_TOOL_ID
   }
 
-  private hasCanonicalKnowledgeSearchCall(toolCalls: ToolCall[]): boolean {
-    for (let i = 0; i < toolCalls.length; i++) {
-      if (this.isKnowledgeSearchFunction(toolCalls[i].functionName)) {
-        return true
-      }
-    }
-    return false
-  }
-
-  private hasKnowledgeSearchTool(tools: ToolDefinition[]): boolean {
-    for (let i = 0; i < tools.length; i++) {
-      if (this.isKnowledgeSearchFunction(tools[i].function.name)) {
-        return true
-      }
-    }
-    return false
-  }
-
-  private getOnlyKnowledgeSearchTools(tools: ToolDefinition[]): ToolDefinition[] {
-    const knowledgeTools: ToolDefinition[] = []
-    for (let i = 0; i < tools.length; i++) {
-      if (this.isKnowledgeSearchFunction(tools[i].function.name)) {
-        knowledgeTools.push(tools[i])
-      }
-    }
-    return knowledgeTools
-  }
-
-  private getToolsWithoutKnowledgeSearch(tools: ToolDefinition[]): ToolDefinition[] {
-    const remainingTools: ToolDefinition[] = []
-    for (let i = 0; i < tools.length; i++) {
-      if (!this.isKnowledgeSearchFunction(tools[i].function.name)) {
-        remainingTools.push(tools[i])
-      }
-    }
-    return remainingTools
-  }
-
-  private getToolsWithoutWebSearch(tools: ToolDefinition[]): ToolDefinition[] {
-    const remainingTools: ToolDefinition[] = []
-    for (let i = 0; i < tools.length; i++) {
-      if (!this.isWebSearchFunction(tools[i].function.name)) {
-        remainingTools.push(tools[i])
-      }
-    }
-    return remainingTools
-  }
 
   /**
    * knowledge_search 的完整片段只用于当前工具续轮。
@@ -4071,7 +3967,6 @@ ${preview}`
     usageTracker: RequestTokenUsageTracker,
     automaticCompactionState: AutomaticCompactionState,
     compactionSourceMessages: ChatMessage[],
-    retryRequiredKnowledgeWithoutReasoning: boolean = false,
     retriedWithoutNativeToolInputs: boolean = false
   ): Promise<void> {
     if (isCancelledFn()) {
@@ -4086,6 +3981,9 @@ ${preview}`
     )
     if (isCancelledFn()) {
       return
+    }
+    if (steeringAtRequestBoundary.length > 0) {
+      this.toolExecutionService.beginToolTurn(requestId)
     }
     for (let i = 0; i < steeringAtRequestBoundary.length; i++) {
       requestMessages.push(steeringAtRequestBoundary[i])
@@ -4147,62 +4045,26 @@ ${preview}`
       }
     }
 
-    const completedWebSearchCount = this.countCompletedWebSearchCalls(aiMessage)
-    const completedKnowledgeQueryCount = this.countCompletedKnowledgeSearchCalls(aiMessage)
-    const requestHasKnowledgeSearch = this.hasKnowledgeSearchTool(tools)
-    const forceKnowledgeSearchInThisRound =
-      requestHasKnowledgeSearch && completedKnowledgeQueryCount === 0
-    // required tool_choice 与 Thinking 的兼容性按供应商协议决定。已知冲突的 DashScope
-    // 首轮关闭推理；其余模型保留用户选择，以兼容只能在推理模式下工作的模型。
-    // DeepSeek 思考模式由请求层省略不兼容的 tool_choice，仍保留知识库调用校验。
-    // 若首次未产生知识库调用，受控重试时才临时关闭一次推理。
-    const reasoningLevelForThisRound = forceKnowledgeSearchInThisRound
-      ? resolveRequiredToolReasoningLevel(
-        {
-          providerId: apiConfig.providerId,
-          baseUrl: apiConfig.baseUrl,
-          apiStyle: apiConfig.apiStyle
-        },
-        modelId,
-        reasoningLevel,
-        apiConfig.modelReasoningStrategyOverride,
-        retryRequiredKnowledgeWithoutReasoning
-      )
-      : reasoningLevel
-    let toolsForThisRound: ToolDefinition[] = []
-    let toolChoiceForThisRound = 'none'
-    if (forceKnowledgeSearchInThisRound) {
-      toolsForThisRound = this.getOnlyKnowledgeSearchTools(tools)
-      toolChoiceForThisRound = 'required'
-    } else if (requestHasKnowledgeSearch && hasFiniteRetrievalCallLimit(knowledgeSearchCallLimit) &&
-      completedKnowledgeQueryCount >= knowledgeSearchCallLimit) {
-      toolsForThisRound = this.getToolsWithoutKnowledgeSearch(tools)
-      toolChoiceForThisRound = toolsForThisRound.length > 0 ? 'auto' : 'none'
-    } else {
-      toolsForThisRound = tools
-      toolChoiceForThisRound = toolsForThisRound.length > 0 ? 'auto' : 'none'
+    const roundOptions = new ToolRoundOptions()
+    roundOptions.webSearchCount = this.countCompletedWebSearchCalls(aiMessage)
+    roundOptions.knowledgeSearchCount = this.countCompletedKnowledgeSearchCalls(aiMessage)
+    roundOptions.webSearchLimit = webSearchCallLimit
+    roundOptions.knowledgeSearchLimit = knowledgeSearchCallLimit
+    roundOptions.compactCompleted = automaticCompactionState.applied || this.hasCompletedCompactCall(aiMessage)
+    roundOptions.stopForNoProgress = this.toolExecutionService.shouldStopToolLoop(requestId)
+    const roundSelection = selectToolRound(tools, roundOptions)
+    const toolsForThisRound = roundSelection.tools
+    const toolChoiceForThisRound = roundSelection.toolChoice
+    // 停止通知反映当前状态；新的用户引导重置计数后，不保留过期的系统指令。
+    for (let i = requestMessages.length - 1; i >= 0; i--) {
+      if (requestMessages[i].role === 'system' && requestMessages[i].content === TOOL_PROGRESS_STOP) {
+        requestMessages.splice(i, 1)
+      }
     }
-    if (hasFiniteRetrievalCallLimit(webSearchCallLimit) &&
-      completedWebSearchCount >= webSearchCallLimit) {
-      toolsForThisRound = this.getToolsWithoutWebSearch(toolsForThisRound)
-      toolChoiceForThisRound = toolsForThisRound.length > 0 ? toolChoiceForThisRound : 'none'
-    }
-    // 每次用户提问最多压缩一次：已压缩成功后从后续回合移除 compact，避免反复压缩摘要
-    if (this.hasCompactTool(toolsForThisRound) &&
-      (automaticCompactionState.applied || this.hasCompletedCompactCall(aiMessage))) {
-      toolsForThisRound = this.getToolsWithoutCompact(toolsForThisRound)
-      toolChoiceForThisRound = toolsForThisRound.length > 0 ? toolChoiceForThisRound : 'none'
+    if (roundOptions.stopForNoProgress) {
+      requestMessages.push(new RequestMessage('system', TOOL_PROGRESS_STOP))
     }
     const toolsEnabledInThisRound = toolsForThisRound.length > 0
-    const requestMessagesForRound = forceKnowledgeSearchInThisRound && retryRequiredKnowledgeWithoutReasoning
-      ? requestMessages.concat([new RequestMessage(
-        'system',
-        '重试指令：上一次输出没有包含必需的 knowledge_search function call。' +
-          '这一轮不要输出任何最终回答或解释；必须立即调用当前唯一提供的 knowledge_search，' +
-          '并传入符合 schema 的 JSON arguments。'
-      )])
-      : requestMessages
-
     console.info('ChatViewModel', `Tool call loop iteration ${iteration + 1}`)
     let roundContentBuffer = ''
     let roundReasoningBuffer = ''
@@ -4402,9 +4264,9 @@ ${preview}`
 
     const estimatedRoundInput = this.aiApiService.estimateRequestInputTokens(
       apiConfig,
-      requestMessagesForRound,
+      requestMessages,
       modelId,
-      reasoningLevelForThisRound,
+      reasoningLevel,
       toolsEnabledInThisRound ? toolsForThisRound : undefined,
       true
     )
@@ -4551,8 +4413,7 @@ ${preview}`
           localReasoningThrottle,
           usageTracker,
           automaticCompactionState,
-          compactionSourceMessages,
-          retryRequiredKnowledgeWithoutReasoning
+          compactionSourceMessages
         )
       }
       resumeAfterCompaction().catch((error: Object): void => {
@@ -4577,7 +4438,7 @@ ${preview}`
     // 发送流式请求（带工具）
     const httpRequest = this.aiApiService.streamChatRequestWithTools(
       apiConfig,
-      requestMessagesForRound,
+      requestMessages,
       modelId,
       (contentChunk: string) => {
         if (isRoundInactive()) {
@@ -4640,67 +4501,6 @@ ${preview}`
         )
         usageTracker.applyToMessage(aiMessage)
         onAIMessageUpdated(aiMessage)
-
-        if (forceKnowledgeSearchInThisRound && !this.hasCanonicalKnowledgeSearchCall(toolCalls)) {
-          rollbackStreamedRoundOutput()
-          discardCurrentRoundResponseSegments()
-          roundContentBuffer = ''
-          roundReasoningBuffer = ''
-          if (!retryRequiredKnowledgeWithoutReasoning) {
-            console.warn('ChatViewModel',
-              'Required knowledge_search was not called; retrying once without reasoning and with explicit instruction')
-            aiMessage.content = ''
-            aiMessage.reasoningContent = ''
-            onAIMessageUpdated(aiMessage)
-            await this.executeToolCallLoop(
-              apiConfig,
-              requestMessages,
-              modelId,
-              aiMessage,
-              onAIMessageUpdated,
-              onComplete,
-              onError,
-	            tools,
-	            toolCallbacks,
-	            reasoningLevel,
-	            requestTemperature,
-	            iteration + 1,
-              webSearchCallLimit,
-              knowledgeSearchCallLimit,
-              snapshotSessionId,
-              snapshotSession,
-              shouldAutoGenerateTitle,
-              requestId,
-              isCancelledFn,
-              isUserCancelledFn,
-              isToolCancelledFn,
-              setUserCancelled,
-              getHasReceivedFirstChunk,
-              setHasReceivedFirstChunk,
-              localFirstChunkThrottle,
-              localContentThrottle,
-              localReasoningThrottle,
-              usageTracker,
-              automaticCompactionState,
-              compactionSourceMessages,
-              true
-            )
-            return
-          }
-          const requiredToolError =
-            '当前模型未按要求调用知识库。请重试，或切换到完整支持 OpenAI 工具调用的模型。'
-          aiMessage.content = requiredToolError
-          aiMessage.isGenerating = false
-          aiMessage.isSearching = false
-          onAIMessageUpdated(aiMessage)
-          this.clearPendingAIMessageIfMatches(aiMessage.id)
-          this.unregisterActiveRequest(requestId)
-          getContextCompactionService().endRequest(requestId)
-          getSubAgentService().clearRuntime()
-          this.toolExecutionService.clearCancelCheckCallback()
-          onError(requiredToolError)
-          return
-        }
 
         // 检查是否有工具调用
         if (toolCalls.length > 0 && toolsEnabledInThisRound) {
@@ -4962,12 +4762,7 @@ ${preview}`
             requestMessages.push(new RequestMessage(
               'system',
               '你派出的子智能体当前轮回复已收取，结果如下(JSON):\n' + collectedJson +
-                '\n\n现在必须先执行质量门，逐项检查：目标覆盖、事实/证据、约束遵守、内部一致性、' +
-                '输出格式。不要先写最终回答。若存在可由原子智能体修正的实质缺口，下一项协调动作应是' +
-                '按 agentId 调用 sub_agent_message，明确指出缺口和验收目标；然后继续主线程可做的工作，' +
-                '并在 main_thread_work 写明等待期间的具体交付物，再用 sub_agent_result 收取新 batch。' +
-                '只有通过质量门或继续追问无实质收益时才综合作答。' +
-                '不要再次收取上面已经收取的 batch。'
+                '\n\n' + COLLECTED_SUB_AGENT_GUIDANCE
             ))
             await this.executeToolCallLoop(
               apiConfig,
@@ -5017,6 +4812,9 @@ ${preview}`
             )
             if (isCancelledFn()) {
               return
+            }
+            if (steeringMessages.length > 0) {
+              this.toolExecutionService.beginToolTurn(requestId)
             }
             for (let i = 0; i < steeringMessages.length; i++) {
               requestMessages.push(steeringMessages[i])
@@ -5151,7 +4949,6 @@ ${preview}`
               usageTracker,
               automaticCompactionState,
               compactionSourceMessages,
-              retryRequiredKnowledgeWithoutReasoning,
               true
             ).catch((retryError: Object): void => {
               console.error('ChatViewModel',
@@ -5206,7 +5003,7 @@ ${preview}`
           console.error('ChatViewModel', `Failed to save AI generated image: ${JSON.stringify(error)}`)
         }
       },
-      reasoningLevelForThisRound,
+      reasoningLevel,
       toolsEnabledInThisRound ? toolsForThisRound : undefined,
       toolChoiceForThisRound,
       (toolCallDeltas: ToolCallDelta[]) => {

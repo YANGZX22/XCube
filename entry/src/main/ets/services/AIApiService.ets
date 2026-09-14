@@ -3131,6 +3131,7 @@ export class AIApiService {
       case ReasoningLevel.XHIGH:
         return 'max'
       case ReasoningLevel.LOW:
+        return 'low'
       case ReasoningLevel.MEDIUM:
       case ReasoningLevel.HIGH:
       default:

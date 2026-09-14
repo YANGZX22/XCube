@@ -813,6 +813,10 @@
       "value": "Off"
     },
     {
+      "name": "reasoning_level_provider_default",
+      "value": "Default"
+    },
+    {
       "name": "reasoning_level_auto",
       "value": "Auto"
     },

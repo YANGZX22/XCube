@@ -813,6 +813,10 @@
       "value": "关闭"
     },
     {
+      "name": "reasoning_level_provider_default",
+      "value": "默认"
+    },
+    {
       "name": "reasoning_level_auto",
       "value": "自动"
     },

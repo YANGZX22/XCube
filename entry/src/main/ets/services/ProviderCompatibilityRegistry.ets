@@ -25,7 +25,7 @@ export enum ReasoningControlMode {
   NONE = 'none',
   TOGGLE = 'toggle',
   EFFORT = 'effort',
-  HIGH_MAX = 'high_max'
+  LOW_HIGH_MAX = 'low_high_max'
 }
 
 export enum ReasoningRequestStrategy {
@@ -344,7 +344,7 @@ export function resolveProviderCompatibilityProfile(info: CompatibilityProviderI
       anthropicBearerRetryOnAuthFailure: false,
       openAIStreamContentMode: OpenAIStreamContentMode.INCREMENTAL,
       preserveAssistantReasoningDetails: false,
-      reasoningControlMode: ReasoningControlMode.HIGH_MAX,
+      reasoningControlMode: ReasoningControlMode.LOW_HIGH_MAX,
       defaultReasoningRequestStrategy: ReasoningRequestStrategy.DEEPSEEK_THINKING
     }
   }
@@ -564,7 +564,7 @@ function getReasoningControlModeForStrategy(strategy: ReasoningRequestStrategy):
     case ReasoningRequestStrategy.SILICONFLOW_THINKING:
       return ReasoningControlMode.EFFORT
     case ReasoningRequestStrategy.DEEPSEEK_THINKING:
-      return ReasoningControlMode.HIGH_MAX
+      return ReasoningControlMode.LOW_HIGH_MAX
     case ReasoningRequestStrategy.OPENAI_REASONING_SPLIT:
     case ReasoningRequestStrategy.MIMO_THINKING:
     case ReasoningRequestStrategy.ZHIPU_THINKING:
@@ -650,10 +650,10 @@ export function supportsReasoningXhighControl(
   rawOverride?: string
 ): boolean {
   const controlMode = resolveReasoningControlMode(info, modelId, modelSupportsReasoning, rawOverride)
-  if (controlMode !== ReasoningControlMode.EFFORT && controlMode !== ReasoningControlMode.HIGH_MAX) {
+  if (controlMode !== ReasoningControlMode.EFFORT && controlMode !== ReasoningControlMode.LOW_HIGH_MAX) {
     return false
   }
-  if (controlMode === ReasoningControlMode.HIGH_MAX) {
+  if (controlMode === ReasoningControlMode.LOW_HIGH_MAX) {
     return true
   }
   const strategy = resolveReasoningRequestStrategyWithOverride(info, modelId, rawOverride)
@@ -679,12 +679,12 @@ export function normalizeReasoningLevelForControl(
   if (controlMode === ReasoningControlMode.TOGGLE) {
     return ReasoningLevel.AUTO
   }
-  if (controlMode === ReasoningControlMode.HIGH_MAX) {
+  if (controlMode === ReasoningControlMode.LOW_HIGH_MAX) {
     switch (level) {
       case ReasoningLevel.AUTO:
+      case ReasoningLevel.LOW:
       case ReasoningLevel.XHIGH:
         return level
-      case ReasoningLevel.LOW:
       case ReasoningLevel.MEDIUM:
       case ReasoningLevel.HIGH:
       default:

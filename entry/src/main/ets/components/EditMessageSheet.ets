@@ -167,7 +167,8 @@ export struct EditMessageSheet {
   private getReasoningLevelText(level: ReasoningLevel): Resource {
     switch (level) {
       case ReasoningLevel.AUTO:
-        return $r('app.string.reasoning_level_auto')
+        return this.reasoningControlMode === ReasoningControlMode.LOW_HIGH_MAX
+          ? $r('app.string.reasoning_level_provider_default') : $r('app.string.reasoning_level_auto')
       case ReasoningLevel.LOW:
         return $r('app.string.reasoning_level_low')
       case ReasoningLevel.MEDIUM:
@@ -193,7 +194,8 @@ export struct EditMessageSheet {
         if (this.reasoningXhighAvailable) {
           this.ReasoningMenuItem(ReasoningLevel.XHIGH)
         }
-      } else if (this.reasoningControlMode === ReasoningControlMode.HIGH_MAX) {
+      } else if (this.reasoningControlMode === ReasoningControlMode.LOW_HIGH_MAX) {
+        this.ReasoningMenuItem(ReasoningLevel.LOW)
         this.ReasoningMenuItem(ReasoningLevel.HIGH)
         if (this.reasoningXhighAvailable) {
           this.ReasoningMenuItem(ReasoningLevel.XHIGH)

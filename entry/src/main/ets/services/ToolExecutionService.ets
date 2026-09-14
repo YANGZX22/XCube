@@ -3,6 +3,7 @@ import { ASK_USER_TOOL_ID } from '../config/BuiltinTools'
 import { getToolRegistry, RegisteredTool, ToolExecutionContext, ToolRegistry } from './ToolRegistry'
 import { parseAskUserQuestions } from '../utils/AskUserQuestionUtils'
 import { resolveLegacyToolId } from '../utils/ToolIdAliases'
+import { ToolProgressGuard, TOOL_PROGRESS_STOP } from '../utils/ToolProgressGuard'
 
 interface ToolExecutionErrorLike {
   code?: number | string
@@ -122,6 +123,7 @@ export class ToolExecutionService {
   private pendingAskUserAnswers: Map<string, PendingAskUserRuntime> = new Map()
   private pendingAskUserChangedCallback: PendingAskUserChangedCallback | null = null
   private webSearchQueryCounts: Map<string, number> = new Map()
+  private progressGuard: ToolProgressGuard = new ToolProgressGuard()
   // 全局工具互斥链：sub_agent 改为异步派发后，主智能体与后台子智能体会同时执行工具，
   // 必须共用同一把锁来维持应用内“同一时刻只执行一个工具”的约定
   // （避免审批弹窗并发弹出、Pyodide WebView 并发执行等问题）
@@ -503,6 +505,46 @@ export class ToolExecutionService {
   // 执行单个工具调用
   async executeToolCall(toolCall: ToolCall, allowedFunctionNames: string[],
     context: ToolExecutionContext = new ToolExecutionContext()): Promise<ToolResult> {
+    if (this.shouldStopToolLoop(context.requestId, context.actorId)) {
+      return new ToolResult(toolCall.id, JSON.stringify({ error: 'tool_no_progress', message: TOOL_PROGRESS_STOP }),
+        true, toolCall.displayName, toolCall.sourceLabel)
+    }
+    // 保留模型传入的参数，分页等执行层补全不应把原样重试伪装成不同调用。
+    const requestedArguments = toolCall.arguments
+    const result = await this.executeToolCallOnce(toolCall, allowedFunctionNames, context)
+    const notice = this.progressGuard.observe(context.requestId, context.actorId,
+      this.normalizeFunctionName(toolCall.functionName), requestedArguments, result.content)
+    if (notice !== '') {
+      result.content = this.appendExecutionNotice(result.content, notice)
+    }
+    return result
+  }
+
+  beginToolTurn(requestId: string, actorId: string = 'main'): void {
+    this.progressGuard.beginTurn(requestId, actorId)
+  }
+
+  endToolRequest(requestId: string): void {
+    this.progressGuard.endRequest(requestId)
+  }
+
+  shouldStopToolLoop(requestId: string, actorId: string = 'main'): boolean {
+    return this.progressGuard.shouldStop(requestId, actorId)
+  }
+
+  private appendExecutionNotice(content: string, notice: string): string {
+    try {
+      const data = JSON.parse(content) as Record<string, Object>
+      if (data !== null && typeof data === 'object' && !Array.isArray(data)) {
+        data['applicationExecutionNotice'] = notice
+        return JSON.stringify(data)
+      }
+    } catch (_error) {}
+    return `${content}\n\n[应用执行提醒]\n${notice}`
+  }
+
+  private async executeToolCallOnce(toolCall: ToolCall, allowedFunctionNames: string[],
+    context: ToolExecutionContext): Promise<ToolResult> {
     console.info('ToolExecutionService', `Executing tool call: ${toolCall.functionName} (${toolCall.id})`)
 
     // 检查是否已取消

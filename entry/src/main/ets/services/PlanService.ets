@@ -138,6 +138,39 @@ export function resolvePlanStepIndex(steps: PlanStep[], reference: string): numb
   return contains.length === 1 ? contains[0] : -1
 }
 
+// 一批更新先完整定位，再一次提交；错误引用不会留下部分勾选。
+export function applyPlanStepStatusUpdate(current: PlanState, references: string[], status: string,
+  updatedBy: string = 'assistant', updatedAt: number = Date.now()): PlanMutationResult {
+  if (references.length === 0 || references.length > PLAN_MAX_STEPS || current.steps.length === 0) {
+    return new PlanMutationResult(false, '请提供当前计划中要更新的步骤', current)
+  }
+  const indexes: number[] = []
+  for (let i = 0; i < references.length; i++) {
+    const index = resolvePlanStepIndex(current.steps, references[i])
+    if (index < 0) {
+      return new PlanMutationResult(false,
+        `未能唯一定位步骤 "${references[i]}"，请改用步骤序号（1-${current.steps.length}）；未修改计划`, current)
+    }
+    if (!indexes.includes(index)) {
+      indexes.push(index)
+    }
+  }
+  const normalizedStatus = normalizePlanStepStatus(status)
+  let changed = false
+  const steps: PlanStep[] = []
+  for (let i = 0; i < current.steps.length; i++) {
+    const step = current.steps[i]
+    const nextStatus = indexes.includes(i) ? normalizedStatus : step.status
+    changed = changed || nextStatus !== step.status
+    steps.push(new PlanStep(step.id, step.title, nextStatus, step.note))
+  }
+  if (!changed) {
+    return new PlanMutationResult(true, '步骤已处于该状态，无需重复更新', current)
+  }
+  const next = new PlanState(current.title, steps, updatedAt, updatedBy, current.revision + 1, true)
+  return new PlanMutationResult(true, `已更新 ${indexes.length} 个步骤`, next)
+}
+
 function collectMatches(steps: PlanStep[], predicate: (title: string) => boolean): number[] {
   const matched: number[] = []
   for (let i = 0; i < steps.length; i++) {
@@ -262,26 +295,18 @@ export class PlanService {
     updatedBy: string = 'assistant',
     planId: string = ''
   ): Promise<PlanMutationResult> {
+    return await this.updateStepsStatus([reference], status, updatedBy, planId)
+  }
+
+  async updateStepsStatus(references: string[], status: string, updatedBy: string = 'assistant',
+    planId: string = ''): Promise<PlanMutationResult> {
     const resolvedPlanId = this.resolvePlanId(planId)
     const current = await this.loadPlan(resolvedPlanId)
-    if (current.steps.length === 0) {
-      return new PlanMutationResult(false, '当前没有计划步骤，请先用 operation="set" 写入计划', current)
+    const result = applyPlanStepStatusUpdate(current, references, status, updatedBy)
+    if (result.ok && result.plan !== current) {
+      await this.persist(result.plan, resolvedPlanId)
     }
-    const index = resolvePlanStepIndex(current.steps, reference)
-    if (index < 0) {
-      return new PlanMutationResult(false,
-        `未能唯一定位步骤 "${reference}"，请改用步骤序号（1-${current.steps.length}）`, current)
-    }
-    const nextSteps: PlanStep[] = []
-    for (let i = 0; i < current.steps.length; i++) {
-      const step = current.steps[i]
-      nextSteps.push(i === index
-        ? new PlanStep(step.id, step.title, normalizePlanStepStatus(status), step.note)
-        : new PlanStep(step.id, step.title, step.status, step.note))
-    }
-    const next = new PlanState(current.title, nextSteps, Date.now(), updatedBy, current.revision + 1, true)
-    await this.persist(next, resolvedPlanId)
-    return new PlanMutationResult(true, `已更新步骤 ${index + 1}：${nextSteps[index].title}`, next)
+    return result
   }
 
   async clearPlan(updatedBy: string = 'assistant', planId: string = ''): Promise<PlanState> {

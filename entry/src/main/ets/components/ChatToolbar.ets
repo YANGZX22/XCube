@@ -590,8 +590,8 @@ export struct ChatToolbar {
     return this.reasoningControlMode === ReasoningControlMode.EFFORT
   }
 
-  private supportsHighMaxLevels(): boolean {
-    return this.reasoningControlMode === ReasoningControlMode.HIGH_MAX
+  private supportsLowHighMaxLevels(): boolean {
+    return this.reasoningControlMode === ReasoningControlMode.LOW_HIGH_MAX
   }
 
   // 按当前控制模式返回有序的可选推理级别（用于滑块分档）
@@ -604,7 +604,8 @@ export struct ChatToolbar {
       if (this.reasoningXhighAvailable) {
         options.push(ReasoningLevel.XHIGH)
       }
-    } else if (this.supportsHighMaxLevels()) {
+    } else if (this.supportsLowHighMaxLevels()) {
+      options.push(ReasoningLevel.LOW)
       options.push(ReasoningLevel.HIGH)
       if (this.reasoningXhighAvailable) {
         options.push(ReasoningLevel.XHIGH)
@@ -628,7 +629,8 @@ export struct ChatToolbar {
   private getReasoningLevelText(level: ReasoningLevel): ResourceStr {
     switch (level) {
       case ReasoningLevel.AUTO:
-        return $r('app.string.reasoning_level_auto')
+        return this.reasoningControlMode === ReasoningControlMode.LOW_HIGH_MAX
+          ? $r('app.string.reasoning_level_provider_default') : $r('app.string.reasoning_level_auto')
       case ReasoningLevel.LOW:
         return $r('app.string.reasoning_level_low')
       case ReasoningLevel.MEDIUM:

@@ -22,6 +22,8 @@ import mapToolTest from './MapTool.test';
 import savedPlacesServiceTest from './SavedPlacesService.test';
 import slashCommandUtilsTest from './SlashCommandUtils.test';
 import planServiceTest from './PlanService.test';
+import toolProgressGuardTest from './ToolProgressGuard.test';
+import toolRoundPolicyTest from './ToolRoundPolicy.test';
 import pythonSandboxRuntimeTest from './PythonSandboxRuntime.test';
 import attachmentCleanupTest from './AttachmentCleanup.test';
 import chatInFlightMessageTest from './ChatInFlightMessage.test';
@@ -59,6 +61,8 @@ export default function testsuite() {
   savedPlacesServiceTest();
   slashCommandUtilsTest();
   planServiceTest();
+  toolProgressGuardTest();
+  toolRoundPolicyTest();
   pythonSandboxRuntimeTest();
   attachmentCleanupTest();
   chatInFlightMessageTest();
