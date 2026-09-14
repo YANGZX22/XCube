@@ -36,6 +36,13 @@ import {
   getWorkspaceFileName,
   WorkspaceExplorerRow
 } from '../utils/WorkspaceExplorerTree'
+import {
+  WORKSPACE_FILE_KIND_SHEET,
+  classifyWorkspaceFile,
+  hasWorkspaceFileImageIcon,
+  resolveWorkspaceFileIconColor,
+  resolveWorkspaceFileSymbol
+} from '../utils/WorkspaceFileIconUtils'
 
 export interface PythonWorkspacePageParams {
   sessionId?: string
@@ -550,20 +557,7 @@ struct PythonWorkspacePageContent {
   }
 
   private getFileAccentColor(path: string): string {
-    const extension = getWorkspaceFileExtension(path)
-    if (extension === 'py') {
-      return '#3776AB'
-    }
-    if (extension === 'md' || extension === 'markdown' || extension === 'txt') {
-      return '#8057C8'
-    }
-    if (extension === 'json' || extension === 'yaml' || extension === 'yml' || extension === 'toml') {
-      return '#C07A20'
-    }
-    if (extension === 'csv' || extension === 'tsv') {
-      return '#2E8B57'
-    }
-    return this.themePrimary
+    return resolveWorkspaceFileIconColor(path, this.isDarkMode, this.themePrimary)
   }
 
   // 行号槽宽度跟着最大行号走，位数变了也不会挤到代码
@@ -586,6 +580,26 @@ struct PythonWorkspacePageContent {
 
   private isRowSelected(row: WorkspaceExplorerRow): boolean {
     return !row.isDirectory && this.selectedPath === row.path
+  }
+
+  // 文件类型图标：docx/xlsx 走位图，其余用按类别选出的系统字形，统一按类别上色。
+  @Builder
+  private FileTypeIcon(path: string, size: number) {
+    if (hasWorkspaceFileImageIcon(path)) {
+      Image(classifyWorkspaceFile(path) === WORKSPACE_FILE_KIND_SHEET
+        ? $r('app.media.doc_xlsx')
+        : $r('app.media.doc_docx'))
+        .width(size)
+        .height(size)
+        .fillColor(this.getFileAccentColor(path))
+        .flexShrink(0)
+        .draggable(false)
+    } else {
+      SymbolGlyph(resolveWorkspaceFileSymbol(path))
+        .fontSize(size)
+        .fontColor([this.getFileAccentColor(path)])
+        .flexShrink(0)
+    }
   }
 
   @Builder
@@ -837,9 +851,7 @@ struct PythonWorkspacePageContent {
         // 文件行左侧留出与目录箭头等宽的位置，同级的名字才对得齐
         Row().width(11)
 
-        SymbolGlyph($r('sys.symbol.doc_text'))
-          .fontSize(14)
-          .fontColor([this.getFileAccentColor(row.path)])
+        this.FileTypeIcon(row.path, 14)
       }
 
       Column({ space: 1 }) {
@@ -1020,6 +1032,8 @@ struct PythonWorkspacePageContent {
             this.closeFile()
           })
         }
+
+        this.FileTypeIcon(this.selectedPath, 17)
 
         Column({ space: 2 }) {
           Text(getWorkspaceFileName(this.selectedPath))
