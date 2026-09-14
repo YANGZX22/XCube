@@ -14,7 +14,7 @@ import {
   MIN_COMPACT_SUMMARY_LENGTH,
   getContextCompactionService
 } from '../services/ContextCompactionService'
-import { ToolExecutor } from '../services/ToolRegistry'
+import { ToolExecutionContext, ToolExecutor } from '../services/ToolRegistry'
 
 export const COMPACT_TOOL_ID: string = 'compact'
 
@@ -54,8 +54,10 @@ class CompactErrorOutput {
 }
 
 export class CompactExecutor implements ToolExecutor {
-  async execute(args: string): Promise<string> {
-    const result = getContextCompactionService().applyCompaction(args)
+  // 必须把 requestId 透传下去：并行会话各自压缩自己的上下文，不能共用一个全局运行时
+  async execute(args: string, context?: ToolExecutionContext): Promise<string> {
+    const requestId = context !== undefined ? context.requestId : ''
+    const result = getContextCompactionService().applyCompaction(args, requestId)
     if (!result.applied) {
       return JSON.stringify(new CompactErrorOutput(result.status, result.message))
     }

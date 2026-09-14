@@ -249,6 +249,15 @@ interface ImageDownloadResult {
 }
 
 // 应用压缩摘要后，本次请求实际需要逐条发送的历史起点与摘要提示
+// 压缩摘要请求的用量回流：摘要是一次真实的模型调用，要计进触发它的那一轮账单
+type CompactionSummaryUsageSink = (
+  inputTokens: number,
+  outputTokens: number,
+  exact: boolean,
+  cacheReadTokens: number,
+  cacheWriteTokens: number
+) => void
+
 class CompactedHistoryPlan {
   startIndex: number = 0
   summaryPrompt: string = ''
@@ -941,6 +950,13 @@ export class ChatViewModel {
         const matchedToolCalls: ToolCall[] = []
         const matchedToolResults: ToolResult[] = []
         for (let j = 0; j < msg.toolCalls.length; j++) {
+          // 子智能体的工具调用只是镜像到主气泡里供实时预览、交互卡片和持久化使用，
+          // 不属于主对话的上下文：子智能体的产出通过 sub_agent_result 的工具结果回到
+          // 主模型。把它们回放进请求历史，等于每一轮都把子智能体的全部工具往返重新
+          // 发一遍——上下文进度条被顶高，主模型也要重复为这些内容付费。
+          if (msg.toolCalls[j].sourceLabel.startsWith(SUB_AGENT_SOURCE_LABEL_PREFIX)) {
+            continue
+          }
           for (let k = 0; k < msg.toolResults.length; k++) {
             if (msg.toolResults[k].toolCallId === msg.toolCalls[j].id) {
               matchedToolCalls.push(msg.toolCalls[j])
@@ -1183,8 +1199,10 @@ export class ChatViewModel {
     if (systemPrompt !== '') {
       requestMessages.push(new RequestMessage('system', systemPrompt))
     }
+    // 必须与真正发送时的判定完全一致（sendMessageWithTools 同款），
+    // 否则进度条算的历史结构和实际请求不是同一份，用量会忽高忽低
     const preserveToolProtocol = provider.apiStyle === ApiStyle.OPENAI &&
-      (tools.length > 0 || provider.openaiTransport !== OpenAITransport.RESPONSES)
+      this.getOpenAITransportForProvider(provider.id) !== OpenAITransport.RESPONSES
     const history = this.buildConversationRequestHistory(messages, 0, preserveToolProtocol)
     for (let i = 0; i < history.length; i++) {
       requestMessages.push(history[i])
@@ -1225,10 +1243,13 @@ export class ChatViewModel {
   // 用户在输入框执行 /compact：单独向当前模型请求一段摘要，
   // 成功后把摘要与锚点写入会话，之后的请求即按压缩后的历史发送。
   // 与工具链路不同，这里不产生新的聊天消息；ChatPage 会把状态写入最近的助手气泡。
+  // tools 必须是本次会话真正会随请求发出的那一份：工具 schema 也占输入窗口，
+  // 判断“值不值得压缩”的用量必须和 UI 进度条、自动压缩判定用同一个口径。
   async compactContextManually(
     providerId: string,
     modelId: string,
-    messages: ChatMessage[]
+    messages: ChatMessage[],
+    tools: ToolDefinition[] = []
   ): Promise<ContextCompactionResult> {
     const compactionService = getContextCompactionService()
     await compactionService.ensurePreferencesLoaded()
@@ -1246,7 +1267,40 @@ export class ChatViewModel {
       return this.buildManualCompactionFailure(ContextCompactionStatus.UNAVAILABLE, `${provider.name} 未配置 API Key`)
     }
 
-    const currentUsage = await this.getContextUsage(providerId, modelId, messages)
+    // 手动压缩同样占用压缩闸门：期间不接受新的发送，也不会与自动压缩并行
+    const manualCompactionOwnerId = `manual_compact_${session.id}_${Date.now()}`
+    if (!compactionService.beginCompaction(session.id, manualCompactionOwnerId)) {
+      return this.buildManualCompactionFailure(
+        ContextCompactionStatus.UNAVAILABLE,
+        '当前会话已有一次上下文压缩在进行中'
+      )
+    }
+    try {
+      return await this.runManualCompaction(
+        provider,
+        effectiveApiKey,
+        providerId,
+        modelId,
+        session,
+        messages,
+        tools
+      )
+    } finally {
+      compactionService.endCompaction(session.id, manualCompactionOwnerId)
+    }
+  }
+
+  private async runManualCompaction(
+    provider: ModelProvider,
+    effectiveApiKey: string,
+    providerId: string,
+    modelId: string,
+    session: ChatSession,
+    messages: ChatMessage[],
+    tools: ToolDefinition[]
+  ): Promise<ContextCompactionResult> {
+    const compactionService = getContextCompactionService()
+    const currentUsage = await this.getContextUsage(providerId, modelId, messages, '', [], tools)
 
     const summary = await this.requestCompactionSummary(
       provider,
@@ -1267,7 +1321,8 @@ export class ChatViewModel {
       summary,
       currentUsage.limitTokens,
       DEFAULT_COMPACT_KEEP_RECENT_TURNS,
-      currentUsage.usedTokens
+      currentUsage.usedTokens,
+      session.contextSummary
     )
     if (!result.applied) {
       console.warn('ChatViewModel', `Manual compaction not applied: ${result.status} ${result.message}`)
@@ -1310,7 +1365,8 @@ export class ChatViewModel {
     modelId: string,
     session: ChatSession,
     messages: ChatMessage[],
-    automatic: boolean
+    automatic: boolean,
+    onSummaryUsage: CompactionSummaryUsageSink | null = null
   ): Promise<string> {
     const requestMessages: RequestMessage[] = [
       new RequestMessage(
@@ -1401,6 +1457,18 @@ export class ChatViewModel {
         console.error('ChatViewModel', `Manual compaction summary failed: ${apiResult.errorMessage}`)
         return ''
       }
+      // 摘要请求是一次真实的模型调用，不能白跑在账单之外。自动压缩发生在某一轮
+      // 回答里，直接计入该轮的用量统计。
+      if (onSummaryUsage !== null) {
+        const summaryUsage = apiResult.usage
+        onSummaryUsage(
+          summaryUsage !== null ? summaryUsage.prompt_tokens : estimatedInputTokens,
+          summaryUsage !== null ? summaryUsage.completion_tokens : estimateTextTokens(apiResult.content),
+          summaryUsage !== null,
+          summaryUsage !== null ? (summaryUsage.cache_read_tokens ?? 0) : 0,
+          summaryUsage !== null ? (summaryUsage.cache_write_tokens ?? 0) : 0
+        )
+      }
       return this.stripReasoningTags(apiResult.content).trim()
     } catch (error) {
       console.error('ChatViewModel', `Manual compaction summary error: ${JSON.stringify(error)}`)
@@ -1417,7 +1485,9 @@ export class ChatViewModel {
     sourceMessages: ChatMessage[],
     requestMessages: RequestMessage[],
     usage: ContextUsage,
-    isCancelledFn: () => boolean
+    isCancelledFn: () => boolean,
+    requestId: string,
+    onSummaryUsage: CompactionSummaryUsageSink | null = null
   ): Promise<ContextCompactionResult> {
     if (snapshotSession === null || snapshotSession.id === '') {
       return this.buildManualCompactionFailure(
@@ -1433,13 +1503,55 @@ export class ChatViewModel {
       )
     }
 
+    // 闸门：同一会话已经在压缩时直接放弃，绝不并行跑第二次摘要请求
+    const compactionService = getContextCompactionService()
+    if (!compactionService.beginCompaction(snapshotSession.id, requestId)) {
+      return this.buildManualCompactionFailure(
+        ContextCompactionStatus.UNAVAILABLE,
+        '当前会话已有一次上下文压缩在进行中'
+      )
+    }
+    try {
+      return await this.runAutomaticCompaction(
+        apiConfig,
+        modelId,
+        snapshotSession,
+        sourceMessages,
+        requestMessages,
+        usage,
+        isCancelledFn,
+        onSummaryUsage
+      )
+    } finally {
+      compactionService.endCompaction(snapshotSession.id, requestId)
+    }
+  }
+
+  private async runAutomaticCompaction(
+    apiConfig: AIApiConfig,
+    modelId: string,
+    snapshotSession: ChatSession,
+    sourceMessages: ChatMessage[],
+    requestMessages: RequestMessage[],
+    usage: ContextUsage,
+    isCancelledFn: () => boolean,
+    onSummaryUsage: CompactionSummaryUsageSink | null = null
+  ): Promise<ContextCompactionResult> {
+    const provider = this.providerViewModel.getProviderById(apiConfig.providerId)
+    if (provider === null) {
+      return this.buildManualCompactionFailure(
+        ContextCompactionStatus.UNAVAILABLE,
+        `未找到供应商 ${apiConfig.providerId}`
+      )
+    }
     const summary = await this.requestCompactionSummary(
       provider,
       apiConfig.apiKey,
       modelId,
       snapshotSession,
       sourceMessages,
-      true
+      true,
+      onSummaryUsage
     )
     if (isCancelledFn()) {
       return this.buildManualCompactionFailure(ContextCompactionStatus.UNAVAILABLE, '自动压缩已取消')
@@ -1454,7 +1566,8 @@ export class ChatViewModel {
       summary,
       usage.limitTokens,
       DEFAULT_COMPACT_KEEP_RECENT_TURNS,
-      usage.usedTokens
+      usage.usedTokens,
+      snapshotSession.contextSummary
     )
     if (!result.applied) {
       console.warn('ChatViewModel', `Automatic compaction not applied: ${result.status} ${result.message}`)
@@ -3204,7 +3317,14 @@ ${knowledgeSearchLimitRule}`
         compactionSourceMessages,
         requestMessages,
         initialContextUsage,
-        (): boolean => cancelled || this.isCancelled(cancelSnapshot)
+        (): boolean => cancelled || this.isCancelled(cancelSnapshot),
+        requestId,
+        (inputTokens: number, outputTokens: number, exact: boolean,
+          cacheReadTokens: number, cacheWriteTokens: number): void => {
+          usageTracker.addCompletedUsage(inputTokens, outputTokens, exact, cacheReadTokens, cacheWriteTokens)
+          usageTracker.applyToMessage(aiMessage)
+          onAIMessageUpdated(aiMessage)
+        }
       )
       if (cancelled || this.isCancelled(cancelSnapshot)) {
         return
@@ -3237,7 +3357,8 @@ ${knowledgeSearchLimitRule}`
       snapshotSessionId,
       compactionSourceMessages,
       initialContextUsage.limitTokens,
-      initialContextUsage.usedTokens
+      initialContextUsage.usedTokens,
+      snapshotSession !== null ? snapshotSession.contextSummary : ''
     ))
 
     // 每个子智能体拥有独立的联网搜索/知识库预算记录，
@@ -3973,6 +4094,14 @@ ${preview}`
     // 工具结果可能让同一气泡的下一轮请求突然越过阈值。此时不再让模型调用 compact，
     // 而是在发起下一轮流式请求前由应用直接压缩，并继续复用当前 aiMessage。
     const compactionService = getContextCompactionService()
+    // 本会话另有一次压缩在进行（手动 /compact 或并行请求）：等它结束再判断阈值，
+    // 否则这一轮会按压缩前的旧上下文去算，并白白占掉本轮唯一的一次压缩机会。
+    if (compactionService.isSessionCompacting(snapshotSessionId)) {
+      await compactionService.awaitSessionCompaction(snapshotSessionId)
+      if (isCancelledFn()) {
+        return
+      }
+    }
     if (!automaticCompactionState.attempted && compactionService.isEnabled()) {
       const roundContextUsage = this.computeRequestContextUsage(
         apiConfig,
@@ -3993,7 +4122,14 @@ ${preview}`
           compactionSourceMessages,
           requestMessages,
           roundContextUsage,
-          isCancelledFn
+          isCancelledFn,
+          requestId,
+          (inputTokens: number, outputTokens: number, exact: boolean,
+            cacheReadTokens: number, cacheWriteTokens: number): void => {
+            usageTracker.addCompletedUsage(inputTokens, outputTokens, exact, cacheReadTokens, cacheWriteTokens)
+            usageTracker.applyToMessage(aiMessage)
+            onAIMessageUpdated(aiMessage)
+          }
         )
         if (isCancelledFn()) {
           return
@@ -4076,6 +4212,11 @@ ${preview}`
     let streamedReasoningLength = 0
     let roundGeneratedContent = ''
     let roundGeneratedReasoning = ''
+    // 按增量累计 Token，不要在每个流式分片里重新扫描整段已生成内容。
+    // estimateTextTokens 是逐字符循环，放在分片回调里就是 O(n²)：回答越长越卡，
+    // 而 maybeInterruptForAutomaticCompaction 恰好每个分片都要读它。
+    let roundGeneratedContentTokens = 0
+    let roundGeneratedReasoningTokens = 0
     let roundGeneratedToolCallTokens = 0
     let observedPromptTokens = 0
     let observedCompletionTokens = 0
@@ -4093,6 +4234,9 @@ ${preview}`
     }
     automaticCompactionState.mergeNextContentSegment = false
     let roundInterruptedForCompaction = false
+    // 工具一旦开始执行就不能再被压缩打断：中途丢弃会让已产生副作用的调用白跑一遍。
+    // 这一轮的压缩改在下一轮请求前（executeToolCallLoop 开头）由应用完成。
+    let roundToolExecutionStarted = false
     // 同一轮可能收到多次错误投递：SSE 错误体一次，非 2xx 收尾再一次。降级只能跑一遍，
     // 且开始降级后后续投递不得再弹 toast——否则用户会在一次成功的回答旁看到报错。
     let nativeToolInputFallbackStarted = false
@@ -4204,6 +4348,7 @@ ${preview}`
         return
       }
       roundGeneratedContent += content
+      roundGeneratedContentTokens += estimateTextTokens(content)
       appendResponseTextSegment(AssistantResponseSegmentType.CONTENT, content)
       if (roundHasToolCallDelta) {
         roundContentBuffer += content
@@ -4220,6 +4365,7 @@ ${preview}`
         return
       }
       roundGeneratedReasoning += content
+      roundGeneratedReasoningTokens += estimateTextTokens(content)
       appendResponseTextSegment(AssistantResponseSegmentType.REASONING, content)
       if (roundHasToolCallDelta) {
         roundReasoningBuffer += content
@@ -4277,8 +4423,12 @@ ${preview}`
         compactionSourceMessages.length < 2) {
         return
       }
-      const locallyGeneratedTokens = estimateTextTokens(roundGeneratedContent) +
-        estimateTextTokens(roundGeneratedReasoning) + roundGeneratedToolCallTokens
+      // 工具已经在跑，或本会话已有一次压缩在进行：都不再从这里抢一次压缩
+      if (roundToolExecutionStarted || compactionService.isSessionCompacting(snapshotSessionId)) {
+        return
+      }
+      const locallyGeneratedTokens = roundGeneratedContentTokens +
+        roundGeneratedReasoningTokens + roundGeneratedToolCallTokens
       // 部分供应商会在流中持续返回 usage。可用时取真实值，否则使用本地增量估算；
       // 每次正文、思考、工具参数和 usage 更新都会重新检查，而不是等下一次用户发送。
       const generatedTokens = Math.max(locallyGeneratedTokens, observedCompletionTokens)
@@ -4333,7 +4483,14 @@ ${preview}`
           compactionSourceMessages,
           requestMessages,
           liveUsage,
-          isCancelledFn
+          isCancelledFn,
+          requestId,
+          (inputTokens: number, outputTokens: number, exact: boolean,
+            cacheReadTokens: number, cacheWriteTokens: number): void => {
+            usageTracker.addCompletedUsage(inputTokens, outputTokens, exact, cacheReadTokens, cacheWriteTokens)
+            usageTracker.applyToMessage(aiMessage)
+            onAIMessageUpdated(aiMessage)
+          }
         )
         if (isCancelledFn()) {
           return
@@ -4479,8 +4636,7 @@ ${preview}`
           estimatedToolCallOutput += estimateTextTokens(toolCalls[i].arguments)
         }
         usageTracker.finishRound(
-          estimateTextTokens(roundGeneratedContent) +
-            estimateTextTokens(roundGeneratedReasoning) + estimatedToolCallOutput
+          roundGeneratedContentTokens + roundGeneratedReasoningTokens + estimatedToolCallOutput
         )
         usageTracker.applyToMessage(aiMessage)
         onAIMessageUpdated(aiMessage)
@@ -4603,6 +4759,18 @@ ${preview}`
               break
             }
           }
+
+          // 压缩是不可抢占的临界区：闸门被别人持有时先等它结束，再决定是否执行工具。
+          // 本轮已被压缩中断时直接交回给续答流程，由它重新发起这一轮。
+          if (compactionService.isSessionCompacting(snapshotSessionId)) {
+            console.info('ChatViewModel', 'Tool calls held: waiting for context compaction to finish')
+            await compactionService.awaitSessionCompaction(snapshotSessionId)
+          }
+          if (isRoundInactive()) {
+            console.info('ChatViewModel', 'Tool calls dropped: round was interrupted for context compaction')
+            return
+          }
+          roundToolExecutionStarted = true
 
           // 执行工具调用
           const toolResults = await this.executeToolCallsWithRetrievalLimit(
@@ -4929,9 +5097,7 @@ ${preview}`
           return
         }
         flushBufferedRoundOutput()
-        usageTracker.finishRound(
-          estimateTextTokens(roundGeneratedContent) + estimateTextTokens(roundGeneratedReasoning)
-        )
+        usageTracker.finishRound(roundGeneratedContentTokens + roundGeneratedReasoningTokens)
         usageTracker.applyToMessage(aiMessage)
 
         // 模型能力被标成支持原生文档/图片，但该接口并不接受对应的 content part 时，整轮会

@@ -20,6 +20,7 @@ import {
   ModelRole,
   ToolCall,
   ToolConfig,
+  ToolDefinition,
   ToolSourceType,
   ApiStyle
 } from '../models/ChatModels'
@@ -149,7 +150,11 @@ import {
   MIN_COMPACTABLE_MESSAGE_COUNT,
   MIN_COMPACT_USAGE_PERCENT
 } from '../utils/ContextWindowUtils'
-import { ContextCompactionStatus } from '../services/ContextCompactionService'
+import {
+  CompactionStateListener,
+  ContextCompactionStatus,
+  getContextCompactionService
+} from '../services/ContextCompactionService'
 import {
   GOAL_COMMAND_ACTION_CLEAR,
   GOAL_COMMAND_ACTION_PROMPT,
@@ -306,6 +311,10 @@ export struct ChatPage {
   @Local contextUsage: ContextUsage = new ContextUsage()
   // /compact 正在执行：一次只允许一个手动压缩请求
   private isCompactingContext: boolean = false
+  // 本会话的上下文压缩闸门状态（手动与自动压缩共用）。压缩期间暂停模型输出、
+  // 禁止工具执行，用户也不能再发送内容。
+  @Local isContextCompacting: boolean = false
+  private compactionStateListener: CompactionStateListener | null = null
   // 图片预览状态
   @Local showImagePreview: boolean = false
   @Local previewImages: Array<string> = []
@@ -560,6 +569,7 @@ export struct ChatPage {
   private branchSwitchScrollRestoreToken: number = 0
   private assistantAvatarReloadToken: number = 0
   private contextUsageRefreshSequence: number = 0
+  private contextUsageRefreshTimerId: number = -1
 
   private showChatSnack(message: string | Resource, duration: number = 2000,
     tone: SnackBarTone = SnackBarTone.DEFAULT): void {
@@ -602,6 +612,7 @@ export struct ChatPage {
       this.toolExecutionApprovalArgumentSummary = this.getNoToolArgumentsText()
     }
     this.registerAppUiStateObservers()
+    this.registerCompactionStateObserver()
     // 设置键盘避让模式
     this.getUIContext().setKeyboardAvoidMode(KeyboardAvoidMode.RESIZE)
 
@@ -651,7 +662,7 @@ export struct ChatPage {
     }
     this.chatViewModel.setTitleCallbacks(titleCallbacks)
     this.chatViewModel.setContextCompactedCallback((): void => {
-      this.refreshContextUsage()
+      this.scheduleContextUsageRefresh()
     })
 
     // 初始化TTS服务
@@ -764,6 +775,7 @@ export struct ChatPage {
       this.ttsService.stop()
       this.clearTTSMessageState()
     }
+    this.clearContextUsageRefreshTimer()
     this.clearInitialBottomAlignmentRetries()
     this.clearRuntimeStateWatchdog()
     this.clearHistoryPreviewCollapseTimer()
@@ -781,6 +793,7 @@ export struct ChatPage {
       console.error('ChatPage', `Failed to flush draft on disappear: ${JSON.stringify(error)}`)
     })
     this.unregisterAppUiStateObservers()
+    this.unregisterCompactionStateObserver()
     this.syncActiveSessionBinding()
     // 离开页面时确保状态栏恢复
     this.setChatStatusBarVisible(true)
@@ -870,7 +883,7 @@ export struct ChatPage {
 
   private markMessageListChanged(): void {
     this.messageListSyncVersion = this.messageListSyncVersion + 1
-    this.refreshContextUsage()
+    this.scheduleContextUsageRefresh()
   }
 
   // 重算当前展示消息的对话树版本信息（versionIndex / versionCount），并触发列表刷新
@@ -2377,14 +2390,63 @@ export struct ChatPage {
       name.endsWith('.png') || name.endsWith('.webp') || name.endsWith('.bmp') || name.endsWith('.gif')
   }
 
+  // 合并短时间内的重复重算。一次发送会连续触发多次（用户消息入列、AI 气泡入列、
+  // isSending 变化、压缩回调），而每次重算都要遍历全部历史文本、解码文本附件、
+  // 序列化全部工具 schema——连着跑几遍就是肉眼可见的卡顿。
+  private scheduleContextUsageRefresh(): void {
+    if (this.contextUsageRefreshTimerId >= 0) {
+      clearTimeout(this.contextUsageRefreshTimerId)
+    }
+    this.contextUsageRefreshTimerId = setTimeout((): void => {
+      this.contextUsageRefreshTimerId = -1
+      this.refreshContextUsage()
+    }, 200)
+  }
+
+  private clearContextUsageRefreshTimer(): void {
+    if (this.contextUsageRefreshTimerId < 0) {
+      return
+    }
+    clearTimeout(this.contextUsageRefreshTimerId)
+    this.contextUsageRefreshTimerId = -1
+  }
+
   // 重新估算当前会话的上下文长度窗口用量（消息列表、模型或压缩状态变化后调用）
   private async refreshContextUsage(): Promise<void> {
     const sequence = ++this.contextUsageRefreshSequence
     const providerId = this.currentProvider !== null ? this.currentProvider.id : ''
-    const usage = await this.chatViewModel.getContextUsage(providerId, this.currentModelId, this.messages)
+    const usage = await this.chatViewModel.getContextUsage(
+      providerId,
+      this.currentModelId,
+      this.messages,
+      '',
+      [],
+      this.buildContextUsageToolDefinitions()
+    )
     if (sequence === this.contextUsageRefreshSequence) {
       this.contextUsage = usage
     }
+  }
+
+  // 工具 schema 会实打实地占用输入窗口，触发自动压缩的判定里一直算着它。
+  // 显示用的估算必须用同一份工具列表，否则进度条和压缩触发点对不上。
+  private buildContextUsageToolDefinitions(): ToolDefinition[] {
+    const provider = this.currentProvider
+    if (provider === null) {
+      return []
+    }
+    const modelSupportsTools = this.getSendFlow().isCurrentModelSupportsTools(provider, this.currentModelId)
+    const toolIds = resolveKnowledgeToolExposure({
+      currentApiStyle: provider.apiStyle,
+      modelSupportsTools: modelSupportsTools,
+      knowledgeReady: ServiceRegistry.knowledgeDocuments().isRetrievalReady(),
+      userEnabled: this.knowledgeConversationEnabled,
+      baseToolIds: this.selectedToolIds.slice()
+    })
+    if (toolIds.length === 0) {
+      return []
+    }
+    return this.toolRegistry.getEnabledToolDefinitions(toolIds)
   }
 
   private getContextUsageColor(): ResourceColor {
@@ -5807,10 +5869,10 @@ export struct ChatPage {
   // 切换模型会改变上下文窗口大小；一次发送结束后历史也已落库，都需要重算用量
   @Monitor('currentModelId', 'isSending')
   onContextUsageInputsChanged(): void {
-    this.refreshContextUsage()
+    this.scheduleContextUsageRefresh()
   }
 
-  @Monitor('isSending', 'isSendDispatching')
+  @Monitor('isSending', 'isSendDispatching', 'isContextCompacting')
   onQueuedDispatchStateChanged(): void {
     this.scheduleQueuedMessageDispatch()
   }
@@ -6106,9 +6168,78 @@ export struct ChatPage {
     this.setCanvasPanelOpen(true)
   }
 
+  // 压缩闸门状态订阅：ChatViewModel 侧已经暂停了模型输出与工具执行，
+  // 这里负责把同一个闸门反映到输入区，让用户发送也一起停下。
+  private registerCompactionStateObserver(): void {
+    if (this.compactionStateListener !== null) {
+      return
+    }
+    const listener: CompactionStateListener = (sessionId: string, compacting: boolean): void => {
+      if (sessionId !== this.sessionId) {
+        return
+      }
+      this.isContextCompacting = compacting
+    }
+    this.compactionStateListener = listener
+    getContextCompactionService().addCompactionStateListener(listener)
+    this.isContextCompacting = getContextCompactionService().isSessionCompacting(this.sessionId)
+  }
+
+  private unregisterCompactionStateObserver(): void {
+    if (this.compactionStateListener === null) {
+      return
+    }
+    getContextCompactionService().removeCompactionStateListener(this.compactionStateListener)
+    this.compactionStateListener = null
+    this.isContextCompacting = false
+  }
+
+  // 闸门状态直接问服务，@Local 只用来触发重算；换会话后不会留下一个过期的 true。
+  private isContextCompactionInProgress(): boolean {
+    return this.isCompactingContext || getContextCompactionService().isSessionCompacting(this.sessionId)
+  }
+
+  // 压缩会整体改写要发给模型的历史，中途插进来的消息要么被摘要漏掉、要么让刚算好的
+  // 锚点失效。但用户不该为此丢掉已经敲好的内容：压缩期间的发送改为排队，
+  // 闸门释放后由 scheduleQueuedMessageDispatch 按原顺序自动发出。
+  private queueSendDuringContextCompaction(
+    contentOverride?: string,
+    attachmentsOverride?: MessageAttachment[]
+  ): boolean {
+    if (!this.isContextCompactionInProgress()) {
+      return false
+    }
+    // 分叉重发/重新生成还带着 pendingForkContext 和已截断的活跃路径，
+    // 排队后这些状态无法原样还原，只能仍然拦下来让用户稍后再点。
+    if (contentOverride !== undefined) {
+      this.showChatSnack(pickLocalizedText(
+        '正在压缩上下文，完成后可重新生成',
+        'Compacting context; you can regenerate once it finishes'
+      ), 2000)
+      return true
+    }
+    const message = new ChatInFlightMessage(
+      this.inputText,
+      this.pendingAttachments,
+      InFlightMessageDelivery.QUEUE,
+      this.sessionId
+    )
+    if (message.content === '' && message.attachments.length === 0) {
+      return true
+    }
+    this.queuedInFlightMessages.push(message)
+    this.queuedMessageCount = this.queuedInFlightMessages.length
+    this.clearComposerAfterInFlightSend()
+    this.showChatSnack(pickLocalizedText(
+      '正在压缩上下文，消息已排队，压缩完成后自动发送',
+      'Compacting context; your message is queued and will send when it finishes'
+    ), 2400, SnackBarTone.SUCCESS)
+    return true
+  }
+
   // /compact：立刻把更早的历史压缩成摘要（只影响发送给模型的上下文，不动聊天记录）
   private async compactContextFromCommand(): Promise<void> {
-    if (this.isCompactingContext) {
+    if (this.isContextCompactionInProgress()) {
       this.showChatSnack(pickLocalizedText('正在压缩上下文…', 'Compacting context…'), 2000)
       return
     }
@@ -6143,7 +6274,8 @@ export struct ChatPage {
       const result = await this.chatViewModel.compactContextManually(
         this.currentProvider.id,
         this.currentModelId,
-        this.messages
+        this.messages,
+        this.buildContextUsageToolDefinitions()
       )
       if (result.applied) {
         keepCompletedCompactionUi = true
@@ -6174,6 +6306,9 @@ export struct ChatPage {
         this.markMessageListChanged()
       }
       this.isCompactingContext = false
+      // 服务侧闸门在 compactContextManually 的 finally 里就已经释放，@Monitor 那一次
+      // 触发时 isCompactingContext 还是 true，排队消息会被挡下且没人再唤醒它。
+      this.scheduleQueuedMessageDispatch()
     }
   }
 
@@ -6199,7 +6334,10 @@ export struct ChatPage {
   // 压缩服务返回的 message 是给模型看的中文提示，这里按状态给用户一句本地化说明
   private getCompactionFailureText(status: string): string {
     if (status === ContextCompactionStatus.SKIPPED) {
-      return pickLocalizedText('没有可压缩的更早历史', 'There is no earlier history to compact yet')
+      return pickLocalizedText(
+        '当前历史压缩后省不下什么，暂时不用压缩',
+        'Compacting would not free up meaningful space yet'
+      )
     }
     if (status === ContextCompactionStatus.INVALID) {
       return pickLocalizedText('模型没有返回有效摘要，请重试', 'The model returned no usable summary, try again')
@@ -6227,7 +6365,9 @@ export struct ChatPage {
       return
     }
 
-    if (delivery === InFlightMessageDelivery.STEER &&
+    // 压缩期间不能引导当前这一轮：引导消息会在请求边界插进正在被摘要覆盖的历史里。
+    // 降级为排队，压缩结束后再作为正常消息发出。
+    if (delivery === InFlightMessageDelivery.STEER && !this.isContextCompactionInProgress() &&
       this.chatViewModel.submitSteeringMessage(this.sessionId, message.content, message.attachments)) {
       this.clearComposerAfterInFlightSend()
       this.markMessageListChanged()
@@ -6264,6 +6404,9 @@ export struct ChatPage {
       this.isSendDispatching || this.queuedInFlightMessages.length === 0) {
       return
     }
+    if (this.isContextCompactionInProgress()) {
+      return
+    }
     this.queuedDispatchScheduled = true
     setTimeout((): void => {
       this.queuedDispatchScheduled = false
@@ -6276,6 +6419,11 @@ export struct ChatPage {
   private async dispatchNextQueuedMessage(): Promise<void> {
     if (this.queuedDispatchRunning || this.isSending || this.isSendDispatching ||
       this.queuedInFlightMessages.length === 0) {
+      return
+    }
+    // 这一段到 sendMessage 之间不能插入 await：消息已经从队列里摘掉，而 sendMessage
+    // 对 contentOverride 走的是拦下不排队的分支，闸门若在中间被抢走消息就没了。
+    if (this.isContextCompactionInProgress()) {
       return
     }
     const next = this.queuedInFlightMessages[0]
@@ -6320,6 +6468,9 @@ export struct ChatPage {
 
   async sendMessage(contentOverride?: string, attachmentsOverride?: MessageAttachment[]): Promise<void> {
     if (this.isSendDispatching || this.isSending) {
+      return
+    }
+    if (this.queueSendDuringContextCompaction(contentOverride, attachmentsOverride)) {
       return
     }
     // 分叉重发（重新生成）：内容/附件来自原用户消息，不读取也不清空输入框草稿

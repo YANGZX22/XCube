@@ -21,6 +21,12 @@ export const MIN_COMPACT_SUMMARY_LENGTH: number = 40
 // 摘要 system 消息的固定前缀，用于在重建请求历史时识别并替换旧摘要
 export const COMPACT_SUMMARY_PROMPT_MARKER: string = '[对话历史压缩摘要]'
 
+// 压缩闸门状态变化回调：UI 据此暂停输出提示、禁用发送
+export type CompactionStateListener = (sessionId: string, compacting: boolean) => void
+
+// awaitSessionCompaction 的等待者：压缩结束时统一放行
+type CompactionWaiter = () => void
+
 export enum ContextCompactionStatus {
   APPLIED = 'compacted',
   SKIPPED = 'skipped',
@@ -60,19 +66,23 @@ export class ContextCompactionRuntime {
   messages: ChatMessage[] = []
   contextWindowTokens: number = 0
   requestInputTokens: number = 0
+  // 本次请求发出时会话已有的摘要：compact 工具产出的新摘要会顶替它
+  previousSummary: string = ''
 
   constructor(
     requestId: string,
     sessionId: string,
     messages: ChatMessage[],
     contextWindowTokens: number,
-    requestInputTokens: number = 0
+    requestInputTokens: number = 0,
+    previousSummary: string = ''
   ) {
     this.requestId = requestId
     this.sessionId = sessionId
     this.messages = messages
     this.contextWindowTokens = contextWindowTokens
     this.requestInputTokens = Math.max(0, Math.round(requestInputTokens))
+    this.previousSummary = previousSummary
   }
 }
 
@@ -99,8 +109,15 @@ class AnchorResolution {
 export class ContextCompactionService {
   private static instance: ContextCompactionService | null = null
   private preferencesService: PreferencesService
-  private runtime: ContextCompactionRuntime | null = null
+  // ChatTaskOrchestratorService 允许多个会话请求并行，运行时必须按 requestId 分开存放；
+  // 单槽位会被后发起的请求顶掉，compact 工具就会算到别的会话上去。
+  private runtimes: Map<string, ContextCompactionRuntime> = new Map()
   private pendingResults: Map<string, ContextCompactionResult> = new Map()
+  // 压缩闸门：同一会话同时只允许一次压缩。闸门持有期间，模型输出、工具执行和
+  // 用户发送都必须让路，压缩不可被抢占。value 是持有闸门的 requestId。
+  private compactingSessions: Map<string, string> = new Map()
+  private compactionWaiters: Map<string, CompactionWaiter[]> = new Map()
+  private compactionStateListeners: CompactionStateListener[] = []
   private cachedEnabled: boolean = true
   private cachedThresholdPercent: number = DEFAULT_COMPACT_THRESHOLD_PERCENT
   private cachedMaxContextTokens: number = DEFAULT_CONTEXT_LIMIT_TOKENS
@@ -182,18 +199,123 @@ export class ContextCompactionService {
   // ============ 请求运行时 ============
 
   beginRequest(runtime: ContextCompactionRuntime): void {
-    this.runtime = runtime
+    if (runtime.requestId === '') {
+      return
+    }
+    this.runtimes.set(runtime.requestId, runtime)
   }
 
   endRequest(requestId: string): void {
-    if (this.runtime !== null && this.runtime.requestId === requestId) {
-      this.runtime = null
-    }
+    this.runtimes.delete(requestId)
     this.pendingResults.delete(requestId)
+    // 请求异常结束时闸门必须跟着释放，否则该会话会被永久锁死
+    this.releaseCompactionForRequest(requestId)
   }
 
-  getCurrentRequestId(): string {
-    return this.runtime !== null ? this.runtime.requestId : ''
+  getRuntime(requestId: string): ContextCompactionRuntime | null {
+    const runtime = this.runtimes.get(requestId)
+    return runtime === undefined ? null : runtime
+  }
+
+  // ============ 压缩闸门 ============
+
+  // 取得某个会话的压缩权。该会话已经在压缩时返回 false，调用方必须放弃本次压缩，
+  // 而不是并行再跑一次摘要请求。
+  beginCompaction(sessionId: string, requestId: string): boolean {
+    if (sessionId === '') {
+      return false
+    }
+    if (this.compactingSessions.has(sessionId)) {
+      return false
+    }
+    this.compactingSessions.set(sessionId, requestId)
+    this.notifyCompactionState(sessionId, true)
+    return true
+  }
+
+  // 只有持有闸门的那个请求能释放它，晚到的清理不会误放别人的锁
+  endCompaction(sessionId: string, requestId: string): void {
+    const owner = this.compactingSessions.get(sessionId)
+    if (owner === undefined || owner !== requestId) {
+      return
+    }
+    this.compactingSessions.delete(sessionId)
+    this.notifyCompactionState(sessionId, false)
+  }
+
+  isSessionCompacting(sessionId: string): boolean {
+    return sessionId !== '' && this.compactingSessions.has(sessionId)
+  }
+
+  isAnySessionCompacting(): boolean {
+    return this.compactingSessions.size > 0
+  }
+
+  // 等待某个会话的压缩结束。压缩期间要暂停的工作（工具执行、续答）在这里排队，
+  // 而不是丢弃或并行抢跑。
+  awaitSessionCompaction(sessionId: string): Promise<void> {
+    if (!this.isSessionCompacting(sessionId)) {
+      return Promise.resolve()
+    }
+    return new Promise<void>((resolve: () => void): void => {
+      const waiters = this.compactionWaiters.get(sessionId)
+      if (waiters === undefined) {
+        this.compactionWaiters.set(sessionId, [resolve])
+        return
+      }
+      waiters.push(resolve)
+    })
+  }
+
+  addCompactionStateListener(listener: CompactionStateListener): void {
+    if (this.compactionStateListeners.indexOf(listener) >= 0) {
+      return
+    }
+    this.compactionStateListeners.push(listener)
+  }
+
+  removeCompactionStateListener(listener: CompactionStateListener): void {
+    const index = this.compactionStateListeners.indexOf(listener)
+    if (index < 0) {
+      return
+    }
+    this.compactionStateListeners.splice(index, 1)
+  }
+
+  private notifyCompactionState(sessionId: string, compacting: boolean): void {
+    if (!compacting) {
+      const waiters = this.compactionWaiters.get(sessionId)
+      if (waiters !== undefined) {
+        this.compactionWaiters.delete(sessionId)
+        for (let i = 0; i < waiters.length; i++) {
+          waiters[i]()
+        }
+      }
+    }
+    for (let i = 0; i < this.compactionStateListeners.length; i++) {
+      try {
+        this.compactionStateListeners[i](sessionId, compacting)
+      } catch (error) {
+        console.warn('ContextCompactionService',
+          `Compaction state listener failed: ${JSON.stringify(error)}`)
+      }
+    }
+  }
+
+  private releaseCompactionForRequest(requestId: string): void {
+    if (requestId === '') {
+      return
+    }
+    const releasedSessionIds: string[] = []
+    this.compactingSessions.forEach((owner: string, sessionId: string): void => {
+      if (owner === requestId) {
+        releasedSessionIds.push(sessionId)
+      }
+    })
+    for (let i = 0; i < releasedSessionIds.length; i++) {
+      this.compactingSessions.delete(releasedSessionIds[i])
+      this.notifyCompactionState(releasedSessionIds[i], false)
+    }
   }
 
   // 取走本次请求内已完成的压缩结果，供工具循环重建请求历史并持久化
@@ -208,16 +330,24 @@ export class ContextCompactionService {
 
   // ============ 压缩执行 ============
 
-  // 由 compact 工具执行器调用；只做校验与计算，不写数据库
-  applyCompaction(args: string): ContextCompactionResult {
+  // 由 compact 工具执行器调用；只做校验与计算，不写数据库。
+  // requestId 来自工具执行上下文：并行请求各自取回自己的运行时，不会互相串台。
+  applyCompaction(args: string, requestId: string = ''): ContextCompactionResult {
     const result = new ContextCompactionResult()
-    const runtime = this.runtime
+    const runtime = requestId !== '' ? this.getRuntime(requestId) : null
     if (runtime === null || runtime.sessionId === '') {
       result.status = ContextCompactionStatus.UNAVAILABLE
       result.message = '当前没有可压缩的会话上下文'
       return result
     }
     result.sessionId = runtime.sessionId
+    // 应用侧压缩正在进行时，模型的 compact 调用不得插队：两边都会改写同一段历史，
+    // 谁后写谁的锚点生效，先跑的那次压缩就白做了。
+    if (this.isSessionCompacting(runtime.sessionId)) {
+      result.status = ContextCompactionStatus.UNAVAILABLE
+      result.message = '应用正在压缩当前对话的上下文，不要重复调用 compact'
+      return result
+    }
 
     let parsed: CompactToolArguments | null = null
     try {
@@ -256,7 +386,8 @@ export class ContextCompactionService {
       keepRecentTurns,
       runtime.contextWindowTokens,
       true,
-      runtime.requestInputTokens
+      runtime.requestInputTokens,
+      runtime.previousSummary
     )
     if (computed.applied) {
       this.pendingResults.set(runtime.requestId, computed)
@@ -272,7 +403,8 @@ export class ContextCompactionService {
     summaryBody: string,
     contextWindowTokens: number,
     keepRecentTurns: number = DEFAULT_COMPACT_KEEP_RECENT_TURNS,
-    requestInputTokens: number = 0
+    requestInputTokens: number = 0,
+    previousSummary: string = ''
   ): ContextCompactionResult {
     const result = new ContextCompactionResult()
     result.sessionId = sessionId
@@ -295,7 +427,8 @@ export class ContextCompactionService {
       this.resolveKeepRecentTurns(keepRecentTurns),
       contextWindowTokens,
       false,
-      requestInputTokens
+      requestInputTokens,
+      previousSummary
     )
   }
 
@@ -307,7 +440,8 @@ export class ContextCompactionService {
     summaryBody: string,
     contextWindowTokens: number,
     keepRecentTurns: number = DEFAULT_COMPACT_KEEP_RECENT_TURNS,
-    requestInputTokens: number = 0
+    requestInputTokens: number = 0,
+    previousSummary: string = ''
   ): ContextCompactionResult {
     const result = new ContextCompactionResult()
     result.sessionId = sessionId
@@ -329,7 +463,8 @@ export class ContextCompactionService {
       this.resolveKeepRecentTurns(keepRecentTurns),
       contextWindowTokens,
       true,
-      requestInputTokens
+      requestInputTokens,
+      previousSummary
     )
   }
 
@@ -342,7 +477,8 @@ export class ContextCompactionService {
     keepRecentTurns: number,
     contextWindowTokens: number,
     reserveTrailingTurn: boolean,
-    requestInputTokens: number = 0
+    requestInputTokens: number = 0,
+    previousSummary: string = ''
   ): ContextCompactionResult {
     const result = new ContextCompactionResult()
     result.sessionId = sessionId
@@ -367,6 +503,22 @@ export class ContextCompactionService {
     }
 
     const keptMessages = messages.slice(anchorIndex + 1)
+    const summaryPromptTokens = estimateExtraPromptTokens([
+      ContextCompactionService.buildSummaryRequestPrompt(summary)
+    ])
+    // 二次压缩时被顶替掉的不只是原文，还有上一份摘要——它在 usedTokens 里属于
+    // “非历史”开销。不把它算进收益，重复压缩会被误判成没有净收益而一直拒绝执行。
+    const supersededSummaryTokens = previousSummary !== '' ? estimateExtraPromptTokens([
+      ContextCompactionService.buildSummaryRequestPrompt(previousSummary)
+    ]) : 0
+    const nonHistoryTokens = Math.max(0, usedTokens - historyTokens - supersededSummaryTokens)
+    const afterTokens = nonHistoryTokens + estimateMessagesTokens(keptMessages) + summaryPromptTokens
+    if (afterTokens >= usedTokens) {
+      // 压完反而更大：原文丢了、窗口没省下来，之后还会只剩“没有可压缩的更早历史”。
+      result.status = ContextCompactionStatus.SKIPPED
+      result.message = '这段历史压缩后不会更省（摘要的开销不小于被它替换掉的内容），请直接回答用户当前的问题'
+      return result
+    }
     result.status = ContextCompactionStatus.APPLIED
     result.summary = summary
     result.anchorMessageId = messages[anchorIndex].id
@@ -374,9 +526,7 @@ export class ContextCompactionService {
     result.compactedMessageCount = anchorIndex + 1
     result.keptMessageCount = keptMessages.length
     result.beforeTokens = usedTokens
-    const nonHistoryTokens = Math.max(0, usedTokens - historyTokens)
-    result.afterTokens = nonHistoryTokens + estimateMessagesTokens(keptMessages) +
-      estimateExtraPromptTokens([ContextCompactionService.buildSummaryRequestPrompt(summary)])
+    result.afterTokens = afterTokens
     result.message = '对话历史已压缩为摘要，请基于摘要继续回答用户当前的问题'
 
     console.info(
@@ -523,6 +673,20 @@ export class ContextCompactionService {
       '应用检测到上下文已达到用户设定的阈值，正在自动压缩较早的对话历史。' +
         '末尾尚未回答完的用户问题会继续以原文保留，不要把它误写成已经完成的事项。'
     )
+  }
+
+  // 子智能体的历史是“任务 + 工具往返”，没有用户对话，摘要要求也不一样：
+  // 它续答时唯一的依据就是这段摘要，工具已经查到的事实必须原样留住。
+  static buildSubAgentSummarySystemPrompt(agentName: string): string {
+    return `你是对话上下文压缩器。子智能体「${agentName}」的工作记录已经达到上下文上限，正在压缩较早的部分。\n` +
+      `请用第三人称完整总结这段记录，覆盖：交付目标与约束、已经查证的事实与数据（保留关键数字、标识符、文件名、URL 原文）、` +
+      `已完成的步骤与产出、已排除的方向及原因、当前进度与尚未完成的事项。\n` +
+      `工具调用的结论必须保留，不要只写“调用了某工具”；被替换掉的原始记录之后不再可见，写漏即永久丢失。\n` +
+      `只输出摘要正文（至少 ${MIN_COMPACT_SUMMARY_LENGTH} 个字符），不要寒暄，不要解释你在做什么。`
+  }
+
+  static buildSubAgentSummaryUserPrompt(): string {
+    return '请现在输出上述工作记录的压缩摘要。'
   }
 
   static buildManualSummaryUserPrompt(): string {

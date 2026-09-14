@@ -7,13 +7,23 @@ import {
   hasFiniteRetrievalCallLimit,
   UNLIMITED_RETRIEVAL_CALL_LIMIT
 } from '../config/RetrievalCallLimit'
-import { resolveRequestMaxOutputTokens } from '../utils/ContextWindowUtils'
+import {
+  buildContextUsageFromRequestTokens,
+  resolveRequestMaxOutputTokens
+} from '../utils/ContextWindowUtils'
+import {
+  COMPACT_SUMMARY_PROMPT_MARKER,
+  ContextCompactionService,
+  MIN_COMPACT_SUMMARY_LENGTH,
+  getContextCompactionService
+} from './ContextCompactionService'
 import {
   parseSubAgentToolArguments,
   SubAgentDispatchArguments,
   SubAgentTaskArguments
 } from './SubAgentArgumentParser'
 import { ToolExecutionContext } from './ToolRegistry'
+import { ReasoningRequestStrategy } from './ProviderCompatibilityRegistry'
 
 export const SUB_AGENT_TOOL_ID: string = 'sub_agent'
 
@@ -275,6 +285,10 @@ class SubAgentSession {
   totalToolCallCount: number = 0
   busy: boolean = false
   awaitingCollection: boolean = false
+  // 每个子智能体各自算自己的上下文，压缩计数与失败记忆也各自独立
+  compactCount: number = 0
+  // 上一次压缩失败时的消息条数：没有新进展前不再反复发摘要请求
+  compactionFailedAtMessageCount: number = -1
 
   constructor(
     id: string,
@@ -872,6 +886,17 @@ export class SubAgentService {
         return report
       }
 
+      // 发请求前先自检上下文。子智能体独立计算自己的窗口用量，越过阈值就地压缩，
+      // 不依赖主对话的压缩闸门，也不占用主对话那一次压缩机会。
+      await this.compactSessionIfNeeded(runtime, session, isCancelled)
+      if (isCancelled()) {
+        report.status = SUB_AGENT_STATUS_CANCELLED
+        report.result = '任务被用户取消'
+        live.status = SUB_AGENT_STATUS_CANCELLED
+        session.busy = false
+        return report
+      }
+
       report.rounds += 1
       session.totalRounds += 1
       live.rounds = session.totalRounds
@@ -1026,6 +1051,306 @@ ${knowledgeSearchRule}
       return prompt
     }
     return `${prompt}\n\n期望输出格式:\n${expectedOutput}`
+  }
+
+  // ============ 子智能体上下文压缩 ============
+  //
+  // 子智能体的上下文与主对话完全独立：它有自己的 messages、自己的窗口预算，
+  // 因此也必须自己判断阈值、自己压缩。此前这里没有任何压缩，历史涨到窗口上限后
+  // resolveRequestMaxOutputTokens 把可用输出压到 1，或者供应商直接报超长，
+  // 表现就是子智能体“到了阈值不压缩，然后整个停住”。
+
+  // 摘要之外仍以原文保留的最近消息条数。子智能体一轮里可能有很多次工具往返，
+  // 按条数保留比按“轮次”更贴合它的消息形状。
+  private static readonly COMPACT_KEEP_RECENT_MESSAGES: number = 8
+
+  // 送去做摘要的转写文本上限，避免摘要请求自己又撑爆窗口
+  private static readonly COMPACT_TRANSCRIPT_MAX_CHARS: number = 80000
+  private static readonly COMPACT_TRANSCRIPT_HEAD_CHARS: number = 20000
+  private static readonly COMPACT_MESSAGE_PREVIEW_CHARS: number = 1500
+
+  // 被切掉的部分太小就不值得压：摘要本身也要占一份上下文，
+  // 换不来净收益的压缩只会白扔原文。先粗筛，拿到摘要后再按实际大小复核。
+  private static readonly COMPACT_MIN_DROPPED_TOKENS: number = 1000
+
+  // 前导 system 消息（子智能体的系统提示，以及上一次压缩插入的摘要）必须保留在最前。
+  // 返回值是会话正文的起始下标。
+  private resolveConversationStartIndex(messages: RequestMessage[]): number {
+    let index = 0
+    while (index < messages.length && messages[index].role === 'system') {
+      index += 1
+    }
+    return index
+  }
+
+  private findExistingSummaryIndex(messages: RequestMessage[]): number {
+    for (let i = 0; i < messages.length; i++) {
+      if (messages[i].role !== 'system') {
+        break
+      }
+      if (messages[i].content.indexOf(COMPACT_SUMMARY_PROMPT_MARKER) >= 0) {
+        return i
+      }
+    }
+    return -1
+  }
+
+  // 安全的切割点：只能切在 user 或 assistant 之前。切在 tool 之前会把 tool result
+  // 与它的 assistant(tool_calls) 拆散，供应商会直接报协议错误。
+  private snapToSafeBoundary(messages: RequestMessage[], startIndex: number, desired: number): number {
+    // 优先向前退到这组调用的 assistant(tool_calls)：整组保留，留下的历史只多不少
+    let backward = desired
+    while (backward > startIndex && messages[backward].role === 'tool') {
+      backward -= 1
+    }
+    if (backward > startIndex) {
+      return backward
+    }
+    // 保留窗口之外整个就是一组超大的工具往返时，只能整组丢掉，否则永远压不动
+    let forward = desired
+    while (forward < messages.length && messages[forward].role === 'tool') {
+      forward += 1
+    }
+    return forward
+  }
+
+  // 子智能体经常是“消息条数不多、但每条极重”——一次检索就能塞满窗口。固定保留 N 条
+  // 会让这类会话永远切不出可压缩的部分，表现正是“到了阈值也不压缩”。这里逐步缩小
+  // 保留窗口，直到能切出东西；但至少留一条原文，否则请求里会只剩 system 消息。
+  private resolveSafeSplitIndex(messages: RequestMessage[], startIndex: number): number {
+    for (let keep = SubAgentService.COMPACT_KEEP_RECENT_MESSAGES; keep >= 1; keep--) {
+      const desired = messages.length - keep
+      if (desired <= startIndex) {
+        continue
+      }
+      const split = this.snapToSafeBoundary(messages, startIndex, desired)
+      if (split > startIndex && split < messages.length) {
+        return split
+      }
+    }
+    return startIndex
+  }
+
+  private buildCompactionTranscript(messages: RequestMessage[]): string {
+    const lines: string[] = []
+    for (let i = 0; i < messages.length; i++) {
+      const message = messages[i]
+      const body = this.truncateForPreview(message.content, SubAgentService.COMPACT_MESSAGE_PREVIEW_CHARS)
+      if (message.role === 'assistant' && message.toolCalls.length > 0) {
+        const calls: string[] = []
+        for (let j = 0; j < message.toolCalls.length; j++) {
+          calls.push(`${message.toolCalls[j].functionName}(${this.truncateForPreview(
+            message.toolCalls[j].arguments, 300)})`)
+        }
+        lines.push(`[子智能体] ${body}\n[调用工具] ${calls.join('; ')}`)
+        continue
+      }
+      if (message.role === 'tool') {
+        lines.push(`[工具结果] ${body}`)
+        continue
+      }
+      if (message.role === 'user') {
+        lines.push(`[主助手指令] ${body}`)
+        continue
+      }
+      lines.push(`[子智能体] ${body}`)
+    }
+    const transcript = lines.join('\n\n')
+    if (transcript.length <= SubAgentService.COMPACT_TRANSCRIPT_MAX_CHARS) {
+      return transcript
+    }
+    // 掐掉中间而不是尾部：任务目标在开头，最新进展在结尾，两端都不能丢
+    const head = transcript.substring(0, SubAgentService.COMPACT_TRANSCRIPT_HEAD_CHARS)
+    const tailLength = SubAgentService.COMPACT_TRANSCRIPT_MAX_CHARS -
+      SubAgentService.COMPACT_TRANSCRIPT_HEAD_CHARS
+    const tail = transcript.substring(transcript.length - tailLength)
+    return `${head}\n\n……（中间记录过长已省略）……\n\n${tail}`
+  }
+
+  // 摘要只要一段纯文本，不需要推理，也不该为它多付一份思考 token
+  private buildCompactionApiConfig(source: AIApiConfig): AIApiConfig {
+    const config: AIApiConfig = {
+      providerId: source.providerId,
+      providerType: source.providerType,
+      apiStyle: source.apiStyle,
+      apiKey: source.apiKey,
+      baseUrl: source.baseUrl,
+      apiPath: source.apiPath,
+      openaiTransport: source.openaiTransport,
+      customHeadersJson: source.customHeadersJson,
+      topP: source.topP,
+      presencePenalty: source.presencePenalty,
+      frequencyPenalty: source.frequencyPenalty
+    }
+    config.modelReasoningStrategyOverride = ReasoningRequestStrategy.NONE
+    config.modelSupportsReasoning = false
+    return config
+  }
+
+  private async requestSubAgentSummary(
+    runtime: SubAgentRuntimeConfig,
+    session: SubAgentSession,
+    droppedMessages: RequestMessage[]
+  ): Promise<string> {
+    const apiConfig = this.buildCompactionApiConfig(runtime.apiConfig)
+    const requestMessages: RequestMessage[] = [
+      new RequestMessage('system', ContextCompactionService.buildSubAgentSummarySystemPrompt(session.name)),
+      new RequestMessage('user',
+        `以下是需要压缩的工作记录：\n\n${this.buildCompactionTranscript(droppedMessages)}\n\n` +
+          ContextCompactionService.buildSubAgentSummaryUserPrompt())
+    ]
+    // 流式解析状态是实例级的，摘要请求必须走独立实例，不能污染会话自己的解析器
+    const isolated = AIApiService.createIsolated()
+    const estimatedInput = isolated.estimateRequestInputTokens(
+      apiConfig,
+      requestMessages,
+      runtime.modelId,
+      ReasoningLevel.OFF
+    )
+    const maxOutputTokens = resolveRequestMaxOutputTokens(
+      runtime.maxTokens,
+      runtime.contextWindowTokens,
+      estimatedInput
+    )
+    try {
+      const result = await isolated.sendChatRequest(
+        apiConfig,
+        requestMessages,
+        runtime.modelId,
+        0.3,
+        maxOutputTokens
+      )
+      if (!result.success) {
+        console.error('SubAgentService',
+          `[${session.name}] compaction summary failed: ${result.errorMessage}`)
+        return ''
+      }
+      // 压缩摘要同样是一次真实的模型调用，必须计入本轮账单。
+      // 走和子智能体正常轮次一样的 onUsage 回调，汇总到主消息的用量统计里。
+      const usage = result.usage
+      runtime.onUsage(
+        usage !== null ? usage.prompt_tokens : estimatedInput,
+        usage !== null ? usage.completion_tokens : estimateTextTokens(result.content),
+        usage !== null,
+        usage !== null ? (usage.cache_read_tokens ?? 0) : 0,
+        usage !== null ? (usage.cache_write_tokens ?? 0) : 0
+      )
+      return result.content.trim()
+    } catch (error) {
+      console.error('SubAgentService',
+        `[${session.name}] compaction summary error: ${JSON.stringify(error)}`)
+      return ''
+    }
+  }
+
+  // 每一轮请求前自检：超过阈值就地压缩自己的 messages，压不动时如实返回 false，
+  // 让调用方继续把这一轮发出去，而不是静默停住。
+  private async compactSessionIfNeeded(
+    runtime: SubAgentRuntimeConfig,
+    session: SubAgentSession,
+    isCancelled: () => boolean
+  ): Promise<boolean> {
+    const compactionService = getContextCompactionService()
+    await compactionService.ensurePreferencesLoaded()
+    if (!compactionService.isEnabled() || runtime.contextWindowTokens <= 0) {
+      return false
+    }
+    // 上次压缩失败后，没有新消息进来就不再重复发摘要请求
+    if (session.compactionFailedAtMessageCount === session.messages.length) {
+      return false
+    }
+
+    const estimatedInput = session.apiService.estimateRequestInputTokens(
+      runtime.apiConfig,
+      session.messages,
+      runtime.modelId,
+      runtime.reasoningLevel,
+      session.tools.length > 0 ? session.tools : undefined,
+      true
+    )
+    const usage = buildContextUsageFromRequestTokens(
+      estimatedInput,
+      runtime.contextWindowTokens,
+      runtime.maxTokens,
+      compactionService.getThresholdPercent()
+    )
+    if (!usage.overThreshold) {
+      return false
+    }
+
+    const startIndex = this.resolveConversationStartIndex(session.messages)
+    const splitIndex = this.resolveSafeSplitIndex(session.messages, startIndex)
+    if (splitIndex <= startIndex) {
+      console.warn('SubAgentService',
+        `[${session.name}] over context threshold but nothing older is safe to compact`)
+      session.compactionFailedAtMessageCount = session.messages.length
+      return false
+    }
+
+    const originalMessageCount = session.messages.length
+    const droppedMessages = session.messages.slice(startIndex, splitIndex)
+    const droppedTokens = session.apiService.estimateRequestInputTokens(
+      runtime.apiConfig,
+      droppedMessages,
+      runtime.modelId,
+      ReasoningLevel.OFF
+    )
+    if (droppedTokens < SubAgentService.COMPACT_MIN_DROPPED_TOKENS) {
+      console.warn('SubAgentService',
+        `[${session.name}] over context threshold but only ${droppedTokens} tokens are compactable; ` +
+          'the recent tool results alone fill the window')
+      session.compactionFailedAtMessageCount = session.messages.length
+      return false
+    }
+    console.info('SubAgentService',
+      `[${session.name}] context ${usage.percent}% >= ${usage.thresholdPercent}%, ` +
+        `compacting ${droppedMessages.length} messages`)
+    session.liveState.liveContent += `\n\n—— 上下文达到 ${usage.percent}%，正在压缩较早的工作记录 ——\n\n`
+
+    const summary = await this.requestSubAgentSummary(runtime, session, droppedMessages)
+    if (isCancelled()) {
+      return false
+    }
+    if (summary.length < MIN_COMPACT_SUMMARY_LENGTH) {
+      console.warn('SubAgentService', `[${session.name}] compaction produced no usable summary`)
+      session.compactionFailedAtMessageCount = session.messages.length
+      return false
+    }
+
+    const summaryMessage = new RequestMessage('system',
+      ContextCompactionService.buildSummaryRequestPrompt(summary))
+    // 摘要反而比被它替换掉的原文还大时，压缩是净亏损：原文丢了，窗口没省下来
+    const summaryTokens = estimateTextTokens(summaryMessage.content)
+    if (summaryTokens >= droppedTokens) {
+      console.warn('SubAgentService',
+        `[${session.name}] compaction abandoned: summary ${summaryTokens} tokens ` +
+          `is not smaller than the ${droppedTokens} tokens it would replace`)
+      session.compactionFailedAtMessageCount = session.messages.length
+      return false
+    }
+    const rebuilt: RequestMessage[] = []
+    const existingSummaryIndex = this.findExistingSummaryIndex(session.messages)
+    for (let i = 0; i < startIndex; i++) {
+      // 旧摘要被本次摘要取代：新摘要是在包含旧摘要的历史上生成的，留着只会重复占地方
+      if (i === existingSummaryIndex) {
+        continue
+      }
+      rebuilt.push(session.messages[i])
+    }
+    rebuilt.push(summaryMessage)
+    for (let i = splitIndex; i < session.messages.length; i++) {
+      rebuilt.push(session.messages[i])
+    }
+    session.messages.splice(0, session.messages.length)
+    for (let i = 0; i < rebuilt.length; i++) {
+      session.messages.push(rebuilt[i])
+    }
+    session.compactCount += 1
+    session.compactionFailedAtMessageCount = -1
+    console.info('SubAgentService',
+      `[${session.name}] compaction #${session.compactCount} done: ` +
+        `messages ${originalMessageCount}->${rebuilt.length}`)
+    return true
   }
 
   // 单轮流式请求：聚合内容与工具调用，Promise 化回调接口
