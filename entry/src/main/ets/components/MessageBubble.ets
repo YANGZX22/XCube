@@ -60,6 +60,19 @@ import {
   parsePythonSandboxFileUrl
 } from '../services/PythonSandboxArtifactLink'
 
+// content.trim() 会整段复制一份字符串。这里只要知道"有没有可见字符"，
+// 从头扫到第一个非空白就能返回，通常第一个字符就命中；正文越长越不该为
+// 这一个布尔值付一次全文复制的代价。
+function hasNonWhitespace(text: string): boolean {
+  for (let i = 0; i < text.length; i++) {
+    const code = text.charCodeAt(i)
+    if (code !== 32 && code !== 9 && code !== 10 && code !== 13 && code !== 12 && code !== 11) {
+      return true
+    }
+  }
+  return false
+}
+
 const DOMAIN = 0x0002
 const TAG = 'MessageBubble'
 
@@ -248,6 +261,8 @@ export struct MessageBubble {
   private cachedCurrentMessageModelIconResourcePath: string = ''
   private cachedReadonlyMessageContent: string = ''
   private cachedReadonlyReasoningContent: string = ''
+  private readonlyMessageContentDirty: boolean = true
+  private readonlyReasoningContentDirty: boolean = true
   private cachedReadonlyTranslatedText: string = ''
   private cachedHasHtmlSegments: boolean = false
   private cachedContentSegments: ContentSegment[] = []
@@ -481,6 +496,18 @@ export struct MessageBubble {
     return segments.join('|')
   }
 
+  // 派生缓存签名只用来判断"要不要重算"，不需要逐字符比对全文。流式期间正文与思考
+  // 会长到几万字，把全文拼进签名再做一次字符串比较，等于每个分片都把整段文本多扫
+  // 两遍——思考越长越明显。长度加首尾采样足以覆盖真实会发生的变化：流式是纯追加，
+  // 其余场景（回滚、翻译、编辑预览）都是整体替换，长度或首尾必然跟着变。
+  private buildTextSignature(text: string): string {
+    if (text.length <= 64) {
+      return text
+    }
+    return text.length.toString() + '\u0002' + text.substring(0, 24) +
+      '\u0002' + text.substring(text.length - 24)
+  }
+
   private buildDerivedCacheSignature(): string {
     return [
       this.message.id,
@@ -496,15 +523,15 @@ export struct MessageBubble {
       this.message.uncachedInputTokens.toString(),
       this.message.cacheReadTokens.toString(),
       this.message.cacheWriteTokens.toString(),
-      this.message.content,
-      this.message.reasoningContent,
+      this.buildTextSignature(this.message.content),
+      this.buildTextSignature(this.message.reasoningContent),
       this.message.isGenerating ? '1' : '0',
       this.message.isSearching ? '1' : '0',
       this.message.contextCompactionState,
       this.currentModelId,
       this.isEditing ? '1' : '0',
-      this.previewContent,
-      this.translatedText,
+      this.buildTextSignature(this.previewContent),
+      this.buildTextSignature(this.translatedText),
       this.message.documentToolHint,
       this.buildAttachmentSignature(this.previewAttachments),
       this.buildAttachmentSignature(this.message.attachments)
@@ -526,11 +553,13 @@ export struct MessageBubble {
       ? this.hasRenderableAttachments(this.previewAttachments)
       : this.hasRenderableAttachments(this.message.attachments)
     this.cachedHasPreviewTextContent = this.cachedDisplayContent.length > 0
-    this.cachedHasMessageTextContent = this.message.content.trim().length > 0
+    this.cachedHasMessageTextContent = hasNonWhitespace(this.message.content)
     this.cachedHasToolbarPayload = this.cachedHasMessageTextContent || this.message.hasAttachments()
     this.cachedCurrentMessageModelIconResourcePath = this.computeCurrentMessageModelIconResourcePath()
-    this.cachedReadonlyMessageContent = this.convertTaskListToReadonly(this.message.content)
-    this.cachedReadonlyReasoningContent = this.convertTaskListToReadonly(this.message.reasoningContent)
+    // 这两份只读文本每次都要跑好几趟全文正则，按需算即可：流式期间没有任何渲染
+    // 路径读它们，急切计算等于每个分片白扫两遍正文和思考。
+    this.readonlyMessageContentDirty = true
+    this.readonlyReasoningContentDirty = true
     this.cachedReadonlyTranslatedText = this.convertTaskListToReadonly(this.translatedText)
     this.cachedHasHtmlSegments = !this.message.isGenerating && this.hasHtmlBlocks(this.message.content)
     this.cachedContentSegments = this.cachedHasHtmlSegments ? this.splitContentToSegments(this.message.content) : []
@@ -1222,11 +1251,19 @@ export struct MessageBubble {
 
   private getReadonlyMessageContent(): string {
     this.ensureDerivedRenderCaches()
+    if (this.readonlyMessageContentDirty) {
+      this.readonlyMessageContentDirty = false
+      this.cachedReadonlyMessageContent = this.convertTaskListToReadonly(this.message.content)
+    }
     return this.cachedReadonlyMessageContent
   }
 
   private getReadonlyReasoningContent(): string {
     this.ensureDerivedRenderCaches()
+    if (this.readonlyReasoningContentDirty) {
+      this.readonlyReasoningContentDirty = false
+      this.cachedReadonlyReasoningContent = this.convertTaskListToReadonly(this.message.reasoningContent)
+    }
     return this.cachedReadonlyReasoningContent
   }
 
