@@ -570,11 +570,15 @@
     },
     {
       "name": "usage_stats_range_all",
-      "value": "All"
+      "value": "ALL"
+    },
+    {
+      "name": "usage_stats_range_7d",
+      "value": "7 DAYS"
     },
     {
       "name": "usage_stats_range_30d",
-      "value": "Last 30 days"
+      "value": "30 DAYS"
     },
     {
       "name": "usage_stats_overview_title",

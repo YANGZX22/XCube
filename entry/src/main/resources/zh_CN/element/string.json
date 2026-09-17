@@ -573,6 +573,10 @@
       "value": "全部"
     },
     {
+      "name": "usage_stats_range_7d",
+      "value": "近 7 天"
+    },
+    {
       "name": "usage_stats_range_30d",
       "value": "近 30 天"
     },

@@ -3410,22 +3410,21 @@ export class DatabaseService {
     if (this.rdbStore === null) {
       return rows
     }
-    const predicates = new relationalStore.RdbPredicates(TableNames.MESSAGES)
-    this.applyUsageRange(predicates, 'timestamp', rangeStartMs)
-    if (rangeEndMs > 0) {
-      predicates.lessThan('timestamp', rangeEndMs)
+    // All usage views share this scope: orphan messages are not active history.
+    let conditions = `EXISTS (SELECT 1 FROM ${TableNames.SESSIONS} s WHERE s.id = m.session_id)`
+    const args: relationalStore.ValueType[] = []
+    if (rangeStartMs > 0) {
+      conditions += ' AND m.timestamp >= ?'
+      args.push(rangeStartMs)
     }
-    const resultSet = await this.rdbStore.query(predicates, [
-      'role',
-      'model_name',
-      'model_id',
-      'timestamp',
-      'billing_enabled',
-      'billing_currency',
-      'estimated_input_tokens',
-      'estimated_output_tokens',
-      'estimated_cost'
-    ])
+    if (rangeEndMs > 0) {
+      conditions += ' AND m.timestamp < ?'
+      args.push(rangeEndMs)
+    }
+    const resultSet = await this.rdbStore.querySql(
+      `SELECT m.role, m.model_name, m.model_id, m.timestamp, m.billing_enabled,
+              m.billing_currency, m.estimated_input_tokens, m.estimated_output_tokens, m.estimated_cost
+       FROM ${TableNames.MESSAGES} m WHERE ${conditions}`, args)
     try {
       while (resultSet.goToNextRow()) {
         rows.push({

@@ -29,6 +29,7 @@ import { formatBillingAmount } from '../utils/ModelBillingUtils'
 import { pickLocalizedText } from '../utils/LocalizedTextUtils'
 
 const TAG = 'UsageStatsPage'
+const RANGE_7D_MS: number = 7 * 24 * 60 * 60 * 1000
 const RANGE_30D_MS: number = 30 * 24 * 60 * 60 * 1000
 const RANKING_LIMIT: number = 10
 const RANGE_SWIPE_THRESHOLD: number = 72
@@ -36,7 +37,7 @@ const RANGE_DRAG_MAX_OFFSET: number = 44
 const RANKING_ANIMATION_DELAY_MS: number = 40
 const RANKING_ANIMATION_DURATION_MS: number = 640
 const RANGE_FLOATING_TAB_BAR_HEIGHT: number = 52
-const RANGE_FLOATING_TAB_BAR_WIDTH: number = 220
+const RANGE_FLOATING_TAB_BAR_WIDTH: number = 300
 const RANGE_FLOATING_TAB_BAR_SIDE_MARGIN: number = 16
 const RANGE_FLOATING_TAB_BAR_BOTTOM_MARGIN: number = 12
 const RANGE_FLOATING_TAB_BAR_SAFE_BOTTOM_MARGIN: number = 24
@@ -46,6 +47,7 @@ let usageStatsPagePathStack: NavPathStack | null = null
 
 enum UsageRangeKey {
   ALL = 'all',
+  LAST_7D = 'last_7d',
   LAST_30D = 'last_30d'
 }
 
@@ -164,6 +166,7 @@ struct UsageStatsPage {
   @Local activityLoadFailed: boolean = false
 
   private allRangeScroller: Scroller = new Scroller()
+  private last7DaysRangeScroller: Scroller = new Scroller()
   private last30DaysRangeScroller: Scroller = new Scroller()
   private statsLoadToken: number = 0
   private rankingAnimationTimer: number = -1
@@ -186,7 +189,7 @@ struct UsageStatsPage {
     this.activityLoadToken += 1
   }
 
-  // The annual activity calendar is independent of the overview's All / 30-day tabs.
+  // The annual activity calendar is independent of the overview's All / 7-day / 30-day tabs.
   private async loadActivity(): Promise<void> {
     const loadToken = ++this.activityLoadToken
     const period = getUsageActivityPeriod()
@@ -212,6 +215,9 @@ struct UsageStatsPage {
   }
 
   private getRangeStartMs(): number {
+    if (this.currentRange === UsageRangeKey.LAST_7D) {
+      return Date.now() - RANGE_7D_MS
+    }
     if (this.currentRange === UsageRangeKey.LAST_30D) {
       return Date.now() - RANGE_30D_MS
     }
@@ -366,15 +372,24 @@ struct UsageStatsPage {
   }
 
   private getCurrentRangeIndex(): number {
-    return this.currentRange === UsageRangeKey.ALL ? 0 : 1
+    if (this.currentRange === UsageRangeKey.LAST_7D) {
+      return 1
+    }
+    return this.currentRange === UsageRangeKey.LAST_30D ? 2 : 0
   }
 
   private getRangeByIndex(index: number): UsageRangeKey {
-    return index === 0 ? UsageRangeKey.ALL : UsageRangeKey.LAST_30D
+    if (index === 1) {
+      return UsageRangeKey.LAST_7D
+    }
+    return index === 2 ? UsageRangeKey.LAST_30D : UsageRangeKey.ALL
   }
 
   private getRangeScroller(rangeKey: UsageRangeKey): Scroller {
-    return rangeKey === UsageRangeKey.ALL ? this.allRangeScroller : this.last30DaysRangeScroller
+    if (rangeKey === UsageRangeKey.LAST_7D) {
+      return this.last7DaysRangeScroller
+    }
+    return rangeKey === UsageRangeKey.LAST_30D ? this.last30DaysRangeScroller : this.allRangeScroller
   }
 
   private getFloatingRangeTabBottomMargin(): number {
@@ -388,11 +403,12 @@ struct UsageStatsPage {
   }
 
   private getRangeBySwipeOffset(offsetX: number): UsageRangeKey | null {
-    if (offsetX <= -RANGE_SWIPE_THRESHOLD && this.currentRange === UsageRangeKey.ALL) {
-      return UsageRangeKey.LAST_30D
+    const currentIndex = this.getCurrentRangeIndex()
+    if (offsetX <= -RANGE_SWIPE_THRESHOLD && this.currentRange !== UsageRangeKey.LAST_30D) {
+      return this.getRangeByIndex(currentIndex + 1)
     }
-    if (offsetX >= RANGE_SWIPE_THRESHOLD && this.currentRange === UsageRangeKey.LAST_30D) {
-      return UsageRangeKey.ALL
+    if (offsetX >= RANGE_SWIPE_THRESHOLD && this.currentRange !== UsageRangeKey.ALL) {
+      return this.getRangeByIndex(currentIndex - 1)
     }
     return null
   }
@@ -846,6 +862,9 @@ struct UsageStatsPage {
     if (index === 0) {
       this.FloatingRangeTab(UsageRangeKey.ALL, $r('app.string.usage_stats_range_all'))
     }
+    else if (index === 1) {
+      this.FloatingRangeTab(UsageRangeKey.LAST_7D, $r('app.string.usage_stats_range_7d'))
+    }
     else {
       this.FloatingRangeTab(UsageRangeKey.LAST_30D, $r('app.string.usage_stats_range_30d'))
     }
@@ -859,6 +878,11 @@ struct UsageStatsPage {
           this.RangePageContent(UsageRangeKey.ALL)
         }
         .tabBar(this.FloatingRangeTab(UsageRangeKey.ALL, $r('app.string.usage_stats_range_all')))
+
+        TabContent() {
+          this.RangePageContent(UsageRangeKey.LAST_7D)
+        }
+        .tabBar(this.FloatingRangeTab(UsageRangeKey.LAST_7D, $r('app.string.usage_stats_range_7d')))
 
         TabContent() {
           this.RangePageContent(UsageRangeKey.LAST_30D)
@@ -894,7 +918,7 @@ struct UsageStatsPage {
       })
       if (shouldUseDrawnNavigation()) {
         DrawnFloatingTabBar({
-          tabCount: 2,
+          tabCount: 3,
           selectedIndex: this.getCurrentRangeIndex(),
           barWidth: RANGE_FLOATING_TAB_BAR_WIDTH,
           barHeight: RANGE_FLOATING_TAB_BAR_HEIGHT,
