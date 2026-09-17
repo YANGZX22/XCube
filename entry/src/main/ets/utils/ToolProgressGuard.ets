@@ -1,16 +1,30 @@
+import { PromptLanguage, pickPromptText } from './PromptLanguageUtils'
+
 export const TOOL_PROGRESS_WARNING: string =
   '连续相同的工具调用未取得新结果。请使用已有结果；只有存在明确缺口时才改用其他参数或方法，不要原样重试。'
 export const TOOL_PROGRESS_STOP: string =
   '连续五次相同的工具调用返回相同结果，本轮已停止工具执行。请基于已有结果回答；若任务尚未完成，说明实际阻塞，不要声称完成。'
 
+export function getToolProgressStop(language: PromptLanguage): string {
+  return pickPromptText(language, TOOL_PROGRESS_STOP,
+    'Five consecutive identical tool calls returned the same result. Tool execution has stopped for this turn. ' +
+    'Answer from available results; if unfinished, state the actual blocker without claiming completion.')
+}
+
+export function isToolProgressStop(content: string): boolean {
+  return content === getToolProgressStop(PromptLanguage.ZH_CN) || content === getToolProgressStop(PromptLanguage.EN_US)
+}
+
 class ToolProgressState {
   requestId: string
+  language: PromptLanguage
   signature: string = ''
   result: string = ''
   repeats: number = 0
 
-  constructor(requestId: string) {
+  constructor(requestId: string, language: PromptLanguage) {
     this.requestId = requestId
+    this.language = language
   }
 }
 
@@ -67,9 +81,9 @@ function isBlockingInteraction(name: string, args: string): boolean {
 export class ToolProgressGuard {
   private states: Map<string, ToolProgressState> = new Map()
 
-  beginTurn(requestId: string, actorId: string): void {
+  beginTurn(requestId: string, actorId: string, language: PromptLanguage = PromptLanguage.ZH_CN): void {
     if (requestId !== '') {
-      this.states.set(this.key(requestId, actorId), new ToolProgressState(requestId))
+      this.states.set(this.key(requestId, actorId), new ToolProgressState(requestId, language))
     }
   }
 
@@ -90,6 +104,10 @@ export class ToolProgressGuard {
     return state !== undefined && state.repeats >= 5
   }
 
+  getStopMessage(requestId: string, actorId: string): string {
+    return getToolProgressStop(this.states.get(this.key(requestId, actorId))?.language ?? PromptLanguage.ZH_CN)
+  }
+
   observe(requestId: string, actorId: string, name: string, args: string, result: string): string {
     const state = this.states.get(this.key(requestId, actorId))
     // 已结束的请求可能仍有正在收尾的工具；不能由迟到结果重新创建状态。
@@ -108,9 +126,11 @@ export class ToolProgressGuard {
     state.signature = signature
     state.result = canonicalResult
     if (state.repeats >= 5) {
-      return TOOL_PROGRESS_STOP
+      return getToolProgressStop(state.language)
     }
-    return state.repeats === 3 ? TOOL_PROGRESS_WARNING : ''
+    return state.repeats === 3 ? pickPromptText(state.language, TOOL_PROGRESS_WARNING,
+      'Repeated identical tool calls have produced no new information. Use available results; ' +
+      'change arguments or methods only for a concrete gap. Do not repeat the same attempt.') : ''
   }
 
   private key(requestId: string, actorId: string): string {

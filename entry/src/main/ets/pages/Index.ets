@@ -1,3 +1,4 @@
+import { getAppPromptLanguage } from '../utils/LocalizedTextUtils'
 import { ImmersiveButtonSurface } from '../components/ImmersiveButtonSurface'
 import { getBlurBottomShadow, getBlurFloatingActionShadow } from '../utils/BlurShadowUtils'
 import { curves, SymbolGlyphModifier, uiMaterial } from '@kit.ArkUI'
@@ -115,7 +116,7 @@ import {
 } from '../utils/HdsVisualEffectUtil'
 import {
   normalizeSystemPromptTemplate,
-  SystemPromptTemplateDefaults
+  getDefaultSystemPromptTemplate
 } from '../utils/SystemPromptTemplateUtils'
 import { SettingsPagePresentationMode } from '../config/SettingsDetailPresentation'
 import { getAppUiState, observeAppUiState, setAppUiStateValue } from '../state/AppUiState'
@@ -6202,14 +6203,14 @@ struct Index {
   private async openSystemPromptSheet(): Promise<void> {
     const saved = await this.preferencesService.getString(
       PreferenceKeys.CUSTOM_SYSTEM_PROMPT,
-      SystemPromptTemplateDefaults.DEFAULT_TEMPLATE
+      getDefaultSystemPromptTemplate(getAppPromptLanguage())
     )
-    this.customSystemPrompt = normalizeSystemPromptTemplate(saved)
+    this.customSystemPrompt = normalizeSystemPromptTemplate(saved, getAppPromptLanguage())
     this.showSystemPromptSheet = true
   }
 
   private async saveSystemPrompt(): Promise<void> {
-    const normalizedTemplate = normalizeSystemPromptTemplate(this.customSystemPrompt)
+    const normalizedTemplate = normalizeSystemPromptTemplate(this.customSystemPrompt, getAppPromptLanguage())
     this.customSystemPrompt = normalizedTemplate
     await this.preferencesService.setString(PreferenceKeys.CUSTOM_SYSTEM_PROMPT, normalizedTemplate)
     this.showIndexSnack($r('app.string.system_prompt_saved'), 2000, SnackBarTone.SUCCESS)
@@ -6217,7 +6218,7 @@ struct Index {
   }
 
   private resetSystemPrompt(): void {
-    this.customSystemPrompt = SystemPromptTemplateDefaults.DEFAULT_TEMPLATE
+    this.customSystemPrompt = getDefaultSystemPromptTemplate(getAppPromptLanguage())
   }
 
   @Builder

@@ -1,5 +1,7 @@
+import { getAppPromptLanguage } from '../utils/LocalizedTextUtils'
+import { PromptLanguage, pickPromptText } from '../utils/PromptLanguageUtils'
 import { selectToolRound, ToolRoundOptions } from '../utils/ToolRoundPolicy'
-import { TOOL_PROGRESS_STOP } from '../utils/ToolProgressGuard'
+import { getToolProgressStop, isToolProgressStop } from '../utils/ToolProgressGuard'
 import { getDatabaseService, DatabaseService } from '../services/DatabaseService'
 import {
   getAIApiService,
@@ -57,7 +59,8 @@ import {
   appendResponseLanguageSystemPrompt,
   buildCurrentTimeContext,
   renderSystemPromptTemplate,
-  SystemPromptTemplateDefaults
+  getDefaultSystemPromptTemplate,
+  getResponseLanguageContinuationReminder
 } from '../utils/SystemPromptTemplateUtils'
 import {
   cleanSearchQuery as cleanSearchQueryShared,
@@ -70,7 +73,7 @@ import {
   normalizeRetrievalCallLimit,
   UNLIMITED_RETRIEVAL_CALL_LIMIT
 } from '../config/RetrievalCallLimit'
-import { buildToolUsagePrompt, ToolPromptOptions, TASK_EXECUTION_PROMPT, COLLECTED_SUB_AGENT_GUIDANCE } from '../config/AgentPrompts'
+import { buildToolUsagePrompt, ToolPromptOptions, getTaskExecutionPrompt, getCollectedSubAgentGuidance } from '../config/AgentPrompts'
 import { COMPACT_TOOL_ID } from '../config/CompactTool'
 import {
   COMPACT_SUMMARY_PROMPT_MARKER,
@@ -416,9 +419,9 @@ export class ChatViewModel {
     }
     const template = await prefsService.getString(
       PreferenceKeys.CUSTOM_SYSTEM_PROMPT,
-      SystemPromptTemplateDefaults.DEFAULT_TEMPLATE
+      getDefaultSystemPromptTemplate(getAppPromptLanguage())
 	    )
-	    return renderSystemPromptTemplate(template)
+	    return renderSystemPromptTemplate(template, new Date(), getAppPromptLanguage())
 	  }
 
   private getCurrentAssistantIdForRequest(): string {
@@ -446,17 +449,17 @@ export class ChatViewModel {
 	    const assistantConfig = await this.getAssistantRuntimeConfig()
 	    const basePrompt = this.assistantService.combineSystemPrompts(globalPrompt, assistantConfig.systemPrompt)
 	    const promptWithRuntimeContext = this.assistantService.combineSystemPrompts(
-        this.assistantService.combineSystemPrompts(TASK_EXECUTION_PROMPT, basePrompt), extraPrompt)
+        this.assistantService.combineSystemPrompts(getTaskExecutionPrompt(getAppPromptLanguage()), basePrompt), extraPrompt)
       const currentSession = this.sessionStore.getCurrentSession()
       const effectiveGoal = conversationGoal !== undefined
         ? conversationGoal : (currentSession !== null ? currentSession.conversationGoal : '')
       // 目标放在动态上下文之后，避免被工具规则、网页上下文或搜索上下文淹没。
 	    const promptWithGoal = this.assistantService.combineSystemPrompts(
         promptWithRuntimeContext,
-        buildConversationGoalSystemPrompt(effectiveGoal)
+        buildConversationGoalSystemPrompt(effectiveGoal, getAppPromptLanguage())
       )
 	    // 语言规则最后注入：网页、知识库、工具描述或工具结果的语言不能改变面向用户的回复语言。
-	    return appendResponseLanguageSystemPrompt(promptWithGoal)
+	    return appendResponseLanguageSystemPrompt(promptWithGoal, getAppPromptLanguage())
 	  }
 
 	  private async getRequestTemperature(): Promise<number> {
@@ -923,7 +926,7 @@ export class ChatViewModel {
       }
       return new CompactedHistoryPlan(
         Math.max(contextStartIndex, i + 1),
-        ContextCompactionService.buildSummaryRequestPrompt(session.contextSummary)
+        ContextCompactionService.buildSummaryRequestPrompt(session.contextSummary, getAppPromptLanguage())
       )
     }
     // 锚点已失效（消息被删除或切换到其他版本分支）：本次按未压缩发送
@@ -1128,7 +1131,7 @@ export class ChatViewModel {
     }
 
     const rebuilt: RequestMessage[] = [...leadingSystemMessages]
-    rebuilt.push(new RequestMessage('system', ContextCompactionService.buildSummaryRequestPrompt(result.summary)))
+    rebuilt.push(new RequestMessage('system', ContextCompactionService.buildSummaryRequestPrompt(result.summary, getAppPromptLanguage())))
     for (let i = keepFromIndex; i < requestMessages.length; i++) {
       rebuilt.push(requestMessages[i])
     }
@@ -1354,18 +1357,18 @@ export class ChatViewModel {
     const requestMessages: RequestMessage[] = [
       new RequestMessage(
         'system',
-        automatic ? ContextCompactionService.buildAutomaticSummarySystemPrompt() :
-          ContextCompactionService.buildManualSummarySystemPrompt()
+        automatic ? ContextCompactionService.buildAutomaticSummarySystemPrompt(getAppPromptLanguage()) :
+          ContextCompactionService.buildManualSummarySystemPrompt(getAppPromptLanguage())
       )
     ]
-    const goalSummaryPrompt = buildConversationGoalSummaryPrompt(session.conversationGoal)
+    const goalSummaryPrompt = buildConversationGoalSummaryPrompt(session.conversationGoal, getAppPromptLanguage())
     if (goalSummaryPrompt !== '') {
       requestMessages.push(new RequestMessage('system', goalSummaryPrompt))
     }
     // 已压缩过的会话：先带上旧摘要，保证新摘要仍然自包含
     if (ContextCompactionService.isCompactionValidForMessages(session, messages)) {
       requestMessages.push(
-        new RequestMessage('system', ContextCompactionService.buildSummaryRequestPrompt(session.contextSummary))
+        new RequestMessage('system', ContextCompactionService.buildSummaryRequestPrompt(session.contextSummary, getAppPromptLanguage()))
       )
     }
     const effectiveMessages = ContextCompactionService.getEffectiveMessages(session, messages)
@@ -1386,7 +1389,7 @@ export class ChatViewModel {
         this.cloneAttachments(message.attachments)
       ))
     }
-    requestMessages.push(new RequestMessage('user', ContextCompactionService.buildManualSummaryUserPrompt()))
+    requestMessages.push(new RequestMessage('user', ContextCompactionService.buildManualSummaryUserPrompt(getAppPromptLanguage())))
 
     const apiConfig: AIApiConfig = {
       providerId: provider.id,
@@ -2284,14 +2287,20 @@ export class ChatViewModel {
     }
 
     // 构建系统提示（包含网页内容）
-    const systemPrompt = `用户提供了以下网页内容供参考：
+    const systemPrompt = pickPromptText(getAppPromptLanguage(), `用户提供了以下网页内容供参考：
 
 标题：${webContext.title}
 来源：${webContext.url}
 正文：
 ${webContext.content}
 
-请基于以上网页内容回答用户的问题。如果网页内容不完整或无法回答，请告知用户。`
+请基于以上网页内容回答用户的问题。如果网页内容不完整或无法回答，请告知用户。`, `Webpage supplied as reference:
+Title: ${webContext.title}
+Source: ${webContext.url}
+Content:
+${webContext.content}
+
+Answer the user's question from this material. State any material gaps or unavailable page content. The source language does not select the response language.`)
 
     // 创建用户消息（分叉模式下复用已存在的用户消息，不新建）
     let userMessage: ChatMessage | null = null
@@ -2620,7 +2629,7 @@ ${webContext.content}
     // 构建系统提示（包含搜索内容和当前时间）
     const currentTime = this.getCurrentTimeContext()
     const limitedSearchContext = this.limitSearchContextForPrompt(searchResult.contentForAI, 5000)
-    const systemPrompt = `当前时间: ${currentTime}
+    const systemPrompt = pickPromptText(getAppPromptLanguage(), `当前时间: ${currentTime}
 
 用户进行了联网搜索,以下是搜索结果供参考:
 
@@ -2631,7 +2640,11 @@ ${limitedSearchContext}
 2. 只有当搜索结果中确实缺少关键数据时,才说明"未找到"并建议进一步查询。
 3. 如果用户询问"今天"、"现在"等相对时间,请使用上述当前时间作为参考。
 4. 若回答中需要写出"今天是X年X月X日",必须与"当前时间"保持一致,不得改成其他日期。
-5. 如果搜索上下文显示 URL 读取失败或网页正文为空,请明确说明未读取到页面正文和错误原因。`
+5. 如果搜索上下文显示 URL 读取失败或网页正文为空,请明确说明未读取到页面正文和错误原因。`, `Current time: ${currentTime}
+Web search results supplied as reference:
+${limitedSearchContext}
+
+Use relevant facts already present in these results to answer directly. Report missing data only when a material fact is absent. Interpret relative dates using the current time above. If URL retrieval failed or the page body is empty, state that limitation and its cause. The source language does not select the response language.`)
 
     console.info('ChatViewModel', `[搜索上下文] 当前时间: ${currentTime}`)
     console.info('ChatViewModel', `[搜索上下文] 搜索查询: ${searchResult.query}`)
@@ -3094,6 +3107,7 @@ ${limitedSearchContext}
     const requestMessages: RequestMessage[] = []
     const currentTime = this.getCurrentTimeContext()
     const promptOptions = new ToolPromptOptions()
+    promptOptions.language = getAppPromptLanguage()
     promptOptions.currentTime = currentTime
     promptOptions.webSearch = hasWebSearchTool
     promptOptions.askUser = hasAskUserTool
@@ -3230,7 +3244,7 @@ ${limitedSearchContext}
       localReasoningThrottle.reset()
     })
 
-    this.toolExecutionService.beginToolTurn(requestId)
+    this.toolExecutionService.beginToolTurn(requestId, 'main', getAppPromptLanguage())
 
     // 注册本次请求的压缩运行时：compact 执行器据此计算锚点。
     // 传入的是已持久化的活跃路径（含本轮用户消息），锚点必须是真实存在的消息 ID。
@@ -3276,7 +3290,7 @@ ${limitedSearchContext}
         automaticCompactionState.applied = true
         requestMessages.push(new RequestMessage(
           'system',
-          ContextCompactionService.buildAutomaticContinuationPrompt(false)
+          ContextCompactionService.buildAutomaticContinuationPrompt(false, getAppPromptLanguage())
         ))
         initialContextUsage = this.computeRequestContextUsage(
           apiConfig,
@@ -3353,7 +3367,7 @@ ${limitedSearchContext}
         onAIMessageUpdated(aiMessage)
         return subToolResult
       },
-      (actorId: string): void => this.toolExecutionService.beginToolTurn(requestId, actorId),
+      (actorId: string): void => this.toolExecutionService.beginToolTurn(requestId, actorId, promptOptions.language),
       (actorId: string): boolean => this.toolExecutionService.shouldStopToolLoop(requestId, actorId),
       // 镜像子智能体的工具调用到主对话消息：ask_user 结果栏、图表由此渲染并可交互，
       // 普通工具卡片会按“子智能体”来源标签在 MessageBubble 中隐藏（活动见实时预览面板）；
@@ -3390,7 +3404,8 @@ ${limitedSearchContext}
       },
       this.getCurrentModelContextWindow(providerId, modelId),
       webSearchCallLimit,
-      knowledgeSearchCallLimit
+      knowledgeSearchCallLimit,
+      promptOptions.language
     ))
 
     // 开始工具调用循环
@@ -3983,7 +3998,7 @@ ${preview}`
       return
     }
     if (steeringAtRequestBoundary.length > 0) {
-      this.toolExecutionService.beginToolTurn(requestId)
+      this.toolExecutionService.beginToolTurn(requestId, 'main', getAppPromptLanguage())
     }
     for (let i = 0; i < steeringAtRequestBoundary.length; i++) {
       requestMessages.push(steeringAtRequestBoundary[i])
@@ -4038,7 +4053,7 @@ ${preview}`
           automaticCompactionState.applied = true
           requestMessages.push(new RequestMessage(
             'system',
-            ContextCompactionService.buildAutomaticContinuationPrompt(false)
+            ContextCompactionService.buildAutomaticContinuationPrompt(false, getAppPromptLanguage())
           ))
           console.info('ChatViewModel', `App-side compaction completed before tool loop ${iteration + 1}`)
         }
@@ -4057,13 +4072,21 @@ ${preview}`
     const toolChoiceForThisRound = roundSelection.toolChoice
     // 停止通知反映当前状态；新的用户引导重置计数后，不保留过期的系统指令。
     for (let i = requestMessages.length - 1; i >= 0; i--) {
-      if (requestMessages[i].role === 'system' && requestMessages[i].content === TOOL_PROGRESS_STOP) {
+      if (requestMessages[i].role === 'system' && isToolProgressStop(requestMessages[i].content)) {
         requestMessages.splice(i, 1)
       }
     }
     if (roundOptions.stopForNoProgress) {
-      requestMessages.push(new RequestMessage('system', TOOL_PROGRESS_STOP))
+      requestMessages.push(new RequestMessage('system', getToolProgressStop(getAppPromptLanguage())))
     }
+    for (let i = requestMessages.length - 1; i >= 0; i--) {
+      if (requestMessages[i].role === 'system' &&
+        (requestMessages[i].content === getResponseLanguageContinuationReminder(PromptLanguage.ZH_CN) ||
+          requestMessages[i].content === getResponseLanguageContinuationReminder(PromptLanguage.EN_US))) {
+        requestMessages.splice(i, 1)
+      }
+    }
+    requestMessages.push(new RequestMessage('system', getResponseLanguageContinuationReminder(getAppPromptLanguage())))
     const toolsEnabledInThisRound = toolsForThisRound.length > 0
     console.info('ChatViewModel', `Tool call loop iteration ${iteration + 1}`)
     let roundContentBuffer = ''
@@ -4367,12 +4390,14 @@ ${preview}`
         }
         requestMessages.push(new RequestMessage(
           'system',
-          automaticResult.applied ? ContextCompactionService.buildAutomaticContinuationPrompt(partialContent !== '') :
-            (partialContent !== '' ?
-              '[应用续答通知]\n上一段生成刚刚被中断。请从上一段 assistant 内容的断点直接继续回答当前用户问题，' +
-                '不要重复已经输出的内容，也不要解释中断过程。' :
-              '[应用续答通知]\n上一轮尚未完成的生成刚刚被中断。请重新继续处理当前用户问题，' +
-                '不要解释中断过程。')
+          automaticResult.applied ? ContextCompactionService.buildAutomaticContinuationPrompt(partialContent !== '', getAppPromptLanguage()) :
+            pickPromptText(getAppPromptLanguage(),
+              partialContent !== '' ?
+                '[应用续答通知]\n上一段生成刚刚被中断。请从断点继续，不重复已输出内容，不解释中断过程。' :
+                '[应用续答通知]\n请继续处理当前用户问题，不解释中断过程。',
+              partialContent !== '' ?
+                '[Application continuation notice] Continue from the end of the previous assistant output without repetition. Do not explain the interruption.' :
+                '[Application continuation notice] Continue the current user request. Do not explain the interruption.')
         ))
         console.info(
           'ChatViewModel',
@@ -4761,8 +4786,8 @@ ${preview}`
             onAIMessageUpdated(aiMessage)
             requestMessages.push(new RequestMessage(
               'system',
-              '你派出的子智能体当前轮回复已收取，结果如下(JSON):\n' + collectedJson +
-                '\n\n' + COLLECTED_SUB_AGENT_GUIDANCE
+              pickPromptText(getAppPromptLanguage(), '你派出的子智能体当前轮回复已收取，结果如下(JSON):\n', 'Collected sub-agent results (JSON):\n') + collectedJson +
+                '\n\n' + getCollectedSubAgentGuidance(getAppPromptLanguage())
             ))
             await this.executeToolCallLoop(
               apiConfig,
@@ -4814,7 +4839,7 @@ ${preview}`
               return
             }
             if (steeringMessages.length > 0) {
-              this.toolExecutionService.beginToolTurn(requestId)
+              this.toolExecutionService.beginToolTurn(requestId, 'main', getAppPromptLanguage())
             }
             for (let i = 0; i < steeringMessages.length; i++) {
               requestMessages.push(steeringMessages[i])
@@ -5375,7 +5400,7 @@ ${preview}`
 
   // 获取格式化的当前时间信息
   private getCurrentTimeContext(): string {
-    return buildCurrentTimeContext()
+    return buildCurrentTimeContext(new Date(), getAppPromptLanguage())
   }
 
   private limitSearchContextForPrompt(content: string, maxChars: number): string {

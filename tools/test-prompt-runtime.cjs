@@ -10,6 +10,8 @@ const root = path.resolve(__dirname, '..');
 const cases = [];
 const prefs = new Map();
 const uiState = { activeChatSessionId: 'prompt-test', planRefreshAt: 0 };
+let configuredLanguage = 'system';
+let systemLanguage = 'en-US';
 const noop = () => {};
 global.ObservedV2 = cls => cls;
 global.Observed = cls => cls;
@@ -29,6 +31,8 @@ Module._load = function(request, parent, isMain) {
   if (request === '@ohos/hypium') return hypium;
   if (request === '@kit.ArkTS') return { util: {} };
   if (request === '@kit.NetworkKit') return { http: {} };
+  if (request === '@kit.LocalizationKit') return { i18n: { System: { getSystemLanguage: () => systemLanguage } } };
+  if (request === '../viewmodels/SettingsManager') return { getSettingsManager: () => ({ getLanguage: () => configuredLanguage }) };
   if (request === '@kit.PerformanceAnalysisKit') return { hilog: { debug: noop, info: noop, warn: noop, error: noop } };
   if (request.endsWith('/PreferencesService') || request === './PreferencesService') return {
     PreferenceKeys: { PLAN_JSON: 'plan' },
@@ -51,9 +55,21 @@ Module._extensions['.ets'] = function(module, filename) {
   }).outputText;
   module._compile(code, filename);
 };
-for (const file of ['ToolProgressGuard', 'ToolRoundPolicy', 'PlanService']) {
+for (const file of ['ToolProgressGuard', 'ToolRoundPolicy', 'PlanService', 'PromptLanguage']) {
   require(path.join(root, `entry/src/test/${file}.test.ets`)).default();
 }
+cases.push({ name: 'app prompt language follows live settings and system changes without a stale cache', fn: () => {
+  const { getAppPromptLanguage } = require(path.join(root, 'entry/src/main/ets/utils/LocalizedTextUtils.ets'));
+  configuredLanguage = 'en-US'; systemLanguage = 'zh-CN';
+  assert.equal(getAppPromptLanguage(), 'en-US');
+  configuredLanguage = 'zh-CN'; systemLanguage = 'en-US';
+  assert.equal(getAppPromptLanguage(), 'zh-CN');
+  configuredLanguage = 'system';
+  assert.equal(getAppPromptLanguage(), 'en-US');
+  systemLanguage = 'zh-CN';
+  assert.equal(getAppPromptLanguage(), 'zh-CN');
+  systemLanguage = 'en-US';
+}});
 cases.push({ name: 'plan executor applies a batch atomically and preserves the plan after invalid input', fn: async () => {
   const { PlanModeExecutor, createPlanModeToolDefinition } = require(path.join(root, 'entry/src/main/ets/config/PlanTool.ets'));
   assert.equal(createPlanModeToolDefinition().function.name, 'plan_mode');
@@ -124,7 +140,8 @@ cases.push({ name: 'tool execution stops repeated work before a sixth execution 
 cases.push({ name: 'sub-agent stops a stalled tool loop, preserves reasoning history and resets for follow-up', fn: async () => {
   const models = require(path.join(root, 'entry/src/main/ets/models/ChatModels.ets'));
   const { SubAgentService, SubAgentRuntimeConfig, SubAgentLiveState } = require(path.join(root, 'entry/src/main/ets/services/SubAgentService.ets'));
-  const { TOOL_PROGRESS_STOP } = require(path.join(root, 'entry/src/main/ets/utils/ToolProgressGuard.ets'));
+  const { isToolProgressStop } = require(path.join(root, 'entry/src/main/ets/utils/ToolProgressGuard.ets'));
+  const { getResponseLanguageContinuationReminder } = require(path.join(root, 'entry/src/main/ets/utils/SystemPromptTemplateUtils.ets'));
   const { ToolExecutionContext, RegisteredTool, getToolRegistry } = require(path.join(root, 'entry/src/main/ets/services/ToolRegistry.ets'));
   const { getToolExecutionService } = require(path.join(root, 'entry/src/main/ets/services/ToolExecutionService.ets'));
   const registry = getToolRegistry();
@@ -140,18 +157,26 @@ cases.push({ name: 'sub-agent stops a stalled tool loop, preserves reasoning his
     {}, 'test-model', 0.7, 1024, models.ReasoningLevel.LOW, [definition], '2026-09-14',
     new ToolExecutionContext('session', 'child-request', 'main'),
     (call, allowed, _budget, ctx) => execution.executeToolCall(call, allowed, ctx),
-    actor => { turnRound = 0; execution.beginToolTurn('child-request', actor); },
+    actor => { turnRound = 0; execution.beginToolTurn('child-request', actor, runtime.promptLanguage); },
     actor => execution.shouldStopToolLoop('child-request', actor),
     noop, noop, () => false, (...args) => usage.push(args)
   );
+  const zhPrompt = service.buildSubAgentSystemPrompt(runtime, 'Probe', true, true, true);
+  assert.ok(zhPrompt.includes('面向用户的输出语言'));
+  runtime.promptLanguage = 'en-US';
   service.configureRuntime(runtime);
   const live = new SubAgentLiveState();
   live.name = 'Probe';
   const session = service.createSubAgentSession(runtime, live);
+  assert.ok(session.messages[0].content.includes('User-facing output language'));
+  assert.equal(/[\u3400-\u9fff]/.test(session.messages[0].content), false);
   session.apiService.estimateRequestInputTokens = () => 100;
   session.apiService.streamChatRequestWithTools = (...args) => {
     turnRound++;
     const messages = args[1], tools = args[11], choice = args[12];
+    const reminder = getResponseLanguageContinuationReminder(runtime.promptLanguage);
+    assert.equal(messages.at(-1).content, reminder);
+    assert.equal(messages.filter(message => message.role === 'system' && message.content === reminder).length, 1);
     const previousCalls = messages.filter(message => message.role === 'assistant' && message.toolCalls.length > 0);
     for (const message of previousCalls) assert.ok(message.reasoningContent.startsWith('reasoning '));
     args[8](`reasoning ${turnRound}`);
@@ -163,7 +188,7 @@ cases.push({ name: 'sub-agent stops a stalled tool loop, preserves reasoning his
       args[4]([]);
     } else {
       assert.equal(tools.length, 1);
-      assert.equal(messages.some(message => message.role === 'system' && message.content === TOOL_PROGRESS_STOP), false);
+      assert.equal(messages.some(message => message.role === 'system' && isToolProgressStop(message.content)), false);
       args[4]([new models.ToolCall(`call-${turnRound}`, 'child_probe', '{}')]);
     }
     return { destroy: noop };

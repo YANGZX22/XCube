@@ -1,9 +1,10 @@
+import { PromptLanguage } from '../utils/PromptLanguageUtils'
 import { ToolCall, ToolConfig, ToolPermissionLevel, ToolResult } from '../models/ChatModels'
 import { ASK_USER_TOOL_ID } from '../config/BuiltinTools'
 import { getToolRegistry, RegisteredTool, ToolExecutionContext, ToolRegistry } from './ToolRegistry'
 import { parseAskUserQuestions } from '../utils/AskUserQuestionUtils'
 import { resolveLegacyToolId } from '../utils/ToolIdAliases'
-import { ToolProgressGuard, TOOL_PROGRESS_STOP } from '../utils/ToolProgressGuard'
+import { ToolProgressGuard } from '../utils/ToolProgressGuard'
 
 interface ToolExecutionErrorLike {
   code?: number | string
@@ -506,7 +507,7 @@ export class ToolExecutionService {
   async executeToolCall(toolCall: ToolCall, allowedFunctionNames: string[],
     context: ToolExecutionContext = new ToolExecutionContext()): Promise<ToolResult> {
     if (this.shouldStopToolLoop(context.requestId, context.actorId)) {
-      return new ToolResult(toolCall.id, JSON.stringify({ error: 'tool_no_progress', message: TOOL_PROGRESS_STOP }),
+      return new ToolResult(toolCall.id, JSON.stringify({ error: 'tool_no_progress', message: this.progressGuard.getStopMessage(context.requestId, context.actorId) }),
         true, toolCall.displayName, toolCall.sourceLabel)
     }
     // 保留模型传入的参数，分页等执行层补全不应把原样重试伪装成不同调用。
@@ -520,8 +521,8 @@ export class ToolExecutionService {
     return result
   }
 
-  beginToolTurn(requestId: string, actorId: string = 'main'): void {
-    this.progressGuard.beginTurn(requestId, actorId)
+  beginToolTurn(requestId: string, actorId: string = 'main', language: PromptLanguage = PromptLanguage.ZH_CN): void {
+    this.progressGuard.beginTurn(requestId, actorId, language)
   }
 
   endToolRequest(requestId: string): void {

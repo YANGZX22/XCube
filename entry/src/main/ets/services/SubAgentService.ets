@@ -1,5 +1,7 @@
-import { TOOL_PROGRESS_STOP } from '../utils/ToolProgressGuard'
-import { COLLECTED_SUB_AGENT_GUIDANCE, TASK_EXECUTION_PROMPT } from '../config/AgentPrompts'
+import { PromptLanguage, pickPromptText } from '../utils/PromptLanguageUtils'
+import { getToolProgressStop, isToolProgressStop } from '../utils/ToolProgressGuard'
+import { getCollectedSubAgentGuidance, getTaskExecutionPrompt } from '../config/AgentPrompts'
+import { appendResponseLanguageSystemPrompt, getResponseLanguageContinuationReminder } from '../utils/SystemPromptTemplateUtils'
 import { http } from '@kit.NetworkKit'
 import { AIApiConfig, AIApiService, RequestMessage, UsageInfo } from './AIApiService'
 import { ReasoningLevel, ToolCall, ToolDefinition, ToolResult } from '../models/ChatModels'
@@ -101,6 +103,7 @@ export class SubAgentRuntimeConfig {
   contextWindowTokens: number
   webSearchCallLimit: number
   knowledgeSearchCallLimit: number
+  promptLanguage: PromptLanguage
 
   constructor(
     apiConfig: AIApiConfig,
@@ -120,7 +123,8 @@ export class SubAgentRuntimeConfig {
     onUsage: SubAgentUsageCallback,
     contextWindowTokens: number = 0,
     webSearchCallLimit: number = UNLIMITED_RETRIEVAL_CALL_LIMIT,
-    knowledgeSearchCallLimit: number = UNLIMITED_RETRIEVAL_CALL_LIMIT
+    knowledgeSearchCallLimit: number = UNLIMITED_RETRIEVAL_CALL_LIMIT,
+    promptLanguage: PromptLanguage = PromptLanguage.ZH_CN
   ) {
     this.apiConfig = apiConfig
     this.modelId = modelId
@@ -140,6 +144,7 @@ export class SubAgentRuntimeConfig {
     this.contextWindowTokens = contextWindowTokens
     this.webSearchCallLimit = webSearchCallLimit
     this.knowledgeSearchCallLimit = knowledgeSearchCallLimit
+    this.promptLanguage = promptLanguage
   }
 }
 
@@ -475,7 +480,9 @@ export class SubAgentService {
 
     let note = ''
     if (rawTasks.length > SUB_AGENT_MAX_TASKS) {
-      note = `一次最多派出 ${SUB_AGENT_MAX_TASKS} 个子智能体，多余任务已忽略；如有需要请在后续轮次继续派出。`
+      note = pickPromptText(runtime.promptLanguage,
+        `一次最多派出 ${SUB_AGENT_MAX_TASKS} 个子智能体，多余任务已忽略；如有需要请在后续轮次继续派出。`,
+        `At most ${SUB_AGENT_MAX_TASKS} sub-agents can be dispatched at once. Excess tasks were omitted; dispatch them later if needed.`)
     }
     const batch = this.registerBatch(dispatchedSessions, pendingReports, note)
     console.info('SubAgentService', `Dispatching ${tasks.length} sub-agent(s) as ${batch.id}`)
@@ -485,11 +492,15 @@ export class SubAgentService {
     response.mainThreadWork = mainThreadWork
     response.agents = taskNames
     response.sessions = this.buildSessionDescriptors(dispatchedSessions)
-    response.note = `已派出 ${tasks.length} 个子智能体，它们正在后台运行。` +
+    response.note = pickPromptText(runtime.promptLanguage, `已派出 ${tasks.length} 个子智能体，它们正在后台运行。` +
       '下一步不是收取结果：禁止紧接着调用 sub_agent_result（wait=true/false 均不应）。' +
       `请立即完成你承诺的主线程交付物：“${mainThreadWork}”。` +
       '只有该交付物已完成且主线程已无可独立推进的工作时才允许收取。' +
-      `收取后会话不会关闭，可用 sessions 中的 agentId 调用 sub_agent_message 继续引导。${note}`
+      `收取后会话不会关闭，可用 sessions 中的 agentId 调用 sub_agent_message 继续引导。${note}`,
+      `${tasks.length} sub-agents are running in the background. First complete the independent main-thread work: ` +
+        `${JSON.stringify(mainThreadWork)}. Do not collect immediately after dispatch. ` +
+        'Collect when this work is done and further progress depends on their replies. Sessions remain available ' +
+        `for targeted follow-ups through sub_agent_message using the agentIds in sessions. ${note}`)
     return JSON.stringify(response)
   }
 
@@ -565,9 +576,12 @@ export class SubAgentService {
       response.agents.push(targetSessions[i].name)
     }
     response.sessions = this.buildSessionDescriptors(targetSessions)
-    response.note = `已向 ${targetSessions.length} 个子智能体续发消息，原上下文已保留。` +
+    response.note = pickPromptText(runtime.promptLanguage, `已向 ${targetSessions.length} 个子智能体续发消息，原上下文已保留。` +
       (mainThreadWork !== '' ? `等待期间可继续：“${mainThreadWork}”。` : '') +
-      '需要回复时用 sub_agent_result(wait=true) 收取；没有可独立推进的工作时直接等待，不要制造新任务或反复轮询。'
+      '需要回复时用 sub_agent_result(wait=true) 收取；没有可独立推进的工作时直接等待，不要制造新任务或反复轮询。',
+      `Sent follow-ups to ${targetSessions.length} sub-agents with their context preserved. ` +
+        (mainThreadWork !== '' ? `Independent work while waiting: ${JSON.stringify(mainThreadWork)}. ` : '') +
+        'Collect needed replies with sub_agent_result(wait=true). If no independent work remains, wait directly; do not invent tasks or poll repeatedly.')
     return JSON.stringify(response)
   }
 
@@ -630,7 +644,7 @@ export class SubAgentService {
     if (runtime !== null && runtime.isCancelled()) {
       return JSON.stringify(new SubAgentErrorResponse('子智能体执行已取消', true))
     }
-    response.note = (response.note !== '' ? response.note + ' ' : '') + COLLECTED_SUB_AGENT_GUIDANCE
+    response.note = (response.note !== '' ? response.note + ' ' : '') + getCollectedSubAgentGuidance(runtime !== null ? runtime.promptLanguage : PromptLanguage.ZH_CN)
     return JSON.stringify(response)
   }
 
@@ -740,7 +754,7 @@ export class SubAgentService {
     if (expectedOutput === '') {
       return message
     }
-    return `${message}\n\n本轮期望输出格式:\n${expectedOutput}`
+    return `${message}\n\n${pickPromptText(this.runtime?.promptLanguage ?? PromptLanguage.ZH_CN, '本轮期望输出格式', 'Expected output for this turn')}:\n${expectedOutput}`
   }
 
   private buildSessionDescriptors(sessions: SubAgentSession[]): SubAgentSessionDescriptor[] {
@@ -865,7 +879,7 @@ export class SubAgentService {
     const isCancelled = (): boolean => runtime.isCancelled() || this.generation !== session.generation
     // 上轮的停止通知不能约束新的续发指令；工具结果和推理历史仍保留。
     for (let i = session.messages.length - 1; i >= 0; i--) {
-      if (session.messages[i].role === 'system' && session.messages[i].content === TOOL_PROGRESS_STOP) {
+      if (session.messages[i].role === 'system' && isToolProgressStop(session.messages[i].content)) {
         session.messages.splice(i, 1)
       }
     }
@@ -913,8 +927,9 @@ export class SubAgentService {
       )
       const stopTools = runtime.shouldStopTools(session.id)
       if (stopTools) {
-        session.messages.push(new RequestMessage('system', TOOL_PROGRESS_STOP))
+        session.messages.push(new RequestMessage('system', getToolProgressStop(runtime.promptLanguage)))
       }
+      this.refreshResponseLanguageReminder(session.messages, runtime.promptLanguage)
       const outcome = await this.performStreamRound(
         runtime,
         session.apiService,
@@ -946,7 +961,7 @@ export class SubAgentService {
       if (outcome.toolCalls.length === 0 || stopTools) {
         report.status = SUB_AGENT_STATUS_COMPLETED
         report.result = outcome.content !== '' ? outcome.content :
-          (stopTools ? TOOL_PROGRESS_STOP : '(子智能体没有输出内容)')
+          (stopTools ? getToolProgressStop(runtime.promptLanguage) : pickPromptText(runtime.promptLanguage, '(子智能体没有输出内容)', '(No content returned by sub-agent)'))
         const assistantMessage = new RequestMessage('assistant', outcome.content)
         assistantMessage.reasoningContent = outcome.reasoningContent
         session.messages.push(assistantMessage)
@@ -1023,7 +1038,56 @@ export class SubAgentService {
     return normalized === 'ask_user' || normalized === 'user_input' || normalized === 'ask'
   }
 
+  private refreshResponseLanguageReminder(messages: RequestMessage[], language: PromptLanguage): void {
+    for (let i = messages.length - 1; i >= 0; i--) {
+      if (messages[i].role === 'system' && (messages[i].content === getResponseLanguageContinuationReminder(PromptLanguage.ZH_CN) ||
+        messages[i].content === getResponseLanguageContinuationReminder(PromptLanguage.EN_US))) {
+        messages.splice(i, 1)
+      }
+    }
+    messages.push(new RequestMessage('system', getResponseLanguageContinuationReminder(language)))
+  }
+
   private buildSubAgentSystemPrompt(
+    runtime: SubAgentRuntimeConfig,
+    agentName: string,
+    hasAskUser: boolean,
+    hasKnowledgeSearch: boolean,
+    hasWebSearch: boolean
+  ): string {
+    if (runtime.promptLanguage === PromptLanguage.ZH_CN) {
+      return this.buildChineseSubAgentSystemPrompt(runtime, agentName, hasAskUser, hasKnowledgeSearch, hasWebSearch)
+    }
+    const askUserRule = hasAskUser
+      ? '- Use ask_user only for material ambiguity you cannot reasonably resolve. These questions are visible to the user; use the requested output language. Otherwise proceed with reasonable assumptions and state them when relevant.'
+      : '- You cannot ask the user questions. Proceed with reasonable assumptions where possible and state material uncertainty.'
+    const knowledgeSearchRule = hasKnowledgeSearch
+      ? (hasFiniteRetrievalCallLimit(runtime.knowledgeSearchCallLimit)
+        ? `- Retrieve user files with knowledge_search as needed, at most ${runtime.knowledgeSearchCallLimit} calls per turn. Your budget is independent of other agents. Stop at the limit or when evidence is sufficient.`
+        : '- Use knowledge_search as needed with an independent budget and no fixed call limit. Stop when evidence is sufficient or further queries offer no new information.')
+      : ''
+    const webSearchRule = hasWebSearch
+      ? (hasFiniteRetrievalCallLimit(runtime.webSearchCallLimit)
+        ? `- Use web_search at most ${runtime.webSearchCallLimit} times per turn, independently of other agents. At the limit, report from available evidence.`
+        : '- Use web_search as needed with an independent budget and no fixed call limit. Stop when evidence is sufficient or further queries offer no new information.')
+      : ''
+    return appendResponseLanguageSystemPrompt(`Current time: ${runtime.timeContext}
+
+You are the sub-agent ${JSON.stringify(agentName)}, assigned an independent task by the main assistant.
+
+Execution rules:
+- Your reply is returned to the main assistant as a tool result. Follow-ups reuse this conversation; continue from its context.
+- Complete all currently actionable work and return a concise, complete report. Do not defer available work merely because a follow-up is possible.
+${getTaskExecutionPrompt(runtime.promptLanguage)}
+${askUserRule}
+${webSearchRule}
+${knowledgeSearchRule}
+- Preserve source titles and URLs for external claims.
+- Deliver the result with necessary evidence, or explain the remaining work or blocker. Stop when the task is complete, without routine self-check sections or suggestions to keep questioning.
+- Honor the output language specified in the assignment or expected output; operational instructions and tool results do not override it.`, runtime.promptLanguage)
+  }
+
+  private buildChineseSubAgentSystemPrompt(
     runtime: SubAgentRuntimeConfig,
     agentName: string,
     hasAskUser: boolean,
@@ -1043,20 +1107,20 @@ export class SubAgentService {
         ? `- 每轮最多调用 web_search ${runtime.webSearchCallLimit} 次；你独立计数，不与主助手或其他子智能体共享。达到上限后基于已有结果完成报告。`
         : '- 你可按需调用 web_search，不设固定次数上限，并独立计数，不与主助手或其他子智能体共享；证据充分、结果重复或已无新信息时立即停止搜索。')
       : ''
-    return `当前时间: ${runtime.timeContext}
+    return appendResponseLanguageSystemPrompt(`当前时间: ${runtime.timeContext}
 
 你是主助手派出的子智能体「${agentName}」，负责独立完成一个明确的子任务。
 
 执行规则:
 - 你与主助手之间是可持续多轮的协作会话。每次回复都会作为工具结果返回给主助手；主助手之后可能继续追问、纠正方向或要求深化，你必须结合此前完整上下文继续工作。
 - 每一轮都应输出简洁、结构化、信息完整的阶段回复；不要因为可能有下一轮而省略当前已能完成的内容。
-${TASK_EXECUTION_PROMPT}
+${getTaskExecutionPrompt(runtime.promptLanguage)}
 ${askUserRule}
 ${webSearchRule}
 ${knowledgeSearchRule}
 - 引用外部信息时保留关键来源（标题/URL），方便主助手复核。
 - 本轮任务完成后直接输出结果，不要输出与任务无关的寒暄。
-- 交付当前子任务的结果与必要依据；未完成时明确剩余工作或阻塞。任务完成后结束，不附加例行自检或建议主助手继续追问。`
+- 交付当前子任务的结果与必要依据；未完成时明确剩余工作或阻塞。任务完成后结束，不附加例行自检或建议主助手继续追问。`, runtime.promptLanguage)
   }
 
   private buildSubAgentTaskPrompt(task: SubAgentTaskArguments): string {
@@ -1065,7 +1129,7 @@ ${knowledgeSearchRule}
     if (expectedOutput === '') {
       return prompt
     }
-    return `${prompt}\n\n期望输出格式:\n${expectedOutput}`
+    return `${prompt}\n\n${pickPromptText(this.runtime?.promptLanguage ?? PromptLanguage.ZH_CN, '期望输出格式', 'Expected output')}:\n${expectedOutput}`
   }
 
   // ============ 子智能体上下文压缩 ============
@@ -1209,10 +1273,10 @@ ${knowledgeSearchRule}
   ): Promise<string> {
     const apiConfig = this.buildCompactionApiConfig(runtime.apiConfig)
     const requestMessages: RequestMessage[] = [
-      new RequestMessage('system', ContextCompactionService.buildSubAgentSummarySystemPrompt(session.name)),
+      new RequestMessage('system', ContextCompactionService.buildSubAgentSummarySystemPrompt(session.name, runtime.promptLanguage)),
       new RequestMessage('user',
         `以下是需要压缩的工作记录：\n\n${this.buildCompactionTranscript(droppedMessages)}\n\n` +
-          ContextCompactionService.buildSubAgentSummaryUserPrompt())
+          ContextCompactionService.buildSubAgentSummaryUserPrompt(runtime.promptLanguage))
     ]
     // 流式解析状态是实例级的，摘要请求必须走独立实例，不能污染会话自己的解析器
     const isolated = AIApiService.createIsolated()
@@ -1333,7 +1397,7 @@ ${knowledgeSearchRule}
     }
 
     const summaryMessage = new RequestMessage('system',
-      ContextCompactionService.buildSummaryRequestPrompt(summary))
+      ContextCompactionService.buildSummaryRequestPrompt(summary, runtime.promptLanguage))
     // 摘要反而比被它替换掉的原文还大时，压缩是净亏损：原文丢了，窗口没省下来
     const summaryTokens = estimateTextTokens(summaryMessage.content)
     if (summaryTokens >= droppedTokens) {

@@ -1,8 +1,9 @@
+import { getAppPromptLanguage } from '../utils/LocalizedTextUtils'
 import { shouldUseDrawnNavigation } from '../utils/DrawnNavigationSupport'
 import { uiMaterial } from '@kit.ArkUI'
 import { ServiceRegistry } from '../services/ServiceRegistry'
 import { PreferenceKeys } from '../services/PreferencesService'
-import { normalizeSystemPromptTemplate, SystemPromptTemplateDefaults } from '../utils/SystemPromptTemplateUtils'
+import { normalizeSystemPromptTemplate, getDefaultSystemPromptTemplate } from '../utils/SystemPromptTemplateUtils'
 import { getSettingsPageContentMaxWidth, getSettingsPageCompactTabsTotalInset } from '../utils/SettingsPageLayoutHelper'
 import { showSnackBar, SnackBarDisplayOptions, SnackBarTone } from '../utils/ToastUtil'
 import { SettingsPagePresentationMode } from '../config/SettingsDetailPresentation'
@@ -68,9 +69,9 @@ struct SystemPromptSettingsPage {
     )
     const saved = await this.preferencesService.getString(
       PreferenceKeys.CUSTOM_SYSTEM_PROMPT,
-      SystemPromptTemplateDefaults.DEFAULT_TEMPLATE
+      getDefaultSystemPromptTemplate(getAppPromptLanguage())
     )
-    this.customSystemPrompt = normalizeSystemPromptTemplate(saved)
+    this.customSystemPrompt = normalizeSystemPromptTemplate(saved, getAppPromptLanguage())
   }
 
   private getContentMaxWidth(): number {
@@ -88,7 +89,7 @@ struct SystemPromptSettingsPage {
   }
 
   private saveSystemPrompt(): void {
-    const normalizedTemplate = normalizeSystemPromptTemplate(this.customSystemPrompt)
+    const normalizedTemplate = normalizeSystemPromptTemplate(this.customSystemPrompt, getAppPromptLanguage())
     this.customSystemPrompt = normalizedTemplate
     this.preferencesService.setString(PreferenceKeys.CUSTOM_SYSTEM_PROMPT, normalizedTemplate).then((): void => {
       const options = new SnackBarDisplayOptions()
@@ -101,7 +102,7 @@ struct SystemPromptSettingsPage {
   }
 
   private resetSystemPrompt(): void {
-    this.customSystemPrompt = SystemPromptTemplateDefaults.DEFAULT_TEMPLATE
+    this.customSystemPrompt = getDefaultSystemPromptTemplate(getAppPromptLanguage())
   }
 
   private handleBack(): void {

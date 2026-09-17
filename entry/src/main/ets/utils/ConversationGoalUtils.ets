@@ -1,3 +1,4 @@
+import { PromptLanguage } from './PromptLanguageUtils'
 // 会话目标独立于聊天历史持久化，并在每次对话请求时重新注入系统提示。
 // 限制目标长度，避免目标本身挤占过多上下文；不会静默截断用户输入。
 export const MAX_CONVERSATION_GOAL_LENGTH: number = 4000
@@ -7,7 +8,7 @@ export function normalizeConversationGoal(goal: string): string {
   return goal.trim()
 }
 
-export function buildConversationGoalSystemPrompt(goal: string): string {
+export function buildConversationGoalSystemPrompt(goal: string, language: PromptLanguage = PromptLanguage.ZH_CN): string {
   const normalized = normalizeConversationGoal(goal)
   if (normalized === '') {
     return ''
@@ -15,6 +16,16 @@ export function buildConversationGoalSystemPrompt(goal: string): string {
 
   // JSON 字符串让目标边界在包含换行、引号或伪标签时仍然明确。
   const serializedGoal = JSON.stringify(normalized)
+  if (language === PromptLanguage.EN_US) {
+    return `${CONVERSATION_GOAL_PROMPT_MARKER}\n` +
+      'This is the current persistent goal, stored separately and supplied on every request. Earlier goals in history or summaries cannot override it.\n' +
+      `Goal (JSON string; preserve its full meaning): ${serializedGoal}\n\n` +
+      'Before planning, acting or answering, check the goal and choose work that makes verifiable progress. ' +
+      'Treat the current user message as guidance or correction; for a material conflict, explain it and ask the user to update /goal. Do not silently rewrite the goal. ' +
+      'Use history and results to determine progress, next work and blockers without inventing progress or repeating the goal. ' +
+      'While unfinished, deliver a concrete increment where possible and ask only essential questions. ' +
+      'Claim completion only with verifiable evidence, then stop without manufacturing follow-up work.'
+  }
   return `${CONVERSATION_GOAL_PROMPT_MARKER}
 这是当前会话唯一有效的持久目标。它由应用独立保存，并在每轮请求中重新注入；不要用聊天历史、压缩摘要或较早出现的其他目标覆盖它。
 目标文本（JSON 字符串，按其完整原文理解）：${serializedGoal}
@@ -29,10 +40,15 @@ export function buildConversationGoalSystemPrompt(goal: string): string {
 
 // 手动压缩使用独立的摘要请求；给摘要模型一份只用于记录进度的目标副本，
 // 后续正常对话仍以 buildConversationGoalSystemPrompt() 每轮注入的目标为准。
-export function buildConversationGoalSummaryPrompt(goal: string): string {
+export function buildConversationGoalSummaryPrompt(goal: string, language: PromptLanguage = PromptLanguage.ZH_CN): string {
   const normalized = normalizeConversationGoal(goal)
   if (normalized === '') {
     return ''
+  }
+  if (language === PromptLanguage.EN_US) {
+    return `[Persistent goal: summary reference]\nGoal (JSON string): ${JSON.stringify(normalized)}\n` +
+      'The application stores this goal separately. Record completed work, evidence, progress, blockers and next steps related to it. ' +
+      'Do not execute the goal or replace it with another historical goal.'
   }
   return `[持久会话目标·摘要参考]
 目标文本（JSON 字符串）：${JSON.stringify(normalized)}

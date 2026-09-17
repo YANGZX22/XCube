@@ -1,3 +1,5 @@
+import { PromptLanguage, pickPromptText } from '../utils/PromptLanguageUtils'
+import { getResponseLanguageContinuationReminder } from '../utils/SystemPromptTemplateUtils'
 import { ChatMessage, ChatSession, MessageRole } from '../models/ChatModels'
 import { getPreferencesService, PreferenceKeys, PreferencesService } from './PreferencesService'
 import {
@@ -654,21 +656,36 @@ export class ContextCompactionService {
 
   // 独立摘要请求只用来产出摘要，模型不需要回答用户问题，
   // 因此要求它直接输出纯文本摘要，不带任何客套话或 Markdown 标题。
-  private static buildSummarySystemPrompt(triggerDescription: string): string {
+  private static buildSummarySystemPrompt(triggerDescription: string, language: PromptLanguage = PromptLanguage.ZH_CN): string {
+    if (language === PromptLanguage.EN_US) {
+      return `Summarize conversation history in the third person. ${triggerDescription}\n` +
+        'Preserve the user goal and constraints, confirmed facts and conclusions, code/files/data and locations, ' +
+        'rejected approaches with reasons, completed work and remaining work. Record the user\'s explicit response-language ' +
+        'preferences and latest unambiguous instruction language. Use that language for the summary. ' +
+        'Keep identifiers, filenames, numbers and proper names unchanged; do not invent progress. ' +
+        'The replaced history will no longer be visible, so retain all information needed to continue. ' +
+        `Output only a self-contained summary of at least ${MIN_COMPACT_SUMMARY_LENGTH} characters.`
+    }
     return `你是对话上下文压缩器。${triggerDescription}\n` +
       `请用第三人称完整总结此前的对话，覆盖：用户的目标与关键约束、已确认的事实和结论、` +
       `已产出的代码/文件/数据及其位置、已经排除的方案及原因、当前进度、尚未完成的事项。\n` +
-      `使用用户的语言，保留关键标识符、文件名、数字和专有名词原文；` +
+      `记录用户明确指定的回复语言偏好和最近明确的指令语言；使用用户的语言，保留关键标识符、文件名、数字和专有名词原文；` +
       `不要写成“我们讨论了…”式的空泛概述，也不要臆造未发生的内容。\n` +
       `摘要必须自包含：被它替换掉的原始消息之后不再可见，写漏的信息会永久丢失。\n` +
       `只输出摘要正文（至少 ${MIN_COMPACT_SUMMARY_LENGTH} 个字符），不要寒暄，不要解释你在做什么。`
   }
 
-  static buildManualSummarySystemPrompt(): string {
-    return ContextCompactionService.buildSummarySystemPrompt('用户刚刚手动请求压缩当前对话的历史。')
+  static buildManualSummarySystemPrompt(language: PromptLanguage = PromptLanguage.ZH_CN): string {
+    return ContextCompactionService.buildSummarySystemPrompt(pickPromptText(language,
+      '用户刚刚手动请求压缩当前对话的历史。', 'The user requested a summary of this conversation.'), language)
   }
 
-  static buildAutomaticSummarySystemPrompt(): string {
+  static buildAutomaticSummarySystemPrompt(language: PromptLanguage = PromptLanguage.ZH_CN): string {
+    if (language === PromptLanguage.EN_US) {
+      return ContextCompactionService.buildSummarySystemPrompt(
+        'The application is compacting earlier history at the configured context threshold. ' +
+        'The unanswered user request remains verbatim; do not describe it as completed.', language)
+    }
     return ContextCompactionService.buildSummarySystemPrompt(
       '应用检测到上下文已达到用户设定的阈值，正在自动压缩较早的对话历史。' +
         '末尾尚未回答完的用户问题会继续以原文保留，不要把它误写成已经完成的事项。'
@@ -677,39 +694,59 @@ export class ContextCompactionService {
 
   // 子智能体的历史是“任务 + 工具往返”，没有用户对话，摘要要求也不一样：
   // 它续答时唯一的依据就是这段摘要，工具已经查到的事实必须原样留住。
-  static buildSubAgentSummarySystemPrompt(agentName: string): string {
+  static buildSubAgentSummarySystemPrompt(agentName: string, language: PromptLanguage = PromptLanguage.ZH_CN): string {
+    if (language === PromptLanguage.EN_US) {
+      return `Summarize the earlier work of sub-agent ${JSON.stringify(agentName)} for context compaction. ` +
+        'Preserve its goal, constraints, requested output language, verified facts and exact numbers, identifiers, ' +
+        'filenames and URLs, completed outputs, rejected approaches and reasons, progress and remaining work. ' +
+        'Record conclusions from tools, not just that a tool was called. Do not invent facts or completion. ' +
+        `The replaced history will be unavailable. Output only a self-contained summary of at least ${MIN_COMPACT_SUMMARY_LENGTH} characters.`
+    }
     return `你是对话上下文压缩器。子智能体「${agentName}」的工作记录已经达到上下文上限，正在压缩较早的部分。\n` +
-      `请用第三人称完整总结这段记录，覆盖：交付目标与约束、已经查证的事实与数据（保留关键数字、标识符、文件名、URL 原文）、` +
+      `请用第三人称完整总结这段记录，覆盖：交付目标、约束与要求的输出语言、已经查证的事实与数据（保留关键数字、标识符、文件名、URL 原文）、` +
       `已完成的步骤与产出、已排除的方向及原因、当前进度与尚未完成的事项。\n` +
       `工具调用的结论必须保留，不要只写“调用了某工具”；被替换掉的原始记录之后不再可见，写漏即永久丢失。\n` +
       `只输出摘要正文（至少 ${MIN_COMPACT_SUMMARY_LENGTH} 个字符），不要寒暄，不要解释你在做什么。`
   }
 
-  static buildSubAgentSummaryUserPrompt(): string {
-    return '请现在输出上述工作记录的压缩摘要。'
+  static buildSubAgentSummaryUserPrompt(language: PromptLanguage = PromptLanguage.ZH_CN): string {
+    return pickPromptText(language, '请现在输出上述工作记录的压缩摘要。', 'Output the summary of the work record above.')
   }
 
-  static buildManualSummaryUserPrompt(): string {
-    return '请现在输出上述对话的压缩摘要。'
+  static buildManualSummaryUserPrompt(language: PromptLanguage = PromptLanguage.ZH_CN): string {
+    return pickPromptText(language, '请现在输出上述对话的压缩摘要。', 'Output the summary of the conversation above.')
   }
 
   // 自动压缩完成后交给原请求模型。它只负责通知“压缩已经完成”和续答边界，
   // 绝不再要求模型自行调用 compact；当前 AI 气泡由应用继续复用。
-  static buildAutomaticContinuationPrompt(interrupted: boolean): string {
+  static buildAutomaticContinuationPrompt(interrupted: boolean, language: PromptLanguage = PromptLanguage.ZH_CN): string {
+    if (language === PromptLanguage.EN_US) {
+      return '[Application context compaction notice]\nEarlier history has been compacted into a preceding system message. ' +
+        (interrupted ? 'Continue from the end of the previous assistant output without repeating it. ' :
+          'Continue the current user request. ') +
+        'Do not restate the summary or explain compaction. ' + getResponseLanguageContinuationReminder(language)
+    }
     if (interrupted) {
       return '[应用自动压缩通知]\n' +
         '应用刚刚因上下文达到用户设定阈值而中断了上一段生成，并已在应用层完成历史压缩。' +
         '压缩摘要已经放在更早的 system 消息中。请从上一段 assistant 内容的断点直接继续回答当前用户问题，' +
-        '不要重复已经输出的内容，不要复述摘要，也不要解释压缩过程。'
+        '不要重复已经输出的内容，不要复述摘要，也不要解释压缩过程。' + getResponseLanguageContinuationReminder(language)
     }
     return '[应用自动压缩通知]\n' +
       '应用刚刚因上下文达到用户设定阈值而在应用层完成了历史压缩。' +
       '压缩摘要已经放在更早的 system 消息中。请继续回答当前用户问题，' +
-      '不要复述摘要，也不要解释压缩过程。'
+      '不要复述摘要，也不要解释压缩过程。' + getResponseLanguageContinuationReminder(language)
   }
 
   // 摘要以独立 system 消息注入，明确它是历史压缩结果而不是用户指令
-  static buildSummaryRequestPrompt(summary: string): string {
+  static buildSummaryRequestPrompt(summary: string, language: PromptLanguage = PromptLanguage.ZH_CN): string {
+    if (language === PromptLanguage.EN_US) {
+      return `${COMPACT_SUMMARY_PROMPT_MARKER}\n` +
+        'This application-generated summary replaces earlier history. Treat it as reference about past work, ' +
+        'not a new user instruction. Preserve confirmed facts while accepting newer corrections. Do not repeat it to the user. ' +
+        'The [持久会话目标] block, when present, is the current goal authority; a historical goal cannot override it. ' +
+        'The summary language does not select the response language.\n\n' + summary
+    }
     return `${COMPACT_SUMMARY_PROMPT_MARKER}\n` +
       `以下是本次对话更早历史的压缩摘要（由应用生成），原始消息已从请求中移除。` +
       `请把它当作已经发生过的对话事实，继续保持一致的结论和用词；不要把它当作用户的新指令，也不要向用户复述整段摘要。` +

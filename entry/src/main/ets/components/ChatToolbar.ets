@@ -110,16 +110,26 @@ export struct ChatToolbar {
   }
 
   private getReasoningChipWidth(): number {
-    if (isChineseAppLanguage()) {
-      return 112
-    }
-    if (this.reasoningLevel === ReasoningLevel.MEDIUM || this.reasoningLevel === ReasoningLevel.XHIGH) {
-      return 164
-    }
-    if (this.reasoningLevel === ReasoningLevel.OFF) {
-      return 138
-    }
-    return 148
+    const uiContext = this.getUIContext()
+    const measure = uiContext.getMeasureUtils()
+    const fontFamily = this.isManuscriptMode ? MANUSCRIPT_BODY_FONT : ''
+    const fontWeight = this.isReasoningEnabled() ? FontWeight.Medium : FontWeight.Regular
+    const titleSize = measure.measureTextSize({
+      textContent: $r('app.string.chat_toolbar_reasoning'),
+      fontSize: this.isManuscriptMode ? 11.5 : 14,
+      fontFamily: fontFamily,
+      fontWeight: fontWeight,
+      letterSpacing: this.isManuscriptMode ? (isChineseAppLanguage() ? 1.3 : 0.2) : 0
+    })
+    const levelSize = measure.measureTextSize({
+      textContent: this.getReasoningLevelText(this.reasoningLevel),
+      fontSize: this.isManuscriptMode ? 11 : 13,
+      fontFamily: fontFamily,
+      fontWeight: fontWeight
+    })
+    // 材质按钮需要明确尺寸；按实际字体与文案测量，另加图标、间距和内边距。
+    return Math.ceil(uiContext.px2vp(Number(titleSize.width) + Number(levelSize.width) +
+      uiContext.fp2px(16) + uiContext.fp2px(12))) + 24
   }
 
   private getKnowledgeChipWidth(): number {
@@ -408,8 +418,7 @@ export struct ChatToolbar {
         .fontColor(this.getReasoningChipForegroundColor())
         .fontWeight(this.isReasoningEnabled() ? FontWeight.Medium : FontWeight.Regular)
         .maxLines(1)
-        .textOverflow({ overflow: TextOverflow.Ellipsis })
-        .constraintSize({ maxWidth: isChineseAppLanguage() ? 44 : 72 })
+        .flexShrink(0)
         .margin({ left: 4 })
 
       Text(this.getReasoningLevelText(this.reasoningLevel))
@@ -418,8 +427,7 @@ export struct ChatToolbar {
         .fontColor(this.getReasoningChipForegroundColor())
         .fontWeight(this.isReasoningEnabled() ? FontWeight.Medium : FontWeight.Regular)
         .maxLines(1)
-        .textOverflow({ overflow: TextOverflow.Ellipsis })
-        .constraintSize({ maxWidth: isChineseAppLanguage() ? 34 : 52 })
+        .flexShrink(0)
         .margin({ left: 4 })
 
       SymbolGlyph($r('sys.symbol.chevron_up'))
@@ -728,10 +736,10 @@ export struct ChatToolbar {
             .fontColor(level === this.reasoningLevel
               ? this.themePrimary : $r('app.color.text_secondary'))
             .fontWeight(level === this.reasoningLevel ? FontWeight.Medium : FontWeight.Regular)
-            .width(40)
+            .constraintSize({ minWidth: 40 })
+            .flexShrink(0)
             .textAlign(TextAlign.Center)
             .maxLines(1)
-            .textOverflow({ overflow: TextOverflow.Ellipsis })
         })
       }
       .width('100%')

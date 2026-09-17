@@ -1,9 +1,14 @@
 import { i18n } from '@kit.LocalizationKit'
 import { AppLanguage, normalizeAppLanguageValue } from '../services/PreferencesService'
-import { ServiceRegistry } from '../services/ServiceRegistry'
+import { getSettingsManager } from '../viewmodels/SettingsManager'
+import { PromptLanguage, resolvePromptLanguage } from './PromptLanguageUtils'
+
+export function getAppPromptLanguage(): PromptLanguage {
+  return resolvePromptLanguage(getSettingsManager().getLanguage(), i18n.System.getSystemLanguage())
+}
 
 export function resolveCurrentAppLanguage(): AppLanguage {
-  const storedLanguage = ServiceRegistry.settings().getLanguage()
+  const storedLanguage = getSettingsManager().getLanguage()
   if (storedLanguage !== AppLanguage.SYSTEM) {
     return storedLanguage
   }
