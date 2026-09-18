@@ -133,9 +133,10 @@ export struct IndexSessionListSection {
       .height(this.getSwipeButtonHeight())
       .clip(false)
     }
-    .width(72)
+    .width(this.getSwipeButtonHeight() + this.getEffectiveHorizontalPadding())
     .height('100%')
-    .justifyContent(FlexAlign.Center)
+    .padding({ left: this.getEffectiveHorizontalPadding() })
+    .justifyContent(FlexAlign.Start)
     .alignItems(VerticalAlign.Center)
     .clip(false)
   }
@@ -192,9 +193,10 @@ export struct IndexSessionListSection {
       .height(this.getSwipeButtonHeight())
       .clip(false)
     }
-    .width(64)
+    .width(this.getSwipeButtonHeight() + this.getEffectiveHorizontalPadding())
     .height('100%')
-    .justifyContent(FlexAlign.Center)
+    .padding({ right: this.getEffectiveHorizontalPadding() })
+    .justifyContent(FlexAlign.End)
     .alignItems(VerticalAlign.Center)
     .clip(false)
   }

@@ -1,12 +1,13 @@
 import { getAppUiState } from '../state/AppUiState'
 import { resolveFileIconResourcePath } from '../utils/FileIconUtils'
 
-// 工作区、消息附件和知识库共用相同映射。原始 SVG 配色用于区分文件类型。
+// 共用文件类型映射；默认保留原始配色，知识库可指定所属类别的颜色。
 @ComponentV2
 export struct FileIcon {
   @Param fileName: string = ''
   @Param mimeType: string = ''
   @Param iconSize: number = 18
+  @Param tintColor: ResourceColor | undefined = undefined
   @Param synchronousLoad: boolean = false
 
   @Computed
@@ -19,6 +20,9 @@ export struct FileIcon {
       .width(this.iconSize)
       .height(this.iconSize)
       .objectFit(ImageFit.Contain)
+      // SVG2 保留 fill="none" 的透明区域，避免着色后遮住图案。
+      .supportSvg2(this.tintColor !== undefined)
+      .fillColor(this.tintColor ?? ColorContent.ORIGIN)
       .flexShrink(0)
       .draggable(false)
       .syncLoad(this.synchronousLoad)

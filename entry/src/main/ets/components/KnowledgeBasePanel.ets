@@ -97,6 +97,10 @@ export struct KnowledgeBasePanel {
     return getAppUiState().visualEffectsMode === VisualEffectsMode.MANUSCRIPT
   }
 
+  private get listHorizontalPadding(): number {
+    return this.isManuscriptMode ? 32 : 16
+  }
+
   private get knowledgeListImmersiveMaterial(): boolean {
     return !this.isManuscriptMode && getAppUiState().knowledgeListImmersiveMaterial
   }
@@ -840,7 +844,12 @@ export struct KnowledgeBasePanel {
 
   @Builder
   private DocumentIcon(document: KnowledgeDocument, size: number) {
-    FileIcon({ fileName: document.originalName, mimeType: document.mimeType, iconSize: size })
+    FileIcon({
+      fileName: document.originalName,
+      mimeType: document.mimeType,
+      iconSize: size,
+      tintColor: this.getDocumentCategoryColor(document)
+    })
   }
 
   private showKnowledgeSnack(
@@ -938,9 +947,10 @@ export struct KnowledgeBasePanel {
       .enabled(!this.isWorking)
       .clip(false)
     }
-    .width(72)
+    .width(this.getSwipeButtonHeight() + this.listHorizontalPadding)
     .height('100%')
-    .justifyContent(FlexAlign.Center)
+    .padding({ left: this.listHorizontalPadding })
+    .justifyContent(FlexAlign.Start)
     .alignItems(VerticalAlign.Center)
     .clip(false)
   }
@@ -1000,9 +1010,10 @@ export struct KnowledgeBasePanel {
       .enabled(!this.isWorking)
       .clip(false)
     }
-    .width(64)
+    .width(this.getSwipeButtonHeight() + this.listHorizontalPadding)
     .height('100%')
-    .justifyContent(FlexAlign.Center)
+    .padding({ right: this.listHorizontalPadding })
+    .justifyContent(FlexAlign.End)
     .alignItems(VerticalAlign.Center)
     .clip(false)
   }
@@ -1092,14 +1103,20 @@ export struct KnowledgeBasePanel {
 
   @Builder
   private DocumentCard(document: KnowledgeDocument) {
-    if (this.isManuscriptMode) {
-      this.ManuscriptDocumentRow(document)
-    } else {
-      // 材质背板与完整卡片一起常驻在堆叠中；使用对话列表的同款 REGULAR 沉浸表面。
-      ImmersiveListSurface({ isImmersive: this.knowledgeListImmersiveMaterial }) {
-        this.StandardDocumentCard(document)
+    Column() {
+      if (this.isManuscriptMode) {
+        this.ManuscriptDocumentRow(document)
+      } else {
+        // 材质背板与完整卡片一起常驻在堆叠中；使用对话列表的同款 REGULAR 沉浸表面。
+        ImmersiveListSurface({ isImmersive: this.knowledgeListImmersiveMaterial }) {
+          this.StandardDocumentCard(document)
+        }
       }
     }
+    .width('100%')
+    // 与对话列表一致：留白随卡片侧滑，气泡仍相对完整列表宽度定位。
+    .padding({ left: this.listHorizontalPadding, right: this.listHorizontalPadding })
+    .clip(false)
   }
 
   @Builder
@@ -1183,6 +1200,7 @@ export struct KnowledgeBasePanel {
       }
     }
     .width('100%')
+    .padding({ left: this.listHorizontalPadding, right: this.listHorizontalPadding })
     .clip(false)
     .margin({ bottom: this.isManuscriptMode ? 0 : 8 })
   }
@@ -1294,8 +1312,6 @@ export struct KnowledgeBasePanel {
     }
     .divider(null)
     .margin({
-      left: this.isManuscriptMode ? 32 : 16,
-      right: this.isManuscriptMode ? 32 : 16,
       top: this.isManuscriptMode ? 12 : 10
     })
   }

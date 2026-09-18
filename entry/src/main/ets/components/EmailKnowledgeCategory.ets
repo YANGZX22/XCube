@@ -79,6 +79,10 @@ export struct EmailKnowledgeCategory {
     return getAppUiState().visualEffectsMode === VisualEffectsMode.MANUSCRIPT
   }
 
+  private get listHorizontalPadding(): number {
+    return this.isManuscriptMode ? 32 : 16
+  }
+
   private get knowledgeListImmersiveMaterial(): boolean {
     return !this.isManuscriptMode && getAppUiState().knowledgeListImmersiveMaterial
   }
@@ -394,6 +398,7 @@ export struct EmailKnowledgeCategory {
       }
     }
     .width('100%')
+    .padding({ left: this.listHorizontalPadding, right: this.listHorizontalPadding })
     .clip(false)
     .margin({ bottom: this.isManuscriptMode ? 0 : 8 })
   }
@@ -405,7 +410,7 @@ export struct EmailKnowledgeCategory {
         SymbolGlyph($r('sys.symbol.envelope'))
           .renderingStrategy(SymbolRenderingStrategy.SINGLE)
           .fontSize(18)
-          .fontColor(['#C97936'])
+          .fontColor([this.getCategoryColor()])
       }
       .width(36)
       .height(36)
@@ -658,7 +663,12 @@ export struct EmailKnowledgeCategory {
 
   @Builder
   private DocumentIcon(document: KnowledgeDocument, size: number) {
-    FileIcon({ fileName: document.originalName, mimeType: document.mimeType, iconSize: size })
+    FileIcon({
+      fileName: document.originalName,
+      mimeType: document.mimeType,
+      iconSize: size,
+      tintColor: this.getCategoryColor()
+    })
   }
 
   @Builder
@@ -806,13 +816,19 @@ export struct EmailKnowledgeCategory {
 
   @Builder
   private ImportedDocumentRow(document: KnowledgeDocument) {
-    if (this.isManuscriptMode) {
-      this.ManuscriptDocumentRow(document)
-    } else {
-      ImmersiveListSurface({ isImmersive: this.knowledgeListImmersiveMaterial }) {
-        this.StandardDocumentCard(document)
+    Column() {
+      if (this.isManuscriptMode) {
+        this.ManuscriptDocumentRow(document)
+      } else {
+        ImmersiveListSurface({ isImmersive: this.knowledgeListImmersiveMaterial }) {
+          this.StandardDocumentCard(document)
+        }
       }
     }
+    .width('100%')
+    // 与对话列表一致：留白随卡片侧滑，气泡仍相对完整列表宽度定位。
+    .padding({ left: this.listHorizontalPadding, right: this.listHorizontalPadding })
+    .clip(false)
   }
 
   @Builder
@@ -910,7 +926,13 @@ export struct EmailKnowledgeCategory {
       .height(56)
       .enabled(!this.knowledgeWorking)
       .clip(false)
-    }.width(72).height('100%').justifyContent(FlexAlign.Center).alignItems(VerticalAlign.Center).clip(false)
+    }
+    .width(56 + this.listHorizontalPadding)
+    .height('100%')
+    .padding({ left: this.listHorizontalPadding })
+    .justifyContent(FlexAlign.Start)
+    .alignItems(VerticalAlign.Center)
+    .clip(false)
   }
 
   @Builder
@@ -943,7 +965,13 @@ export struct EmailKnowledgeCategory {
       .height(56)
       .enabled(!this.knowledgeWorking)
       .clip(false)
-    }.width(64).height('100%').justifyContent(FlexAlign.Center).alignItems(VerticalAlign.Center).clip(false)
+    }
+    .width(56 + this.listHorizontalPadding)
+    .height('100%')
+    .padding({ right: this.listHorizontalPadding })
+    .justifyContent(FlexAlign.End)
+    .alignItems(VerticalAlign.Center)
+    .clip(false)
   }
 
   @Builder
@@ -1007,7 +1035,12 @@ export struct EmailKnowledgeCategory {
                 ForEach(this.previewMessage.attachments, (item: EmailAttachmentPart, index: number) => {
                   Column() {
                     Row({ space: 10 }) {
-                      FileIcon({ fileName: item.name, mimeType: item.mimeType, iconSize: 18 })
+                      FileIcon({
+                        fileName: item.name,
+                        mimeType: item.mimeType,
+                        iconSize: 18,
+                        tintColor: this.getCategoryColor()
+                      })
                       Column({ space: 2 }) {
                         Text(item.name).fontSize(13).fontColor($r('app.color.text_primary')).maxLines(1)
                           .textOverflow({ overflow: TextOverflow.Ellipsis }).width('100%')
@@ -1159,8 +1192,6 @@ export struct EmailKnowledgeCategory {
     }
     .divider(null)
     .margin({
-      left: this.isManuscriptMode ? 32 : 16,
-      right: this.isManuscriptMode ? 32 : 16,
       top: this.isManuscriptMode ? 12 : 10
     })
     .bindSheet($$this.showSearchSheet, this.SearchSheetContent(), {
