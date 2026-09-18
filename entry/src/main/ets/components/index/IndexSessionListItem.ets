@@ -159,10 +159,13 @@ export struct IndexSessionListItem {
         this.onToggleFavorite(this.item.session)
       }
     })
+      .width('100%')
       .borderRadius(LIST_MATERIAL_CARD_RADIUS)
       .clip(false)
-      .border({
+      // 选中描边不参与布局，卡片与知识库列表同样占满左右 16vp 边距内的宽度。
+      .outline({
         width: 2,
+        radius: LIST_MATERIAL_CARD_RADIUS,
         color: this.item.isSelected || this.item.isActive ? this.themePrimary : Color.Transparent
       })
       .opacity(this.isMultiSelectMode && !this.item.isSelected ? 0.5 : 1)

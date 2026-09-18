@@ -1,0 +1,30 @@
+<svg
+  xmlns="http://www.w3.org/2000/svg"
+  viewBox="0 0 1024 1024"
+  aria-hidden="true"
+>
+  <g
+    fill="none"
+    stroke="#8576FF"
+    stroke-width="42"
+    stroke-linecap="round"
+    stroke-linejoin="round"
+  >
+    <path d="M512 174 792 336V660L512 822 232 660V336Z"/>
+    <path d="M232 336 360 410"/>
+    <path d="M664 410 792 336"/>
+    <path d="M512 674V822"/>
+  </g>
+
+  <path
+    fill="#FFFFFF"
+    fill-rule="evenodd"
+    d="
+      M294 310H390L512 438 634 310H730
+      L566 512 730 714H634L512 586
+      L390 714H294L458 512Z
+
+      M512 466 558 512 512 558 466 512Z
+    "
+  />
+</svg>

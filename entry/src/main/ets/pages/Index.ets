@@ -1,5 +1,6 @@
 import { getAppPromptLanguage } from '../utils/LocalizedTextUtils'
 import { ImmersiveButtonSurface } from '../components/ImmersiveButtonSurface'
+import { ImmersiveListSurface } from '../components/ImmersiveListSurface'
 import { getBlurBottomShadow, getBlurFloatingActionShadow } from '../utils/BlurShadowUtils'
 import { curves, SymbolGlyphModifier, uiMaterial } from '@kit.ArkUI'
 import { ConfigurationConstant, common } from '@kit.AbilityKit'
@@ -2819,6 +2820,10 @@ struct Index {
     return 52
   }
 
+  private useFloatingSearchMaterial(): boolean {
+    return !this.isManuscriptMode() && shouldUseWrappedMaterial()
+  }
+
   private getFloatingSearchPanelWidth(): number {
     const availableWidth = this.isChatSplitLayout() ? this.getExpandedChatListWidth() : this.windowWidthVp
     if (availableWidth <= 0) {
@@ -5338,7 +5343,7 @@ struct Index {
   }
 
   @Builder
-  private FloatingSearchPanel() {
+  private FloatingSearchPanelContent() {
     Row({ space: 8 }) {
       Search({ value: this.searchText, placeholder: $r('app.string.search_sessions_placeholder') })
         .id(this.searchInputFocusId)
@@ -5356,35 +5361,44 @@ struct Index {
           this.refreshSessionListProjection()
         })
         .onSubmit((_value: string) => {
-          try {
-            this.getUIContext().getFocusController().clearFocus()
-          } catch (error) {
-          }
+          this.clearSearchInputFocus()
         })
         .onAppear(() => {
           this.scheduleSearchInputFocus(30)
         })
 
-      Button({ type: this.isManuscriptMode() ? ButtonType.Normal : ButtonType.Circle,
-        stateEffect: !this.isManuscriptMode() }) {
-        SymbolGlyph($r('sys.symbol.magnifyingglass'))
-          .fontSize(18)
-          .fontColor([this.themePrimary])
-      }
-      .width(36)
-      .height(36)
-      .padding(0)
-      .backgroundColor(Color.Transparent)
-      .borderRadius(this.isManuscriptMode() ? 0 : 18)
-      .border({ width: 0, color: Color.Transparent })
-      .onClick(() => {
-        try {
-          this.getUIContext().getFocusController().clearFocus()
-        } catch (error) {
+      if (this.useFloatingSearchMaterial()) {
+        InteractiveMaterialButton({
+          surfaceWidth: 36,
+          surfaceHeight: 36,
+          buttonType: ButtonType.Circle,
+          onActivate: (): void => {
+            this.clearSearchInputFocus()
+          }
+        }) {
+          SymbolGlyph($r('sys.symbol.magnifyingglass'))
+            .fontSize(18)
+            .fontColor([this.themePrimary])
         }
-      })
+      } else {
+        Button({ type: this.isManuscriptMode() ? ButtonType.Normal : ButtonType.Circle,
+          stateEffect: !this.isManuscriptMode() }) {
+          SymbolGlyph($r('sys.symbol.magnifyingglass'))
+            .fontSize(18)
+            .fontColor([this.themePrimary])
+        }
+        .width(36)
+        .height(36)
+        .padding(0)
+        .backgroundColor(Color.Transparent)
+        .borderRadius(this.isManuscriptMode() ? 0 : 18)
+        .border({ width: 0, color: Color.Transparent })
+        .onClick(() => {
+          this.clearSearchInputFocus()
+        })
+      }
     }
-    .width(this.getFloatingSearchPanelWidth())
+    .width('100%')
     .height(this.getFloatingSearchPanelHeight())
     .borderRadius(this.isManuscriptMode() ? 0 : this.getFloatingSearchPanelHeight() / 2)
     .clip(false)
@@ -5392,8 +5406,29 @@ struct Index {
     .justifyContent(FlexAlign.Center)
     .alignItems(VerticalAlign.Center)
     .backgroundColor(Color.Transparent)
-    .backdropBlur(this.isManuscriptMode() ? 0 : 24)
-    .shadow(getBlurBottomShadow(!(this.isManuscriptMode())))
+    .backdropBlur(this.isManuscriptMode() || this.useFloatingSearchMaterial() ? 0 : 24)
+    .shadow(getBlurBottomShadow(!this.isManuscriptMode() && !this.useFloatingSearchMaterial()))
+  }
+
+  private clearSearchInputFocus(): void {
+    try {
+      this.getUIContext().getFocusController().clearFocus()
+    } catch (_error) {
+    }
+  }
+
+  @Builder
+  private FloatingSearchPanel() {
+    Stack({ alignContent: Alignment.TopStart }) {
+      ImmersiveListSurface({
+        isImmersive: this.useFloatingSearchMaterial(),
+        cornerRadius: this.isManuscriptMode() ? 0 : this.getFloatingSearchPanelHeight() / 2
+      }) {
+        this.FloatingSearchPanelContent()
+      }
+    }
+    .width(this.getFloatingSearchPanelWidth())
+    .clip(false)
     .position({ x: '50%', y: this.getFloatingSearchPanelTop() })
     .translate({ x: '-50%' })
     .transition(TransitionEffect.asymmetric(

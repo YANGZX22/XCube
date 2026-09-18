@@ -273,7 +273,7 @@ export struct IndexSessionListSection {
         }
         .margin({
           top: this.isManuscriptMode ? 0 : (index === 0 ? 4 : 0),
-          bottom: this.isManuscriptMode ? 0 : 6
+          bottom: this.isManuscriptMode ? 0 : 10
         })
         .swipeAction(this.isMultiSelectMode ? undefined : {
           start: this.FavoriteSwipeButton(item.session),

@@ -2691,6 +2691,16 @@ export struct MessageBubble {
     return status + pickLocalizedText(` · ${current.bars.length} 项`, ` · ${current.bars.length} items`)
   }
 
+  private isTimelineBarGroupActive(block: TimelineBlock): boolean {
+    const current = this.getCurrentTimelineBlock(block)
+    if (current === undefined || current.hasPendingQuestion) {
+      return false
+    }
+    return current.hasExecutingTools || (current.hasSearch && this.message.isSearching) ||
+      (this.message.isGenerating && (current.hasLegacyReasoning ||
+        (current.lastReasoningSegmentId !== '' && current.lastReasoningSegmentId === this.activeTimelineSegmentId)))
+  }
+
   // 同一工具在不同段里可能凑出完全相同的分组 key，按段落作用域加前缀避免块内撞键
   private appendToolCallBlocks(blocks: TimelineBlock[], toolCallIds: string[], keyScope: string): void {
     const groups = this.getToolCallRenderGroups(toolCallIds)
@@ -2893,28 +2903,25 @@ export struct MessageBubble {
   @Builder
   private TimelineBarGroupHeader(block: TimelineBlock) {
     Row() {
-      SymbolGlyph($r('sys.symbol.square_stack_3d'))
-        .fontSize(14)
-        .fontColor([this.themePrimary])
-
-      Text(this.getTimelineBarGroupTitle(block))
-        .fontSize(13)
-        .fontWeight(FontWeight.Medium)
-        .fontColor(this.isManuscriptMode ? this.themePrimary : $r('app.color.text_secondary'))
-        .maxLines(1)
-        .textOverflow({ overflow: TextOverflow.Ellipsis })
+      ThinkingStatusIndicator({
+        isActive: this.isTimelineBarGroupActive(block),
+        label: this.getTimelineBarGroupTitle(block),
+        iconImage: $r('app.media.xcube_symbol_unknown_fore'),
+        inactiveColor: $r('app.color.text_secondary'),
+        fullWidth: true
+      })
         .layoutWeight(1)
-        .margin({ left: 6, right: 8 })
+        .margin({ right: 8 })
 
       Row() {
         Text(this.isTimelineBarGroupExpanded(block) ?
           $r('app.string.common_collapse') : $r('app.string.common_details'))
           .fontSize(11)
-          .fontColor(this.isManuscriptMode ? this.themePrimary : $r('app.color.text_tertiary'))
+          .fontColor(this.isTimelineBarGroupActive(block) ? this.themePrimary : $r('app.color.text_tertiary'))
 
         SymbolGlyph($r('sys.symbol.chevron_down'))
           .fontSize(12)
-          .fontColor([this.isManuscriptMode ? this.themePrimary : $r('app.color.text_tertiary')])
+          .fontColor([this.isTimelineBarGroupActive(block) ? this.themePrimary : $r('app.color.text_tertiary')])
           .rotate({ angle: this.isTimelineBarGroupExpanded(block) ? 180 : 0 })
           .animation(getTimelineBarExpandAnimation())
           .margin({ left: 2 })
