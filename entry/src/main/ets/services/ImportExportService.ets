@@ -588,7 +588,7 @@ export class ImportExportService {
     const manifest: ManifestData = {
       version: '1.0',
       exportTime: Date.now(),
-      appVersion: '2.0.1',
+      appVersion: '2.0.10',
       exportType: (options.sessionIds && options.sessionIds.length > 0) ? 'partial' : 'full',
       options: options,
       statistics: statistics,

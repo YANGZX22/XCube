@@ -5,6 +5,7 @@ import { ImmersiveButtonSurface } from '../components/ImmersiveButtonSurface'
 import { getBlurBottomShadow } from '../utils/BlurShadowUtils'
 import { curves, uiMaterial } from '@kit.ArkUI'
 import { HdsNavigation, HdsNavigationTitleBarOptions, HdsNavigationTitleMode } from '@kit.UIDesignKit'
+import { picker } from '@kit.CoreFileKit'
 import { AppStorageKeys } from '../config/AppStorageKeys'
 import { SettingsPagePresentationMode } from '../config/SettingsDetailPresentation'
 import { SettingsCompactTitleBarContent } from '../components/settings/SettingsCompactPageHeader'
@@ -17,9 +18,18 @@ import {
   DEFAULT_ELEVENLABS_STABILITY,
   ElevenLabsVoiceInfo,
   getTTSService,
+  normalizeTTSEngine,
   TTSEngineType,
   TTSService
 } from '../services/TTSService'
+import { hasMiMoVoiceSample, importMiMoVoiceSample } from '../services/MiMoVoiceSampleService'
+import {
+  DEFAULT_MIMO_TTS_BASE_URL,
+  DEFAULT_MIMO_TTS_VOICE,
+  MIMO_TTS_VOICES,
+  MiMoTTSModel,
+  normalizeMiMoTTSModel
+} from '../utils/MiMoTTSUtils'
 import { getAppUiState, setAppUiStateValue } from '../state/AppUiState'
 import {
   buildHdsTopNavigationTitleBarOptionsForPage,
@@ -50,7 +60,17 @@ struct TTSSettingsPage {
   @Local isLoadingVoices: boolean = false
   @Local voiceOptions: SelectOption[] = []
   @Local voiceIds: string[] = []
+  @Local mimoBaseUrl: string = DEFAULT_MIMO_TTS_BASE_URL
+  @Local mimoApiKey: string = ''
+  @Local mimoModel: MiMoTTSModel = MiMoTTSModel.PRESET
+  @Local mimoVoice: string = DEFAULT_MIMO_TTS_VOICE
+  @Local mimoVoiceDescription: string = ''
+  @Local mimoVoiceSampleName: string = ''
+  @Local isImportingVoiceSample: boolean = false
 
+  private readonly mimoModels: string[] = [MiMoTTSModel.PRESET, MiMoTTSModel.VOICE_DESIGN, MiMoTTSModel.VOICE_CLONE]
+  private readonly mimoModelOptions: SelectOption[] = this.mimoModels.map((value: string): SelectOption => ({ value }))
+  private readonly mimoVoiceOptions: SelectOption[] = MIMO_TTS_VOICES.map((value: string): SelectOption => ({ value }))
   private readonly modelOptions: SelectOption[] = [
     { value: 'eleven_multilingual_v2' },
     { value: 'eleven_flash_v2_5' },
@@ -123,7 +143,7 @@ struct TTSSettingsPage {
   private async loadSettings(loadGeneration: number): Promise<void> {
     const ttsEnabled = await this.preferences.getBoolean(PreferenceKeys.TTS_ENABLED, true)
     const savedEngine = await this.preferences.getString(PreferenceKeys.TTS_ENGINE, TTSEngineType.LOCAL)
-    const engine = savedEngine === TTSEngineType.ELEVENLABS ? TTSEngineType.ELEVENLABS : TTSEngineType.LOCAL
+    const engine = normalizeTTSEngine(savedEngine)
     const elevenLabsBaseUrl = await this.preferences.getString(
       PreferenceKeys.ELEVENLABS_BASE_URL,
       DEFAULT_ELEVENLABS_BASE_URL
@@ -143,6 +163,13 @@ struct TTSSettingsPage {
       DEFAULT_ELEVENLABS_SIMILARITY_BOOST
     )
     const speed = await this.preferences.getNumber(PreferenceKeys.ELEVENLABS_SPEED, DEFAULT_ELEVENLABS_SPEED)
+    const mimoBaseUrl = await this.preferences.getString(PreferenceKeys.MIMO_TTS_BASE_URL, DEFAULT_MIMO_TTS_BASE_URL)
+    const mimoApiKey = await this.preferences.getString(PreferenceKeys.MIMO_TTS_API_KEY, '')
+    const mimoModel = normalizeMiMoTTSModel(
+      await this.preferences.getString(PreferenceKeys.MIMO_TTS_MODEL, MiMoTTSModel.PRESET))
+    const mimoVoice = await this.preferences.getString(PreferenceKeys.MIMO_TTS_VOICE, DEFAULT_MIMO_TTS_VOICE)
+    const mimoVoiceDescription = await this.preferences.getString(PreferenceKeys.MIMO_TTS_VOICE_DESCRIPTION, '')
+    const savedSampleName = await this.preferences.getString(PreferenceKeys.MIMO_TTS_VOICE_SAMPLE_NAME, '')
     if (loadGeneration !== this.settingsLoadGeneration) {
       return
     }
@@ -156,6 +183,13 @@ struct TTSSettingsPage {
     this.stability = stability
     this.similarityBoost = similarityBoost
     this.speed = speed
+    this.mimoBaseUrl = mimoBaseUrl
+    this.mimoApiKey = mimoApiKey
+    this.mimoModel = mimoModel
+    this.mimoVoice = MIMO_TTS_VOICES.includes(mimoVoice) ? mimoVoice : DEFAULT_MIMO_TTS_VOICE
+    this.mimoVoiceDescription = mimoVoiceDescription
+    const context = this.getUIContext().getHostContext()
+    this.mimoVoiceSampleName = context !== undefined && hasMiMoVoiceSample(context) ? savedSampleName : ''
     if (elevenLabsVoiceId !== '') {
       this.voiceOptions = [{ value: elevenLabsVoiceId }]
       this.voiceIds = [elevenLabsVoiceId]
@@ -265,6 +299,12 @@ struct TTSSettingsPage {
     await this.preferences.setNumber(PreferenceKeys.ELEVENLABS_STABILITY, this.stability)
     await this.preferences.setNumber(PreferenceKeys.ELEVENLABS_SIMILARITY_BOOST, this.similarityBoost)
     await this.preferences.setNumber(PreferenceKeys.ELEVENLABS_SPEED, this.speed)
+    this.mimoBaseUrl = this.mimoBaseUrl.trim() || DEFAULT_MIMO_TTS_BASE_URL
+    await this.preferences.setString(PreferenceKeys.MIMO_TTS_BASE_URL, this.mimoBaseUrl)
+    await this.preferences.setString(PreferenceKeys.MIMO_TTS_API_KEY, this.mimoApiKey.trim())
+    await this.preferences.setString(PreferenceKeys.MIMO_TTS_MODEL, this.mimoModel)
+    await this.preferences.setString(PreferenceKeys.MIMO_TTS_VOICE, this.mimoVoice)
+    await this.preferences.setString(PreferenceKeys.MIMO_TTS_VOICE_DESCRIPTION, this.mimoVoiceDescription.trim())
     setAppUiStateValue(AppStorageKeys.TTS_ENABLED, this.ttsEnabled)
 
     if (showSuccess) {
@@ -286,6 +326,20 @@ struct TTSSettingsPage {
       (this.elevenLabsApiKey.trim() === '' || this.elevenLabsVoiceId.trim() === '')) {
       this.showMessage($r('app.string.tts_elevenlabs_required'), SnackBarTone.ERROR)
       return
+    }
+    if (this.engine === TTSEngineType.MIMO) {
+      if (this.mimoApiKey.trim() === '') {
+        this.showMessage($r('app.string.tts_mimo_api_key_required'), SnackBarTone.ERROR)
+        return
+      }
+      if (this.mimoModel === MiMoTTSModel.VOICE_DESIGN && this.mimoVoiceDescription.trim() === '') {
+        this.showMessage($r('app.string.tts_mimo_description_required'), SnackBarTone.ERROR)
+        return
+      }
+      if (this.mimoModel === MiMoTTSModel.VOICE_CLONE && this.mimoVoiceSampleName === '') {
+        this.showMessage($r('app.string.tts_mimo_sample_required'), SnackBarTone.ERROR)
+        return
+      }
     }
 
     const pageGeneration = this.settingsLoadGeneration
@@ -332,6 +386,38 @@ struct TTSSettingsPage {
     options.message = message
     options.tone = tone
     showSnackBar(this.getUIContext(), options)
+  }
+
+  private async chooseMiMoVoiceSample(): Promise<void> {
+    const context = this.getUIContext().getHostContext()
+    if (context === undefined || this.isImportingVoiceSample) {
+      return
+    }
+    const generation = this.settingsLoadGeneration
+    this.isImportingVoiceSample = true
+    try {
+      const options = new picker.DocumentSelectOptions()
+      options.maxSelectNumber = 1
+      options.fileSuffixFilters = ['.mp3', '.wav']
+      const uris = await new picker.DocumentViewPicker(context).select(options)
+      if (uris.length === 0 || generation !== this.settingsLoadGeneration) {
+        return
+      }
+      const name = importMiMoVoiceSample(context, uris[0])
+      // The imported file is durable; preferences only keep its display name, never the audio Base64.
+      await this.preferences.setString(PreferenceKeys.MIMO_TTS_VOICE_SAMPLE_NAME, name)
+      if (generation === this.settingsLoadGeneration) {
+        this.mimoVoiceSampleName = name
+      }
+    } catch (error) {
+      if (generation === this.settingsLoadGeneration) {
+        this.showMessage(error instanceof Error ? error.message : JSON.stringify(error), SnackBarTone.ERROR)
+      }
+    } finally {
+      if (generation === this.settingsLoadGeneration) {
+        this.isImportingVoiceSample = false
+      }
+    }
   }
 
   private getModelSelectedIndex(): number {
@@ -439,7 +525,7 @@ struct TTSSettingsPage {
     title: Resource,
     description: Resource
   ) {
-    // Keep both choices the same size so labels stay aligned across languages.
+    // Keep choices the same height so labels stay aligned across languages.
     Stack({ alignContent: Alignment.TopStart }) {
       ImmersiveButtonSurface({
         materialFactory: () => (new uiMaterial.ImmersiveMaterial({
@@ -557,6 +643,16 @@ struct TTSSettingsPage {
       }
       .width('100%')
       .alignItems(VerticalAlign.Top)
+
+      Row() {
+        this.EngineButton(
+          TTSEngineType.MIMO,
+          $r('sys.symbol.waveform'),
+          $r('app.string.tts_engine_mimo'),
+          $r('app.string.tts_engine_mimo_desc')
+        )
+      }
+      .width('100%')
     }
     .width('100%')
     .alignItems(HorizontalAlign.Start)
@@ -950,6 +1046,130 @@ struct TTSSettingsPage {
   }
 
   @Builder
+  private MiMoSelector(
+    label: Resource,
+    options: SelectOption[],
+    selected: number,
+    value: string,
+    onSelect: (index: number, value: string) => void
+  ) {
+    Column({ space: 7 }) {
+      Text(label)
+        .fontSize(13)
+        .fontColor($r('app.color.text_secondary'))
+        .width('100%')
+      Select(options)
+        .selected(selected)
+        .value(value)
+        .width('100%')
+        .height(46)
+        .font({ size: 13 })
+        .fontColor($r('app.color.text_primary'))
+        .selectedOptionFontColor(this.themePrimary)
+        .backgroundColor(Color.Transparent)
+        .borderRadius(14)
+        .systemMaterial(new uiMaterial.ImmersiveMaterial({
+          style: uiMaterial.ImmersiveStyle.ULTRA_THIN,
+          materialColor: Color.Transparent,
+          applyShadow: false
+        }))
+        .menuSystemMaterial(new uiMaterial.ImmersiveMaterial({ style: uiMaterial.ImmersiveStyle.THICK }))
+        .enabled(this.ttsEnabled)
+        .onSelect(onSelect)
+    }
+    .width('100%')
+    .alignItems(HorizontalAlign.Start)
+  }
+
+  @Builder
+  private MiMoCardContent() {
+    Column({ space: 16 }) {
+      Text($r('app.string.tts_mimo_config'))
+        .fontSize(16)
+        .fontWeight(FontWeight.Medium)
+        .fontColor($r('app.color.text_primary'))
+        .width('100%')
+      this.InputField($r('app.string.tts_api_base_url'), this.mimoBaseUrl, DEFAULT_MIMO_TTS_BASE_URL, false,
+        (value: string): void => { this.mimoBaseUrl = value })
+      this.InputField($r('app.string.tts_api_key'), this.mimoApiKey, 'api-key', true,
+        (value: string): void => { this.mimoApiKey = value })
+      this.MiMoSelector($r('app.string.tts_model'), this.mimoModelOptions,
+        this.mimoModels.indexOf(this.mimoModel), this.mimoModel,
+        (_index: number, value: string): void => { this.mimoModel = normalizeMiMoTTSModel(value) })
+
+      if (this.mimoModel === MiMoTTSModel.PRESET) {
+        this.MiMoSelector($r('app.string.tts_voice_id'), this.mimoVoiceOptions,
+          MIMO_TTS_VOICES.indexOf(this.mimoVoice), this.mimoVoice,
+          (_index: number, value: string): void => { this.mimoVoice = value })
+      } else if (this.mimoModel === MiMoTTSModel.VOICE_DESIGN) {
+        Column({ space: 7 }) {
+          Text($r('app.string.tts_mimo_voice_description'))
+            .fontSize(13)
+            .fontColor($r('app.color.text_secondary'))
+          TextArea({ text: this.mimoVoiceDescription, placeholder: $r('app.string.tts_mimo_description_placeholder') })
+            .width('100%')
+            .height(110)
+            .fontSize(14)
+            .fontColor($r('app.color.text_primary'))
+            .placeholderColor($r('app.color.text_tertiary'))
+            .backgroundColor(Color.Transparent)
+            .borderRadius(16)
+            .padding(12)
+            .backdropBlur(16)
+            .shadow(getBlurBottomShadow())
+            .enabled(this.ttsEnabled)
+            .onChange((value: string): void => { this.mimoVoiceDescription = value })
+        }
+        .width('100%')
+        .alignItems(HorizontalAlign.Start)
+      } else {
+        Column({ space: 7 }) {
+          Text($r('app.string.tts_mimo_voice_sample'))
+            .fontSize(13)
+            .fontColor($r('app.color.text_secondary'))
+          Button(this.isImportingVoiceSample ? $r('app.string.tts_mimo_importing_sample') :
+            $r('app.string.tts_mimo_import_sample'))
+            .width('100%')
+            .height(46)
+            .fontSize(14)
+            .fontColor(this.themePrimary)
+            .backgroundColor(Color.Transparent)
+            .borderRadius(16)
+            .border({ width: 1, color: this.themePrimaryLight })
+            .enabled(this.ttsEnabled && !this.isImportingVoiceSample && !this.isTesting)
+            .onClick((): void => { this.chooseMiMoVoiceSample() })
+          if (this.mimoVoiceSampleName !== '') {
+            Text(this.mimoVoiceSampleName)
+              .fontSize(12)
+              .fontColor($r('app.color.text_primary'))
+              .maxLines(2)
+          }
+          Text($r('app.string.tts_mimo_sample_note'))
+            .fontSize(12)
+            .fontColor($r('app.color.text_secondary'))
+            .lineHeight(18)
+        }
+        .width('100%')
+        .alignItems(HorizontalAlign.Start)
+      }
+
+      Text($r('app.string.tts_mimo_output_note'))
+        .fontSize(12)
+        .fontColor($r('app.color.text_secondary'))
+        .lineHeight(18)
+        .width('100%')
+      Text($r('app.string.tts_mimo_security_note'))
+        .fontSize(12)
+        .fontColor($r('app.color.text_tertiary'))
+        .lineHeight(18)
+        .width('100%')
+    }
+    .width('100%')
+    .alignItems(HorizontalAlign.Start)
+    .opacity(this.ttsEnabled ? 1 : 0.5)
+  }
+
+  @Builder
   private ActionButtons() {
     Row({ space: 12 }) {
       Stack({ alignContent: Alignment.TopStart }) {
@@ -1075,9 +1295,13 @@ struct TTSSettingsPage {
           .backdropBlur(16)
           .shadow(getBlurBottomShadow())
 
-          if (this.engine === TTSEngineType.ELEVENLABS) {
+          if (this.engine === TTSEngineType.ELEVENLABS || this.engine === TTSEngineType.MIMO) {
             Column() {
-              this.ElevenLabsCardContent()
+              if (this.engine === TTSEngineType.MIMO) {
+                this.MiMoCardContent()
+              } else {
+                this.ElevenLabsCardContent()
+              }
             }
             .width('100%')
             .padding(18)

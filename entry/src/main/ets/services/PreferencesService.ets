@@ -117,6 +117,12 @@ export class PreferenceKeys {
   static readonly ELEVENLABS_STABILITY: string = 'elevenlabs_stability'
   static readonly ELEVENLABS_SIMILARITY_BOOST: string = 'elevenlabs_similarity_boost'
   static readonly ELEVENLABS_SPEED: string = 'elevenlabs_speed'
+  static readonly MIMO_TTS_BASE_URL: string = 'mimo_tts_base_url'
+  static readonly MIMO_TTS_API_KEY: string = 'mimo_tts_api_key'
+  static readonly MIMO_TTS_MODEL: string = 'mimo_tts_model'
+  static readonly MIMO_TTS_VOICE: string = 'mimo_tts_voice'
+  static readonly MIMO_TTS_VOICE_DESCRIPTION: string = 'mimo_tts_voice_description'
+  static readonly MIMO_TTS_VOICE_SAMPLE_NAME: string = 'mimo_tts_voice_sample_name'
 
   // 材质效果
   static readonly MATERIAL_TYPE: string = 'material_type'

@@ -6,10 +6,29 @@ import { http } from '@kit.NetworkKit'
 import { media } from '@kit.MediaKit'
 import { util } from '@kit.ArkTS'
 import { getPreferencesService, PreferenceKeys } from './PreferencesService'
+import { readMiMoVoiceSample } from './MiMoVoiceSampleService'
+import {
+  buildMiMoTTSEndpoint,
+  buildMiMoTTSRequest,
+  decodeMiMoTTSAudio,
+  DEFAULT_MIMO_TTS_BASE_URL,
+  DEFAULT_MIMO_TTS_VOICE,
+  MiMoTTSModel,
+  MiMoTTSSettings,
+  normalizeMiMoTTSModel
+} from '../utils/MiMoTTSUtils'
 
 export enum TTSEngineType {
   LOCAL = 'local',
-  ELEVENLABS = 'elevenlabs'
+  ELEVENLABS = 'elevenlabs',
+  MIMO = 'mimo'
+}
+
+export function normalizeTTSEngine(engine: string): TTSEngineType {
+  if (engine === TTSEngineType.MIMO) {
+    return TTSEngineType.MIMO
+  }
+  return engine === TTSEngineType.ELEVENLABS ? TTSEngineType.ELEVENLABS : TTSEngineType.LOCAL
 }
 
 export const DEFAULT_ELEVENLABS_BASE_URL: string = 'https://api.elevenlabs.io'
@@ -35,6 +54,7 @@ class TTSSettingsSnapshot {
   elevenLabsStability: number = DEFAULT_ELEVENLABS_STABILITY
   elevenLabsSimilarityBoost: number = DEFAULT_ELEVENLABS_SIMILARITY_BOOST
   elevenLabsSpeed: number = DEFAULT_ELEVENLABS_SPEED
+  mimo: MiMoTTSSettings = new MiMoTTSSettings()
 }
 
 class ElevenLabsVoiceSettingsPayload {
@@ -237,6 +257,10 @@ export class TTSService {
       await this.speakWithElevenLabs(processedText, settings, requestToken)
       return
     }
+    if (settings.engine === TTSEngineType.MIMO) {
+      await this.speakWithMiMo(processedText, settings, requestToken)
+      return
+    }
     await this.speakWithLocalReader(processedText, requestToken)
   }
 
@@ -245,7 +269,16 @@ export class TTSService {
     const settings = new TTSSettingsSnapshot()
     settings.enabled = await prefs.getBoolean(PreferenceKeys.TTS_ENABLED, true)
     const engine = await prefs.getString(PreferenceKeys.TTS_ENGINE, TTSEngineType.LOCAL)
-    settings.engine = engine === TTSEngineType.ELEVENLABS ? TTSEngineType.ELEVENLABS : TTSEngineType.LOCAL
+    settings.engine = normalizeTTSEngine(engine)
+    if (settings.engine === TTSEngineType.MIMO) {
+      settings.mimo.baseUrl = await prefs.getString(PreferenceKeys.MIMO_TTS_BASE_URL, DEFAULT_MIMO_TTS_BASE_URL)
+      settings.mimo.apiKey = await prefs.getString(PreferenceKeys.MIMO_TTS_API_KEY, '')
+      settings.mimo.model = normalizeMiMoTTSModel(
+        await prefs.getString(PreferenceKeys.MIMO_TTS_MODEL, MiMoTTSModel.PRESET))
+      settings.mimo.voice = await prefs.getString(PreferenceKeys.MIMO_TTS_VOICE, DEFAULT_MIMO_TTS_VOICE)
+      settings.mimo.voiceDescription = await prefs.getString(PreferenceKeys.MIMO_TTS_VOICE_DESCRIPTION, '')
+      return settings
+    }
     settings.elevenLabsBaseUrl = await prefs.getString(
       PreferenceKeys.ELEVENLABS_BASE_URL,
       DEFAULT_ELEVENLABS_BASE_URL
@@ -370,11 +403,32 @@ export class TTSService {
     }
 
     // 4,500 字符兼容 Eleven v3 的 5,000 字符限制，并预留前后文参数空间。
-    this.apiChunks = this.splitTextForElevenLabs(text, 4500)
+    this.apiChunks = this.splitTextForApi(text, 4500)
     this.apiChunkIndex = 0
     this.apiStartNotified = false
     this.apiSettings = settings
     await this.generateAndPlayCurrentChunk(requestToken)
+  }
+
+  private async speakWithMiMo(text: string, settings: TTSSettingsSnapshot, requestToken: number): Promise<void> {
+    try {
+      if (settings.mimo.apiKey.trim() === '') {
+        throw new Error('请先在播报设置中填写 MiMo TTS API Key')
+      }
+      if (settings.mimo.model === MiMoTTSModel.VOICE_CLONE && this.context !== null) {
+        settings.mimo.voiceSample = readMiMoVoiceSample(this.context)
+      }
+      // Keep individual generations short for responsive playback of long replies.
+      this.apiChunks = this.splitTextForApi(text, 1000)
+      this.apiChunkIndex = 0
+      this.apiStartNotified = false
+      this.apiSettings = settings
+      await this.generateAndPlayCurrentChunk(requestToken)
+    } catch (error) {
+      if (requestToken === this.activeRequestToken) {
+        this.failCurrentRequest(error instanceof Error ? error.message : JSON.stringify(error))
+      }
+    }
   }
 
   private async generateAndPlayCurrentChunk(requestToken: number): Promise<void> {
@@ -389,17 +443,19 @@ export class TTSService {
     const previousText = this.apiChunkIndex > 0 ? this.apiChunks[this.apiChunkIndex - 1] : ''
     const nextText = this.apiChunkIndex + 1 < this.apiChunks.length ? this.apiChunks[this.apiChunkIndex + 1] : ''
     try {
-      const audio = await this.requestElevenLabsAudio(
-        this.apiChunks[this.apiChunkIndex],
-        previousText,
-        nextText,
-        this.apiSettings,
-        requestToken
-      )
+      const audio = this.apiSettings.engine === TTSEngineType.MIMO ?
+        await this.requestMiMoAudio(this.apiChunks[this.apiChunkIndex], this.apiSettings.mimo, requestToken) :
+        await this.requestElevenLabsAudio(
+          this.apiChunks[this.apiChunkIndex],
+          previousText,
+          nextText,
+          this.apiSettings,
+          requestToken
+        )
       if (requestToken !== this.activeRequestToken) {
         return
       }
-      await this.playElevenLabsAudio(audio, requestToken)
+      await this.playApiAudio(audio, requestToken)
     } catch (error) {
       if (requestToken !== this.activeRequestToken) {
         return
@@ -480,18 +536,72 @@ export class TTSService {
     }
   }
 
-  private async playElevenLabsAudio(audio: ArrayBuffer, requestToken: number): Promise<void> {
+  private async requestMiMoAudio(
+    text: string,
+    settings: MiMoTTSSettings,
+    requestToken: number
+  ): Promise<ArrayBuffer> {
+    const payload = buildMiMoTTSRequest(text, settings)
+    const request = http.createHttp()
+    this.apiRequest = request
+    try {
+      const response = await request.request(buildMiMoTTSEndpoint(settings.baseUrl), {
+        method: http.RequestMethod.POST,
+        header: {
+          'Content-Type': 'application/json',
+          'Accept': 'application/json',
+          'api-key': settings.apiKey.trim()
+        },
+        extraData: JSON.stringify(payload),
+        connectTimeout: 15000,
+        readTimeout: 180000,
+        expectDataType: http.HttpDataType.STRING
+      })
+      if (requestToken !== this.activeRequestToken) {
+        throw new Error('朗读请求已取消')
+      }
+      if (response.responseCode < 200 || response.responseCode >= 300) {
+        const detail = this.decodeResponseBody(response.result)
+        throw new Error(`MiMo TTS 请求失败 (${response.responseCode})${detail === '' ? '' : `: ${detail}`}`)
+      }
+      if (typeof response.result !== 'string') {
+        throw new Error('MiMo TTS 返回的响应格式无效')
+      }
+      return decodeMiMoTTSAudio(response.result)
+    } catch (error) {
+      if (requestToken !== this.activeRequestToken) {
+        throw new Error('朗读请求已取消')
+      }
+      if (error instanceof Error && error.message.startsWith('MiMo TTS')) {
+        throw error
+      }
+      const err = error as BusinessError
+      throw new Error(`MiMo TTS 请求失败: ${err.message ?? JSON.stringify(error)}`)
+    } finally {
+      if (this.apiRequest === request) {
+        this.apiRequest = null
+      }
+      try {
+        request.destroy()
+      } catch (_error) {}
+    }
+  }
+
+  private async playApiAudio(audio: ArrayBuffer, requestToken: number): Promise<void> {
     if (this.context === null) {
       throw new Error('应用上下文不可用')
     }
 
-    const path = `${this.context.cacheDir}/xcube_tts_${Date.now()}_${this.apiChunkIndex}.mp3`
+    const path = `${this.context.cacheDir}/xcube_tts_${requestToken}_${Date.now()}_${this.apiChunkIndex}.mp3`
     const outputFile = fileIo.openSync(
       path,
       fileIo.OpenMode.CREATE | fileIo.OpenMode.WRITE_ONLY | fileIo.OpenMode.TRUNC
     )
     try {
       fileIo.writeSync(outputFile.fd, audio)
+    } catch (error) {
+      this.deleteFileSafely(path)
+      throw new Error((error as BusinessError).message ?? JSON.stringify(error))
     } finally {
       fileIo.closeSync(outputFile)
     }
@@ -501,8 +611,21 @@ export class TTSService {
       return
     }
 
-    const sourceFile = fileIo.openSync(path, fileIo.OpenMode.READ_ONLY)
-    const player = await media.createAVPlayer()
+    let sourceFile: fileIo.File
+    try {
+      sourceFile = fileIo.openSync(path, fileIo.OpenMode.READ_ONLY)
+    } catch (error) {
+      this.deleteFileSafely(path)
+      throw new Error((error as BusinessError).message ?? JSON.stringify(error))
+    }
+    let player: media.AVPlayer
+    try {
+      player = await media.createAVPlayer()
+    } catch (error) {
+      fileIo.closeSync(sourceFile)
+      this.deleteFileSafely(path)
+      throw new Error((error as BusinessError).message ?? JSON.stringify(error))
+    }
     if (requestToken !== this.activeRequestToken) {
       fileIo.closeSync(sourceFile)
       this.deleteFileSafely(path)
@@ -526,11 +649,15 @@ export class TTSService {
       }
       if (state === 'initialized') {
         player.prepare().catch((error: Error): void => {
-          this.failCurrentRequest(`音频准备失败: ${error.message}`)
+          if (player === this.apiPlayer && requestToken === this.activeRequestToken) {
+            this.failCurrentRequest(`音频准备失败: ${error.message}`)
+          }
         })
       } else if (state === 'prepared') {
         player.play().catch((error: Error): void => {
-          this.failCurrentRequest(`音频播放失败: ${error.message}`)
+          if (player === this.apiPlayer && requestToken === this.activeRequestToken) {
+            this.failCurrentRequest(`音频播放失败: ${error.message}`)
+          }
         })
       } else if (state === 'playing') {
         this.isReading = true
@@ -676,6 +803,9 @@ export class TTSService {
     this.activeRequestToken += 1
     const callback = this.currentCallback
     this.currentCallback = null
+    this.apiChunks = []
+    this.apiChunkIndex = 0
+    this.apiSettings = null
 
     if (this.apiRequest !== null) {
       try {
@@ -730,7 +860,7 @@ export class TTSService {
     return ''
   }
 
-  private splitTextForElevenLabs(text: string, maxLength: number): string[] {
+  private splitTextForApi(text: string, maxLength: number): string[] {
     const chunks: string[] = []
     let remaining = text.trim()
     while (remaining.length > maxLength) {

@@ -2594,7 +2594,7 @@
     },
     {
       "name": "settings_tts_desc",
-      "value": "System offline TTS or ElevenLabs API"
+      "value": "System offline TTS, ElevenLabs or MiMo TTS"
     },
     {
       "name": "tts_enabled_title",
@@ -2625,12 +2625,68 @@
       "value": "Cloud API synthesis"
     },
     {
+      "name": "tts_engine_mimo",
+      "value": "MiMo TTS"
+    },
+    {
+      "name": "tts_engine_mimo_desc",
+      "value": "Preset voices, voice design and cloning"
+    },
+    {
+      "name": "tts_mimo_config",
+      "value": "MiMo TTS API"
+    },
+    {
+      "name": "tts_mimo_api_key_required",
+      "value": "Enter the MiMo TTS API Key first"
+    },
+    {
+      "name": "tts_mimo_voice_description",
+      "value": "Voice description"
+    },
+    {
+      "name": "tts_mimo_description_placeholder",
+      "value": "For example: A warm, clear female voice speaking Mandarin at a relaxed pace."
+    },
+    {
+      "name": "tts_mimo_description_required",
+      "value": "Enter a voice description for voice design"
+    },
+    {
+      "name": "tts_mimo_voice_sample",
+      "value": "Reference audio"
+    },
+    {
+      "name": "tts_mimo_import_sample",
+      "value": "Import MP3 / WAV sample"
+    },
+    {
+      "name": "tts_mimo_importing_sample",
+      "value": "Importing…"
+    },
+    {
+      "name": "tts_mimo_sample_required",
+      "value": "Import an MP3 or WAV sample for voice cloning"
+    },
+    {
+      "name": "tts_mimo_sample_note",
+      "value": "MP3 or WAV, up to 10 MiB. Importing saves the sample on this device and replaces the previous sample."
+    },
+    {
+      "name": "tts_mimo_output_note",
+      "value": "Audio is generated as MP3. Long replies are split at sentence boundaries and played in order. Text optimization is disabled to preserve the reply."
+    },
+    {
+      "name": "tts_mimo_security_note",
+      "value": "The API key is stored in local app preferences. MiMo mode sends the reply text, voice description or reference audio to the configured API endpoint."
+    },
+    {
       "name": "tts_local_ready",
       "value": "Local engine ready"
     },
     {
       "name": "tts_local_note",
-      "value": "Uses the system offline text-to-speech engine. No third-party API key is required, and message text is not sent to ElevenLabs."
+      "value": "Uses the system offline text-to-speech engine. No third-party API key is required, and message text stays on this device."
     },
     {
       "name": "tts_elevenlabs_config",

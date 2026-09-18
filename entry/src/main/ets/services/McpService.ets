@@ -24,7 +24,7 @@ import { resolveLegacyToolId } from '../utils/ToolIdAliases'
 const MCP_PROTOCOL_VERSION = '2025-06-18'
 const MCP_DEFAULT_TIMEOUT_MS = 30000
 const MCP_CLIENT_NAME = 'ChatBox'
-const MCP_CLIENT_VERSION = '2.0.1'
+const MCP_CLIENT_VERSION = '2.0.10'
 
 interface McpHttpResponse {
   statusCode: number

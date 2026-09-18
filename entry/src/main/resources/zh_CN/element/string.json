@@ -2594,7 +2594,7 @@
     },
     {
       "name": "settings_tts_desc",
-      "value": "系统本地 TTS 或 ElevenLabs API"
+      "value": "系统离线 TTS、ElevenLabs 或 MiMo TTS"
     },
     {
       "name": "tts_enabled_title",
@@ -2625,12 +2625,68 @@
       "value": "云端 API 语音合成"
     },
     {
+      "name": "tts_engine_mimo",
+      "value": "MiMo TTS"
+    },
+    {
+      "name": "tts_engine_mimo_desc",
+      "value": "预置音色、音色设计与声音克隆"
+    },
+    {
+      "name": "tts_mimo_config",
+      "value": "MiMo TTS API"
+    },
+    {
+      "name": "tts_mimo_api_key_required",
+      "value": "请先填写 MiMo TTS API Key"
+    },
+    {
+      "name": "tts_mimo_voice_description",
+      "value": "音色描述"
+    },
+    {
+      "name": "tts_mimo_description_placeholder",
+      "value": "例如：温暖清晰的女声，标准普通话，语速舒缓自然。"
+    },
+    {
+      "name": "tts_mimo_description_required",
+      "value": "使用音色设计时请填写音色描述"
+    },
+    {
+      "name": "tts_mimo_voice_sample",
+      "value": "参考音频"
+    },
+    {
+      "name": "tts_mimo_import_sample",
+      "value": "导入 MP3 / WAV 样本"
+    },
+    {
+      "name": "tts_mimo_importing_sample",
+      "value": "正在导入…"
+    },
+    {
+      "name": "tts_mimo_sample_required",
+      "value": "使用声音克隆时请先导入 MP3 或 WAV 样本"
+    },
+    {
+      "name": "tts_mimo_sample_note",
+      "value": "支持 MP3、WAV，最大 10 MiB。导入后即保存到本机，并替换之前的样本。"
+    },
+    {
+      "name": "tts_mimo_output_note",
+      "value": "音频以 MP3 格式生成。长回复按自然语句分段并依次播放，不启用文本润色以保留原回复。"
+    },
+    {
+      "name": "tts_mimo_security_note",
+      "value": "API Key 保存在本地应用偏好设置中。MiMo 模式会将回复文本及音色描述或参考音频发送至配置的 API 地址。"
+    },
+    {
       "name": "tts_local_ready",
       "value": "本地引擎已就绪"
     },
     {
       "name": "tts_local_note",
-      "value": "使用系统离线文字转语音引擎，无需第三方 API Key，消息文本也不会发送给 ElevenLabs。"
+      "value": "使用系统离线语音合成引擎，无需第三方 API Key，消息文本保留在本机。"
     },
     {
       "name": "tts_elevenlabs_config",

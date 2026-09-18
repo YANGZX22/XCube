@@ -16,7 +16,7 @@ export class LicenseCatalogItem {
 
 export const RUNTIME_LICENSES: LicenseCatalogItem[] = [
   new LicenseCatalogItem(
-    'XCube', '2.0.1', 'MIT',
+    'XCube', '2.0.10', 'MIT',
     'Copyright © 2026 longlivey、YANGZX22。',
     'Copyright © 2026 longlivey and YANGZX22.'
   ),
