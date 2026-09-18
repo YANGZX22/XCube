@@ -5,12 +5,13 @@
 <h1 align="center">XCube</h1>
 
 <p align="center">
-  为 HarmonyOS 7 打造的原生 AI 智能体工作台。
+  基于 HarmonyOS 7 打造的原生 AI 智能体工作台。
 </p>
 
 <p align="center">
   <img src="https://img.shields.io/badge/HarmonyOS-7_(API_26)-4285F4" alt="HarmonyOS 7" />
   <a href="./CHANGELOG.md"><img src="https://img.shields.io/badge/version-2.0.1-2ea44f" alt="版本 2.0.1" /></a>
+  <a href="https://appgallery.huawei.com/link/invite-test-wap?taskId=ea479545cdb1a7d831163c11b530b911"><img src="https://img.shields.io/badge/download-2.0.1-CF0A2C" alt="版本 2.0.1 邀测链接" /></a>
   <a href="./LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue" alt="MIT License" /></a>
 </p>
 
@@ -26,7 +27,7 @@
 > [!NOTE]
 > XCube 延续自 [YANGZX22/chatcube](https://github.com/YANGZX22/chatcube)，该项目最初由 [LongLiveY96/ChatCube](https://github.com/LongLiveY96/ChatCube) 分支而来。两个早期版本的版权与 MIT 许可证声明均完整保留。
 
-## 界面截图1
+## 界面截图
 
 <table>
   <tr>
@@ -45,15 +46,16 @@
 
 ## 项目概览
 
-- 🤖 **多模型兼容** —— 内置 15 个以上的服务商，并支持 OpenAI、Anthropic 和 Gemini 兼容 API
-- 🔍 **联网搜索与 MCP** —— 支持 Bing（本地）、Brave、Tavily、Exa、博查和 DeepSeek Web Search，以及远程 Streamable MCP Server
-- 🧩 **多轮子智能体协作** —— 主智能体可将复杂任务分配给最多 3 个子智能体，并在多轮交互后统一汇总结果
-- 📚 **本地知识库** —— 结合关键词与向量的混合 RAG，内置 DOCX／XLSX 解析与 OCR；文件始终保留在应用沙箱内
-- 🛠️ **内置工具** —— Canvas 文档、计划模式、Python 沙箱、图表、日历、地图与常用地点，以及交付原文件、页面图或提取文本的 PDF／图片／DOCX／XLSX 工具包
-- 🔊 **回复播报** —— 支持 HarmonyOS 原生 TTS 或 ElevenLabs
-- 🔒 **隐私保护** —— 所有工具均设置明确的权限控制与用户确认流程
+XCube 完全基于原生 ArkTS 构建，强调沉浸光感的全局性、沉浸式界面，不断打磨原生体验和视觉质感
 
-项目完全使用 ArkTS 构建，致力于打磨 HarmonyOS 原生交互与沉浸光感材质。
+- **多模型兼容**：内置 15 个以上的服务商，并支持 OpenAI、Anthropic 和 Gemini 兼容 API
+- **联网搜索与 MCP**：支持 Bing (本地)、Brave、Tavily、Exa、博查和 DeepSeek Web Search，以及远程 Streamable MCP Server
+- **多轮子智能体协作**：主智能体可将复杂任务分配给最多 3 个子智能体，并在多轮交互后统一汇总结果
+- **本地知识库**：结合关键词与向量的混合 RAG，内置 DOCX／XLSX 解析与 OCR；文件始终保留在应用沙箱内
+- **会话工作区**：按会话保存文件，支持用户管理与预览，并供主智能体和子智能体通过 Python 工具协作处理
+- **内置工具**：Canvas 文档、计划模式、Python 沙箱、图表、日历、地图与常用地点，以及交付原文件、页面图或提取文本的 PDF／图片／DOCX／XLSX 工具包等等
+- **回复播报**：支持 HarmonyOS 原生 TTS 或 ElevenLabs
+- **隐私保护**：所有工具均设置明确的权限控制与用户确认流程
 
 ## 功能特性
 
@@ -61,15 +63,18 @@
 
 内置对以下 15 个以上服务商的支持：
 
-OpenAI · Claude · Gemini · DeepSeek · Grok · Ollama · OpenRouter · SiliconFlow · Qwen · Kimi · Zhipu（GLM）· Doubao · MiniMax · AiHubMix · MiMo
+OpenAI · Claude · Gemini · DeepSeek · Grok · Ollama · OpenRouter · SiliconFlow · Qwen · Kimi · Zhipu · Doubao · MiniMax · AiHubMix · MiMo
 
 此外，用户可以添加符合 OpenAI、Anthropic 或 Gemini 接口规范的自定义端点。
 
-### 🔍 联网搜索
+### 📁 会话工作区
 
-在“工具中心 → 联网搜索”中启用 `web_search` 并选择 Bing（本地）、Brave、Tavily、Exa、博查或 DeepSeek Web Search。每次对话使用独立的搜索预算，模型超出预算前会请求用户确认。
+在聊天输入区点击 **工作区**，即可查看当前会话的文件树和文件预览。工作区按会话分别保存在应用沙箱内。
 
-DeepSeek Web Search 默认在每次搜索时读取当前 DeepSeek 服务商的 API Key，不会将密钥复制到搜索设置，并且只请求 DeepSeek 官方 Anthropic 端点。也可关闭自动模式，单独配置 API Key 和 Anthropic 兼容接口。DeepSeek Web Search 会发起模型请求并消耗对应账户的 Token 额度。
+- **管理文件**：长按根目录空白处可上传文件、新建文件或文件夹；长按文件夹可在其中上传、新建或递归删除；长按文件可删除。
+- **与模型协作**：启用 **Python** 工具后，主智能体和子智能体共享当前会话的工作区。模型可读取文件、创建或修改文本与 Python 脚本，也可运行 Python 处理工作区内的文件；同一会话的操作按顺序执行，修改同一文件时会检查版本冲突。
+
+工作区最多保存 64 个文件、512 个文件夹；单文件不超过 16 MiB，文件总量不超过 32 MiB。安装额外 Python 包可能需要联网。
 
 ### 🧩 并行子智能体
 
@@ -83,19 +88,14 @@ DeepSeek Web Search 默认在每次搜索时读取当前 DeepSeek 服务商的 A
 
 “知识库”标签页支持上传 DOCX、XLSX、PDF、Markdown、文本和图片。DOCX 与 XLSX 由应用内置的 OOXML 解析器处理，图片和扫描版 PDF 可使用本地 OCR。模型按需通过 [`knowledge_search`](entry/src/main/ets/config/KnowledgeSearchTool.ets) 工具检索资料；应用不会预先执行检索，也不会将知识片段注入系统提示词。
 
-- **混合检索** —— 融合关键词与向量检索，并扩展相邻片段，以保留跨分块内容的完整性
-- **DOCX 结构解析** —— 保留标题、段落、列表、换行和表格，并转换为适合语义分块的结构化文本
-- **XLSX 表格解析** —— 支持多工作表、共享字符串、日期、合并单元格、公式缓存值和稀疏单元格坐标
-- **结构感知分块** —— 保留页边界、标题、列表、表格、工作表与 FAQ 问答对等文档结构
-- **两种向量方案** —— PC／2-in-1 设备可使用本地 ArkData Embedding，也可接入任意 OpenAI 兼容的 Embedding API
-- **本地数据存储** —— 文件、OCR 结果、索引和向量均存放在应用沙箱内
-- **邮件一键导入** —— 知识库内设与 PDF、Word、表格、图片并列的“邮件”栏；选中 IMAP 邮件后，正文、受支持的附件和内嵌图片会进入同一套解析／OCR 流程。
+- **混合检索**：融合关键词与向量检索，并扩展相邻片段，以保留跨分块内容的完整性
+- **DOCX 结构解析**：保留标题、段落、列表、换行和表格，并转换为适合语义分块的结构化文本
+- **XLSX 表格解析**：支持多工作表、共享字符串、日期、合并单元格、公式缓存值和稀疏单元格坐标
+- **结构感知分块**：保留页边界、标题、列表、表格、工作表与 FAQ 问答对等文档结构
+- **邮件一键导入**：知识库内设与 PDF、Word、表格、图片并列的“邮件”栏。
 
 > [!NOTE]
-> 本地 ArkData Embedding 目前仅支持 2-in-1 设备。手机和平板可以使用 API Embedding；未配置 Embedding API 时，关键词检索仍可正常使用。
-
-> [!NOTE]
-> Office 解析目前支持 OOXML 格式 `.docx` 和 `.xlsx`，不支持旧版 `.doc`／`.xls`、加密文件、宏、图表内容或文档内图片 OCR。公式优先读取文件保存的缓存结果，无缓存时保留公式表达式。
+> XCube 支持 ArkTS 原生 ArkData Embedding。但仅支持 2-in-1 设备。其余设备可以使用兼容 OpenAI API 格式的 Embedding 模型。
 
 ### 🛠️ 内置工具
 
@@ -124,7 +124,7 @@ DeepSeek Web Search 默认在每次搜索时读取当前 DeepSeek 服务商的 A
 | **花瓣导航**                     | 将搜索地点、坐标或已保存的常用地点标签交给花瓣地图进行路线导航                                                                               |
 
 > [!IMPORTANT]
-> 使用地图相关功能前，必须在 DevEco Studio 中打开 **File → Project Structure → Signing Configs → Enable open capabilities**，启用 **Map Kit** 并应用配置。如果调试 Profile 早于该能力生成，还需重新申请或下载 Profile 并更新签名配置。完整步骤参见[Map Kit 集成说明](docs/map-kit-integration.md#上线前必须完成的控制台配置)。
+> 使用地图相关功能前，必须在 DevEco Studio 中打开 **File → Project Structure → Signing Configs → Enable open capabilities**，启用 **Map Kit** 并应用配置。如果调试 Profile 早于该能力生成，还需重新申请或下载 Profile 并更新签名配置。
 
 #### <sup>*</sup>[可选] 为文本模型在视觉理解工具背后启用 ModLens
 
@@ -168,9 +168,9 @@ cp build-profile.json5.example build-profile.json5
 
 使用 DevEco Studio 打开项目，并在目标设备上运行。
 
-### 2. 从邀测链接安装 (即将上线)
+### 2. 从[邀测链接](https://appgallery.huawei.com/link/invite-test-wap?taskId=ea479545cdb1a7d831163c11b530b911)直接安装 (即将上线)
 
-### 3. 或者选择直接侧载 HAP (即将停止维护)
+### 3. 侧载 HAP (邀测链接上线后将停止发布)
 
 在 [Release](https://github.com/YANGZX22/XCube/releases) 页面下载最新版本 HAP 文件后，可以通过 [Auto-installer](https://github.com/likuai2010/auto-installer/) 或 [DevEco Testing](https://developer.huawei.com/consumer/cn/deveco-testing/) 将 HAP 安装至设备。
 

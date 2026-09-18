@@ -11,6 +11,7 @@
 <p align="center">
   <img src="https://img.shields.io/badge/HarmonyOS-7_(API_26)-4285F4" alt="HarmonyOS 7" />
   <a href="./CHANGELOG.md"><img src="https://img.shields.io/badge/version-2.0.1-2ea44f" alt="Version 2.0.1" /></a>
+  <a href="https://appgallery.huawei.com/link/invite-test-wap?taskId=ea479545cdb1a7d831163c11b530b911"><img src="https://img.shields.io/badge/download-2.0.1-CF0A2C" alt="Version 2.0.1 invitation testing link" /></a>
   <a href="./LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue" alt="MIT License" /></a>
 </p>
 
@@ -21,13 +22,7 @@
 ## Latest Information
 
 > [!IMPORTANT]
-> **Immersive Light compatibility issue (from 28 August 2026):** on HarmonyOS `7.0.0.105` (API 26), Immersive Light currently fails on all HarmonyOS 7 material interfaces even though DevEco Studio compilation succeeds; origin HarmonyOS 6 materials interfaces remain unaffected. The likely cause is a compatibility difference between the API 26 Beta2 SDK (`26.0.0.32`) used by the project and the official system runtime (`26.0.0.105`).
-
-> [!NOTE]
-> As the official release of HarmonyOS 7 approaches, updates to this repository will be put on hold. Once the official version is released, this app may be made available via the Huawei AppGallery’s invitation-only testing feature, at which point installation will be more convenient. Please note, however, that this app may NEVER be officially listed on the Huawei AppGallery.
-
-> [!IMPORTANT]
-> XCube requires **HarmonyOS 7 (API 26.0.0) or later**. Users on HarmonyOS 6 or earlier must first join the [Huawei Beta Test Program](https://cn.club.vmall.com/mhw/assets/file-html-app/3b2bca9630d0fcb2bb2dfac09ee415ea20230529103243/index.html?ts=1785306752202#/) before installing the app. Refer to the program website for current test dates.
+> **Immersive Light compatibility:** Starting with HarmonyOS `7.0.0.105` (API 26), the system [restricts](https://developer.huawei.com/consumer/cn/doc/harmonyos-guides/arkts-immersive-light-sense-overview#约束与限制) application-level and component-level Immersive Light on ordinary ArkUI components. XCube has adapted to this restriction and is working to restore the same visual quality as before it took effect. Update your device to HarmonyOS 7 or later for the best experience. Compatibility work is still ongoing.
 
 > [!NOTE]
 > XCube continues [YANGZX22/chatcube](https://github.com/YANGZX22/chatcube), which was originally forked from [LongLiveY96/ChatCube](https://github.com/LongLiveY96/ChatCube). Copyright and MIT license notices from both earlier versions are preserved in full.
@@ -42,24 +37,25 @@
     <td align="center"><img src="docs/screenshots/work-with-sub-agents.png" width="220" /><br/><sub>Work with Subagents</sub></td>
   </tr>
   <tr>
-    <td align="center"><img src="docs/screenshots/map.png" width="220" /><br/><sub>Map Integration</sub></td>
-    <td align="center"><img src="docs/screenshots/modlens.png" width="220" /><br/><sub>Better Vision Support</sub></td>
-    <td align="center"><img src="docs/screenshots/complicated-projects.png" width="220" /><br/><sub>Engineering Processing Capacity</sub></td>
+    <td align="center"><img src="docs/screenshots/map.png" width="220" /><br/><sub>Maps and Navigation</sub></td>
+    <td align="center"><img src="docs/screenshots/modlens.png" width="220" /><br/><sub>Enhanced Vision Support</sub></td>
+    <td align="center"><img src="docs/screenshots/complicated-projects.png" width="220" /><br/><sub> Complex Projects</sub></td>
     <td align="center"><img src="docs/screenshots/workspace.png" width="220" /><br/><sub>Workspace</sub></td>
   </tr>
 </table>
 
 ## Project Overview
 
-- 🤖 **Multi-model support** — built-in configurations for more than 15 providers, plus support for OpenAI-, Anthropic-, and Gemini-compatible APIs
-- 🔍 **Web search and MCP** — Bing (local), Brave, Tavily, Exa, Bocha, DeepSeek Web Search, and remote Streamable MCP servers
-- 🧩 **Multi-turn sub-agent collaboration** — the main agent can delegate complex work to up to three sub-agents, guide them through multiple rounds, and consolidate their results
-- 📚 **Local knowledge base** — hybrid keyword and vector RAG with built-in DOCX/XLSX parsing and OCR; files remain in the app sandbox
-- 🛠️ **Built-in tools** — Canvas documents, Plan mode, Python sandbox, charts, calendar, maps and saved places, plus PDF/image/DOCX/XLSX toolkits that hand models the original file, rendered pages, or extracted text
-- 🔊 **Read aloud** — HarmonyOS offline TTS or ElevenLabs
-- 🔒 **Privacy protection** — explicit permission controls and user confirmation flows for all tools
+XCube is built entirely in native ArkTS. It aims to bring Immersive Light across the interface while continually refining the native experience and visual quality.
 
-Built entirely in ArkTS, with continued emphasis on refining native HarmonyOS interactions and immersive-light materials.
+- **Multi-model support** — built-in configurations for more than 15 providers, plus support for OpenAI-, Anthropic-, and Gemini-compatible APIs
+- **Web search and MCP** — Bing (local), Brave, Tavily, Exa, Bocha, DeepSeek Web Search, and remote Streamable MCP servers
+- **Multi-turn sub-agent collaboration** — the main agent can delegate complex work to up to three sub-agents, guide them through multiple rounds, and consolidate their results
+- **Local knowledge base** — hybrid keyword and vector RAG with built-in DOCX/XLSX parsing and OCR; files remain in the app sandbox
+- **Conversation workspace** — stores files per conversation for users to manage and preview, and for the main agent and sub-agents to process together through Python tools
+- **Built-in tools** — Canvas documents, Plan mode, Python sandbox, charts, calendar, maps and saved places, plus PDF/image/DOCX/XLSX toolkits that hand models the original file, rendered pages, or extracted text
+- **Read aloud** — HarmonyOS offline TTS or ElevenLabs
+- **Privacy protection** — explicit permission controls and user confirmation flows for all tools
 
 ## Features
 
@@ -67,15 +63,18 @@ Built entirely in ArkTS, with continued emphasis on refining native HarmonyOS in
 
 Built-in support for more than 15 providers:
 
-OpenAI · Claude · Gemini · DeepSeek · Grok · Ollama · OpenRouter · SiliconFlow · Qwen · Kimi · Zhipu (GLM) · Doubao · MiniMax · AiHubMix · MiMo
+OpenAI · Claude · Gemini · DeepSeek · Grok · Ollama · OpenRouter · SiliconFlow · Qwen · Kimi · Z.ai (Zhipu) · Doubao · MiniMax · AiHubMix · MiMo
 
 Custom endpoints that follow the OpenAI, Anthropic, or Gemini API specifications can also be added.
 
-### 🔍 Web Search
+### 📁 Conversation Workspace
 
-Enable `web_search` under **Tool Center → Web Search**, then choose Bing (local), Brave, Tavily, Exa, Bocha, or DeepSeek Web Search. Each conversation has its own search budget, and the model requests confirmation before exceeding it.
+Tap **Workspace** in the chat input area to browse the current conversation's file tree and preview files. Each conversation has its own workspace in the app sandbox.
 
-By default, DeepSeek Web Search reads the API key from the currently selected DeepSeek provider for each search. The key is not copied into search settings, and auto mode only calls DeepSeek's official Anthropic endpoint. You can disable auto mode to configure a separate API key and Anthropic-compatible endpoint. DeepSeek Web Search makes a model request and consumes token balance on the corresponding account.
+- **Manage files** — long-press an empty area in the root directory to upload a file or create a file or folder; long-press a folder to upload or create inside it, or delete it recursively; long-press a file to delete it.
+- **Work with models** — when the **Python** tool is enabled, the main agent and sub-agents share the current conversation's workspace. Models can read files, create or edit text and Python scripts, and run Python to process workspace files. Operations within a conversation run in order, and edits to the same file are checked for version conflicts.
+
+A workspace can hold up to 64 files and 512 folders. Each file is limited to 16 MiB, and the total file size is limited to 32 MiB. Installing additional Python packages may require network access.
 
 ### 🧩 Parallel Sub-agents
 
@@ -93,15 +92,10 @@ The Knowledge Base tab accepts DOCX, XLSX, PDF, Markdown, text, and image upload
 - **DOCX structure extraction** — preserves headings, paragraphs, lists, line breaks, and tables as structured text suitable for semantic chunking
 - **XLSX table extraction** — supports multiple worksheets, shared strings, dates, merged cells, cached formula values, and sparse-cell coordinates
 - **Structure-aware chunking** — preserves page boundaries, headings, lists, tables, worksheets, and FAQ pairs
-- **Two embedding options** — on-device ArkData Embedding on PC/2-in-1 devices, or any OpenAI-compatible Embedding API
-- **Local data storage** — files, OCR results, indexes, and vectors are stored in the app sandbox
-- **Email import** — an Email category alongside PDF, Word, spreadsheets, and images can import selected IMAP messages in one tap; message bodies, supported attachments, and inline images enter the same parsing/OCR pipeline.
+- **One-tap email import** — an Email category alongside PDF, Word, spreadsheets, and images is available in the knowledge base
 
 > [!NOTE]
-> On-device ArkData Embedding currently supports 2-in-1 devices only. Phones and tablets can use an API Embedding model; keyword retrieval remains available when no Embedding API is configured.
-
-> [!NOTE]
-> Office parsing currently supports the OOXML `.docx` and `.xlsx` formats. Legacy `.doc`/`.xls` files, encrypted files, macros, chart content, and OCR of images embedded in documents are not supported. Formulas use the cached value saved in the workbook when available; otherwise, the formula expression is preserved.
+> XCube supports native ArkTS ArkData Embedding, but only on 2-in-1 devices. Other devices can use an OpenAI API-compatible Embedding model.
 
 ### 🛠️ Built-in Tools
 
@@ -130,7 +124,7 @@ The Knowledge Base tab accepts DOCX, XLSX, PDF, Markdown, text, and image upload
 | **Petal Navigation**           | Sends a searched place, coordinates, or a saved-place label to Petal Maps for route navigation                                                                                                                                                                                                                                  |
 
 > [!IMPORTANT]
-> Before using map features, open **File → Project Structure → Signing Configs → Enable open capabilities** in DevEco Studio, enable **Map Kit**, and apply the configuration. If the debug Profile predates the capability, request or download a new Profile and update the signing configuration. An app without Map Kit enabled typically receives error `1002600004`. See the [Map Kit integration guide](docs/map-kit-integration.md#上线前必须完成的控制台配置) for complete instructions.
+> Before using map features, open **File → Project Structure → Signing Configs → Enable open capabilities** in DevEco Studio, enable **Map Kit**, and apply the configuration. If the debug Profile predates the capability, request or download a new Profile and update the signing configuration.
 
 #### <sup>*</sup> [Optional] Enable ModLens behind the Vision Tool for Text-only Models
 
@@ -142,21 +136,16 @@ HarmonyOS apps cannot directly run the Node.js CLI required by ModLens. The proj
 
 #### <sup>#</sup> Saved-place labels and coordinates are stored locally in the app and are available to the model only when the corresponding tool is enabled. Accessing the current precise location and using Map Kit require location and map permissions.
 
-### 🔊 Read Aloud
-
-Model responses can be read aloud from the message toolbar (**Settings → Read Aloud**):
-
-- **Local TTS** — uses the HarmonyOS offline speech engine; no API key is required, and playback content is processed only on the device
-- **ElevenLabs** — uses a user-configured API key and supports selecting a voice from the account and adjusting stability, similarity, and speed
-
 ## Getting Started
 
-### Prerequisites
+### 1. Build Locally
 
-- A phone, tablet, or 2-in-1 device running HarmonyOS 7 (API 26.0.0) or later
-- [DevEco Studio ≥ 26.0.0 Beta2](https://developer.huawei.com/consumer/cn/deveco-studio/)
+### Requirements
 
-### 1. Clone and Configure the Project
+- A device running HarmonyOS 7 (API 26.0.0) or later
+- [DevEco Studio ≥ 26.0.0](https://developer.huawei.com/consumer/cn/deveco-studio/)
+
+#### A. Clone and Configure the Project
 
 ```bash
 git clone https://github.com/YANGZX22/XCube.git
@@ -165,7 +154,7 @@ cp build-profile.json5.example build-profile.json5
 # Edit build-profile.json5 and enter the signing configuration
 ```
 
-### 2. Add the Speech-recognition Model (One-time Setup)
+#### B. Add the Speech-recognition Model (One-time Setup)
 
 > [!NOTE]
 > The ASR model is too large to include in the Git repository and must be added manually:
@@ -175,11 +164,13 @@ cp build-profile.json5.example build-profile.json5
 
 The model directory is excluded by `.gitignore` and will not be committed to the repository.
 
-### 3. Run
+#### C. Run
 
 Open the project in DevEco Studio and run it on the target device.
 
-#### Or Sideload the HAP Directly
+### 2. Install from the [Invitation Testing Link](https://appgallery.huawei.com/link/invite-test-wap?taskId=ea479545cdb1a7d831163c11b530b911) (Coming Soon)
+
+### 3. Sideload the HAP (HAP Releases Will Stop When Invitation Testing Goes Live)
 
 Download the latest HAP file from the [Releases](https://github.com/YANGZX22/XCube/releases) page, then install it on the device with [Auto-installer](https://github.com/likuai2010/auto-installer/) or [DevEco Testing](https://developer.huawei.com/consumer/cn/deveco-testing/).
 
