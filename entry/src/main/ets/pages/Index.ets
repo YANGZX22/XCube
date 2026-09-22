@@ -1,6 +1,6 @@
 import { getAppPromptLanguage } from '../utils/LocalizedTextUtils'
 import { ImmersiveButtonSurface } from '../components/ImmersiveButtonSurface'
-import { ImmersiveListSurface } from '../components/ImmersiveListSurface'
+import { ImmersiveListSurface, LIST_MATERIAL_CARD_RADIUS } from '../components/ImmersiveListSurface'
 import { getBlurBottomShadow, getBlurFloatingActionShadow } from '../utils/BlurShadowUtils'
 import { curves, SymbolGlyphModifier, uiMaterial } from '@kit.ArkUI'
 import { ConfigurationConstant, common } from '@kit.AbilityKit'
@@ -150,6 +150,7 @@ import {
 @ComponentV2
 struct Index {
   private static readonly COMPACT_TABS_BAR_HEIGHT: number = 56
+  private static readonly ASSISTANT_SWIPE_BUTTON_SIZE: number = 56
   private static readonly TAB_TITLE_BAR_HEIGHT: number = 56
   private static readonly TAB_TITLE_FONT_SIZE: number = 18
   private static readonly TAB_TITLE_VERTICAL_OFFSET: number = -2
@@ -4189,7 +4190,7 @@ struct Index {
             start: this.AssistantStartSwipePanel(assistant),
             end: this.AssistantEndSwipePanel(assistant)
           })
-          .borderRadius(this.isManuscriptMode() ? 0 : 12)
+          .borderRadius(this.isManuscriptMode() ? 0 : LIST_MATERIAL_CARD_RADIUS)
           .clip(false)
         }, (assistant: Assistant) => this.getAssistantRenderKey(assistant))
 
@@ -4209,7 +4210,7 @@ struct Index {
             start: this.AssistantStartSwipePanel(assistant),
             end: this.AssistantEndSwipePanel(assistant)
           })
-          .borderRadius(this.isManuscriptMode() ? 0 : 12)
+          .borderRadius(this.isManuscriptMode() ? 0 : LIST_MATERIAL_CARD_RADIUS)
           .clip(false)
         }, (assistant: Assistant) => this.getAssistantRenderKey(assistant))
 
@@ -4271,85 +4272,89 @@ struct Index {
   @Builder
   private AssistantStartSwipePanel(assistant: Assistant) {
     Row() {
-      this.AssistantSwipeButton($r('sys.symbol.plus'), $r('app.string.new_chat'), this.themePrimary, 84, (): void => {
+      this.AssistantSwipeButton($r('sys.symbol.plus'), $r('app.string.new_chat'), this.themePrimary, (): void => {
         this.assistantListScroller.closeAllSwipeActions()
         this.openAssistantNewChat(assistant)
       })
     }
+    .width(Index.ASSISTANT_SWIPE_BUTTON_SIZE + 8)
     .height('100%')
-    .borderRadius({ topLeft: 12, bottomLeft: 12 })
-    .clip(true)
+    .padding({ right: 8 })
+    .justifyContent(FlexAlign.Start)
+    .alignItems(VerticalAlign.Center)
+    .clip(false)
   }
 
   @Builder
   private AssistantEndSwipePanel(assistant: Assistant) {
-    Row() {
+    Row({ space: 8 }) {
       this.AssistantSwipeButton($r('sys.symbol.square_and_pencil'), $r('app.string.edit_assistant_short'),
-        this.themePrimary, 72, (): void => {
+        this.themePrimary, (): void => {
           this.assistantListScroller.closeAllSwipeActions()
           this.openAssistantEditor(assistant)
         })
 
       if (assistant.id !== DEFAULT_ASSISTANT_ID && !assistant.isDefault) {
         this.AssistantSwipeButton($r('sys.symbol.trash'), $r('app.string.delete'), $r('app.color.status_error'),
-          72, (): void => {
+          (): void => {
             this.assistantListScroller.closeAllSwipeActions()
             this.deleteAssistantFromTab(assistant)
           })
       }
     }
+    .width(assistant.id !== DEFAULT_ASSISTANT_ID && !assistant.isDefault ?
+      Index.ASSISTANT_SWIPE_BUTTON_SIZE * 2 + 16 : Index.ASSISTANT_SWIPE_BUTTON_SIZE + 8)
     .height('100%')
-    .borderRadius({ topRight: 12, bottomRight: 12 })
-    .clip(true)
+    .padding({ left: 8 })
+    .justifyContent(FlexAlign.End)
+    .alignItems(VerticalAlign.Center)
+    .clip(false)
   }
 
   @Builder
-  private AssistantSwipeButton(symbol: Resource, label: ResourceStr, backgroundColor: ResourceColor, width: number,
+  private AssistantSwipeButton(symbol: Resource, label: ResourceStr, iconColor: ResourceColor,
     onTap: () => void) {
     Stack({ alignContent: Alignment.TopStart }) {
       ImmersiveButtonSurface({
         materialFactory: () => (new uiMaterial.ImmersiveMaterial({
           style: uiMaterial.ImmersiveStyle.REGULAR,
-          materialColor: backgroundColor,
-          applyShadow: false,
           interactive: true,
           lightEffect: { color: undefined }
         })),
-        fallbackShadow: false,
-        cornerRadius: 0
+        cornerRadius: undefined
       }) {
-        Button() {
+        Button({ type: ButtonType.Circle, stateEffect: false }) {
           Column() {
             SymbolGlyph(symbol)
               .fontSize(18)
-              .fontColor([Color.White])
+              .fontColor([iconColor])
 
             Text(label)
               .fontSize(11)
               .fontWeight(FontWeight.Medium)
-              .fontColor(Color.White)
+              .fontColor(iconColor)
               .maxLines(1)
               .textOverflow({ overflow: TextOverflow.Ellipsis })
               .textAlign(TextAlign.Center)
               .margin({ top: 2 })
           }
           .width('100%')
+          .height(Index.ASSISTANT_SWIPE_BUTTON_SIZE)
           .padding({ left: 4, right: 4 })
           .justifyContent(FlexAlign.Center)
           .alignItems(HorizontalAlign.Center)
         }
-        .width(width)
-        .height('100%')
-        .borderRadius(0)
+        .width(Index.ASSISTANT_SWIPE_BUTTON_SIZE)
+        .height(Index.ASSISTANT_SWIPE_BUTTON_SIZE)
         .backgroundColor(Color.Transparent)
-        .stateEffect(false)
+        .padding(0)
         .onClick(() => {
           onTap()
         })
       }
     }
-    .width(width)
-    .height('100%')
+    .width(Index.ASSISTANT_SWIPE_BUTTON_SIZE)
+    .height(Index.ASSISTANT_SWIPE_BUTTON_SIZE)
     .clip(false)
   }
 
@@ -4577,19 +4582,20 @@ struct Index {
       this.ManuscriptAssistantRow(assistant)
     } else {
       Column() {
-        this.AssistantJumpCardContent(assistant, featured)
+        // 复用列表材质背板与阴影；低版本或主动降级时由背板统一回退到透明模糊。
+        ImmersiveListSurface({ isImmersive: true, cornerRadius: LIST_MATERIAL_CARD_RADIUS }) {
+          Column() {
+            this.AssistantJumpCardContent(assistant, featured)
+          }
+          .width('100%')
+          .padding({ left: 14, right: 14, top: featured ? 14 : 12, bottom: featured ? 14 : 12 })
+          .backgroundColor(Color.Transparent)
+          .borderRadius(LIST_MATERIAL_CARD_RADIUS)
+          .clip(false)
+        }
       }
       .width('100%')
-      .padding({ left: 14, right: 14, top: featured ? 14 : 12, bottom: featured ? 14 : 12 })
-      .backgroundColor(Color.Transparent)
-      .borderRadius(16)
-      .border({
-        width: assistant.id === this.currentAssistantId || this.openingAssistantId === assistant.id ? 1.5 : 1,
-        color: assistant.id === this.currentAssistantId || this.openingAssistantId === assistant.id ?
-          this.themePrimary : this.themePrimaryLight
-      })
-      .backdropBlur(24)
-      .shadow(getBlurBottomShadow())
+      .clip(false)
       .scale({
         x: this.openingAssistantId === assistant.id ? 0.985 : 1,
         y: this.openingAssistantId === assistant.id ? 0.985 : 1

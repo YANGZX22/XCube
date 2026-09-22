@@ -12,6 +12,17 @@
     "installationFree": false,
     "pages": "$profile:main_pages",
     "routerMap": "$profile:router_map",
+    // 未上架应用的隐私托管调试配置：需以 debug 模式构建，并通过 hdc 安装到真机。
+    "metadata": [
+      {
+        "name": "appgallery_privacy_hosted",
+        "value": "1"
+      },
+      {
+        "name": "appgallery_privacy_link_privacy_statement",
+        "value": "https://agreement-drcn.hispace.dbankcloud.cn/index.html?lang=zh&agreementId=2024660022557964672"
+      }
+    ],
     "requestPermissions": [
       {
         "name": "ohos.permission.INTERNET",

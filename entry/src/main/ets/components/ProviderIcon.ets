@@ -55,6 +55,8 @@ export struct ProviderIcon {
   @Param radius: number = 10
   @Param fallbackSymbol: Resource = $r('sys.symbol.message')
   @Param fallbackColor: ResourceColor = Color.White
+  // Optional monochrome SVG tint; retain original provider colors by default.
+  @Param tintColor: ResourceColor | undefined = undefined
   @Param iconType: string = 'svg'
   @Param textIcon: string = ''
   @Param textIconBgColor: string = ''
@@ -175,6 +177,7 @@ export struct ProviderIcon {
           .width(this.iconSize)
           .height(this.iconSize)
           .objectFit(ImageFit.Contain)
+          .fillColor(this.tintColor ?? ColorContent.ORIGIN)
           .interpolation(ImageInterpolation.High)
           .borderRadius(this.radius)
           .clip(true)
@@ -184,6 +187,7 @@ export struct ProviderIcon {
           .width(this.iconSize)
           .height(this.iconSize)
           .objectFit(this.getCustomImageFit())
+          .fillColor(this.tintColor ?? ColorContent.ORIGIN)
           .interpolation(ImageInterpolation.High)
           .borderRadius(this.radius)
           .clip(true)
@@ -194,13 +198,13 @@ export struct ProviderIcon {
       else if ((this.iconType === 'text' || this.shouldFallbackToText()) && this.textIcon !== '') {
         Text(this.textIcon)
           .fontSize(this.getTextFontSize())
-          .fontColor(this.getTextColor())
+          .fontColor(this.tintColor ?? this.getTextColor())
           .fontWeight(FontWeight.Bold)
       }
       else {
         SymbolGlyph(this.fallbackSymbol)
           .fontSize(this.iconSize * 0.55)
-          .fontColor([this.fallbackColor])
+          .fontColor([this.tintColor ?? this.fallbackColor])
       }
     }
     .width(this.iconSize)

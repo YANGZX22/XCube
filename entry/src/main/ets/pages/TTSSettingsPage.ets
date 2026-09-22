@@ -2,6 +2,8 @@ import { shouldUseDrawnNavigation } from '../utils/DrawnNavigationSupport'
 import { withColorAlpha } from '../utils/ColorAlphaUtils'
 import { shouldUseWrappedMaterial } from '../utils/WrappedMaterialSupport'
 import { ImmersiveButtonSurface } from '../components/ImmersiveButtonSurface'
+import { ProviderIcon } from '../components/ProviderIcon'
+import { resolveLobeProviderIconUrl } from '../utils/LobeIconResolver'
 import { getBlurBottomShadow } from '../utils/BlurShadowUtils'
 import { curves, uiMaterial } from '@kit.ArkUI'
 import { HdsNavigation, HdsNavigationTitleBarOptions, HdsNavigationTitleMode } from '@kit.UIDesignKit'
@@ -521,9 +523,7 @@ struct TTSSettingsPage {
   @Builder
   private EngineButton(
     engine: TTSEngineType,
-    icon: Resource,
-    title: Resource,
-    description: Resource
+    title: Resource
   ) {
     // Keep choices the same height so labels stay aligned across languages.
     Stack({ alignContent: Alignment.TopStart }) {
@@ -539,57 +539,64 @@ struct TTSSettingsPage {
         cornerRadius: 18
       }) {
         Button() {
-          Column({ space: 9 }) {
-            Row() {
-              Column() {
-                SymbolGlyph(icon)
-                  .fontSize(21)
-                  .fontColor([this.engine === engine && !shouldUseWrappedMaterial() ? Color.White : this.themePrimary])
+          Stack({ alignContent: Alignment.Center }) {
+            Column({ space: 6 }) {
+              Stack({ alignContent: Alignment.Center }) {
+                if (engine === TTSEngineType.LOCAL) {
+                  SymbolGlyph($r('sys.symbol.speaker_wave_2'))
+                    .fontSize(21)
+                    .fontColor([this.themePrimary])
+                } else {
+                  ProviderIcon({
+                    iconType: 'image',
+                    customImagePath: resolveLobeProviderIconUrl(engine),
+                    iconSize: 24,
+                    radius: 0,
+                    textIcon: engine === TTSEngineType.ELEVENLABS ? 'EL' : 'Mi',
+                    tintColor: this.themePrimary,
+                    fallbackSymbol: $r('sys.symbol.speaker_wave_2'),
+                    fallbackColor: this.themePrimary
+                  })
+                }
               }
-              .width(38)
-              .height(38)
-              .justifyContent(FlexAlign.Center)
-              .borderRadius(12)
-              .backgroundColor(this.engine === engine ? '#26FFFFFF' : Color.Transparent)
-              .border({ width: 1, color: this.engine === engine ? '#38FFFFFF' : this.themePrimaryLight })
+              .width('100%')
+              .height(28)
 
-              Blank()
-
-              if (this.engine === engine) {
-                SymbolGlyph($r('sys.symbol.checkmark_circle_fill'))
-                  .fontSize(18)
-                  .fontColor([shouldUseWrappedMaterial() ? this.themePrimary : Color.White])
-                  .transition(
-                    TransitionEffect.OPACITY.combine(TransitionEffect.scale({ x: 0.55, y: 0.55 }))
-                      .animation({ duration: 320, curve: curves.springMotion(0.35, 0.82) })
-                  )
-              }
-            }
-            .width('100%')
-
-            Column({ space: 3 }) {
               Text(title)
-                .fontSize(14)
+                .fontSize(13)
+                .minFontSize(10)
+                .maxFontSize(13)
+                .maxLines(1)
+                .textOverflow({ overflow: TextOverflow.Ellipsis })
                 .fontWeight(FontWeight.Medium)
                 .fontColor(this.engine === engine ? this.themePrimary : $r('app.color.text_primary'))
+                .textAlign(TextAlign.Center)
                 .width('100%')
-
-              Text(description)
-                .fontSize(11)
-                .fontColor($r('app.color.text_secondary'))
-                .lineHeight(16)
-                .maxLines(2)
-                .width('100%')
+                .height(18)
             }
-            .alignItems(HorizontalAlign.Start)
+            .width('100%')
+            .height('100%')
+            .alignItems(HorizontalAlign.Center)
+            .justifyContent(FlexAlign.Center)
+
+            // Position the glyph relative to the button content; align() does not position a Stack child.
+            if (this.engine === engine) {
+              SymbolGlyph($r('sys.symbol.checkmark_circle_fill'))
+                .fontSize(14)
+                .fontColor([this.themePrimary])
+                .position({ top: 2, right: 2 })
+                .hitTestBehavior(HitTestMode.None)
+                .transition(
+                  TransitionEffect.OPACITY.combine(TransitionEffect.scale({ x: 0.55, y: 0.55 }))
+                    .animation({ duration: 320, curve: curves.springMotion(0.35, 0.82) })
+                )
+            }
           }
           .width('100%')
           .height('100%')
-          .alignItems(HorizontalAlign.Start)
-          .justifyContent(FlexAlign.Start)
         }
-        .height(112)
-        .padding(13)
+        .height(80)
+        .padding(8)
         .backgroundColor(Color.Transparent)
         .borderRadius(18)
         .border({ width: shouldUseWrappedMaterial() ? 0 : 1,
@@ -603,7 +610,7 @@ struct TTSSettingsPage {
       }
     }
     .layoutWeight(1)
-    .height(112)
+    .height(80)
     .opacity(this.ttsEnabled ? 1 : 0.5)
     .animation({ duration: 320, curve: curves.springMotion(0.35, 0.82) })
     .enabled(this.ttsEnabled)
@@ -627,32 +634,22 @@ struct TTSSettingsPage {
       .width('100%')
       .alignItems(VerticalAlign.Center)
 
-      Row({ space: 12 }) {
+      Row({ space: 8 }) {
         this.EngineButton(
           TTSEngineType.LOCAL,
-          $r('sys.symbol.speaker_wave_2'),
-          $r('app.string.tts_engine_local'),
-          $r('app.string.tts_engine_local_desc')
+          $r('app.string.tts_engine_local')
         )
         this.EngineButton(
           TTSEngineType.ELEVENLABS,
-          $r('sys.symbol.cloud'),
-          $r('app.string.tts_engine_elevenlabs'),
-          $r('app.string.tts_engine_elevenlabs_desc')
+          $r('app.string.tts_engine_elevenlabs')
+        )
+        this.EngineButton(
+          TTSEngineType.MIMO,
+          $r('app.string.tts_engine_mimo')
         )
       }
       .width('100%')
       .alignItems(VerticalAlign.Top)
-
-      Row() {
-        this.EngineButton(
-          TTSEngineType.MIMO,
-          $r('sys.symbol.waveform'),
-          $r('app.string.tts_engine_mimo'),
-          $r('app.string.tts_engine_mimo_desc')
-        )
-      }
-      .width('100%')
     }
     .width('100%')
     .alignItems(HorizontalAlign.Start)
@@ -928,9 +925,6 @@ struct TTSSettingsPage {
   private ElevenLabsCardContent() {
     Column({ space: 16 }) {
       Row({ space: 9 }) {
-        SymbolGlyph($r('sys.symbol.paintbrush_pointed_waveform'))
-          .fontSize(19)
-          .fontColor([this.themePrimary])
         Text($r('app.string.tts_elevenlabs_config'))
           .fontSize(16)
           .fontWeight(FontWeight.Medium)

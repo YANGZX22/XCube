@@ -11,7 +11,7 @@
 <p align="center">
   <img src="https://img.shields.io/badge/HarmonyOS-7_(API_26)-4285F4" alt="HarmonyOS 7" />
   <a href="./CHANGELOG.md"><img src="https://img.shields.io/badge/version-2.0.10-2ea44f" alt="Version 2.0.10" /></a>
-  <a href="https://appgallery.huawei.com/link/invite-test-wap?taskId=ea479545cdb1a7d831163c11b530b911"><img src="https://img.shields.io/badge/download-2.0.1-CF0A2C" alt="Version 2.0.1 invitation testing link" /></a>
+  <a href="https://appgallery.huawei.com/link/invite-test-wap?taskId=ea479545cdb1a7d831163c11b530b911&invitationCode=29VdBr62t8H"><img src="https://img.shields.io/badge/download-2.0.1-CF0A2C" alt="Version 2.0.1 invitation testing link" /></a>
   <a href="./LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue" alt="MIT License" /></a>
 </p>
 

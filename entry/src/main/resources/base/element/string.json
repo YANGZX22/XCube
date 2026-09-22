@@ -1937,6 +1937,22 @@
       "value": "Legal"
     },
     {
+      "name": "about_view_privacy_policy",
+      "value": "View Privacy Policy"
+    },
+    {
+      "name": "about_privacy_policy_desc",
+      "value": "Open the system privacy agreement dialog"
+    },
+    {
+      "name": "about_privacy_service_unavailable",
+      "value": "The system privacy dialog is unavailable on this device or the current installation is not enrolled in privacy hosting."
+    },
+    {
+      "name": "about_privacy_dialog_failed",
+      "value": "Unable to open the system privacy dialog. Please try again later."
+    },
+    {
       "name": "about_open_source_licenses",
       "value": "Licenses"
     },
@@ -2594,7 +2610,7 @@
     },
     {
       "name": "settings_tts_desc",
-      "value": "System offline TTS, ElevenLabs or MiMo TTS"
+      "value": "System offline provider and settings"
     },
     {
       "name": "tts_enabled_title",

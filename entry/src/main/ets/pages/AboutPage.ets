@@ -2,6 +2,8 @@ import { shouldUseDrawnNavigation } from '../utils/DrawnNavigationSupport'
 import { ImmersiveButtonSurface } from '../components/ImmersiveButtonSurface'
 import { getBlurBottomShadow } from '../utils/BlurShadowUtils'
 import { Want, bundleManager, common } from '@kit.AbilityKit'
+import { privacyManager } from '@kit.AppGalleryKit'
+import { BusinessError } from '@kit.BasicServicesKit'
 import { LengthMetricsUnit, uiMaterial } from '@kit.ArkUI'
 import { hilog } from '@kit.PerformanceAnalysisKit'
 import { HdsNavigation, HdsNavigationTitleBarOptions, HdsNavigationTitleMode } from '@kit.UIDesignKit'
@@ -66,6 +68,7 @@ struct AboutPage {
   @Local versionName: string = '2.0.10'
   @Local isCheckingUpdate: boolean = false
   @Local isCleaningCache: boolean = false
+  @Local isRequestingPrivacyConsent: boolean = false
   @Local showLicensesSheet: boolean = false
   @Local isLogoAnimating: boolean = false
   @Local logoCanvasOpacity: number = 1
@@ -320,6 +323,57 @@ struct AboutPage {
   }
 
   @Builder
+  private PrivacyPolicyRow() {
+    Row() {
+      Column() {
+        SymbolGlyph($r('sys.symbol.doc_text'))
+          .fontSize(20)
+          .fontColor([this.themePrimary])
+      }
+      .width(36)
+      .height(36)
+      .borderRadius(9)
+      .backgroundColor(Color.Transparent)
+      .justifyContent(FlexAlign.Center)
+      .alignItems(HorizontalAlign.Center)
+      .backdropBlur(16)
+      .shadow(getBlurBottomShadow())
+
+      Column({ space: 2 }) {
+        Text($r('app.string.about_view_privacy_policy'))
+          .fontSize(14)
+          .fontWeight(FontWeight.Medium)
+          .fontColor($r('app.color.text_primary'))
+        Text($r('app.string.about_privacy_policy_desc'))
+          .fontSize(12)
+          .fontColor($r('app.color.text_secondary'))
+      }
+      .alignItems(HorizontalAlign.Start)
+      .margin({ left: 12 })
+      .layoutWeight(1)
+
+      if (this.isRequestingPrivacyConsent) {
+        LoadingProgress()
+          .width(20)
+          .height(20)
+          .color(this.themePrimary)
+      } else {
+        SymbolGlyph($r('sys.symbol.chevron_right'))
+          .fontSize(18)
+          .fontColor([$r('app.color.text_tertiary')])
+      }
+    }
+    .width('100%')
+    .constraintSize({ minHeight: 64 })
+    .padding({ left: 16, right: 16, top: 10, bottom: 10 })
+    .alignItems(VerticalAlign.Center)
+    .enabled(!this.isRequestingPrivacyConsent)
+    .onClick((): void => {
+      this.openPrivacyPolicy()
+    })
+  }
+
+  @Builder
   private PageContent() {
     Scroll(this.compactScroller) {
       Row() {
@@ -542,6 +596,13 @@ struct AboutPage {
             .width('100%')
 
           Column() {
+            this.PrivacyPolicyRow()
+
+            Divider()
+              .strokeWidth(0.5)
+              .color(this.themePrimaryLight)
+              .margin({ left: 16, right: 16 })
+
             Row() {
               Column() {
                 SymbolGlyph($r('sys.symbol.doc_text'))
@@ -700,6 +761,34 @@ struct AboutPage {
     } catch (err) {
       hilog.error(0x0000, TAG, 'Open GitHub failed: %{public}s', JSON.stringify(err))
       this.pageToast('无法打开 GitHub 链接')
+    }
+  }
+
+  private async openPrivacyPolicy(): Promise<void> {
+    if (this.isRequestingPrivacyConsent) {
+      return
+    }
+    this.isRequestingPrivacyConsent = true
+    try {
+      if (!canIUse('SystemCapability.AppGalleryService.PrivacyManager') ||
+        typeof privacyManager.requestAppPrivacyConsent !== 'function') {
+        this.pageToast($r('app.string.about_privacy_service_unavailable'))
+        return
+      }
+      const hostContext = this.getUIContext().getHostContext()
+      if (!hostContext) {
+        throw new Error('UI context unavailable')
+      }
+      // 使用托管服务的标准化弹框；签署交互由系统处理，不撤销或伪造用户同意。
+      await privacyManager.requestAppPrivacyConsent(hostContext as common.UIAbilityContext)
+    } catch (error) {
+      const code = (error as BusinessError)?.code
+      hilog.error(0x0000, TAG, 'Request privacy dialog failed, code=%{public}d',
+        typeof code === 'number' ? code : -1)
+      this.pageToast(code === 1006700003 ? $r('app.string.about_privacy_service_unavailable') :
+        $r('app.string.about_privacy_dialog_failed'))
+    } finally {
+      this.isRequestingPrivacyConsent = false
     }
   }
 

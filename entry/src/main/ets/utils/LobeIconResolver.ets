@@ -157,6 +157,7 @@ const PROVIDER_ICON_MAPPINGS: LobeIconMapping[] = [
   new LobeIconMapping('zhipu-color', ['zhipu', 'zhipuai', 'bigmodel']),
   new LobeIconMapping('volcengine-color', ['doubao', 'volcengine']),
   new LobeIconMapping('minimax-color', ['minimax']),
+  new LobeIconMapping('elevenlabs', ['elevenlabs']),
   new LobeIconMapping('aihubmix-color', ['aihubmix']),
   new LobeIconMapping('xai', ['grok', 'xai']),
   new LobeIconMapping('xiaomimimo', ['mimo', 'xiaomimimo', 'xiaomi']),
@@ -238,4 +239,3 @@ export function resolveLobeModelIconFileName(modelId: string, providerId: string
 export function resolveLobeModelIconUrl(modelId: string, providerId: string = ''): string {
   return buildLobeIconUrl(resolveLobeModelIconFileName(modelId, providerId))
 }
-

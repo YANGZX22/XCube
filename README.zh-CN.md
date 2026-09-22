@@ -11,7 +11,7 @@
 <p align="center">
   <img src="https://img.shields.io/badge/HarmonyOS-7_(API_26)-4285F4" alt="HarmonyOS 7" />
   <a href="./CHANGELOG.md"><img src="https://img.shields.io/badge/version-2.0.10-2ea44f" alt="版本 2.0.10" /></a>
-  <a href="https://appgallery.huawei.com/link/invite-test-wap?taskId=ea479545cdb1a7d831163c11b530b911"><img src="https://img.shields.io/badge/download-2.0.1-CF0A2C" alt="版本 2.0.1 邀测链接" /></a>
+  <a href="https://appgallery.huawei.com/link/invite-test-wap?taskId=ea479545cdb1a7d831163c11b530b911&invitationCode=29VdBr62t8H"><img src="https://img.shields.io/badge/download-2.0.1-CF0A2C" alt="版本 2.0.1 邀测链接" /></a>
   <a href="./LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue" alt="MIT License" /></a>
 </p>
 
@@ -138,7 +138,9 @@ HarmonyOS 应用无法直接运行 ModLens 所需的 Node.js CLI，因此项目�
 
 ## 快速开始
 
-### 1. 本地编译
+### 1. 从[邀测链接](https://appgallery.huawei.com/link/invite-test-wap?taskId=ea479545cdb1a7d831163c11b530b911)直接安装 (即将上线)
+
+### 2. 本地编译
 
 ### 环境要求
 
@@ -168,9 +170,7 @@ cp build-profile.json5.example build-profile.json5
 
 使用 DevEco Studio 打开项目，并在目标设备上运行。
 
-### 2. 从[邀测链接](https://appgallery.huawei.com/link/invite-test-wap?taskId=ea479545cdb1a7d831163c11b530b911)直接安装 (即将上线)
-
-### 3. 侧载 HAP (邀测链接上线后将停止发布)
+### 3. 侧载 HAP (停止发布；仅更新版本号)
 
 在 [Release](https://github.com/YANGZX22/XCube/releases) 页面下载最新版本 HAP 文件后，可以通过 [Auto-installer](https://github.com/likuai2010/auto-installer/) 或 [DevEco Testing](https://developer.huawei.com/consumer/cn/deveco-testing/) 将 HAP 安装至设备。
 

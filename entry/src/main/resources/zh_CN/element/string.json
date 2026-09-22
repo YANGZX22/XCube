@@ -1937,6 +1937,22 @@
       "value": "法律信息"
     },
     {
+      "name": "about_view_privacy_policy",
+      "value": "查看隐私政策"
+    },
+    {
+      "name": "about_privacy_policy_desc",
+      "value": "打开系统标准化隐私弹框"
+    },
+    {
+      "name": "about_privacy_service_unavailable",
+      "value": "当前设备不支持系统隐私弹框，或安装版本尚未接入隐私托管。"
+    },
+    {
+      "name": "about_privacy_dialog_failed",
+      "value": "无法打开系统隐私弹框，请稍后重试。"
+    },
+    {
       "name": "about_open_source_licenses",
       "value": "许可证"
     },
@@ -2594,7 +2610,7 @@
     },
     {
       "name": "settings_tts_desc",
-      "value": "系统离线 TTS、ElevenLabs 或 MiMo TTS"
+      "value": "播报服务商与音色"
     },
     {
       "name": "tts_enabled_title",

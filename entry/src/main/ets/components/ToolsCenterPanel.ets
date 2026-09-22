@@ -1859,16 +1859,6 @@ export struct ToolsCenterPanel {
                 .backgroundColor(getAppUiState().themeBackground)
                 .padding({ left: 12, right: 12 })
                 .margin({ top: 8 })
-
-              Text(pickLocalizedText(
-                '博查是国内中文搜索 API，需在 open.bochaai.com 获取 API Key（付费）。',
-                'Bocha is a Chinese search API; get an API key at open.bochaai.com (paid).'
-              ))
-                .fontSize(11)
-                .lineHeight(16)
-                .fontColor($r('app.color.text_tertiary'))
-                .width('100%')
-                .margin({ top: 6 })
             }
 
             if (this.searchEngine === SearchEngine.DEEPSEEK) {
@@ -1878,16 +1868,6 @@ export struct ToolsCenterPanel {
                     .fontSize(12)
                     .fontColor($r('app.color.text_secondary'))
                     .width('100%')
-
-                  Text(pickLocalizedText(
-                    '优先读取当前 DeepSeek 服务商的 API Key，否则匹配其他已配置的 DeepSeek 服务商。',
-                    'Prefer the current DeepSeek provider API key, then match another configured DeepSeek provider.'
-                  ))
-                    .fontSize(11)
-                    .lineHeight(16)
-                    .fontColor($r('app.color.text_tertiary'))
-                    .width('100%')
-                    .margin({ top: 2, right: 8 })
                 }
                 .layoutWeight(1)
 
@@ -1904,8 +1884,8 @@ export struct ToolsCenterPanel {
 
               if (this.searchDeepSeekUseCurrentProvider) {
                 Text(pickLocalizedText(
-                  '自动模式只请求 DeepSeek 官方 Anthropic 端点，API Key 不会复制到搜索设置。',
-                  'Auto mode only calls the official DeepSeek Anthropic endpoint and does not copy the API key into search settings.'
+                  '请求保存在服务商管理 DeepSeek 官方 Anthropic 端点',
+                  'Auto mode calls the official DeepSeek Anthropic endpoint.'
                 ))
                   .fontSize(11)
                   .lineHeight(16)
@@ -1952,16 +1932,6 @@ export struct ToolsCenterPanel {
                   .width('100%')
                   .margin({ top: 6 })
               }
-
-              Text(pickLocalizedText(
-                'Web Search 会发起 DeepSeek 模型请求，并消耗对应账户的 Token 额度。',
-                'Web Search makes a DeepSeek model request and consumes token balance on that account.'
-              ))
-                .fontSize(11)
-                .lineHeight(16)
-                .fontColor($r('app.color.text_tertiary'))
-                .width('100%')
-                .margin({ top: 8 })
             }
 
             Text($r('app.string.search_engine_runtime_hint'))

@@ -1,9 +1,10 @@
 import { ImmersiveButtonSurface } from './ImmersiveButtonSurface'
 import { FileIcon } from './FileIcon'
 import { ImmersiveListSurface, LIST_MATERIAL_CARD_RADIUS } from './ImmersiveListSurface'
+import { KnowledgeCategoryToggleButton } from './KnowledgeCategoryToggleButton'
 import { getBlurBottomShadow } from '../utils/BlurShadowUtils'
 import { picker } from '@kit.CoreFileKit'
-import { curves, uiMaterial } from '@kit.ArkUI'
+import { curves, LengthMetrics, uiMaterial } from '@kit.ArkUI'
 import { pdfService, pdfViewManager, PdfView } from '@kit.PDFKit'
 import {
   KnowledgeDocument,
@@ -28,7 +29,7 @@ import { EmailKnowledgeCategory } from './EmailKnowledgeCategory'
 import { ManuscriptPageTitle } from './index/ManuscriptPageTitle'
 
 const KNOWLEDGE_CATEGORY_COLLAPSED_VISIBLE_COUNT: number = 1
-const KNOWLEDGE_CATEGORY_STACK_LIMIT: number = 3
+const KNOWLEDGE_CATEGORY_STACK_LIMIT: number = 2
 const KNOWLEDGE_CATEGORY_STACK_STEP: number = 14
 const KNOWLEDGE_DOCUMENT_CARD_HEIGHT: number = 58
 const KNOWLEDGE_DOCUMENT_CARD_GAP: number = 8
@@ -758,12 +759,9 @@ export struct KnowledgeBasePanel {
     return this.getCategoryColor(this.getDocumentCategoryKey(document))
   }
 
-  private getCategoryCardTint(categoryKey: string): string {
-    return withColorAlpha(this.getCategoryColor(categoryKey), this.isDarkMode ? '26' : '16')
-  }
-
-  private getCategoryCardBorderColor(categoryKey: string): string {
-    return withColorAlpha(this.getCategoryColor(categoryKey), this.isDarkMode ? '40' : '2E')
+  private getCategoryIconBackgroundColor(categoryKey: string): ResourceColor {
+    return this.isManuscriptMode ? Color.Transparent :
+      withColorAlpha(this.getCategoryColor(categoryKey), this.isDarkMode ? '26' : '14')
   }
 
   @Builder
@@ -1126,10 +1124,9 @@ export struct KnowledgeBasePanel {
     }
     .width(36)
     .height(36)
+    .flexShrink(0)
     .borderRadius(this.isManuscriptMode ? 0 : LIST_MATERIAL_CARD_RADIUS)
-    .backgroundColor(this.isManuscriptMode
-      ? Color.Transparent
-      : withColorAlpha(this.getCategoryColor(categoryKey), this.isDarkMode ? '26' : '14'))
+    .backgroundColor(this.getCategoryIconBackgroundColor(categoryKey))
     .justifyContent(FlexAlign.Center)
     .alignItems(HorizontalAlign.Center)
 
@@ -1150,79 +1147,41 @@ export struct KnowledgeBasePanel {
         .maxLines(1)
         .textOverflow({ overflow: TextOverflow.Ellipsis })
     }
-    .layoutWeight(1)
+    .flexGrow(1)
+    .flexShrink(1)
+    .flexBasis(0)
     .alignItems(HorizontalAlign.Start)
 
     if (this.getDocumentsForCategory(categoryKey).length > KNOWLEDGE_CATEGORY_COLLAPSED_VISIBLE_COUNT) {
-      Row({ space: 4 }) {
-        Text(this.isCategoryExpanded(categoryKey)
-          ? pickLocalizedText('收起', 'Collapse')
-          : pickLocalizedText('展开', 'Expand'))
-          .fontSize(11)
-          .fontWeight(FontWeight.Medium)
-          .fontColor(this.getCategoryColor(categoryKey))
-
-        SymbolGlyph($r('sys.symbol.chevron_down'))
-          .renderingStrategy(SymbolRenderingStrategy.SINGLE)
-          .fontSize(12)
-          .fontColor([this.getCategoryColor(categoryKey)])
-          .rotate({ angle: this.isCategoryExpanded(categoryKey) ? 180 : 0 })
-          .animation({ duration: 220, curve: Curve.EaseOut })
-      }
-      .height(32)
-      .padding({ left: 10, right: 10 })
-      .borderRadius(999)
-      .backgroundColor(withColorAlpha(
-        this.getCategoryColor(categoryKey),
-        this.isDarkMode ? '24' : '10'
-      ))
-      .stateStyles({
-        normal: {
-          .opacity(1)
-        },
-        pressed: {
-          .opacity(0.62)
+      KnowledgeCategoryToggleButton({
+        expanded: this.isCategoryExpanded(categoryKey),
+        accentColor: this.getCategoryColor(categoryKey),
+        onToggle: (): void => {
+          this.toggleCategoryExpanded(categoryKey)
         }
-      })
-      .onClick((): void => {
-        this.toggleCategoryExpanded(categoryKey)
       })
     }
   }
 
   @Builder
   private DocumentCategoryHeader(categoryKey: string) {
+    // 分类标题直接排版在页面背景上，不再作为材质卡片绘制。
     Column() {
-      ImmersiveListSurface({
-        isImmersive: this.knowledgeListImmersiveMaterial, cornerRadius: LIST_MATERIAL_CARD_RADIUS
-      }) {
-        this.DocumentCategoryHeaderRow(categoryKey)
+      Divider()
+        .width('100%')
+        .strokeWidth(1)
+        .color(this.getCategoryIconBackgroundColor(categoryKey))
+
+      Flex({ direction: FlexDirection.Row, alignItems: ItemAlign.Center, space: { main: LengthMetrics.vp(10) } }) {
+        this.DocumentCategoryHeaderContent(categoryKey)
       }
+      .width('100%')
+      .height(this.isManuscriptMode ? 64 : 60)
+      .padding({ left: this.isManuscriptMode ? 4 : 12, right: this.isManuscriptMode ? 4 : 10 })
     }
     .width('100%')
     .padding({ left: this.listHorizontalPadding, right: this.listHorizontalPadding })
-    .clip(false)
     .margin({ bottom: this.isManuscriptMode ? 0 : 8 })
-  }
-
-  @Builder
-  private DocumentCategoryHeaderRow(categoryKey: string) {
-    Row({ space: 10 }) {
-      this.DocumentCategoryHeaderContent(categoryKey)
-    }
-    .width('100%')
-    .height(this.isManuscriptMode ? 64 : 60)
-    .padding({ left: this.isManuscriptMode ? 4 : 12, right: this.isManuscriptMode ? 4 : 10 })
-    .borderRadius(this.isManuscriptMode ? 0 : LIST_MATERIAL_CARD_RADIUS)
-    .backgroundColor(Color.Transparent)
-    .border({
-      width: this.isManuscriptMode ? { bottom: 1 } : 0.5,
-      color: this.isManuscriptMode
-        ? getAppUiState().themeDivider
-        : this.getCategoryCardBorderColor(categoryKey)
-    })
-    .backdropBlur(this.isManuscriptMode || this.knowledgeListImmersiveMaterial ? 0 : 24)
-    .shadow(getBlurBottomShadow(!this.isManuscriptMode && !this.knowledgeListImmersiveMaterial))
   }
 
   @Builder

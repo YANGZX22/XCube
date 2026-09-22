@@ -1,8 +1,10 @@
 import { ImmersiveButtonSurface } from './ImmersiveButtonSurface'
 import { FileIcon } from './FileIcon'
 import { ImmersiveListSurface, LIST_MATERIAL_CARD_RADIUS } from './ImmersiveListSurface'
+import { KnowledgeCategoryToggleButton } from './KnowledgeCategoryToggleButton'
+import { ChatFloatingImmersiveButton } from './ChatFloatingImmersiveButton'
 import { getBlurBottomShadow } from '../utils/BlurShadowUtils'
-import { curves, uiMaterial } from '@kit.ArkUI'
+import { curves, LengthMetrics, uiMaterial } from '@kit.ArkUI'
 import {
   EmailAccountConfig,
   EmailAttachmentPart,
@@ -27,7 +29,7 @@ import { KnowledgeDocument, KnowledgeDocumentStatus } from '../services/Knowledg
 import { ImmersiveSheetHeader } from './ImmersiveSheetHeader'
 
 const EMAIL_CATEGORY_COLLAPSED_VISIBLE_COUNT: number = 1
-const EMAIL_CATEGORY_STACK_LIMIT: number = 3
+const EMAIL_CATEGORY_STACK_LIMIT: number = 2
 const EMAIL_CATEGORY_STACK_STEP: number = 14
 const EMAIL_DOCUMENT_CARD_HEIGHT: number = 58
 const EMAIL_DOCUMENT_CARD_GAP: number = 8
@@ -356,14 +358,6 @@ export struct EmailKnowledgeCategory {
     return '#C97936'
   }
 
-  private getCategoryCardTint(): string {
-    return withColorAlpha(this.getCategoryColor(), this.isDarkMode ? '26' : '16')
-  }
-
-  private getCategoryCardBorderColor(): string {
-    return withColorAlpha(this.getCategoryColor(), this.isDarkMode ? '40' : '2E')
-  }
-
   private toggleCategoryExpanded(): void {
     if (this.importedDocuments.length <= EMAIL_CATEGORY_COLLAPSED_VISIBLE_COUNT) {
       return
@@ -389,23 +383,24 @@ export struct EmailKnowledgeCategory {
   }
 
   @Builder
-  private CategoryHeader() {
-    Column() {
-      ImmersiveListSurface({
-        isImmersive: this.knowledgeListImmersiveMaterial, cornerRadius: LIST_MATERIAL_CARD_RADIUS
-      }) {
-        this.CategoryHeaderRow()
+  private AddEmailButtonContent() {
+    Stack({ alignContent: Alignment.Center }) {
+      if (this.isWorking) {
+        LoadingProgress().width(18).height(18).color(this.getCategoryColor())
+      } else {
+        SymbolGlyph($r('sys.symbol.doc_plaintext_and_envelope_open'))
+          .fontSize(17)
+          .fontColor([this.getCategoryColor()])
       }
     }
-    .width('100%')
-    .padding({ left: this.listHorizontalPadding, right: this.listHorizontalPadding })
-    .clip(false)
-    .margin({ bottom: this.isManuscriptMode ? 0 : 8 })
+    .width(36)
+    .height(36)
   }
 
   @Builder
-  private CategoryHeaderRow() {
-    Row({ space: 10 }) {
+  private CategoryHeader() {
+    // 与其他知识库分类一致，只保留标题内容和操作，不绘制整条背板。
+    Flex({ direction: FlexDirection.Row, alignItems: ItemAlign.Center, space: { main: LengthMetrics.vp(10) } }) {
       Column() {
         SymbolGlyph($r('sys.symbol.envelope'))
           .renderingStrategy(SymbolRenderingStrategy.SINGLE)
@@ -414,6 +409,7 @@ export struct EmailKnowledgeCategory {
       }
       .width(36)
       .height(36)
+      .flexShrink(0)
       .borderRadius(this.isManuscriptMode ? 0 : LIST_MATERIAL_CARD_RADIUS)
       .backgroundColor(this.isManuscriptMode ? Color.Transparent : withColorAlpha('#C97936',
         this.isDarkMode ? '26' : '14'))
@@ -432,69 +428,49 @@ export struct EmailKnowledgeCategory {
           .maxLines(1)
           .textOverflow({ overflow: TextOverflow.Ellipsis })
       }
-      .layoutWeight(1)
+      .flexGrow(1)
+      .flexShrink(1)
+      .flexBasis(0)
       .alignItems(HorizontalAlign.Start)
 
       if (this.importedDocuments.length > EMAIL_CATEGORY_COLLAPSED_VISIBLE_COUNT) {
-        Row({ space: 4 }) {
-          Text(this.isCategoryExpanded
-            ? pickLocalizedText('收起', 'Collapse')
-            : pickLocalizedText('展开', 'Expand'))
-            .fontSize(11)
-            .fontWeight(FontWeight.Medium)
-            .fontColor('#C97936')
-
-          SymbolGlyph($r('sys.symbol.chevron_down'))
-            .renderingStrategy(SymbolRenderingStrategy.SINGLE)
-            .fontSize(12)
-            .fontColor(['#C97936'])
-            .rotate({ angle: this.isCategoryExpanded ? 180 : 0 })
-            .animation({ duration: 220, curve: Curve.EaseOut })
-        }
-        .height(32)
-        .padding({ left: 9, right: 9 })
-        .borderRadius(999)
-        .backgroundColor(withColorAlpha('#C97936', this.isDarkMode ? '24' : '10'))
-        .stateStyles({
-          normal: {
-            .opacity(1)
-          },
-          pressed: {
-            .opacity(0.62)
+        KnowledgeCategoryToggleButton({
+          expanded: this.isCategoryExpanded,
+          accentColor: this.getCategoryColor(),
+          onToggle: (): void => {
+            this.toggleCategoryExpanded()
           }
-        })
-        .onClick((): void => {
-          this.toggleCategoryExpanded()
         })
       }
 
-      Button({ type: ButtonType.Circle, stateEffect: false }) {
-        if (this.isWorking) {
-          LoadingProgress().width(18).height(18).color('#C97936')
-        } else {
-          SymbolGlyph($r('sys.symbol.doc_plaintext_and_envelope_open'))
-            .fontSize(17)
-            .fontColor(['#C97936'])
-        }
+      Stack() {
+        ChatFloatingImmersiveButton({
+          barWidth: 36,
+          barHeight: 36,
+          responsePadding: 0,
+          enableMaterialInteraction: true,
+          enableShadow: true,
+          contentBuilder: (): void => this.AddEmailButtonContent(),
+          onButtonClick: (): void => {
+            if (!this.isWorking) {
+              this.openSearchSheet()
+            }
+          }
+        })
       }
       .width(36)
       .height(36)
-      .padding(0)
-      .backgroundColor(withColorAlpha('#C97936', this.isDarkMode ? '24' : '10'))
+      .flexShrink(0)
       .enabled(!this.isWorking)
-      .onClick(() => this.openSearchSheet())
+      .clip(false)
     }
     .width('100%')
     .height(this.isManuscriptMode ? 64 : 60)
-    .padding({ left: this.isManuscriptMode ? 4 : 12, right: this.isManuscriptMode ? 4 : 10 })
-    .borderRadius(this.isManuscriptMode ? 0 : LIST_MATERIAL_CARD_RADIUS)
-    .backgroundColor(Color.Transparent)
-    .border({
-      width: this.isManuscriptMode ? { bottom: 1 } : 0.5,
-      color: this.isManuscriptMode ? getAppUiState().themeDivider : this.getCategoryCardBorderColor()
+    .padding({
+      left: this.listHorizontalPadding + (this.isManuscriptMode ? 4 : 12),
+      right: this.listHorizontalPadding + (this.isManuscriptMode ? 4 : 10)
     })
-    .backdropBlur(this.isManuscriptMode || this.knowledgeListImmersiveMaterial ? 0 : 24)
-    .shadow(getBlurBottomShadow(!this.isManuscriptMode && !this.knowledgeListImmersiveMaterial))
+    .margin({ bottom: this.isManuscriptMode ? 0 : 8 })
   }
 
   @Builder

@@ -4,7 +4,8 @@ import {
   LOBE_ICONS_PACKAGE_VERSION,
   resolveLobeModelIconFileName,
   resolveLobeModelIconUrl,
-  resolveLobeProviderIconFileName
+  resolveLobeProviderIconFileName,
+  resolveLobeProviderIconUrl
 } from '../main/ets/utils/LobeIconResolver'
 
 export default function lobeIconResolverTest() {
@@ -37,6 +38,12 @@ export default function lobeIconResolverTest() {
       expect(resolveLobeModelIconUrl('gemini-2.5-pro')).assertContain('/gemini-color.svg')
       expect(resolveLobeProviderIconFileName('zhipu')).assertEqual('zhipu-color')
     })
+
+    it('uses_shared_provider_icon_urls_for_speech_engines', 0, () => {
+      expect(resolveLobeProviderIconUrl('elevenlabs')).assertEqual(buildLobeIconUrl('elevenlabs'))
+      expect(resolveLobeProviderIconUrl(' ElevenLabs ')).assertEqual(buildLobeIconUrl('elevenlabs'))
+      expect(resolveLobeProviderIconUrl('mimo')).assertEqual(buildLobeIconUrl('xiaomimimo'))
+      expect(resolveLobeProviderIconUrl('local')).assertEqual('')
+    })
   })
 }
-
