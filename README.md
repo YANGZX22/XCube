@@ -138,7 +138,9 @@ HarmonyOS apps cannot directly run the Node.js CLI required by ModLens. The proj
 
 ## Getting Started
 
-### 1. Build Locally
+### 1. Install from the [Invitation Testing Link](https://appgallery.huawei.com/link/invite-test-wap?taskId=ea479545cdb1a7d831163c11b530b911) (Recommended)
+
+### 2. Build Locally
 
 ### Requirements
 
@@ -168,9 +170,7 @@ The model directory is excluded by `.gitignore` and will not be committed to the
 
 Open the project in DevEco Studio and run it on the target device.
 
-### 2. Install from the [Invitation Testing Link](https://appgallery.huawei.com/link/invite-test-wap?taskId=ea479545cdb1a7d831163c11b530b911) (Coming Soon)
-
-### 3. Sideload the HAP (HAP Releases Will Stop When Invitation Testing Goes Live)
+### 3. Sideload the HAP (Stop updates)
 
 Download the latest HAP file from the [Releases](https://github.com/YANGZX22/XCube/releases) page, then install it on the device with [Auto-installer](https://github.com/likuai2010/auto-installer/) or [DevEco Testing](https://developer.huawei.com/consumer/cn/deveco-testing/).
 

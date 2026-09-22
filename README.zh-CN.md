@@ -138,7 +138,7 @@ HarmonyOS 应用无法直接运行 ModLens 所需的 Node.js CLI，因此项目�
 
 ## 快速开始
 
-### 1. 从[邀测链接](https://appgallery.huawei.com/link/invite-test-wap?taskId=ea479545cdb1a7d831163c11b530b911)直接安装 (即将上线)
+### 1. 从[邀测链接](https://appgallery.huawei.com/link/invite-test-wap?taskId=ea479545cdb1a7d831163c11b530b911)直接安装 (推荐)
 
 ### 2. 本地编译
 
