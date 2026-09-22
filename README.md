@@ -138,7 +138,7 @@ HarmonyOS apps cannot directly run the Node.js CLI required by ModLens. The proj
 
 ## Getting Started
 
-### 1. Install from the [Invitation Testing Link](https://appgallery.huawei.com/link/invite-test-wap?taskId=ea479545cdb1a7d831163c11b530b911) (Recommended)
+### 1. Install directly from the [Invitation Testing Link](https://appgallery.huawei.com/link/invite-test-wap?taskId=ea479545cdb1a7d831163c11b530b911&invitationCode=29VdBr62t8H) (Recommended)
 
 ### 2. Build Locally
 
