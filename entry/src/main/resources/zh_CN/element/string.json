@@ -446,15 +446,23 @@
     },
     {
       "name": "hand_adaptive_master_desc",
-      "value": "识别握持手并调整底部栏与新建对话按钮位置，提升单手操作可达性。"
+      "value": "选择让任务栏或加号随握持手调整位置，方便单手操作。"
     },
     {
-      "name": "hand_adaptive_new_chat_title",
-      "value": "新建对话按钮"
+      "name": "hand_adaptive_follow_target_title",
+      "value": "跟随对象"
     },
     {
-      "name": "hand_adaptive_new_chat_desc",
-      "value": "自适应悬浮新建对话按钮的位置。"
+      "name": "hand_adaptive_follow_target_desc",
+      "value": "所选控件靠近握持手，另一控件位于另一侧。关闭后保留选择，恢复默认位置。"
+    },
+    {
+      "name": "hand_adaptive_follow_taskbar",
+      "value": "任务栏"
+    },
+    {
+      "name": "hand_adaptive_follow_plus",
+      "value": "加号"
     },
     {
       "name": "hand_adaptive_unsupported",

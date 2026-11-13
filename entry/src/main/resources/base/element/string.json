@@ -446,15 +446,23 @@
     },
     {
       "name": "hand_adaptive_master_desc",
-      "value": "Detect holding hand and adapt the bottom bar and New Chat button positions for one-handed operation."
+      "value": "Choose whether the taskbar or plus button follows your holding hand for easier one-handed use."
     },
     {
-      "name": "hand_adaptive_new_chat_title",
-      "value": "New Chat button"
+      "name": "hand_adaptive_follow_target_title",
+      "value": "Follow target"
     },
     {
-      "name": "hand_adaptive_new_chat_desc",
-      "value": "Adapt the floating New Chat button position."
+      "name": "hand_adaptive_follow_target_desc",
+      "value": "The selected control stays near your holding hand, with the other on the opposite side. Turning this off restores default positions but keeps your selection."
+    },
+    {
+      "name": "hand_adaptive_follow_taskbar",
+      "value": "Tab Bar"
+    },
+    {
+      "name": "hand_adaptive_follow_plus",
+      "value": "Plus"
     },
     {
       "name": "hand_adaptive_unsupported",

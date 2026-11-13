@@ -28,7 +28,7 @@ export class AppStorageKeys {
   static readonly SETTINGS_DETAIL_PRESENTATION_MODE: string = 'settings_detail_presentation_mode'
   static readonly SETTINGS_HAND_ADAPTIVE_CHANGED_AT: string = 'settings_hand_adaptive_changed_at'
   static readonly SETTING_HAND_ADAPTIVE_ENABLED: string = 'setting_hand_adaptive_enabled'
-  static readonly SETTING_HAND_ADAPTIVE_NEW_CHAT: string = 'setting_hand_adaptive_new_chat'
+  static readonly SETTING_HAND_ADAPTIVE_FOLLOW_TARGET: string = 'setting_hand_adaptive_follow_target'
   static readonly SETTING_HAND_ADAPTIVE_UNSUPPORTED: string = 'setting_hand_adaptive_unsupported'
 
   // 主题键

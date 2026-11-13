@@ -4,6 +4,7 @@ import { BusinessError } from '@kit.BasicServicesKit'
 import { common } from '@kit.AbilityKit'
 import abilityAccessCtrl, { Permissions, PermissionRequestResult } from '@ohos.abilityAccessCtrl'
 import { AppStorageKeys } from '../config/AppStorageKeys'
+import { HandAdaptiveFollowTarget, normalizeHandAdaptiveFollowTarget } from '../config/HandAdaptiveSettings'
 import { setAppUiStateValue } from '../state/AppUiState'
 import { LayoutSizeClass } from '../config/LayoutProfile'
 import { PreferenceKeys } from '../services/PreferencesService'
@@ -53,7 +54,7 @@ struct HandAdaptiveSettingsPage {
   }
 
   @Local handAdaptiveEnabled: boolean = false
-  @Local handAdaptiveNewChat: boolean = false
+  @Local handAdaptiveFollowTarget: HandAdaptiveFollowTarget = HandAdaptiveFollowTarget.PLUS
   @Local handAdaptiveUnsupported: boolean = false
 
   private preferencesService = ServiceRegistry.preferences()
@@ -99,9 +100,10 @@ struct HandAdaptiveSettingsPage {
 
   private async loadSettings(): Promise<void> {
     const enabled = await this.preferencesService.getBoolean(PreferenceKeys.HAND_ADAPTIVE_ENABLED, false)
-    const newChatEnabled = await this.preferencesService.getBoolean(PreferenceKeys.HAND_ADAPTIVE_NEW_CHAT, enabled)
+    const followTarget = await this.preferencesService.getString(PreferenceKeys.HAND_ADAPTIVE_FOLLOW_TARGET,
+      HandAdaptiveFollowTarget.PLUS)
     this.handAdaptiveEnabled = enabled
-    this.handAdaptiveNewChat = enabled ? newChatEnabled : false
+    this.handAdaptiveFollowTarget = normalizeHandAdaptiveFollowTarget(followTarget)
     this.handAdaptiveUnsupported = enabled ? !this.isHoldingHandSupported() : false
   }
 
@@ -120,9 +122,9 @@ struct HandAdaptiveSettingsPage {
 
   private async persistSettings(): Promise<void> {
     await this.preferencesService.setBoolean(PreferenceKeys.HAND_ADAPTIVE_ENABLED, this.handAdaptiveEnabled)
-    await this.preferencesService.setBoolean(PreferenceKeys.HAND_ADAPTIVE_NEW_CHAT, this.handAdaptiveNewChat)
+    await this.preferencesService.setString(PreferenceKeys.HAND_ADAPTIVE_FOLLOW_TARGET, this.handAdaptiveFollowTarget)
     AppStorage.setOrCreate(AppStorageKeys.SETTING_HAND_ADAPTIVE_ENABLED, this.handAdaptiveEnabled)
-    AppStorage.setOrCreate(AppStorageKeys.SETTING_HAND_ADAPTIVE_NEW_CHAT, this.handAdaptiveNewChat)
+    AppStorage.setOrCreate(AppStorageKeys.SETTING_HAND_ADAPTIVE_FOLLOW_TARGET, this.handAdaptiveFollowTarget)
     AppStorage.setOrCreate(AppStorageKeys.SETTING_HAND_ADAPTIVE_UNSUPPORTED, this.handAdaptiveUnsupported)
     setAppUiStateValue(AppStorageKeys.SETTINGS_HAND_ADAPTIVE_CHANGED_AT, Date.now())
   }
@@ -159,8 +161,8 @@ struct HandAdaptiveSettingsPage {
         console.error('HandAdaptiveSettingsPage', `Failed to apply master setting: ${JSON.stringify(error)}`)
       })
     }
-    callbacks.onToggleHandAdaptiveNewChat = (value: boolean): void => {
-      this.applyNewChatSetting(value)
+    callbacks.onSelectHandAdaptiveFollowTarget = (value: HandAdaptiveFollowTarget): void => {
+      this.applyFollowTargetSetting(value)
     }
     return callbacks
   }
@@ -168,26 +170,26 @@ struct HandAdaptiveSettingsPage {
   private async applyMasterSetting(value: boolean): Promise<void> {
     if (value && !await this.requestDetectGesturePermission()) {
       this.handAdaptiveEnabled = false
-      this.handAdaptiveNewChat = false
       this.handAdaptiveUnsupported = true
       await this.persistSettings()
       return
     }
     this.handAdaptiveEnabled = value
     if (value) {
-      this.handAdaptiveNewChat = true
       this.handAdaptiveUnsupported = !this.isHoldingHandSupported()
     } else {
-      this.handAdaptiveNewChat = false
       this.handAdaptiveUnsupported = false
     }
     await this.persistSettings()
   }
 
-  private applyNewChatSetting(value: boolean): void {
-    this.handAdaptiveNewChat = value
+  private applyFollowTargetSetting(value: HandAdaptiveFollowTarget): void {
+    if (this.handAdaptiveFollowTarget === value) {
+      return
+    }
+    this.handAdaptiveFollowTarget = value
     this.persistSettings().catch((error: Error): void => {
-      console.error('HandAdaptiveSettingsPage', `Failed to persist new chat setting: ${JSON.stringify(error)}`)
+      console.error('HandAdaptiveSettingsPage', `Failed to persist follow target: ${JSON.stringify(error)}`)
     })
   }
 
@@ -205,7 +207,7 @@ struct HandAdaptiveSettingsPage {
           IndexSettingsSheetContent({
             settingsSheetType: SettingsSheetType.HAND_ADAPTIVE,
             handAdaptiveEnabled: this.handAdaptiveEnabled,
-            handAdaptiveNewChat: this.handAdaptiveNewChat,
+            handAdaptiveFollowTarget: this.handAdaptiveFollowTarget,
             handAdaptiveUnsupported: this.handAdaptiveUnsupported,
             callbacks: this.buildCallbacks()
           })

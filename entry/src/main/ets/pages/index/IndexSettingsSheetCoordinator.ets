@@ -1,11 +1,12 @@
 import { AppLanguage, ThemeMode } from '../../services/PreferencesService'
 import { SettingsManager } from '../../viewmodels/SettingsManager'
+import { HandAdaptiveFollowTarget } from '../../config/HandAdaptiveSettings'
 
 export class IndexSettingsSheetActionCallbacks {
   onSelectTheme: (mode: ThemeMode) => Promise<void> = async (_mode: ThemeMode): Promise<void> => {}
   onSelectLanguage: (language: AppLanguage) => Promise<void> = async (_language: AppLanguage): Promise<void> => {}
   onToggleHandAdaptiveEnabled: (value: boolean) => void = (_value: boolean): void => {}
-  onToggleHandAdaptiveNewChat: (value: boolean) => void = (_value: boolean): void => {}
+  onSelectHandAdaptiveFollowTarget: (value: HandAdaptiveFollowTarget) => void = (_value: HandAdaptiveFollowTarget): void => {}
   onToggleNotifyEnabled: (value: boolean) => Promise<void> = async (_value: boolean): Promise<void> => {}
   onToggleNotifyOnComplete: (value: boolean) => Promise<void> = async (_value: boolean): Promise<void> => {}
   onToggleNotifyOnFailed: (value: boolean) => Promise<void> = async (_value: boolean): Promise<void> => {}
@@ -19,7 +20,7 @@ export class IndexSettingsSheetCoordinatorBindOptions {
   onLanguageUpdated: (language: AppLanguage) => void = (_language: AppLanguage): void => {}
   onCloseSheet: () => void = (): void => {}
   onHandAdaptiveEnabledChanged: (value: boolean) => void = (_value: boolean): void => {}
-  onHandAdaptiveNewChatChanged: (value: boolean) => void = (_value: boolean): void => {}
+  onHandAdaptiveFollowTargetChanged: (value: HandAdaptiveFollowTarget) => void = (_value: HandAdaptiveFollowTarget): void => {}
   onNotifyEnabledUpdated: (value: boolean) => void = (_value: boolean): void => {}
   onNotifyOnCompleteUpdated: (value: boolean) => void = (_value: boolean): void => {}
   onNotifyOnFailedUpdated: (value: boolean) => void = (_value: boolean): void => {}
@@ -52,8 +53,8 @@ export class IndexSettingsSheetCoordinator {
       options.onHandAdaptiveEnabledChanged(value)
     }
 
-    callbacks.onToggleHandAdaptiveNewChat = (value: boolean): void => {
-      options.onHandAdaptiveNewChatChanged(value)
+    callbacks.onSelectHandAdaptiveFollowTarget = (value: HandAdaptiveFollowTarget): void => {
+      options.onHandAdaptiveFollowTargetChanged(value)
     }
 
     callbacks.onToggleNotifyEnabled = async (value: boolean): Promise<void> => {

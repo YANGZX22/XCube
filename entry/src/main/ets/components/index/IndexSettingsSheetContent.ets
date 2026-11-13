@@ -1,9 +1,16 @@
 import { ImmersiveButtonSurface } from '../ImmersiveButtonSurface'
-import { uiMaterial } from '@kit.ArkUI'
+import { IMMERSIVE_MATERIAL_SHADOW_OUTSET } from '../ImmersiveMaterialBackdrop'
+import { TabSegmentButtonV2, ColorMetrics, LengthMetrics, SegmentButtonV2Items, uiMaterial } from '@kit.ArkUI'
+import { HandAdaptiveFollowTarget } from '../../config/HandAdaptiveSettings'
+import { VisualEffectsMode } from '../../models/ThemeColors'
+import { isWrappedMaterialApiAvailable, shouldUseWrappedMaterial } from '../../utils/WrappedMaterialSupport'
+import { withColorAlpha } from '../../utils/ColorAlphaUtils'
 import { ThemeMode, AppLanguage } from '../../services/PreferencesService'
 import { SettingsSheetType } from '../../pages/index/IndexPageTypes'
 import { IndexSettingsSheetActionCallbacks } from '../../pages/index/IndexSettingsSheetCoordinator'
 import { getAppUiState } from '../../state/AppUiState'
+
+const FOLLOW_TARGET_BUTTON_HEIGHT: number = 48
 
 @ComponentV2
 export struct IndexSettingsSheetContent {
@@ -22,9 +29,144 @@ export struct IndexSettingsSheetContent {
   @Param chatInputEnterKeySend: boolean = false
   @Param chatOrderedResponseHistory: boolean = false
   @Param handAdaptiveEnabled: boolean = false
-  @Param handAdaptiveNewChat: boolean = false
+  @Param handAdaptiveFollowTarget: HandAdaptiveFollowTarget = HandAdaptiveFollowTarget.PLUS
   @Param handAdaptiveUnsupported: boolean = false
   @Param callbacks: IndexSettingsSheetActionCallbacks = new IndexSettingsSheetActionCallbacks()
+  @Local followTargetWidth: number = 0
+  private followTargetItems: SegmentButtonV2Items = new SegmentButtonV2Items([
+    { text: $r('app.string.hand_adaptive_follow_taskbar') },
+    { text: $r('app.string.hand_adaptive_follow_plus') }
+  ])
+
+  private useFollowTargetMaterial(): boolean {
+    return getAppUiState().visualEffectsMode !== VisualEffectsMode.MANUSCRIPT && shouldUseWrappedMaterial()
+  }
+
+  private getFollowTargetMaterial(): uiMaterial.Material | undefined {
+    if (!isWrappedMaterialApiAvailable()) {
+      return undefined
+    }
+    if (!this.useFollowTargetMaterial()) {
+      return uiMaterial.Material.empty
+    }
+    return new uiMaterial.ImmersiveMaterial({
+      style: uiMaterial.ImmersiveStyle.ULTRA_THIN,
+      materialColor: withColorAlpha(this.themePrimary, '14'),
+      colorInvert: true,
+      interactive: true,
+      lightEffect: {}
+    })
+  }
+
+  private getFollowTargetBlurEffect(): BackgroundEffectOptions | undefined {
+    if (this.useFollowTargetMaterial()) {
+      return undefined
+    }
+    return { radius: 24, saturation: 1, brightness: 1, color: Color.Transparent }
+  }
+
+  private selectFollowTarget(index: number): void {
+    if (index !== 0 && index !== 1) {
+      return
+    }
+    const target = index === 0 ? HandAdaptiveFollowTarget.TASKBAR : HandAdaptiveFollowTarget.PLUS
+    if (target === this.handAdaptiveFollowTarget) {
+      return
+    }
+    // V2 自己处理点击和拖拽的选中动画，不再嵌套外层 animateTo。
+    this.callbacks.onSelectHandAdaptiveFollowTarget(target)
+  }
+
+  private interceptFollowTargetTouch(event: TouchEvent): HitTestMode {
+    const touch = event.changedTouches.length > 0 ? event.changedTouches[0] : event.touches[0]
+    if (touch && touch.x >= 0 && touch.x < this.followTargetWidth &&
+      touch.y >= 0 && touch.y < FOLLOW_TARGET_BUTTON_HEIGHT) {
+      return HitTestMode.Transparent
+    }
+    // 透明宿主外扩仅用于绘制，不能抢走标题、说明文字或相邻控件的触摸。
+    return HitTestMode.BLOCK_DESCENDANTS
+  }
+
+  @Builder
+  private FollowTargetSegmentButton() {
+    TabSegmentButtonV2({
+      items: this.followTargetItems,
+      selectedIndex: this.handAdaptiveFollowTarget === HandAdaptiveFollowTarget.TASKBAR ? 0 : 1,
+      $selectedIndex: (index: number): void => {
+        this.selectFollowTarget(index)
+      },
+      itemFontColor: ColorMetrics.resourceColor($r('sys.color.font_primary')),
+      itemSelectedFontColor: ColorMetrics.resourceColor(this.useFollowTargetMaterial() ?
+        $r('sys.color.font_primary') : $r('sys.color.font_on_primary')),
+      // 材质模式只叠加半透明主题色，避免实心滑块盖住透射与反色效果。
+      itemSelectedBackgroundColor: ColorMetrics.resourceColor(this.useFollowTargetMaterial() ?
+        withColorAlpha(this.themePrimary, '33') : this.themePrimary),
+      itemMinHeight: LengthMetrics.vp(40),
+      buttonPadding: LengthMetrics.vp(4),
+      backgroundSystemMaterial: this.getFollowTargetMaterial(),
+      // undefined 会回退到 SDK 的默认底色，必须显式清空。
+      buttonBackgroundColor: ColorMetrics.resourceColor(Color.Transparent),
+      buttonBackgroundEffect: this.getFollowTargetBlurEffect(),
+      enableStateAnimation: true
+    })
+      .width('100%')
+      .clip(false)
+  }
+
+  @Builder
+  private FollowTargetMaterialTitle() {
+    Column() {
+      this.FollowTargetSegmentButton()
+    }
+    .width('100%')
+    .height('100%')
+    .padding(IMMERSIVE_MATERIAL_SHADOW_OUTSET)
+    .justifyContent(FlexAlign.Center)
+    .backgroundColor(Color.Transparent)
+    .clip(false)
+    .hitTestBehavior(HitTestMode.Transparent)
+  }
+
+  @Builder
+  private FollowTargetSelector() {
+    if (this.useFollowTargetMaterial()) {
+      // 原生 V2 内部用 Stack 绘制材质。按官方示例把组件本身放进标题栏作用域，
+      // 而不是额外覆盖一个材质背板，保留其原生拖拽、点击和文字反色。
+      Stack({ alignContent: Alignment.TopStart }) {
+        Navigation() {}
+          .title({ builder: this.FollowTargetMaterialTitle, height: '100%' }, {
+            backgroundColor: Color.Transparent,
+            backgroundBlurStyle: BlurStyle.NONE
+          })
+          .titleMode(NavigationTitleMode.Mini)
+          .hideBackButton(true)
+          .hideToolBar(true)
+          .mode(NavigationMode.Stack)
+          // Navigation 内部标题栏有自己的裁剪边界，必须给阴影和形变留出真实空间。
+          .width(`calc(100% + ${IMMERSIVE_MATERIAL_SHADOW_OUTSET * 2}vp)`)
+          .height(FOLLOW_TARGET_BUTTON_HEIGHT + IMMERSIVE_MATERIAL_SHADOW_OUTSET * 2)
+          .position({ x: -IMMERSIVE_MATERIAL_SHADOW_OUTSET, y: -IMMERSIVE_MATERIAL_SHADOW_OUTSET })
+          .backgroundColor(Color.Transparent)
+          .clip(false)
+          .hitTestBehavior(HitTestMode.Transparent)
+      }
+        // 布局占位和点击区域仍是原来的按钮尺寸，按钮本身没有缩小或移位。
+        .width('100%')
+        .height(FOLLOW_TARGET_BUTTON_HEIGHT)
+        .clip(false)
+        .hitTestBehavior(HitTestMode.Transparent)
+        .onTouchIntercept((event: TouchEvent): HitTestMode => this.interceptFollowTargetTouch(event))
+        .onSizeChange((_oldSize: SizeOptions, size: SizeOptions) => {
+          const width = Number(size.width)
+          if (Number.isFinite(width) && width > 0 && Math.abs(width - this.followTargetWidth) > 0.1) {
+            this.followTargetWidth = width
+          }
+        })
+    } else {
+      // 降级模式仍使用原生分段按钮的透明高斯模糊，不创建材质宿主。
+      this.FollowTargetSegmentButton()
+    }
+  }
 
   @Builder
   private ThemeOptionItem(mode: ThemeMode, label: Resource) {
@@ -113,11 +255,21 @@ export struct IndexSettingsSheetContent {
       if (this.handAdaptiveEnabled) {
         Divider().color(this.themeDivider)
 
-        this.HandAdaptiveToggleItem($r('app.string.hand_adaptive_new_chat_title'),
-          $r('app.string.hand_adaptive_new_chat_desc'), this.handAdaptiveNewChat, this.handAdaptiveEnabled,
-          (value: boolean) => {
-            this.callbacks.onToggleHandAdaptiveNewChat(value)
-          })
+        Column({ space: 10 }) {
+          Text($r('app.string.hand_adaptive_follow_target_title'))
+            .fontSize(15)
+            .fontColor($r('app.color.text_primary'))
+
+          this.FollowTargetSelector()
+
+          Text($r('app.string.hand_adaptive_follow_target_desc'))
+            .fontSize(12)
+            .fontColor($r('app.color.text_secondary'))
+            .lineHeight(18)
+        }
+        .width('100%')
+        .alignItems(HorizontalAlign.Start)
+        .padding({ left: 8, right: 8, top: 16, bottom: 12 })
 
         if (this.handAdaptiveUnsupported) {
           Text($r('app.string.hand_adaptive_unsupported_tip'))

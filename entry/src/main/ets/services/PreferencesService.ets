@@ -89,7 +89,7 @@ export class PreferenceKeys {
 
   // 握姿自适应配置
   static readonly HAND_ADAPTIVE_ENABLED: string = 'hand_adaptive_enabled'
-  static readonly HAND_ADAPTIVE_NEW_CHAT: string = 'hand_adaptive_new_chat'
+  static readonly HAND_ADAPTIVE_FOLLOW_TARGET: string = 'hand_adaptive_follow_target'
 
   // models.dev 能力匹配配置
   static readonly MODELS_DEV_BASE_URL: string = 'models_dev_base_url'

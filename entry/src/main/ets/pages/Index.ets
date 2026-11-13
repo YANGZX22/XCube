@@ -90,8 +90,10 @@ import {
   INDEX_NEW_CHAT_FAB_STACK_HEIGHT,
   INDEX_NEW_CHAT_FAB_SIZE,
   isHandAdaptiveActiveForIndex,
-  shouldPlaceFabOnLeftForIndex
+  shouldPlaceFabOnLeftForIndex,
+  shouldPlaceCompactPlusOnLeftForIndex
 } from './index/IndexHandAdaptiveHelper'
+import { HandAdaptiveFollowTarget, normalizeHandAdaptiveFollowTarget } from '../config/HandAdaptiveSettings'
 import {
   INDEX_TAB_ASSISTANTS,
   INDEX_TAB_CHAT,
@@ -198,7 +200,7 @@ struct Index {
   @Local notifyOnComplete: boolean = true
   @Local notifyOnFailed: boolean = true
   @Local handAdaptiveEnabled: boolean = false
-  @Local handAdaptiveNewChat: boolean = false
+  @Local handAdaptiveFollowTarget: HandAdaptiveFollowTarget = HandAdaptiveFollowTarget.PLUS
   @Local handAdaptiveUnsupported: boolean = false
   @Local compactBottomBarsWidthVp: number = 0
   private get handAdaptiveSettingsChangedAt(): number {
@@ -1102,7 +1104,7 @@ struct Index {
     AppStorage.setOrCreate('setting_notify_on_complete', this.notifyOnComplete)
     AppStorage.setOrCreate('setting_notify_on_failed', this.notifyOnFailed)
     AppStorage.setOrCreate(AppStorageKeys.SETTING_HAND_ADAPTIVE_ENABLED, this.handAdaptiveEnabled)
-    AppStorage.setOrCreate(AppStorageKeys.SETTING_HAND_ADAPTIVE_NEW_CHAT, this.handAdaptiveNewChat)
+    AppStorage.setOrCreate(AppStorageKeys.SETTING_HAND_ADAPTIVE_FOLLOW_TARGET, this.handAdaptiveFollowTarget)
     AppStorage.setOrCreate(AppStorageKeys.SETTING_HAND_ADAPTIVE_UNSUPPORTED, this.handAdaptiveUnsupported)
     setAppUiStateValue(AppStorageKeys.CHAT_FONT_SIZE, this.chatFontSize)
     setAppUiStateValue(AppStorageKeys.CHAT_INPUT_ENTER_KEY_SEND, this.chatInputEnterKeySend)
@@ -1116,18 +1118,17 @@ struct Index {
     const seq = this.handAdaptiveLoadSeq + 1
     this.handAdaptiveLoadSeq = seq
     const enabled = await this.preferencesService.getBoolean(PreferenceKeys.HAND_ADAPTIVE_ENABLED, false)
-    const newChatEnabled = await this.preferencesService.getBoolean(PreferenceKeys.HAND_ADAPTIVE_NEW_CHAT, enabled)
+    const followTarget = await this.preferencesService.getString(PreferenceKeys.HAND_ADAPTIVE_FOLLOW_TARGET,
+      HandAdaptiveFollowTarget.PLUS)
     if (seq !== this.handAdaptiveLoadSeq) {
       return
     }
 
     this.handAdaptiveEnabled = enabled
+    this.handAdaptiveFollowTarget = normalizeHandAdaptiveFollowTarget(followTarget)
     if (!enabled) {
-      this.handAdaptiveNewChat = false
       this.handAdaptiveUnsupported = false
       this.currentHoldingHand = motion.HoldingHandStatus.UNKNOWN_STATUS
-    } else {
-      this.handAdaptiveNewChat = newChatEnabled
     }
 
     this.updateHoldingHandSubscription()
@@ -1135,7 +1136,7 @@ struct Index {
   }
 
   private isHandAdaptiveActive(): boolean {
-    return isHandAdaptiveActiveForIndex(this.handAdaptiveEnabled, this.handAdaptiveNewChat)
+    return isHandAdaptiveActiveForIndex(this.handAdaptiveEnabled)
   }
 
   private updateHoldingHandSubscription(): void {
@@ -1205,7 +1206,7 @@ struct Index {
   }
 
   private shouldPlaceFabOnLeft(): boolean {
-    return shouldPlaceFabOnLeftForIndex(this.handAdaptiveEnabled, this.handAdaptiveNewChat, this.handAdaptiveUnsupported,
+    return shouldPlaceFabOnLeftForIndex(this.handAdaptiveEnabled, this.handAdaptiveFollowTarget, this.handAdaptiveUnsupported,
       this.currentHoldingHand)
   }
 
@@ -1291,14 +1292,13 @@ struct Index {
 
   private async persistHandAdaptiveSettings(): Promise<void> {
     await this.preferencesService.setBoolean(PreferenceKeys.HAND_ADAPTIVE_ENABLED, this.handAdaptiveEnabled)
-    await this.preferencesService.setBoolean(PreferenceKeys.HAND_ADAPTIVE_NEW_CHAT, this.handAdaptiveNewChat)
+    await this.preferencesService.setString(PreferenceKeys.HAND_ADAPTIVE_FOLLOW_TARGET, this.handAdaptiveFollowTarget)
   }
 
   private async handleHandAdaptiveEnabledChanged(value: boolean): Promise<void> {
     this.handAdaptiveLoadSeq = this.handAdaptiveLoadSeq + 1
     if (value && !await this.requestDetectGesturePermission()) {
       this.handAdaptiveEnabled = false
-      this.handAdaptiveNewChat = false
       this.handAdaptiveUnsupported = true
       this.currentHoldingHand = motion.HoldingHandStatus.UNKNOWN_STATUS
       this.syncSettingsSummaryToStorage()
@@ -1309,9 +1309,7 @@ struct Index {
     this.handAdaptiveEnabled = value
     if (value) {
       this.handAdaptiveUnsupported = false
-      this.handAdaptiveNewChat = true
     } else {
-      this.handAdaptiveNewChat = false
       this.handAdaptiveUnsupported = false
       this.currentHoldingHand = motion.HoldingHandStatus.UNKNOWN_STATUS
     }
@@ -1320,9 +1318,12 @@ struct Index {
     this.updateHoldingHandSubscription()
   }
 
-  private async handleHandAdaptiveNewChatChanged(value: boolean): Promise<void> {
+  private async handleHandAdaptiveFollowTargetChanged(value: HandAdaptiveFollowTarget): Promise<void> {
+    if (this.handAdaptiveFollowTarget === value) {
+      return
+    }
     this.handAdaptiveLoadSeq = this.handAdaptiveLoadSeq + 1
-    this.handAdaptiveNewChat = value
+    this.handAdaptiveFollowTarget = value
     this.syncSettingsSummaryToStorage()
     await this.persistHandAdaptiveSettings()
     this.updateHoldingHandSubscription()
@@ -2217,10 +2218,8 @@ struct Index {
   }
 
   private shouldPlaceCompactMiniBarOnLeft(): boolean {
-    if (!this.handAdaptiveEnabled || this.handAdaptiveUnsupported) {
-      return false
-    }
-    return this.currentHoldingHand === motion.HoldingHandStatus.LEFT_HAND_HELD
+    return shouldPlaceCompactPlusOnLeftForIndex(this.handAdaptiveEnabled, this.handAdaptiveFollowTarget,
+      this.handAdaptiveUnsupported, this.currentHoldingHand)
   }
 
   private getCompactBottomTabBarWidth(): number {
@@ -2311,9 +2310,10 @@ struct Index {
         .width(40)
         .height(40)
         .position({
-          x: Math.max(12, this.getCompactBottomBarsWidth() - 52),
+          x: this.shouldPlaceFabOnLeft() ? 12 : Math.max(12, this.getCompactBottomBarsWidth() - 52),
           y: -46
         })
+        .animation({ duration: 420, curve: curves.springMotion(0.75, 0.86) })
       }
       .height(this.getManuscriptBottomBarHeight())
       .width('100%')
@@ -6109,7 +6109,7 @@ struct Index {
           chatInputEnterKeySend: this.chatInputEnterKeySend,
           chatOrderedResponseHistory: this.chatOrderedResponseHistory,
           handAdaptiveEnabled: this.handAdaptiveEnabled,
-          handAdaptiveNewChat: this.handAdaptiveNewChat,
+          handAdaptiveFollowTarget: this.handAdaptiveFollowTarget,
           handAdaptiveUnsupported: this.handAdaptiveUnsupported,
           callbacks: this.buildSettingsSheetCallbacks()
         })
@@ -6136,7 +6136,7 @@ struct Index {
       chatInputEnterKeySend: this.chatInputEnterKeySend,
       chatOrderedResponseHistory: this.chatOrderedResponseHistory,
       handAdaptiveEnabled: this.handAdaptiveEnabled,
-      handAdaptiveNewChat: this.handAdaptiveNewChat,
+      handAdaptiveFollowTarget: this.handAdaptiveFollowTarget,
       handAdaptiveUnsupported: this.handAdaptiveUnsupported,
       callbacks: this.buildSettingsSheetCallbacks()
     })
@@ -6154,7 +6154,7 @@ struct Index {
       chatInputEnterKeySend: this.chatInputEnterKeySend,
       chatOrderedResponseHistory: this.chatOrderedResponseHistory,
       handAdaptiveEnabled: this.handAdaptiveEnabled,
-      handAdaptiveNewChat: this.handAdaptiveNewChat,
+      handAdaptiveFollowTarget: this.handAdaptiveFollowTarget,
       handAdaptiveUnsupported: this.handAdaptiveUnsupported,
       callbacks: this.buildSettingsSheetCallbacks()
     })
@@ -6172,7 +6172,7 @@ struct Index {
       chatInputEnterKeySend: this.chatInputEnterKeySend,
       chatOrderedResponseHistory: this.chatOrderedResponseHistory,
       handAdaptiveEnabled: this.handAdaptiveEnabled,
-      handAdaptiveNewChat: this.handAdaptiveNewChat,
+      handAdaptiveFollowTarget: this.handAdaptiveFollowTarget,
       handAdaptiveUnsupported: this.handAdaptiveUnsupported,
       callbacks: this.buildSettingsSheetCallbacks()
     })
@@ -6205,8 +6205,8 @@ struct Index {
     callbacks.onToggleHandAdaptiveEnabled = (value: boolean): void => {
       this.handleHandAdaptiveEnabledChanged(value)
     }
-    callbacks.onToggleHandAdaptiveNewChat = (value: boolean): void => {
-      this.handleHandAdaptiveNewChatChanged(value)
+    callbacks.onSelectHandAdaptiveFollowTarget = (value: HandAdaptiveFollowTarget): void => {
+      this.handleHandAdaptiveFollowTargetChanged(value)
     }
     callbacks.onToggleNotifyEnabled = async (value: boolean): Promise<void> => {
       this.notifyEnabled = value

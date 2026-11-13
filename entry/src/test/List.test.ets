@@ -37,6 +37,7 @@ import usageActivityTest from './UsageActivity.test';
 import workspaceFileCodecTest from './WorkspaceFileCodec.test';
 import nativeFileInputTest from './NativeFileInput.test';
 import pdfPageSelectionTest from './PdfPageSelection.test';
+import handAdaptiveTest from './HandAdaptive.test';
 
 export default function testsuite() {
   localUnitTest();
@@ -78,4 +79,5 @@ export default function testsuite() {
   workspaceFileCodecTest();
   nativeFileInputTest();
   pdfPageSelectionTest();
+  handAdaptiveTest();
 }
