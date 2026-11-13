@@ -2906,7 +2906,7 @@ export struct MessageBubble {
       ThinkingStatusIndicator({
         isActive: this.isTimelineBarGroupActive(block),
         label: this.getTimelineBarGroupTitle(block),
-        iconImage: $r('app.media.xcube_symbol_unknown_fore'),
+        icon: $r('sys.symbol.line_below_highlighter'),
         inactiveColor: $r('app.color.text_secondary'),
         fullWidth: true
       })

@@ -24,12 +24,14 @@ const SWEEP_DURATION: number = 1400
 // 反过来（0 → -SWEEP_PERIOD）会变成自右向左。
 const SWEEP_START_OFFSET: number = -SWEEP_PERIOD
 const SWEEP_END_OFFSET: number = 0
+// 合并栏与思考栏的图标共用占位，保持标题起点和垂直中心一致。
+const STATUS_ICON_SIZE: number = 14
 
 @ComponentV2
 export struct ThinkingStatusIndicator {
   @Param isActive: boolean = false
   @Param label: ResourceStr | undefined = undefined
-  @Param iconImage: Resource | undefined = undefined
+  @Param icon: Resource = $r('sys.symbol.AI_deep_thinking')
   @Param inactiveColor: ResourceColor | undefined = undefined
   @Param fullWidth: boolean = false
   @Local private sweepOffset: number = SWEEP_START_OFFSET
@@ -148,23 +150,12 @@ export struct ThinkingStatusIndicator {
   @Builder
   private ThinkingContent() {
     Row() {
-      if (this.iconImage !== undefined) {
-        Image(this.iconImage)
-          .width(20)
-          .height(20)
-          .objectFit(ImageFit.Contain)
-          // 同时着色 SVG 的描边与填充，保留透明区域和镂空。
-          .supportSvg2(true)
-          .colorFilter(this.getAccentColor())
-          .flexShrink(0)
-          .draggable(false)
-          .accessibilityLevel('no')
-      } else {
-        SymbolGlyph($r('sys.symbol.AI_deep_thinking'))
-          .fontSize(14)
-          .fontColor([this.getAccentColor()])
-          .flexShrink(0)
-      }
+      SymbolGlyph(this.icon)
+        .fontSize(STATUS_ICON_SIZE)
+        .width(STATUS_ICON_SIZE)
+        .height(STATUS_ICON_SIZE)
+        .fontColor([this.getAccentColor()])
+        .flexShrink(0)
 
       Text(this.label ?? (this.isActive ? $r('app.string.reasoning_thinking') : $r('app.string.reasoning_process')))
         .fontSize(13)
