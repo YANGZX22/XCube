@@ -499,7 +499,7 @@ export struct ModelPickerSheet {
 
       if (this.shouldShowDivider(row.groupPosition)) {
         Divider()
-          .color($r('app.color.divider'))
+          .color(getAppUiState().themePrimaryLight)
           .margin({ left: 54, right: 12 })
       }
     }

@@ -23,13 +23,13 @@ export struct ExportOptionsPanel {
         this.includeAttachments,
         (value: boolean) => { this.onIncludeAttachmentsChange(value) }
       )
-      Divider().color($r('app.color.divider'))
+      Divider().color(getAppUiState().themePrimaryLight)
       this.OptionRow(
         $r('app.string.export_include_providers'),
         this.includeProviders,
         (value: boolean) => { this.onIncludeProvidersChange(value) }
       )
-      Divider().color($r('app.color.divider'))
+      Divider().color(getAppUiState().themePrimaryLight)
       this.OptionRow(
         $r('app.string.export_include_preferences'),
         this.includePreferences,

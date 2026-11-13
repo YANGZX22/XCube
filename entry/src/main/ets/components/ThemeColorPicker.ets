@@ -142,7 +142,7 @@ export struct ThemeColorPicker {
       width: this.currentTheme === theme.id ? 2 : 1,
       color: this.currentTheme === theme.id ?
         (this.isDarkMode ? theme.dark.primary : theme.light.primary) :
-        $r('app.color.divider')
+        getAppUiState().themePrimaryLight
     })
     .onClick(() => {
       animateTo({ duration: 450, curve: Curve.EaseInOut }, () => {

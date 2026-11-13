@@ -428,7 +428,7 @@ export struct AskUserCard {
             Column({ space: 8 }) {
               if (callIndex > 0) {
                 Divider()
-                  .color($r('app.color.divider'))
+                  .color(getAppUiState().themePrimaryLight)
                   .margin({ top: 2, bottom: 2 })
               }
 
@@ -462,7 +462,7 @@ export struct AskUserCard {
             .backgroundColor(this.isManuscriptMode ? Color.Transparent : $r('app.color.surface'))
             .border({
               width: this.isManuscriptMode ? { bottom: 1 } : 0.5,
-              color: this.isManuscriptMode ? this.themePrimary : $r('app.color.divider')
+              color: this.isManuscriptMode ? this.themePrimary : getAppUiState().themePrimaryLight
             })
             .borderRadius(this.isManuscriptMode ? 0 : 16)
             .onClick(() => {
@@ -603,7 +603,7 @@ export struct AskUserCard {
     .border({
       width: this.isManuscriptMode ? 1 : 0.5,
       color: this.isManuscriptMode && this.isOptionSelected(question, option, resultContent) ?
-        this.themePrimary : $r('app.color.divider')
+        this.themePrimary : getAppUiState().themePrimaryLight
     })
     .onClick(() => {
       if (this.isAnswered || this.compactMode) {

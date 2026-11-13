@@ -3958,7 +3958,7 @@ struct Index {
         .backgroundColor(this.themeBackground)
         .border({
           width: { left: 1 },
-          color: $r('app.color.divider')
+          color: getAppUiState().themePrimaryLight
         })
         .position({ x: this.getExpandedKnowledgeListPaneWidth(), y: 0 })
         .zIndex(2)
@@ -4087,7 +4087,7 @@ struct Index {
     .padding({ left: 8, right: 8 })
     .backgroundColor(this.themeBackground)
     .borderRadius(11)
-    .border({ width: 1, color: $r('app.color.divider') })
+    .border({ width: 1, color: getAppUiState().themePrimaryLight })
   }
 
   @Builder
@@ -4877,7 +4877,7 @@ struct Index {
       this.AssistantEditorHeader()
 
       Divider()
-        .color($r('app.color.divider'))
+        .color(getAppUiState().themePrimaryLight)
         .margin({ left: 20, right: 20 })
 
       Scroll() {
@@ -4886,19 +4886,19 @@ struct Index {
             this.AssistantNameAvatarRow()
 
             Divider()
-              .color($r('app.color.divider'))
+              .color(getAppUiState().themePrimaryLight)
               .margin({ left: 16, right: 16 })
 
             this.AssistantPromptEditor()
 
             Divider()
-              .color($r('app.color.divider'))
+              .color(getAppUiState().themePrimaryLight)
               .margin({ left: 16, right: 16 })
 
             this.AssistantDefaultModelRow()
 
             Divider()
-              .color($r('app.color.divider'))
+              .color(getAppUiState().themePrimaryLight)
               .margin({ left: 16, right: 16 })
 
             this.AssistantTemperatureRow()

@@ -296,7 +296,7 @@ export struct ProviderIconEditSheet {
       .borderRadius(19)
       .border({
         width: this.editMode === mode ? 0 : 1,
-        color: $r('app.color.divider')
+        color: getAppUiState().themePrimaryLight
       })
       .onClick(() => {
         if (this.editMode === mode) {
@@ -428,7 +428,7 @@ export struct ProviderIconEditSheet {
           .width(40)
           .height(40)
           .borderRadius(10)
-          .border({ width: 1, color: $r('app.color.divider') })
+          .border({ width: 1, color: getAppUiState().themePrimaryLight })
           .justifyContent(FlexAlign.Center)
         } else {
           Column()
@@ -436,7 +436,7 @@ export struct ProviderIconEditSheet {
             .height(40)
             .backgroundColor(this.bgColor)
             .borderRadius(10)
-            .border({ width: 1, color: $r('app.color.divider') })
+            .border({ width: 1, color: getAppUiState().themePrimaryLight })
         }
 
         Text(this.bgColor === TRANSPARENT_BG_COLOR ? $r('app.string.icon_transparent_hint') : this.bgColor)
@@ -483,7 +483,7 @@ export struct ProviderIconEditSheet {
         .borderRadius(10)
         .border({
           width: this.bgColor === TRANSPARENT_BG_COLOR ? 3 : 1,
-          color: this.bgColor === TRANSPARENT_BG_COLOR ? this.themePrimary : $r('app.color.divider')
+          color: this.bgColor === TRANSPARENT_BG_COLOR ? this.themePrimary : getAppUiState().themePrimaryLight
         })
         .justifyContent(FlexAlign.Center)
         .onClick(() => {
@@ -499,7 +499,7 @@ export struct ProviderIconEditSheet {
       .width('100%')
       .padding({ bottom: 8 })
 
-      Divider().color($r('app.color.divider'))
+      Divider().color(getAppUiState().themePrimaryLight)
 
       Scroll() {
         Grid() {
@@ -512,7 +512,7 @@ export struct ProviderIconEditSheet {
                 .borderRadius(10)
                 .border({
                   width: this.bgColor === color ? 3 : 1,
-                  color: this.bgColor === color ? this.themePrimary : $r('app.color.divider')
+                  color: this.bgColor === color ? this.themePrimary : getAppUiState().themePrimaryLight
                 })
                 .onClick(() => {
                   this.bgColor = color

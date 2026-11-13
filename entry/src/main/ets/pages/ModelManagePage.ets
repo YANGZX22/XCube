@@ -556,7 +556,7 @@ struct ModelManagePage {
         .type(ButtonType.Circle)
         .width(36)
         .height(36)
-        .backgroundColor($r('app.color.divider'))
+        .backgroundColor(getAppUiState().themePrimaryLight)
         .onClick(() => {
           this.matchAllIcons()
         })
@@ -569,7 +569,7 @@ struct ModelManagePage {
         .type(ButtonType.Circle)
         .width(36)
         .height(36)
-        .backgroundColor($r('app.color.divider'))
+        .backgroundColor(getAppUiState().themePrimaryLight)
         .onClick(() => {
           this.openCreateProvider()
         })
@@ -581,7 +581,7 @@ struct ModelManagePage {
     }
     .width('100%')
     .backgroundColor(getAppUiState().themeBackground)
-    .border({ width: { bottom: 1 }, color: $r('app.color.divider') })
+    .border({ width: { bottom: 1 }, color: getAppUiState().themePrimaryLight })
   }
 
   @Builder
@@ -630,7 +630,7 @@ struct ModelManagePage {
         .type(ButtonType.Circle)
         .width(36)
         .height(36)
-        .backgroundColor($r('app.color.divider'))
+        .backgroundColor(getAppUiState().themePrimaryLight)
         .onClick(() => {
           this.matchAllIcons()
         })
@@ -643,7 +643,7 @@ struct ModelManagePage {
         .type(ButtonType.Circle)
         .width(36)
         .height(36)
-        .backgroundColor($r('app.color.divider'))
+        .backgroundColor(getAppUiState().themePrimaryLight)
         .onClick(() => {
           this.openCreateProvider()
         })
@@ -1414,7 +1414,7 @@ struct ProviderCardItem {
             textIconDisplayMode: resolveProviderTextIconDisplayMode(this.provider.isConnected),
             iconSize: 24,
             radius: 6,
-            bgColor: $r('app.color.divider'),
+            bgColor: getAppUiState().themePrimaryLight,
             brandColor: this.provider.brandColor,
             fallbackSymbol: $r('sys.symbol.cloud'),
             fallbackColor: $r('app.color.text_tertiary')

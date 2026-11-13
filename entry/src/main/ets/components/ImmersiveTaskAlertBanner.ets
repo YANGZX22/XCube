@@ -15,7 +15,7 @@ export struct ImmersiveTaskAlertBanner {
   @Param actionText: ResourceStr = ''
   @Param bottomInset: number = 0
   @Param accentColor: ResourceColor = $r('app.color.primary')
-  @Param cardStrokeColor: ResourceColor = $r('app.color.divider')
+  @Param cardStrokeColor: ResourceColor | undefined = undefined
   @Param darkMode: boolean = false
   @Event onView: () => void = (): void => {}
   @Event onDismiss: () => void = (): void => {}
@@ -85,7 +85,7 @@ export struct ImmersiveTaskAlertBanner {
     .padding({ left: 12, right: 8, top: 10, bottom: 10 })
     .borderRadius(22)
     .backgroundColor(Color.Transparent)
-    .border({ width: this.useImmersiveMaterial ? 0 : 0.5, color: this.cardStrokeColor })
+    .border({ width: this.useImmersiveMaterial ? 0 : 0.5, color: this.cardStrokeColor ?? getAppUiState().themePrimaryLight })
     .backdropBlur(this.useImmersiveMaterial ? 0 : 24)
     .shadow(this.useImmersiveMaterial ? undefined : {
       radius: 28,

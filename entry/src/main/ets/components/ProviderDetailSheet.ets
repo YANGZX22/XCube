@@ -1448,7 +1448,7 @@ export struct ProviderDetailPanel {
             .type(ButtonType.Circle)
             .width(36)
             .height(36)
-            .backgroundColor($r('app.color.divider'))
+            .backgroundColor(getAppUiState().themePrimaryLight)
             .onClick(() => {
               this.showDeleteConfirmDialog()
             })
@@ -1483,7 +1483,7 @@ export struct ProviderDetailPanel {
           .type(ButtonType.Circle)
           .width(36)
           .height(36)
-          .backgroundColor($r('app.color.divider'))
+          .backgroundColor(getAppUiState().themePrimaryLight)
           .onClick(() => {
             this.onClose()
           })
@@ -1516,7 +1516,7 @@ export struct ProviderDetailPanel {
             .type(ButtonType.Circle)
             .width(36)
             .height(36)
-            .backgroundColor($r('app.color.divider'))
+            .backgroundColor(getAppUiState().themePrimaryLight)
             .onClick(() => {
               this.showDeleteConfirmDialog()
             })
@@ -1542,7 +1542,7 @@ export struct ProviderDetailPanel {
       }
       .width('100%')
       .backgroundColor(getAppUiState().themeBackground)
-      .border({ width: { bottom: 1 }, color: $r('app.color.divider') })
+      .border({ width: { bottom: 1 }, color: getAppUiState().themePrimaryLight })
     } else {
       ImmersiveSheetHeader({
         title: this.isCreateMode ? $r('app.string.add_custom_provider') :
@@ -1629,7 +1629,7 @@ export struct ProviderDetailPanel {
                 customImagePath: this.provider.customImagePath,
                 iconSize: 48,
                 radius: 12,
-                bgColor: $r('app.color.divider'),
+                bgColor: getAppUiState().themePrimaryLight,
                 brandColor: this.provider.brandColor,
                 fallbackSymbol: $r('sys.symbol.cloud'),
                 fallbackColor: $r('app.color.text_secondary')
@@ -1796,7 +1796,7 @@ export struct ProviderDetailPanel {
               customImagePath: this.provider.customImagePath,
               iconSize: 44,
               radius: 11,
-              bgColor: $r('app.color.divider'),
+              bgColor: getAppUiState().themePrimaryLight,
               brandColor: this.provider.brandColor,
               fallbackSymbol: $r('sys.symbol.cloud'),
               fallbackColor: $r('app.color.text_secondary')
@@ -1970,7 +1970,7 @@ export struct ProviderDetailPanel {
               })
 
               if (index < this.apiStyleOptions.length - 1) {
-                Divider().color($r('app.color.divider')).margin({ left: 40 })
+                Divider().color(getAppUiState().themePrimaryLight).margin({ left: 40 })
               }
             })
           }
@@ -1983,7 +1983,7 @@ export struct ProviderDetailPanel {
         .padding({ left: 16, right: 16 })
 
         Divider()
-          .color($r('app.color.divider'))
+          .color(getAppUiState().themePrimaryLight)
           .margin({ left: 16, right: 16, top: 16, bottom: 16 })
 
         if (this.provider?.apiStyle === ApiStyle.OPENAI) {
@@ -2032,7 +2032,7 @@ export struct ProviderDetailPanel {
                 })
 
                 if (index < this.openaiTransportOptions.length - 1) {
-                  Divider().color($r('app.color.divider')).margin({ left: 40 })
+                  Divider().color(getAppUiState().themePrimaryLight).margin({ left: 40 })
                 }
               })
             }
@@ -2045,7 +2045,7 @@ export struct ProviderDetailPanel {
           .padding({ left: 16, right: 16 })
 
           Divider()
-            .color($r('app.color.divider'))
+            .color(getAppUiState().themePrimaryLight)
             .margin({ left: 16, right: 16, top: 16, bottom: 16 })
         }
 
@@ -2081,7 +2081,7 @@ export struct ProviderDetailPanel {
           .padding({ left: 16, right: 16 })
 
           Divider()
-            .color($r('app.color.divider'))
+            .color(getAppUiState().themePrimaryLight)
             .margin({ left: 16, right: 16, top: 16, bottom: 16 })
         }
       }
@@ -2166,7 +2166,7 @@ export struct ProviderDetailPanel {
       .padding({ left: 16, right: 16 })
 
       Divider()
-        .color($r('app.color.divider'))
+        .color(getAppUiState().themePrimaryLight)
         .margin({ left: 16, right: 16, top: 16, bottom: 16 })
 
       // API Base URL
@@ -2202,7 +2202,7 @@ export struct ProviderDetailPanel {
       .padding({ left: 16, right: 16 })
 
       Divider()
-        .color($r('app.color.divider'))
+        .color(getAppUiState().themePrimaryLight)
         .margin({ left: 16, right: 16, top: 16, bottom: 16 })
 
       // API 路径（可选）
@@ -2233,7 +2233,7 @@ export struct ProviderDetailPanel {
       .padding({ left: 16, right: 16 })
 
       Divider()
-        .color($r('app.color.divider'))
+        .color(getAppUiState().themePrimaryLight)
         .margin({ left: 16, right: 16, top: 16, bottom: 16 })
 
       Column({ space: 12 }) {
@@ -2380,7 +2380,7 @@ export struct ProviderDetailPanel {
             .padding(14)
             .borderRadius(18)
             .backgroundColor(getAppUiState().themeBackground)
-            .border({ width: 1, color: $r('app.color.divider') })
+            .border({ width: 1, color: getAppUiState().themePrimaryLight })
           }, (entry: ProviderHeaderEntry) => entry.id)
         }
       }
@@ -2388,7 +2388,7 @@ export struct ProviderDetailPanel {
       .padding({ left: 16, right: 16, bottom: 16 })
 
       Divider()
-        .color($r('app.color.divider'))
+        .color(getAppUiState().themePrimaryLight)
         .margin({ left: 16, right: 16, bottom: 16 })
 
       this.BalanceConfigSection()
@@ -3082,7 +3082,7 @@ export struct ModelItemCard {
 
       if (this.showDivider) {
         Divider()
-          .color($r('app.color.divider'))
+          .color(getAppUiState().themePrimaryLight)
           .margin({ left: 56, right: 16 })
       }
     }

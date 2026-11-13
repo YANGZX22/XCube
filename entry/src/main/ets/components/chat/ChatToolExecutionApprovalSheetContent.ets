@@ -307,7 +307,7 @@ export struct ChatToolExecutionApprovalSheetContent {
           .fontColor($r('app.color.text_primary'))
           .border({
             width: 0.5,
-            color: $r('app.color.divider')
+            color: getAppUiState().themePrimaryLight
           })
           .onClick(() => {
             this.onCancel()

@@ -1609,7 +1609,7 @@ export struct MessageBubble {
     Row({ space: 4 }) {
       SymbolGlyph($r('sys.symbol.chevron_left'))
         .fontSize(13)
-        .fontColor([this.canSwitchToPreviousVersion() ? $r('app.color.text_tertiary') : $r('app.color.divider')])
+        .fontColor([this.canSwitchToPreviousVersion() ? $r('app.color.text_tertiary') : getAppUiState().themePrimaryLight])
         .onClick(() => {
           if (this.canSwitchToPreviousVersion()) {
             this.onSwitchVersion(-1)
@@ -1624,7 +1624,7 @@ export struct MessageBubble {
 
       SymbolGlyph($r('sys.symbol.chevron_right'))
         .fontSize(13)
-        .fontColor([this.canSwitchToNextVersion() ? $r('app.color.text_tertiary') : $r('app.color.divider')])
+        .fontColor([this.canSwitchToNextVersion() ? $r('app.color.text_tertiary') : getAppUiState().themePrimaryLight])
         .onClick(() => {
           if (this.canSwitchToNextVersion()) {
             this.onSwitchVersion(1)
@@ -1677,7 +1677,7 @@ export struct MessageBubble {
         SymbolGlyph($r('sys.symbol.chevron_left'))
           .fontSize(13)
           .fontColor([this.canSwitchToPreviousVersion()
-            ? $r('app.color.text_tertiary') : $r('app.color.divider')])
+            ? $r('app.color.text_tertiary') : getAppUiState().themePrimaryLight])
       }
       .width(this.getMessageToolbarButtonSize())
       .height(this.getMessageToolbarButtonSize())
@@ -1699,7 +1699,7 @@ export struct MessageBubble {
         SymbolGlyph($r('sys.symbol.chevron_right'))
           .fontSize(13)
           .fontColor([this.canSwitchToNextVersion()
-            ? $r('app.color.text_tertiary') : $r('app.color.divider')])
+            ? $r('app.color.text_tertiary') : getAppUiState().themePrimaryLight])
       }
       .width(this.getMessageToolbarButtonSize())
       .height(this.getMessageToolbarButtonSize())
@@ -1715,7 +1715,7 @@ export struct MessageBubble {
         .width(1)
         .vertical(true)
         .height(14)
-        .color($r('app.color.divider'))
+        .color(getAppUiState().themePrimaryLight)
         .margin({ left: 3, right: 3 })
     }
 
@@ -2118,7 +2118,7 @@ export struct MessageBubble {
             .layoutWeight(1)
         }
         .padding(8)
-        .backgroundColor($r('app.color.divider'))
+        .backgroundColor(getAppUiState().themePrimaryLight)
         .borderRadius(8)
         .margin({ bottom: 8 })
         .onClick(() => {
@@ -2251,7 +2251,7 @@ export struct MessageBubble {
         SymbolGlyph($r('sys.symbol.chevron_left'))
           .fontSize(this.getMessageToolbarIconSize())
           .fontColor([this.canSwitchToPreviousVersion()
-            ? this.messageToolbarIconColor : $r('app.color.divider')])
+            ? this.messageToolbarIconColor : getAppUiState().themePrimaryLight])
       }
       .width(this.getMessageToolbarButtonSize())
       .height(this.getMessageToolbarButtonSize())
@@ -2273,7 +2273,7 @@ export struct MessageBubble {
         SymbolGlyph($r('sys.symbol.chevron_right'))
           .fontSize(this.getMessageToolbarIconSize())
           .fontColor([this.canSwitchToNextVersion()
-            ? this.messageToolbarIconColor : $r('app.color.divider')])
+            ? this.messageToolbarIconColor : getAppUiState().themePrimaryLight])
       }
       .width(this.getMessageToolbarButtonSize())
       .height(this.getMessageToolbarButtonSize())
@@ -2289,7 +2289,7 @@ export struct MessageBubble {
         .width(1)
         .vertical(true)
         .height(14)
-        .color($r('app.color.divider'))
+        .color(getAppUiState().themePrimaryLight)
         .margin(this.isManuscriptMode ? 0 : { left: 3, right: 3 })
     }
 
@@ -2371,7 +2371,7 @@ export struct MessageBubble {
       .width(1)
       .vertical(true)
       .height(14)
-      .color($r('app.color.divider'))
+      .color(getAppUiState().themePrimaryLight)
       .margin(this.isManuscriptMode ? 0 : { left: 3, right: 3 })
 
     Button({ type: ButtonType.Circle, stateEffect: this.isManuscriptMode }) {

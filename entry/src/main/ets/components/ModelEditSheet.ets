@@ -523,7 +523,7 @@ export struct ModelEditSheet {
       this.HeaderBar()
 
       Divider()
-        .color($r('app.color.divider'))
+        .color(getAppUiState().themePrimaryLight)
         .margin({ left: 20, right: 20 })
 
       Scroll() {
@@ -532,32 +532,32 @@ export struct ModelEditSheet {
           this.ModelIdSection()
 
           Divider()
-            .color($r('app.color.divider'))
+            .color(getAppUiState().themePrimaryLight)
             .margin({ left: 16, right: 16 })
 
           this.ModelNameSection()
 
           Divider()
-            .color($r('app.color.divider'))
+            .color(getAppUiState().themePrimaryLight)
             .margin({ left: 16, right: 16 })
 
           this.ContextLengthSection()
 
           Divider()
-            .color($r('app.color.divider'))
+            .color(getAppUiState().themePrimaryLight)
             .margin({ left: 16, right: 16 })
 
           // 能力标签区
           this.CapabilityChipsSection()
 
           Divider()
-            .color($r('app.color.divider'))
+            .color(getAppUiState().themePrimaryLight)
             .margin({ left: 16, right: 16 })
 
           this.BillingSection()
 
           Divider()
-            .color($r('app.color.divider'))
+            .color(getAppUiState().themePrimaryLight)
             .margin({ left: 16, right: 16 })
 
           // 可折叠高级参数区
@@ -778,7 +778,7 @@ export struct ModelEditSheet {
 
       if (this.billingEnabled) {
         Divider()
-          .color($r('app.color.divider'))
+          .color(getAppUiState().themePrimaryLight)
 
         Row() {
           Text(pickLocalizedText('币种', 'Currency'))
@@ -1219,7 +1219,7 @@ export struct ModelEditSheet {
       // 展开内容
       if (this.isAdvancedExpanded) {
         Divider()
-          .color($r('app.color.divider'))
+          .color(getAppUiState().themePrimaryLight)
 
         Column() {
           Column({ space: 8 }) {
@@ -1254,7 +1254,7 @@ export struct ModelEditSheet {
           .padding({ top: 12, bottom: 12 })
 
           Divider()
-            .color($r('app.color.divider'))
+            .color(getAppUiState().themePrimaryLight)
 
           // 温度
           Column() {
@@ -1306,7 +1306,7 @@ export struct ModelEditSheet {
           .padding({ top: 12, bottom: 12 })
 
           Divider()
-            .color($r('app.color.divider'))
+            .color(getAppUiState().themePrimaryLight)
 
           // Top P
           Column() {
@@ -1358,7 +1358,7 @@ export struct ModelEditSheet {
           .padding({ top: 12, bottom: 12 })
 
           Divider()
-            .color($r('app.color.divider'))
+            .color(getAppUiState().themePrimaryLight)
 
           // 存在惩罚
           Column() {
@@ -1410,7 +1410,7 @@ export struct ModelEditSheet {
           .padding({ top: 12, bottom: 12 })
 
           Divider()
-            .color($r('app.color.divider'))
+            .color(getAppUiState().themePrimaryLight)
 
           // 频率惩罚
           Column() {
@@ -1462,7 +1462,7 @@ export struct ModelEditSheet {
           .padding({ top: 12, bottom: 12 })
 
           Divider()
-            .color($r('app.color.divider'))
+            .color(getAppUiState().themePrimaryLight)
 
           // 重置按钮
           Button('重置为默认值')
@@ -1470,7 +1470,7 @@ export struct ModelEditSheet {
             .fontColor($r('app.color.text_primary'))
             .backgroundColor(Color.Transparent)
             .borderRadius(12)
-            .border({ width: 0.5, color: $r('app.color.divider') })
+            .border({ width: 0.5, color: getAppUiState().themePrimaryLight })
             .height(44)
             .width('100%')
             .margin({ top: 12 })

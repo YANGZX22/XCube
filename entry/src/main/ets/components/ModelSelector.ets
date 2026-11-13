@@ -308,7 +308,7 @@ export struct ModelSelectorContent {
               (this.showFavoritesOnly ? this.favoriteFilterActiveBackground : getAppUiState().themeSurface)))
             .border({
               width: this.immersiveMaterial ? 0 : (this.showFavoritesOnly ? 1 : 0.5),
-              color: this.showFavoritesOnly ? this.favoriteAccentColor : $r('app.color.divider')
+              color: this.showFavoritesOnly ? this.favoriteAccentColor : getAppUiState().themePrimaryLight
             })
             .onClick(() => {
               this.showFavoritesOnly = !this.showFavoritesOnly
@@ -580,7 +580,7 @@ export struct ModelSelectorContent {
 
       if (row.groupPosition === ModelRowGroupPosition.FIRST || row.groupPosition === ModelRowGroupPosition.MIDDLE) {
         Divider()
-          .color($r('app.color.divider'))
+          .color(getAppUiState().themePrimaryLight)
           .margin({ left: 60, right: 12 })
       }
     }

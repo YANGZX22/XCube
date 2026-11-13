@@ -185,7 +185,7 @@ export struct ChatToolPickerSheetContent {
   }
 
   private getCardBorderColor(): ResourceColor {
-    return $r('app.color.divider')
+    return getAppUiState().themePrimaryLight
   }
 
   private getBuiltinDescription(tool: ToolConfig): string {
@@ -346,7 +346,7 @@ export struct ChatToolPickerSheetContent {
             .backgroundColor(withColorAlpha(this.themeSurface, 'CC'))
             .border({
               width: 0.5,
-              color: $r('app.color.divider')
+              color: getAppUiState().themePrimaryLight
             })
             .shadow({ radius: 12, color: 'rgba(15, 23, 42, 0.04)', offsetX: 0, offsetY: 4 })
             .alignItems(HorizontalAlign.Center)
@@ -460,7 +460,7 @@ export struct ChatToolPickerSheetContent {
                         if (index < category.tools.length - 1) {
                           Divider()
                             .strokeWidth(0.5)
-                            .color($r('app.color.divider'))
+                            .color(getAppUiState().themePrimaryLight)
                             .margin({ left: 64, right: 12 })
                         }
                       }, (tool: ToolConfig) => tool.id)

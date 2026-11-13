@@ -48,7 +48,7 @@ export struct ShareMessageCard {
 
   // 获取分割线颜色
   private getDividerColor(): ResourceColor {
-    return $r('app.color.divider')
+    return getAppUiState().themePrimaryLight
   }
 
   // 获取AI头像背景色
@@ -350,7 +350,7 @@ export struct ShareMessageCard {
               .layoutWeight(1)
           }
           .padding(8)
-          .backgroundColor(isUserMessage ? 'rgba(255,255,255,0.15)' : $r('app.color.divider'))
+          .backgroundColor(isUserMessage ? 'rgba(255,255,255,0.15)' : getAppUiState().themePrimaryLight)
           .borderRadius(8)
           .margin({ bottom: 4 })
         }

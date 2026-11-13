@@ -3,6 +3,7 @@
  * 用于在消息列表中显示日期分隔
  */
 
+import { getAppUiState } from '../state/AppUiState'
 import { formatDateDivider } from '../utils/DateFormatUtils'
 
 @ComponentV2
@@ -19,7 +20,7 @@ export struct DateDivider {
         .padding({ left: 10, right: 10, top: 3, bottom: 3 })
         .backgroundColor(Color.Transparent)
         .borderRadius(8)
-        .border({ width: 0.5, color: $r('app.color.divider') })
+        .border({ width: 0.5, color: getAppUiState().themePrimaryLight })
     }
     .width('100%')
     .justifyContent(FlexAlign.Center)

@@ -58,7 +58,7 @@ struct UsageMetricCard {
   @Param value: number = 0
   @Param unit: ResourceStr = ''
   @Param primaryColor: string = '#7A68F0'
-  @Param primaryLightColor: string = '#E6E1FD'
+  @Param primaryLightColor: string | undefined = undefined
   @Param surfaceColor: string = '#FDFCFF'
 
   build() {
@@ -72,7 +72,7 @@ struct UsageMetricCard {
         .width(28)
         .height(28)
         .borderRadius(9)
-        .backgroundColor(this.primaryLightColor)
+        .backgroundColor(this.primaryLightColor ?? getAppUiState().themePrimaryLight)
         .justifyContent(FlexAlign.Center)
         .alignItems(HorizontalAlign.Center)
 
@@ -104,7 +104,7 @@ struct UsageMetricCard {
     .padding(14)
     .backgroundColor(this.surfaceColor)
     .borderRadius(16)
-    .border({ width: 1, color: this.primaryLightColor })
+    .border({ width: 1, color: this.primaryLightColor ?? getAppUiState().themePrimaryLight })
     .visualEffect(buildPointLightBorderEffect())
   }
 }

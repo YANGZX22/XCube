@@ -2122,7 +2122,7 @@ export struct ToolsCenterPanel {
                 .height(46)
                 .borderRadius(14)
                 .backgroundColor(getAppUiState().themeBackground)
-                .border({ width: 1, color: $r('app.color.divider') })
+                .border({ width: 1, color: getAppUiState().themePrimaryLight })
                 .padding({ left: 14, right: 14 })
             }
             .width('100%')
@@ -2143,7 +2143,7 @@ export struct ToolsCenterPanel {
                 .height(46)
                 .borderRadius(14)
                 .backgroundColor(getAppUiState().themeBackground)
-                .border({ width: 1, color: $r('app.color.divider') })
+                .border({ width: 1, color: getAppUiState().themePrimaryLight })
                 .padding({ left: 14, right: 14 })
 
               Text(pickLocalizedText('请输入完整的 HTTP/HTTPS 地址。', 'Enter the full HTTP or HTTPS URL.'))
@@ -2196,7 +2196,7 @@ export struct ToolsCenterPanel {
                 .height(46)
                 .backgroundColor(getAppUiState().themeBackground)
                 .borderRadius(14)
-                .border({ width: 1, color: $r('app.color.divider') })
+                .border({ width: 1, color: getAppUiState().themePrimaryLight })
                 .padding({ left: 10, right: 10 })
             }
             .width('100%')
@@ -2223,7 +2223,7 @@ export struct ToolsCenterPanel {
                   .height(46)
                   .borderRadius(14)
                   .backgroundColor(getAppUiState().themeBackground)
-                  .border({ width: 1, color: $r('app.color.divider') })
+                  .border({ width: 1, color: getAppUiState().themePrimaryLight })
                   .padding({ left: 14, right: 14 })
 
                 Text(pickLocalizedText(
@@ -2382,7 +2382,7 @@ export struct ToolsCenterPanel {
                       .height(44)
                       .borderRadius(14)
                       .backgroundColor(getAppUiState().themeBackground)
-                      .border({ width: 1, color: $r('app.color.divider') })
+                      .border({ width: 1, color: getAppUiState().themePrimaryLight })
                       .padding({ left: 14, right: 14 })
                   }
                   .width('100%')
@@ -2408,7 +2408,7 @@ export struct ToolsCenterPanel {
                         .height(44)
                         .borderRadius(14)
                         .backgroundColor(getAppUiState().themeBackground)
-                        .border({ width: 1, color: $r('app.color.divider') })
+                        .border({ width: 1, color: getAppUiState().themePrimaryLight })
                         .padding({ left: 14, right: 14 })
                     } else {
                       TextInput({ text: entry.value, placeholder: pickLocalizedText(
@@ -2423,7 +2423,7 @@ export struct ToolsCenterPanel {
                         .height(44)
                         .borderRadius(14)
                         .backgroundColor(getAppUiState().themeBackground)
-                        .border({ width: 1, color: $r('app.color.divider') })
+                        .border({ width: 1, color: getAppUiState().themePrimaryLight })
                         .padding({ left: 14, right: 14 })
                     }
                   }
@@ -2433,7 +2433,7 @@ export struct ToolsCenterPanel {
                 .padding(14)
                 .borderRadius(18)
                 .backgroundColor(getAppUiState().themeBackground)
-                .border({ width: 1, color: $r('app.color.divider') })
+                .border({ width: 1, color: getAppUiState().themePrimaryLight })
               }, (entry: McpHeaderEntry) => entry.id)
             }
           }
@@ -2585,7 +2585,7 @@ export struct ToolsCenterPanel {
                 .height(46)
                 .borderRadius(14)
                 .backgroundColor(getAppUiState().themeBackground)
-                .border({ width: 1, color: $r('app.color.divider') })
+                .border({ width: 1, color: getAppUiState().themePrimaryLight })
                 .padding({ left: 14, right: 14 })
             }
             .width('100%')
@@ -2609,7 +2609,7 @@ export struct ToolsCenterPanel {
                 .height(46)
                 .borderRadius(14)
                 .backgroundColor(getAppUiState().themeBackground)
-                .border({ width: 1, color: $r('app.color.divider') })
+                .border({ width: 1, color: getAppUiState().themePrimaryLight })
                 .padding({ left: 14, right: 14 })
             }
             .width('100%')
@@ -2639,7 +2639,7 @@ export struct ToolsCenterPanel {
               .placeholderColor($r('app.color.text_tertiary'))
               .backgroundColor(getAppUiState().themeBackground)
               .borderRadius(14)
-              .border({ width: 1, color: $r('app.color.divider') })
+              .border({ width: 1, color: getAppUiState().themePrimaryLight })
               .padding({ left: 14, right: 14, top: 12, bottom: 12 })
               .width('100%')
               .height(260)
@@ -3286,7 +3286,7 @@ struct RetrievalCallLimitCardItem {
 
       Divider()
         .strokeWidth(0.5)
-        .color($r('app.color.divider'))
+        .color(getAppUiState().themePrimaryLight)
 
       RetrievalCallLimitSlider({
         label: pickLocalizedText('知识库检索', 'Knowledge search'),

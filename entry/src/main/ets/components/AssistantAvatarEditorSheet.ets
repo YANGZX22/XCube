@@ -505,7 +505,7 @@ export struct AssistantAvatarEditorSheet {
           .width(40)
           .height(40)
           .borderRadius(10)
-          .border({ width: 1, color: $r('app.color.divider') })
+          .border({ width: 1, color: getAppUiState().themePrimaryLight })
           .justifyContent(FlexAlign.Center)
         } else {
           Column()
@@ -513,7 +513,7 @@ export struct AssistantAvatarEditorSheet {
             .height(40)
             .backgroundColor(this.tempAvatarColor)
             .borderRadius(10)
-            .border({ width: 1, color: $r('app.color.divider') })
+            .border({ width: 1, color: getAppUiState().themePrimaryLight })
         }
 
         Text(this.tempAvatarColor === TRANSPARENT_BG_COLOR ? $r('app.string.icon_transparent_hint') :
@@ -579,7 +579,7 @@ export struct AssistantAvatarEditorSheet {
         .borderRadius(10)
         .border({
           width: this.tempAvatarColor === TRANSPARENT_BG_COLOR ? 3 : 1,
-          color: this.tempAvatarColor === TRANSPARENT_BG_COLOR ? this.themePrimary : $r('app.color.divider')
+          color: this.tempAvatarColor === TRANSPARENT_BG_COLOR ? this.themePrimary : getAppUiState().themePrimaryLight
         })
         .justifyContent(FlexAlign.Center)
         .onClick(() => {
@@ -595,7 +595,7 @@ export struct AssistantAvatarEditorSheet {
       .width('100%')
       .padding({ bottom: 8 })
 
-      Divider().color($r('app.color.divider'))
+      Divider().color(getAppUiState().themePrimaryLight)
 
       Scroll() {
         Grid() {
@@ -608,7 +608,7 @@ export struct AssistantAvatarEditorSheet {
                 .borderRadius(10)
                 .border({
                   width: this.tempAvatarColor === color ? 3 : 1,
-                  color: this.tempAvatarColor === color ? this.themePrimary : $r('app.color.divider')
+                  color: this.tempAvatarColor === color ? this.themePrimary : getAppUiState().themePrimaryLight
                 })
                 .onClick(() => {
                   this.tempAvatarColor = color

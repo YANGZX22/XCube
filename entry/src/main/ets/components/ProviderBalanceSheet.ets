@@ -110,7 +110,7 @@ export struct ProviderBalanceSheet {
         customImagePath: item.providerCustomImagePath,
         iconSize: 36,
         radius: 10,
-        bgColor: $r('app.color.divider'),
+        bgColor: getAppUiState().themePrimaryLight,
         brandColor: item.providerBrandColor,
         fallbackSymbol: $r('sys.symbol.cloud'),
         fallbackColor: $r('app.color.text_secondary')

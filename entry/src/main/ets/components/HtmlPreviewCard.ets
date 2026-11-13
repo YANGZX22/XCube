@@ -343,7 +343,7 @@ export struct HtmlPreviewCard {
           .height(28)
           .borderRadius(14)
           .justifyContent(FlexAlign.Center)
-          .backgroundColor(this.copyBtnPressed ? $r('app.color.divider') : Color.Transparent)
+          .backgroundColor(this.copyBtnPressed ? getAppUiState().themePrimaryLight : Color.Transparent)
           .scale({ x: this.copyBtnPressed ? 0.9 : 1, y: this.copyBtnPressed ? 0.9 : 1 })
           .animation({ duration: 150, curve: Curve.EaseOut })
           .onTouch((event: TouchEvent) => {
@@ -370,7 +370,7 @@ export struct HtmlPreviewCard {
           .height(28)
           .borderRadius(14)
           .justifyContent(FlexAlign.Center)
-          .backgroundColor(this.fullScreenBtnPressed ? $r('app.color.divider') : Color.Transparent)
+          .backgroundColor(this.fullScreenBtnPressed ? getAppUiState().themePrimaryLight : Color.Transparent)
           .scale({ x: this.fullScreenBtnPressed ? 0.9 : 1, y: this.fullScreenBtnPressed ? 0.9 : 1 })
           .animation({ duration: 150, curve: Curve.EaseOut })
           .onTouch((event: TouchEvent) => {
@@ -389,7 +389,7 @@ export struct HtmlPreviewCard {
       .padding({ left: 8, right: 8, top: 6, bottom: 6 })
 
       Divider()
-        .color($r('app.color.divider'))
+        .color(getAppUiState().themePrimaryLight)
 
       // 代码视图（条件渲染，轻量组件无销毁问题）
       if (this.activeTab === 0) {
@@ -424,7 +424,7 @@ export struct HtmlPreviewCard {
     .width('100%')
     .backgroundColor($r('app.color.surface'))
     .borderRadius(12)
-    .border({ width: 1, color: $r('app.color.divider') })
+    .border({ width: 1, color: getAppUiState().themePrimaryLight })
     .clip(true)
     .margin({ top: 8, bottom: 4 })
       .bindSheet($$this.showFullScreen, this.FullScreenBuilder(), {

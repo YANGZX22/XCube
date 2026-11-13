@@ -1,3 +1,4 @@
+import { getAppUiState } from '../state/AppUiState'
 import { refreshAssistantAvatar } from '../services/AssistantAvatarCache'
 import { fileIo, fileUri } from '@kit.CoreFileKit'
 import { util } from '@kit.ArkTS'
@@ -281,7 +282,7 @@ export struct AssistantAvatarView {
 
   private getAvatarBorderColor(): ResourceColor {
     return this.avatarBorderWidth > 0 ? this.avatarBorderColor :
-      (this.isTransparentTextAvatar() ? $r('app.color.divider') : Color.Transparent)
+      (this.isTransparentTextAvatar() ? getAppUiState().themePrimaryLight : Color.Transparent)
   }
 
   @Builder

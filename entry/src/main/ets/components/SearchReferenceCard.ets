@@ -128,7 +128,7 @@ export struct SearchReferenceCard {
         Row()
           .width(1)
           .height(10)
-          .backgroundColor($r('app.color.divider'))
+          .backgroundColor(getAppUiState().themePrimaryLight)
           .margin({ left: 8, right: 8 })
 
         // 引用数量

@@ -33,14 +33,14 @@ export struct ImportOptionsPanel {
             this.conflictStrategy === 'skip',
             () => { this.onConflictStrategyChange('skip') }
           )
-          Divider().color($r('app.color.divider'))
+          Divider().color(getAppUiState().themePrimaryLight)
           this.RadioRow(
             $r('app.string.import_strategy_overwrite'),
             'overwrite',
             this.conflictStrategy === 'overwrite',
             () => { this.onConflictStrategyChange('overwrite') }
           )
-          Divider().color($r('app.color.divider'))
+          Divider().color(getAppUiState().themePrimaryLight)
           this.RadioRow(
             $r('app.string.import_strategy_ask'),
             'ask',
@@ -61,7 +61,7 @@ export struct ImportOptionsPanel {
           this.importProviders,
           (value: boolean) => { this.onImportProvidersChange(value) }
         )
-        Divider().color($r('app.color.divider'))
+        Divider().color(getAppUiState().themePrimaryLight)
         this.OptionRow(
           $r('app.string.import_preferences'),
           this.importPreferences,

@@ -48,7 +48,7 @@ export struct ShareDocumentCard {
       .padding({ left: 16, right: 16, top: 16, bottom: 12 })
 
       Divider()
-        .color($r('app.color.divider'))
+        .color(getAppUiState().themePrimaryLight)
         .margin({ left: 16, right: 16 })
 
       Column({ space: 14 }) {

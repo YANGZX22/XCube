@@ -609,7 +609,7 @@ export struct EmailKnowledgeCategory {
 
       if (!isLast) {
         Divider()
-          .color($r('app.color.divider'))
+          .color(getAppUiState().themePrimaryLight)
           .margin({ left: 50, right: 12 })
       }
     }
@@ -982,7 +982,7 @@ export struct EmailKnowledgeCategory {
               .width('100%')
               .padding({ left: 12, right: 12, top: 11, bottom: 10 })
 
-              Divider().color($r('app.color.divider')).margin({ left: 12, right: 12 })
+              Divider().color(getAppUiState().themePrimaryLight).margin({ left: 12, right: 12 })
 
               Column({ space: 6 }) {
                 Text(pickLocalizedText('邮件正文', 'Message'))
@@ -1027,7 +1027,7 @@ export struct EmailKnowledgeCategory {
                     .width('100%')
                     .padding({ left: 12, right: 12, top: 9, bottom: 9 })
                     if (index < this.previewMessage.attachments.length - 1) {
-                      Divider().color($r('app.color.divider')).margin({ left: 40, right: 12 })
+                      Divider().color(getAppUiState().themePrimaryLight).margin({ left: 40, right: 12 })
                     }
                   }
                   .width('100%')

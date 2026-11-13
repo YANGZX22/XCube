@@ -4,6 +4,7 @@
  * 支持三种图标类型：SVG、文字、自定义图片
  */
 
+import { getAppUiState } from '../state/AppUiState'
 import { buildIconResourcePath } from '../utils/ProviderIconUtils'
 import { TRANSPARENT_BG_COLOR } from '../utils/IconGeneratorUtils'
 import { IconDownloadCache } from '../services/IconDownloadCache'
@@ -141,7 +142,7 @@ export struct ProviderIcon {
   private getBackgroundColor(): ResourceColor {
     if (this.iconType === 'text' || this.shouldFallbackToText()) {
       if (this.isDisabledNeutralMode()) {
-        return $r('app.color.divider')
+        return getAppUiState().themePrimaryLight
       }
       if (this.shouldUseTransparentTextLayout()) {
         return Color.Transparent
@@ -346,7 +347,7 @@ export struct ProviderIconSmall {
         .width(this.iconSize)
         .height(this.iconSize)
         .borderRadius(this.iconSize * 0.25)
-        .backgroundColor(this.isDisabledNeutralMode() ? $r('app.color.divider') : this.textIconBgColor)
+        .backgroundColor(this.isDisabledNeutralMode() ? getAppUiState().themePrimaryLight : this.textIconBgColor)
         .justifyContent(FlexAlign.Center)
         .alignItems(HorizontalAlign.Center)
       }

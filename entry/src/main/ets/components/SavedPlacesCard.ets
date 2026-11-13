@@ -908,7 +908,7 @@ export struct SavedPlacesCard {
               if (index < this.places.length - 1) {
                 Divider()
                   .strokeWidth(0.5)
-                  .color($r('app.color.divider'))
+                  .color(getAppUiState().themePrimaryLight)
               }
             }, (place: SavedPlace) => place.id)
           }

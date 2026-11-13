@@ -43,7 +43,7 @@ export struct AttachmentPicker {
           .width(36)
           .height(4)
           .borderRadius(2)
-          .backgroundColor($r('app.color.divider'))
+          .backgroundColor(getAppUiState().themePrimaryLight)
           .margin({ top: 8, bottom: 16 })
       }
 

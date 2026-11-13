@@ -316,7 +316,7 @@ export struct ToolCallCard {
               Row()
                 .width(1)
                 .height(10)
-                .backgroundColor($r('app.color.divider'))
+                .backgroundColor(getAppUiState().themePrimaryLight)
                 .margin({ right: 3 })
 
               Text(pickLocalizedText('预览', 'Preview'))

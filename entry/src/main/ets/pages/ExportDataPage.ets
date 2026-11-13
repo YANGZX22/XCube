@@ -342,7 +342,7 @@ struct ExportDataPage {
         Column() {
           this.SessionRow(session)
           if (index < this.sessions.length - 1) {
-            Divider().color($r('app.color.divider')).margin({ left: 52 })
+            Divider().color(getAppUiState().themePrimaryLight).margin({ left: 52 })
           }
         }
       }, (session: ChatSession) => session.id)
@@ -509,7 +509,7 @@ struct ExportDataPage {
     }
     .width('100%')
     .backgroundColor(getAppUiState().themeBackground)
-    .border({ width: { bottom: 1 }, color: $r('app.color.divider') })
+    .border({ width: { bottom: 1 }, color: getAppUiState().themePrimaryLight })
   }
 
   @Builder

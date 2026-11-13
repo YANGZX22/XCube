@@ -469,7 +469,7 @@ struct AssistantManagePage {
     }
     .width('100%')
     .backgroundColor(getAppUiState().themeBackground)
-    .border({ width: { bottom: 1 }, color: $r('app.color.divider') })
+    .border({ width: { bottom: 1 }, color: getAppUiState().themePrimaryLight })
   }
 
   @Builder
@@ -561,7 +561,7 @@ struct AssistantManagePage {
     .borderRadius(16)
     .border({
       width: assistant.id === this.editingAssistantId ? 1.5 : 1,
-      color: assistant.id === this.editingAssistantId ? this.themePrimary : $r('app.color.divider')
+      color: assistant.id === this.editingAssistantId ? this.themePrimary : getAppUiState().themePrimaryLight
     })
     .onClick(() => {
       this.selectAssistant(assistant)
@@ -728,7 +728,7 @@ struct AssistantManagePage {
     .padding(16)
     .backgroundColor(getAppUiState().themeSurface)
     .borderRadius(20)
-    .border({ width: 1, color: $r('app.color.divider') })
+    .border({ width: 1, color: getAppUiState().themePrimaryLight })
   }
 
   @Builder
@@ -827,7 +827,7 @@ struct AssistantManagePage {
     .padding({ left: 8, right: 8 })
     .backgroundColor(getAppUiState().themeBackground)
     .borderRadius(11)
-    .border({ width: 1, color: $r('app.color.divider') })
+    .border({ width: 1, color: getAppUiState().themePrimaryLight })
   }
 
   @Builder

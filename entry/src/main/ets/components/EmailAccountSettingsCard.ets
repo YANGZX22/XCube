@@ -377,7 +377,7 @@ export struct EmailAccountSettingsCard {
             ? Color.White : $r('app.color.text_secondary'))
           .border({ width: 1,
             color: this.formAuthenticationMethod === EmailAuthenticationMethod.PASSWORD
-              ? this.themePrimary : $r('app.color.divider') })
+              ? this.themePrimary : getAppUiState().themePrimaryLight })
           .onClick(() => this.selectAuthenticationMethod(EmailAuthenticationMethod.PASSWORD))
         Button('Microsoft OAuth2')
           .type(ButtonType.Capsule).height(34).fontSize(12)
@@ -387,7 +387,7 @@ export struct EmailAccountSettingsCard {
             ? Color.White : $r('app.color.text_secondary'))
           .border({ width: 1,
             color: this.formAuthenticationMethod === EmailAuthenticationMethod.MICROSOFT_OAUTH2
-              ? this.themePrimary : $r('app.color.divider') })
+              ? this.themePrimary : getAppUiState().themePrimaryLight })
           .onClick(() => this.selectAuthenticationMethod(EmailAuthenticationMethod.MICROSOFT_OAUTH2))
       }.width('100%')
     }.width('100%').alignItems(HorizontalAlign.Start)
@@ -482,7 +482,7 @@ export struct EmailAccountSettingsCard {
         .fontColor(this.formSmtpSecurity === EmailTransportSecurity.SSL_TLS
           ? Color.White : $r('app.color.text_secondary'))
         .border({ width: 1, color: this.formSmtpSecurity === EmailTransportSecurity.SSL_TLS ? this.themePrimary :
-          $r('app.color.divider') })
+          getAppUiState().themePrimaryLight })
         .onClick(() => this.selectSmtpSecurity(EmailTransportSecurity.SSL_TLS))
       Button('STARTTLS')
         .type(ButtonType.Capsule).height(34).fontSize(12)
@@ -491,7 +491,7 @@ export struct EmailAccountSettingsCard {
         .fontColor(this.formSmtpSecurity === EmailTransportSecurity.STARTTLS
           ? Color.White : $r('app.color.text_secondary'))
         .border({ width: 1, color: this.formSmtpSecurity === EmailTransportSecurity.STARTTLS ? this.themePrimary :
-          $r('app.color.divider') })
+          getAppUiState().themePrimaryLight })
         .onClick(() => this.selectSmtpSecurity(EmailTransportSecurity.STARTTLS))
     }
     .width('100%')
@@ -507,7 +507,7 @@ export struct EmailAccountSettingsCard {
         .fontColor(this.formImapSecurity === EmailTransportSecurity.SSL_TLS
           ? Color.White : $r('app.color.text_secondary'))
         .border({ width: 1, color: this.formImapSecurity === EmailTransportSecurity.SSL_TLS ? this.themePrimary :
-          $r('app.color.divider') })
+          getAppUiState().themePrimaryLight })
         .onClick(() => this.selectImapSecurity(EmailTransportSecurity.SSL_TLS))
       Button('STARTTLS')
         .type(ButtonType.Capsule).height(34).fontSize(12)
@@ -516,7 +516,7 @@ export struct EmailAccountSettingsCard {
         .fontColor(this.formImapSecurity === EmailTransportSecurity.STARTTLS
           ? Color.White : $r('app.color.text_secondary'))
         .border({ width: 1, color: this.formImapSecurity === EmailTransportSecurity.STARTTLS ? this.themePrimary :
-          $r('app.color.divider') })
+          getAppUiState().themePrimaryLight })
         .onClick(() => this.selectImapSecurity(EmailTransportSecurity.STARTTLS))
     }
     .width('100%')

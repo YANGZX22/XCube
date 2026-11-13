@@ -172,7 +172,7 @@ struct DefaultModelPage {
     }
     .width('100%')
     .backgroundColor(getAppUiState().themeBackground)
-    .border({ width: { bottom: 1 }, color: $r('app.color.divider') })
+    .border({ width: { bottom: 1 }, color: getAppUiState().themePrimaryLight })
   }
 
   @Builder
@@ -713,7 +713,7 @@ struct ModelConfigCard {
       })
 
       if (this.showPromptEdit) {
-        Divider().color($r('app.color.divider')).margin({ left: 16 })
+        Divider().color(getAppUiState().themePrimaryLight).margin({ left: 16 })
 
         Row() {
           Text($r('app.string.default_model_prompt_template'))

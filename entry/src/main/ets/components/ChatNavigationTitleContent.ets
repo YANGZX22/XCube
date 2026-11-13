@@ -70,9 +70,6 @@ export struct ChatNavigationTitleContent {
   private get themePrimary(): string {
     return getAppUiState().themePrimary
   }
-  private get themePrimaryLight(): string {
-    return getAppUiState().themePrimaryLight
-  }
   private get isManuscriptMode(): boolean {
     return getAppUiState().visualEffectsMode === VisualEffectsMode.MANUSCRIPT
   }
@@ -206,7 +203,7 @@ export struct ChatNavigationTitleContent {
       .height(22)
       .borderRadius(6)
       .backgroundColor($r('app.color.model_icon_bg'))
-      .border({ width: 1, color: this.themePrimaryLight })
+      .border({ width: 1, color: getAppUiState().themePrimaryLight })
       .justifyContent(FlexAlign.Center)
       .alignItems(HorizontalAlign.Center)
     } else if (this.hasProviderIdentity()) {
@@ -230,7 +227,7 @@ export struct ChatNavigationTitleContent {
       .height(22)
       .borderRadius(6)
       .backgroundColor($r('app.color.model_icon_bg'))
-      .border({ width: 1, color: this.themePrimaryLight })
+      .border({ width: 1, color: getAppUiState().themePrimaryLight })
       .justifyContent(FlexAlign.Center)
       .alignItems(HorizontalAlign.Center)
     }

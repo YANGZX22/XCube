@@ -535,7 +535,7 @@ struct WebDAVSyncPage {
       .width('100%')
       .padding(14)
 
-      Divider().color($r('app.color.divider'))
+      Divider().color(getAppUiState().themePrimaryLight)
 
       Row() {
         Text($r('app.string.webdav_remote_file_size'))
@@ -559,7 +559,7 @@ struct WebDAVSyncPage {
       .width('100%')
       .padding(14)
 
-      Divider().color($r('app.color.divider'))
+      Divider().color(getAppUiState().themePrimaryLight)
 
       Stack({ alignContent: Alignment.TopStart }) {
         ImmersiveButtonSurface({
@@ -714,18 +714,18 @@ struct WebDAVSyncPage {
       if (this.preview !== null) {
         Column() {
           this.PreviewInfoRow('会话', `${this.preview!.sessionsCount} 个`)
-          Divider().color($r('app.color.divider'))
+          Divider().color(getAppUiState().themePrimaryLight)
           this.PreviewInfoRow('消息', `${this.preview!.messagesCount} 条`)
-          Divider().color($r('app.color.divider'))
+          Divider().color(getAppUiState().themePrimaryLight)
           this.PreviewInfoRow('附件', `${this.preview!.attachmentsCount} 个`)
-          Divider().color($r('app.color.divider'))
+          Divider().color(getAppUiState().themePrimaryLight)
           this.PreviewInfoRow('供应商', `${this.preview!.providersCount} 个`)
           if (this.preview!.preferencesCount > 0) {
-            Divider().color($r('app.color.divider'))
+            Divider().color(getAppUiState().themePrimaryLight)
             this.PreviewInfoRow('偏好设置', `${this.preview!.preferencesCount} 项`)
           }
           if (this.preview!.conflicts.length > 0) {
-            Divider().color($r('app.color.divider'))
+            Divider().color(getAppUiState().themePrimaryLight)
             Row() {
               Text('⚠️ 冲突')
                 .fontSize(15)
@@ -887,7 +887,7 @@ struct WebDAVSyncPage {
     }
     .width('100%')
     .backgroundColor(getAppUiState().themeBackground)
-    .border({ width: { bottom: 1 }, color: $r('app.color.divider') })
+    .border({ width: { bottom: 1 }, color: getAppUiState().themePrimaryLight })
   }
 
   @Builder

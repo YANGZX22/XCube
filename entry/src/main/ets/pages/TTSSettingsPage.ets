@@ -995,18 +995,18 @@ struct TTSSettingsPage {
       .alignItems(HorizontalAlign.Start)
 
       Divider()
-        .color($r('app.color.divider'))
+        .color(getAppUiState().themePrimaryLight)
 
       Column() {
         this.StabilitySlider()
 
         Divider()
-          .color($r('app.color.divider'))
+          .color(getAppUiState().themePrimaryLight)
 
         this.SimilaritySlider()
 
         Divider()
-          .color($r('app.color.divider'))
+          .color(getAppUiState().themePrimaryLight)
 
         this.SpeedSlider()
       }
@@ -1019,7 +1019,7 @@ struct TTSSettingsPage {
       .shadow(getBlurBottomShadow())
 
       Divider()
-        .color($r('app.color.divider'))
+        .color(getAppUiState().themePrimaryLight)
 
       Text($r('app.string.tts_output_format_note'))
         .fontSize(12)
@@ -1340,7 +1340,7 @@ struct TTSSettingsPage {
     }
     .width('100%')
     .backgroundColor(getAppUiState().themeBackground)
-    .border({ width: { bottom: 1 }, color: $r('app.color.divider') })
+    .border({ width: { bottom: 1 }, color: getAppUiState().themePrimaryLight })
   }
 
   @Builder

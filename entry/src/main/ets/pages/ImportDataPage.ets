@@ -338,20 +338,20 @@ struct ImportDataPage {
 
               Column() {
                 this.InfoRow('会话', `${this.preview?.sessionsCount || 0} 个`)
-                Divider().color($r('app.color.divider'))
+                Divider().color(getAppUiState().themePrimaryLight)
                 this.InfoRow('消息', `${this.preview?.messagesCount || 0} 条`)
-                Divider().color($r('app.color.divider'))
+                Divider().color(getAppUiState().themePrimaryLight)
                 this.InfoRow('附件', `${this.preview?.attachmentsCount || 0} 个`)
-                Divider().color($r('app.color.divider'))
+                Divider().color(getAppUiState().themePrimaryLight)
                 this.InfoRow('供应商', `${this.preview?.providersCount || 0} 个`)
 
                 if (this.preview && this.preview.preferencesCount > 0) {
-                  Divider().color($r('app.color.divider'))
+                  Divider().color(getAppUiState().themePrimaryLight)
                   this.InfoRow('偏好设置', `${this.preview.preferencesCount} 项`)
                 }
 
                 if (this.preview && this.preview.conflicts.length > 0) {
-                  Divider().color($r('app.color.divider'))
+                  Divider().color(getAppUiState().themePrimaryLight)
                   Row() {
                     Text('⚠️ 冲突')
                       .fontSize(16)
@@ -458,7 +458,7 @@ struct ImportDataPage {
     }
     .width('100%')
     .backgroundColor(getAppUiState().themeBackground)
-    .border({ width: { bottom: 1 }, color: $r('app.color.divider') })
+    .border({ width: { bottom: 1 }, color: getAppUiState().themePrimaryLight })
   }
 
   @Builder
