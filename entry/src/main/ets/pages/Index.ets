@@ -154,7 +154,7 @@ struct Index {
   private static readonly COMPACT_TABS_BAR_HEIGHT: number = 56
   private static readonly ASSISTANT_SWIPE_BUTTON_SIZE: number = 56
   private static readonly TAB_TITLE_BAR_HEIGHT: number = 56
-  private static readonly TAB_TITLE_FONT_SIZE: number = 18
+  private static readonly TAB_TITLE_FONT_SIZE: number = 22
   private static readonly TAB_TITLE_VERTICAL_OFFSET: number = -2
   private static readonly TAB_CONTENT_HORIZONTAL_PADDING: number = 16
   private static readonly TAB_TITLE_BAR_HORIZONTAL_PADDING: number = 16
@@ -2155,15 +2155,22 @@ struct Index {
       `${this.currentAssistantColor}:${this.assistantAvatarRenderTick}`
   }
 
+  private getTabTitleHorizontalPadding(): number {
+    return this.isManuscriptMode() ? Index.TAB_TITLE_CONTENT_HORIZONTAL_PADDING :
+      Index.TAB_TITLE_BAR_HORIZONTAL_PADDING
+  }
+
   private getAssistantSwitchMaxWidth(): number {
     if (this.windowWidthVp <= 0) {
-      return this.isManuscriptMode() ? 188 : 260
+      return this.isManuscriptMode() ? 188 : 260 -
+        (this.getTabTitleHorizontalPadding() - Index.TAB_TITLE_CONTENT_HORIZONTAL_PADDING)
     }
     if (this.isManuscriptMode()) {
       const manuscriptActionWidth = this.isMultiSelectMode ? 44 : 132
       return Math.max(112, this.windowWidthVp - manuscriptActionWidth - 56)
     }
-    return Math.max(140, this.windowWidthVp - 104)
+    return Math.max(140, this.windowWidthVp - 104 -
+      (this.getTabTitleHorizontalPadding() - Index.TAB_TITLE_CONTENT_HORIZONTAL_PADDING))
   }
 
   private getAssistantSwitchNameMaxWidth(): number {
@@ -3770,8 +3777,8 @@ struct Index {
         .width('100%')
         .height(Index.TAB_TITLE_BAR_HEIGHT)
         .padding({
-          left: Index.TAB_TITLE_CONTENT_HORIZONTAL_PADDING,
-          right: Index.TAB_TITLE_CONTENT_HORIZONTAL_PADDING
+          left: this.getTabTitleHorizontalPadding(),
+          right: this.getTabTitleHorizontalPadding()
         })
         .alignItems(VerticalAlign.Center)
         .translate({ y: Index.TAB_TITLE_VERTICAL_OFFSET })
@@ -3781,13 +3788,16 @@ struct Index {
           .fontSize(Index.TAB_TITLE_FONT_SIZE)
           .fontWeight(FontWeight.Bold)
           .fontColor($r('app.color.text_primary'))
+          .textAlign(TextAlign.Start)
+          .maxLines(1)
+          .textOverflow({ overflow: TextOverflow.Ellipsis })
           .layoutWeight(1)
       }
       .width('100%')
       .height(Index.TAB_TITLE_BAR_HEIGHT)
       .padding({
-        left: Index.TAB_TITLE_CONTENT_HORIZONTAL_PADDING,
-        right: Index.TAB_TITLE_CONTENT_HORIZONTAL_PADDING
+        left: this.getTabTitleHorizontalPadding(),
+        right: this.getTabTitleHorizontalPadding()
       })
       .alignItems(VerticalAlign.Center)
       .translate({ y: Index.TAB_TITLE_VERTICAL_OFFSET })
@@ -4000,6 +4010,9 @@ struct Index {
           .fontSize(Index.TAB_TITLE_FONT_SIZE)
           .fontWeight(FontWeight.Bold)
           .fontColor($r('app.color.text_primary'))
+          .textAlign(TextAlign.Start)
+          .maxLines(1)
+          .textOverflow({ overflow: TextOverflow.Ellipsis })
           .layoutWeight(1)
 
         Row({ space: 8 }) {
@@ -4011,8 +4024,8 @@ struct Index {
       .width('100%')
       .height(Index.TAB_TITLE_BAR_HEIGHT)
       .padding({
-        left: Index.TAB_TITLE_CONTENT_HORIZONTAL_PADDING,
-        right: Index.TAB_TITLE_CONTENT_HORIZONTAL_PADDING
+        left: this.getTabTitleHorizontalPadding(),
+        right: this.getTabTitleHorizontalPadding()
       })
       .alignItems(VerticalAlign.Center)
       .translate({ y: Index.TAB_TITLE_VERTICAL_OFFSET })
@@ -5269,7 +5282,7 @@ struct Index {
 
           Text(this.getCurrentAssistantName())
             .fontFamily(this.isManuscriptMode() ? MANUSCRIPT_HEADING_FONT : '')
-            .fontSize(Index.TAB_TITLE_FONT_SIZE)
+            .fontSize(this.isManuscriptMode() ? 18 : Index.TAB_TITLE_FONT_SIZE)
             .fontWeight(this.isManuscriptMode() ? 600 : FontWeight.Bold)
             .fontColor(this.isManuscriptMode() ? this.themePrimary : $r('app.color.text_primary'))
             .maxLines(1)
@@ -5579,14 +5592,14 @@ struct Index {
       .width('100%')
       .height(Index.TAB_TITLE_BAR_HEIGHT)
       .padding({
-        left: Index.TAB_TITLE_CONTENT_HORIZONTAL_PADDING,
-        right: Index.TAB_TITLE_CONTENT_HORIZONTAL_PADDING
+        left: this.getTabTitleHorizontalPadding(),
+        right: this.getTabTitleHorizontalPadding()
       })
       .alignItems(VerticalAlign.Center)
     } else {
       Row() {
         Text($r('app.string.select_conversations'))
-          .fontSize(Index.TAB_TITLE_FONT_SIZE)
+          .fontSize(this.isManuscriptMode() ? 18 : Index.TAB_TITLE_FONT_SIZE)
           .fontWeight(FontWeight.Bold)
           .fontColor($r('app.color.text_primary'))
 
@@ -5599,8 +5612,8 @@ struct Index {
       .width('100%')
       .height(Index.TAB_TITLE_BAR_HEIGHT)
       .padding({
-        left: Index.TAB_TITLE_CONTENT_HORIZONTAL_PADDING,
-        right: Index.TAB_TITLE_CONTENT_HORIZONTAL_PADDING
+        left: this.getTabTitleHorizontalPadding(),
+        right: this.getTabTitleHorizontalPadding()
       })
       .alignItems(VerticalAlign.Center)
     }
@@ -5986,13 +5999,16 @@ struct Index {
           .fontSize(Index.TAB_TITLE_FONT_SIZE)
           .fontWeight(FontWeight.Bold)
           .fontColor($r('app.color.text_primary'))
+          .textAlign(TextAlign.Start)
+          .maxLines(1)
+          .textOverflow({ overflow: TextOverflow.Ellipsis })
           .layoutWeight(1)
       }
       .width('100%')
       .height(Index.TAB_TITLE_BAR_HEIGHT)
       .padding({
-        left: Index.TAB_TITLE_CONTENT_HORIZONTAL_PADDING,
-        right: Index.TAB_TITLE_CONTENT_HORIZONTAL_PADDING
+        left: this.getTabTitleHorizontalPadding(),
+        right: this.getTabTitleHorizontalPadding()
       })
       .alignItems(VerticalAlign.Center)
       .translate({ y: Index.TAB_TITLE_VERTICAL_OFFSET })

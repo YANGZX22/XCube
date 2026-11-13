@@ -214,7 +214,7 @@
     },
     {
       "name": "new_chat",
-      "value": "New Chat"
+      "value": "New"
     },
     {
       "name": "no_sessions",
@@ -398,7 +398,7 @@
     },
     {
       "name": "settings_language",
-      "value": "Language"
+      "value": "Languages / 语言"
     },
     {
       "name": "settings_language_desc",
