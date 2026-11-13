@@ -8,6 +8,8 @@ import {
   ToolSourceType
 } from '../models/ChatModels'
 import { util } from '@kit.ArkTS'
+import { BUILTIN_BROWSER_TOOL_ID } from '../services/BuiltinBrowserPolicy'
+import { BuiltinBrowserExecutor, createBuiltinBrowserConfig, createBuiltinBrowserDefinition } from './BuiltinBrowserTool'
 import { ToolExecutionContext, ToolExecutor, RegisteredTool, getToolRegistry } from '../services/ToolRegistry'
 import { getWebSearchService, SearchResult, WebSearchResult } from '../services/WebSearchService'
 import { cleanSearchQuery } from '../utils/SearchQueryUtils'
@@ -3695,6 +3697,12 @@ export function registerBuiltinTools(): void {
   const registry = getToolRegistry()
   let registeredNow = 0
 
+  if (!registry.isToolRegistered(BUILTIN_BROWSER_TOOL_ID)) {
+    registry.registerTool(new RegisteredTool(BUILTIN_BROWSER_TOOL_ID, createBuiltinBrowserConfig(),
+      createBuiltinBrowserDefinition(), new BuiltinBrowserExecutor()))
+    registeredNow += 1
+  }
+
   if (!registry.isToolRegistered(KNOWLEDGE_SEARCH_TOOL_ID)) {
     const knowledgeSearchTool = new RegisteredTool(
       KNOWLEDGE_SEARCH_TOOL_ID,
@@ -3987,6 +3995,7 @@ export function getBuiltinToolIds(): string[] {
     KNOWLEDGE_SEARCH_TOOL_ID,
     COMPACT_TOOL_ID,
     'web_search',
+    BUILTIN_BROWSER_TOOL_ID,
     ASK_USER_TOOL_ID,
     SUB_AGENT_TOOL_ID,
     PYTHON_SANDBOX_TOOL_ID,

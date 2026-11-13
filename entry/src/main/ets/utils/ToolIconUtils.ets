@@ -46,6 +46,8 @@ export function resolveToolSymbolResource(toolId: string): Resource {
   switch (normalizeToolIconId(toolId)) {
     case 'web_search':
       return $r('sys.symbol.worldclock_fill_2')
+    case 'builtin_browser':
+      return $r('sys.symbol.worldclock')
     case 'ask_user':
       return $r('sys.symbol.ellipsis_message')
     case 'sub_agent':

@@ -12,6 +12,8 @@ export class ToolExecutionContext {
   modelId: string = ''
   // Per-call side channel: never serialize raw file bytes into tool JSON/history.
   inputAttachments: MessageAttachment[] = []
+  // Interactive tools can stop waiting as soon as their owning request is cancelled.
+  isCancelled: () => boolean = (): boolean => false
 
   constructor(sessionId: string = '', requestId: string = '', actorId: string = 'main',
     supportsVision: boolean = false, supportsDocuments: boolean = false,
@@ -26,8 +28,10 @@ export class ToolExecutionContext {
   }
 
   withActor(actorId: string): ToolExecutionContext {
-    return new ToolExecutionContext(this.sessionId, this.requestId, actorId,
+    const context = new ToolExecutionContext(this.sessionId, this.requestId, actorId,
       this.supportsVision, this.supportsDocuments, this.providerId, this.modelId)
+    context.isCancelled = this.isCancelled
+    return context
   }
 }
 

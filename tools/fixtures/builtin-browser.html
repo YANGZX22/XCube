@@ -1,0 +1,116 @@
+<!doctype html>
+<html lang="zh-CN">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Built-in Browser 流程验收</title>
+<style>
+  body { max-width: 700px; margin: auto; padding: 24px; font: 18px/1.6 system-ui; color: #202838; background: #f6f8fc; }
+  section { padding: 20px; margin: 18px 0; border-radius: 16px; background: white; border: 1px solid #dce1ed; }
+  button, input { font: inherit; padding: 12px; margin: 6px 0; max-width: 100%; box-sizing: border-box; }
+  button { background: #5048bd; color: white; border: 0; border-radius: 10px; }
+  input { width: 100%; }
+  output { display: block; overflow-wrap: anywhere; }
+  canvas { width: 100%; max-width: 400px; background: #eef0ff; touch-action: manipulation; }
+  iframe { width: 100%; height: 160px; border: 1px solid #ccd4e4; }
+  .outer-scroll { height: 360px; overflow: auto; padding: 12px; border: 3px solid #5048bd; overscroll-behavior: contain; }
+  .inner-scroll { height: 180px; overflow: auto; border: 3px solid #22794d; overscroll-behavior: contain; touch-action: pan-x pan-y; }
+  .inner-content { width: 950px; min-height: 850px; padding: 12px; background: repeating-linear-gradient(#e8f5ed 0 64px, #d0eadb 64px 128px); }
+  .outer-space { height: 420px; background: linear-gradient(#eef0ff, #d9ddff); }
+  .mobile-layout { display: none; }
+  @media (max-width: 600px) { .mobile-layout { display: block; } .desktop-layout { display: none; } }
+</style>
+<h1>Browser 流程验收</h1>
+<p>所有操作仅修改此测试页面，不发送表单或保存数据。</p>
+<section>
+  <h2>页面模式</h2>
+  <p class="mobile-layout">窄屏布局（≤ 600 CSS px）</p>
+  <p class="desktop-layout">宽屏布局（&gt; 600 CSS px）</p>
+  <output id="mode-status"></output>
+  <output id="agent-status"></output>
+</section>
+<section>
+  <h2>1. 原生点击</h2>
+  <button id="counter">点击计数 +1</button>
+  <output id="count">计数：0</output>
+</section>
+<section>
+  <h2>2. 中文输入与 Enter</h2>
+  <form id="form">
+    <label for="text">输入“你好，XCube Browser”后提交</label>
+    <input id="text" autocomplete="off" placeholder="中英文混合输入">
+    <button type="submit">提交并回显</button>
+  </form>
+  <output id="echo">尚未提交</output>
+</section>
+<section>
+  <h2>3. Canvas / iframe</h2>
+  <canvas id="canvas" width="400" height="160"></canvas>
+  <output id="point">尚未点击 Canvas</output>
+  <iframe title="iframe 点击测试" srcdoc="<!doctype html><meta charset='utf-8'><body style='font:18px system-ui;padding:16px'><button style='font:inherit;padding:12px' onclick='this.textContent=&quot;iframe 点击成功&quot;'>点击 iframe 内按钮</button></body>"></iframe>
+</section>
+<section>
+  <h2>4. 两层嵌套滚动</h2>
+  <p>绿框为内层列表，紫框为外层容器。在绿框中部滚动，仅内层数值变化；在紫框留白处滚动，仅外层数值变化。</p>
+  <output id="scroll-status">等待滚动</output>
+  <div class="outer-scroll" id="outer-scroll">
+    <p>外层顶部（紫色）</p>
+    <div class="inner-scroll" id="inner-scroll">
+      <div class="inner-content">
+        <p>内层顶部（绿色）</p>
+        <p style="margin-left:650px">横向滚动目标</p>
+        <p style="margin-top:620px">内层底部</p>
+      </div>
+    </div>
+    <div class="outer-space"><p>外层留白滚动区</p></div>
+    <p>外层底部</p>
+  </div>
+  <h3>iframe 内滚动</h3>
+  <iframe title="iframe 滚动测试" srcdoc="<!doctype html><meta name='viewport' content='width=device-width,initial-scale=1'><body style='font:18px system-ui;margin:12px'><p style='position:sticky;top:0;background:white' id='pos'>iframe 顶部</p><div style='height:800px;background:linear-gradient(#edf2ff,#a5b8ed)'>在此区域中部滚动</div><p>iframe 底部</p><script>addEventListener('scroll',()=>document.querySelector('#pos').textContent='iframe scrollY='+Math.round(scrollY))</script></body>"></iframe>
+</section>
+<section style="min-height:100vh"><h2>5. 向下滚动</h2><p>滚动到页面底部，找到绿色按钮。</p></section>
+<section>
+  <button style="background:#22794d" id="bottom">已到达底部</button>
+  <output id="bottom-status">尚未点击底部按钮</output>
+  <a href="#top" onclick="window.scrollTo(0,0);return false">回到顶部</a>
+</section>
+<script>
+  const loads = Number(sessionStorage.getItem('browser-fixture-loads') || 0) + 1;
+  sessionStorage.setItem('browser-fixture-loads', String(loads));
+  const updateMode = () => {
+    document.querySelector('#mode-status').textContent = `加载次数=${loads}；视口=${innerWidth} × ${innerHeight} CSS px；CH mobile=${navigator.userAgentData?.mobile ?? '不可用'}`;
+    document.querySelector('#agent-status').textContent = navigator.userAgent;
+  };
+  updateMode();
+  addEventListener('resize', updateMode);
+  const inner = document.querySelector('#inner-scroll');
+  const outer = document.querySelector('#outer-scroll');
+  const updateScroll = () => {
+    document.querySelector('#scroll-status').textContent = `内层 x=${Math.round(inner.scrollLeft)} y=${Math.round(inner.scrollTop)}；外层 y=${Math.round(outer.scrollTop)}；整页 y=${Math.round(scrollY)}`;
+  };
+  inner.addEventListener('scroll', updateScroll);
+  outer.addEventListener('scroll', updateScroll);
+  addEventListener('scroll', updateScroll);
+  updateScroll();
+  let count = 0;
+  document.querySelector('#counter').onclick = event => {
+    document.querySelector('#count').textContent = `计数：${++count}；isTrusted=${event.isTrusted}`;
+  };
+  document.querySelector('#form').onsubmit = event => {
+    event.preventDefault();
+    document.querySelector('#echo').textContent = `已提交：${document.querySelector('#text').value}`;
+  };
+  const canvas = document.querySelector('#canvas');
+  const context = canvas.getContext('2d');
+  context.fillStyle = '#5048bd';
+  context.fillRect(80, 45, 240, 70);
+  context.fillStyle = '#fff';
+  context.font = '24px system-ui';
+  context.fillText('Click Canvas', 126, 88);
+  canvas.onclick = event => {
+    document.querySelector('#point').textContent = `Canvas 点击 (${Math.round(event.offsetX)}, ${Math.round(event.offsetY)})；isTrusted=${event.isTrusted}`;
+  };
+  document.querySelector('#bottom').onclick = () => {
+    document.querySelector('#bottom-status').textContent = '底部按钮点击成功';
+  };
+</script>
+</html>

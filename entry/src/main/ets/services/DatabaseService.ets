@@ -1,3 +1,4 @@
+import { getBuiltinBrowserService } from './BuiltinBrowserService'
 import { relationalStore } from '@kit.ArkData'
 import { Context } from '@kit.AbilityKit'
 import {
@@ -2029,6 +2030,7 @@ export class DatabaseService {
     }
 
     getDocumentAttachmentRegistryService().clearSession(sessionId)
+    getBuiltinBrowserService().closeSession(sessionId)
     try {
       await this.deleteUnreferencedAttachmentFiles(store, candidateFilePaths)
     } catch (error) {

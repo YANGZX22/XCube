@@ -44,6 +44,8 @@ export function getLocalizedPythonSandboxActionLabel(action: string): string {
 
 export function getLocalizedBuiltinToolName(toolId: string, fallback: string = ''): string {
   switch (normalizeToolId(toolId)) {
+    case 'builtin_browser':
+      return pickLocalizedText('浏览器', 'In-APP Browser')
     case 'web_search':
     case 'exa_search':
     case 'websearch':
@@ -109,6 +111,9 @@ export function getLocalizedBuiltinToolName(toolId: string, fallback: string = '
 
 export function getLocalizedBuiltinToolDescription(toolId: string, fallback: string = ''): string {
   switch (normalizeToolId(toolId)) {
+    case 'builtin_browser':
+      return pickLocalizedText('应用内置浏览器，可供模型直接操控（可能消耗更多 tokens）',
+        'Built-in browser, which allows the model to be controlled directly (may consume more tokens)')
     case 'web_search':
       return pickLocalizedText('模型可搜索互联网获取最新信息',
         'Search the web for current information.')

@@ -18,6 +18,7 @@ export struct InteractiveMaterialButton {
   @Param applyShadow: boolean = false
   @Param buttonShadow: ShadowOptions | undefined = undefined
   @Param responsePadding: number = 0
+  @Param accessibilityLabel: string = ''
   @Event onActivate: () => void = (): void => {}
   @BuilderParam content: () => void
 
@@ -59,6 +60,7 @@ export struct InteractiveMaterialButton {
         .clip(false)
         .shadow(this.buttonShadow ?? (!shouldUseWrappedMaterial() && this.applyShadow ? getBlurBottomShadow() : undefined))
         .enabled(this.isEnabled)
+        .accessibilityText(this.accessibilityLabel)
         .responseRegion({
           x: -this.hitPadding,
           y: -this.hitPadding,

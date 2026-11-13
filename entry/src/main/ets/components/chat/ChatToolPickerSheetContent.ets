@@ -2,6 +2,7 @@ import { ImmersiveButtonSurface } from '../ImmersiveButtonSurface'
 import { getBlurBottomShadow } from '../../utils/BlurShadowUtils'
 import { uiMaterial } from '@kit.ArkUI'
 import { ToolConfig, ToolPermissionLevel, ToolSourceType } from '../../models/ChatModels'
+import { BUILTIN_BROWSER_TOOL_ID } from '../../services/BuiltinBrowserPolicy'
 import { getAppUiState } from '../../state/AppUiState'
 import { withColorAlpha } from '../../utils/ColorAlphaUtils'
 import { pickLocalizedText } from '../../utils/LocalizedTextUtils'
@@ -256,7 +257,7 @@ export struct ChatToolPickerSheetContent {
             .maxLines(1)
             .textOverflow({ overflow: TextOverflow.Ellipsis })
 
-          if (tool.permissionLevel === ToolPermissionLevel.WRITE) {
+          if (tool.id !== BUILTIN_BROWSER_TOOL_ID && tool.permissionLevel === ToolPermissionLevel.WRITE) {
             Text(pickLocalizedText('需确认', 'Approval'))
               .fontSize(10)
               .fontColor(this.isDarkMode ? '#FFD6A6' : '#8A4B08')

@@ -13,6 +13,9 @@ import { MANUSCRIPT_BODY_FONT, MANUSCRIPT_COMPOSER_TOOLBAR_HEIGHT } from '../uti
 import { isChineseAppLanguage } from '../utils/LocalizedTextUtils'
 import { InteractiveMaterialButton } from './InteractiveMaterialButton'
 import { shouldUseWrappedMaterial } from '../utils/WrappedMaterialSupport'
+import { getLocalizedBuiltinToolName } from '../utils/ToolDisplayTextUtils'
+import { resolveToolSymbolResource } from '../utils/ToolIconUtils'
+import { BrowserEdgeFlowLight } from './BrowserEdgeFlowLight'
 
 @ComponentV2
 export struct ChatToolbar {
@@ -36,6 +39,7 @@ export struct ChatToolbar {
   @Event onKnowledgeToggle: (enabled: boolean) => void =
     (_enabled: boolean): void => {}
   @Param workspaceActive: boolean = false
+  @Param browserModelActive: boolean = false
   @Param showScrollTopAction: boolean = false
   @Param showScrollBottomAction: boolean = false
   @Param scrollBottomActionLoading: boolean = false
@@ -48,6 +52,7 @@ export struct ChatToolbar {
   @Event onCanvasAction: () => void = (): void => {}
   // 工作区改成独立页面，由 ChatPage 压栈打开
   @Event onOpenWorkspace: () => void = (): void => {}
+  @Event onOpenBrowser: () => void = (): void => {}
   @Event onPlanAction: () => void = (): void => {}
   // 推理强度滑块面板是否展开
   @Local showReasoningPanel: boolean = false
@@ -140,6 +145,17 @@ export struct ChatToolbar {
     return isChineseAppLanguage() ? 84 : 112
   }
 
+  private getBrowserChipWidth(): number {
+    const uiContext = this.getUIContext()
+    const titleSize = uiContext.getMeasureUtils().measureTextSize({
+      textContent: getLocalizedBuiltinToolName('builtin_browser'),
+      fontSize: this.isManuscriptMode ? 11.5 : 14,
+      fontFamily: this.isManuscriptMode ? MANUSCRIPT_BODY_FONT : '',
+      fontWeight: FontWeight.Medium
+    })
+    return Math.ceil(uiContext.px2vp(Number(titleSize.width) + uiContext.fp2px(16))) + 28
+  }
+
   private getToolChipForegroundColor(): ResourceColor {
     if (this.isManuscriptMode) {
       return this.hasSelectedTools ? this.themePrimary : getAppUiState().themeTextSecondary
@@ -185,6 +201,7 @@ export struct ChatToolbar {
         this.KnowledgeImmersiveChip()
 
         this.WorkspaceImmersiveChip()
+        this.BrowserChip()
 
         if (!this.isManuscriptMode) {
           if (this.showScrollTopAction) {
@@ -588,6 +605,43 @@ export struct ChatToolbar {
     .padding({ left: 8, right: 8 })
     .alignItems(VerticalAlign.Center)
     .justifyContent(FlexAlign.Center)
+  }
+
+  @Builder
+  private BrowserChip() {
+    InteractiveMaterialButton({
+      surfaceWidth: this.getBrowserChipWidth(),
+      surfaceHeight: this.getToolbarChipBarHeight(),
+      applyShadow: !this.isManuscriptMode && !shouldUseWrappedMaterial(),
+      onActivate: () => this.onOpenBrowser()
+    }) {
+      Stack() {
+        if (this.browserModelActive) {
+          BrowserEdgeFlowLight({
+            surfaceWidth: this.getBrowserChipWidth(),
+            surfaceHeight: this.getToolbarChipBarHeight(),
+            cornerRadius: this.getToolbarChipBarHeight() / 2
+          })
+        }
+        Row({ space: 4 }) {
+          SymbolGlyph(resolveToolSymbolResource('builtin_browser')).fontSize(16)
+            .fontColor([this.browserModelActive ? this.themePrimary : getAppUiState().themeTextSecondary])
+          Text(getLocalizedBuiltinToolName('builtin_browser'))
+            .fontSize(this.isManuscriptMode ? 11.5 : 14)
+            .fontFamily(this.isManuscriptMode ? MANUSCRIPT_BODY_FONT : '')
+            .fontWeight(this.browserModelActive ? FontWeight.Medium : FontWeight.Regular)
+            .fontColor(this.browserModelActive ? this.themePrimary : getAppUiState().themeTextSecondary)
+            .maxLines(1)
+        }
+        .height(this.getToolbarChipBarHeight())
+        .justifyContent(FlexAlign.Center)
+      }
+      // Clip the shader output inside the capsule, while keeping the label above the light.
+      .width(this.getBrowserChipWidth())
+      .height(this.getToolbarChipBarHeight())
+      .borderRadius(this.getToolbarChipBarHeight() / 2)
+      .clip(true)
+    }
   }
 
   private isReasoningEnabled(): boolean {

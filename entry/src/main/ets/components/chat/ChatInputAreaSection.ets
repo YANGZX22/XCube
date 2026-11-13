@@ -49,6 +49,7 @@ export struct ChatInputAreaSection {
   @Event onKnowledgeToggle: (enabled: boolean) => void =
     (_enabled: boolean): void => {}
   @Param workspaceActive: boolean = false
+  @Param browserModelActive: boolean = false
   @Param hasRecentScreenshot: boolean = false
   @Param bottomAvoidHeight: number = 0
   @Param contentMaxWidth: number = 99999
@@ -80,6 +81,7 @@ export struct ChatInputAreaSection {
   @Event onManuscriptHistory: () => void = () => {}
   @Event onManuscriptCanvas: () => void = () => {}
   @Event onOpenWorkspace: () => void = () => {}
+  @Event onOpenBrowser: () => void = () => {}
   @Event onManuscriptPlan: () => void = () => {}
 
   private getEffectiveContentMaxWidth(): number {
@@ -202,6 +204,7 @@ export struct ChatInputAreaSection {
             this.onKnowledgeToggle(enabled)
           },
           workspaceActive: this.workspaceActive,
+          browserModelActive: this.browserModelActive,
           showScrollTopAction: this.showManuscriptScrollTop,
           showScrollBottomAction: this.showManuscriptScrollBottom,
           scrollBottomActionLoading: this.manuscriptScrollBottomLoading,
@@ -223,6 +226,7 @@ export struct ChatInputAreaSection {
           onOpenWorkspace: (): void => {
             this.onOpenWorkspace()
           },
+          onOpenBrowser: (): void => this.onOpenBrowser(),
           onPlanAction: (): void => {
             this.onManuscriptPlan()
           }

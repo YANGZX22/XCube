@@ -164,6 +164,25 @@ export class RequestMessage {
     return messages
   }
 
+  // A browser loop can run for many steps. Keep only its two newest visual frames in memory/context;
+  // preserve every paired tool result and all ordinary user/file-tool attachments.
+  static trimBrowserSnapshots(messages: RequestMessage[]): void {
+    let retained = 0
+    for (let i = messages.length - 1; i >= 0; i--) {
+      const message = messages[i]
+      if (message.sourceToolCallId === '') {
+        continue
+      }
+      message.attachments = message.attachments.filter((attachment: MessageAttachment): boolean => {
+        if (!/^browser-\d+-\d+$/.test(attachment.id)) {
+          return true
+        }
+        retained++
+        return retained <= 2
+      })
+    }
+  }
+
   // 创建带工具调用的 assistant 消息
   static createAssistantWithToolCalls(content: string, toolCalls: ToolCall[]): RequestMessage {
     const msg = new RequestMessage('assistant', content)

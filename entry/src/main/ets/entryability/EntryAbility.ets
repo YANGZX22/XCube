@@ -1,3 +1,4 @@
+import { getBuiltinBrowserService } from '../services/BuiltinBrowserService'
 import { AbilityConstant, Configuration, ConfigurationConstant, UIAbility, Want } from '@kit.AbilityKit';
 import { hilog } from '@kit.PerformanceAnalysisKit';
 import { window } from '@kit.ArkUI';
@@ -492,6 +493,7 @@ export default class EntryAbility extends UIAbility {
     // Ability has brought to foreground
     hilog.info(DOMAIN, 'testTag', '%{public}s', 'Ability onForeground');
     setAppUiStateValue(AppStorageKeys.APP_IN_BACKGROUND, false);
+    getBuiltinBrowserService().setForeground(true)
     this.updateWindowAppearance();
     ServiceRegistry.backgroundGuard().onAppBackgroundChanged(false)
   }
@@ -500,6 +502,7 @@ export default class EntryAbility extends UIAbility {
     // Ability has back to background
     hilog.info(DOMAIN, 'testTag', '%{public}s', 'Ability onBackground');
     setAppUiStateValue(AppStorageKeys.APP_IN_BACKGROUND, true);
+    getBuiltinBrowserService().setForeground(false)
     ServiceRegistry.backgroundGuard().onAppBackgroundChanged(true)
   }
 }

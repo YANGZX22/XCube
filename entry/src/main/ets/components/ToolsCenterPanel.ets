@@ -3,6 +3,7 @@ import { uiMaterial } from '@kit.ArkUI'
 import { ToolConfig, SearchEngine, ToolSourceType } from '../models/ChatModels'
 import { McpAuthType, McpServerConfig } from '../models/McpModels'
 import { ToolRegistry } from '../services/ToolRegistry'
+import { BUILTIN_BROWSER_TOOL_ID } from '../services/BuiltinBrowserPolicy'
 import { McpService } from '../services/McpService'
 import { SkillConfig, SkillService } from '../services/SkillService'
 import { ServiceRegistry } from '../services/ServiceRegistry'
@@ -3840,20 +3841,23 @@ struct BuiltinToolCardItem {
     return getAppUiState().themeBackground
   }
 
-  private isWriteTool(): boolean {
-    return this.tool.permissionLevel === 'write'
+  private needsApproval(): boolean {
+    return this.tool.id !== BUILTIN_BROWSER_TOOL_ID && this.tool.permissionLevel === 'write'
   }
 
   private getPermissionText(): string {
-    return this.isWriteTool() ? pickLocalizedText('需确认', 'Approval') : pickLocalizedText('只读', 'Read only')
+    if (this.tool.id === BUILTIN_BROWSER_TOOL_ID) {
+      return pickLocalizedText('免审批', 'No approval')
+    }
+    return this.needsApproval() ? pickLocalizedText('需确认', 'Approval') : pickLocalizedText('只读', 'Read only')
   }
 
   private getPermissionTextColor(): string {
-    return this.isWriteTool() ? '#D9485F' : this.themePrimary
+    return this.needsApproval() ? '#D9485F' : this.themePrimary
   }
 
   private getPermissionBackgroundColor(): string {
-    if (this.isWriteTool()) {
+    if (this.needsApproval()) {
       return this.isDarkMode ? '#4B1D24' : '#FDECEF'
     }
     return this.backgroundHex
@@ -3948,7 +3952,7 @@ struct BuiltinToolCardItem {
           .padding({ left: 10, right: 10, top: 6, bottom: 6 })
           .borderRadius(999)
           .backgroundColor(this.getPermissionBackgroundColor())
-          .border({ width: this.isWriteTool() ? 0 : 1, color: this.themePrimary })
+          .border({ width: this.needsApproval() ? 0 : 1, color: this.themePrimary })
 
         Blank()
 

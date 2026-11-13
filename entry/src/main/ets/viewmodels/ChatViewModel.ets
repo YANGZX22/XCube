@@ -3699,6 +3699,7 @@ ${preview}`
     // ask_user 等用户作答（可能数分钟）；sub_agent_result 等子智能体跑完，
     // 而子智能体自己还要抢这把锁——占着锁等它们必然死锁
     return normalized === 'ask_user' || normalized === 'user_input' || normalized === 'ask' ||
+      normalized === 'builtin_browser' ||
       normalized === SUB_AGENT_TOOL_ID || normalized === SUB_AGENT_RESULT_TOOL_ID ||
       normalized === SUB_AGENT_MESSAGE_TOOL_ID
   }
@@ -4727,6 +4728,7 @@ ${preview}`
           for (let i = 0; i < nativeToolInputs.length; i++) {
             requestMessages.push(nativeToolInputs[i])
           }
+          RequestMessage.trimBrowserSnapshots(requestMessages)
 
           // 清空 AI 消息内容，准备接收新的回复
           aiMessage.content = ''

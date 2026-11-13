@@ -1,3 +1,5 @@
+import { getBuiltinBrowserService } from './BuiltinBrowserService'
+import { BUILTIN_BROWSER_TOOL_ID } from './BuiltinBrowserPolicy'
 import { PromptLanguage } from '../utils/PromptLanguageUtils'
 import { ToolCall, ToolConfig, ToolPermissionLevel, ToolResult } from '../models/ChatModels'
 import { ASK_USER_TOOL_ID } from '../config/BuiltinTools'
@@ -39,6 +41,11 @@ export function formatToolExecutionError(error: Object): string {
 }
 
 export function requiresToolApproval(config: ToolConfig, argumentsJson: string = ''): boolean {
+  if (config.id === BUILTIN_BROWSER_TOOL_ID) {
+    // Browser controls and explicit handoff never need a separate approval dialog.
+    // The executor still validates arguments, session ownership and the current screenshot.
+    return false
+  }
   if (config.permissionLevel === ToolPermissionLevel.WRITE || config.requiresUserApproval) {
     return true
   }
@@ -527,6 +534,7 @@ export class ToolExecutionService {
 
   endToolRequest(requestId: string): void {
     this.progressGuard.endRequest(requestId)
+    getBuiltinBrowserService().endRequest(requestId)
   }
 
   shouldStopToolLoop(requestId: string, actorId: string = 'main'): boolean {
@@ -623,6 +631,7 @@ export class ToolExecutionService {
       // 执行工具
       const startTime = Date.now()
       const callContext = context.withActor(context.actorId)
+      callContext.isCancelled = (): boolean => context.isCancelled() || this.isCancelled()
       const result = await executor.execute(toolCall.arguments, callContext)
 
       // 执行完成后再次检查是否取消（避免返回已取消的结果）

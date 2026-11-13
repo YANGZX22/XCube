@@ -1,3 +1,4 @@
+import { BuiltinBrowserState, getBuiltinBrowserService } from '../services/BuiltinBrowserService'
 import { shouldUseDrawnNavigation } from '../utils/DrawnNavigationSupport'
 import { ImmersiveButtonSurface } from '../components/ImmersiveButtonSurface'
 import { getBlurBottomShadow } from '../utils/BlurShadowUtils'
@@ -353,6 +354,7 @@ export struct ChatPage {
   // 聊天输入区的独立持久化开关；不会预检索或把知识片段拼入提示词。
   @Local knowledgeConversationEnabled: boolean = false
   @Local workspaceActive: boolean = false
+  @Local browserState: BuiltinBrowserState = getBuiltinBrowserService().state
   @Local selectedToolIds: string[] = []
   @Local availableChatTools: ToolConfig[] = []
   @Local isRefreshingMcpToolAvailability: boolean = false
@@ -2081,6 +2083,15 @@ export struct ChatPage {
         sessionTitle: this.sessionTitle
       } as PythonWorkspacePageParams
     })
+  }
+
+  private handleBrowserOpen(): void {
+    this.safeStopInputSession()
+    try {
+      getBuiltinBrowserService().showForUser(this.sessionId)
+    } catch (error) {
+      this.showError(error instanceof Error ? error.message : String(error))
+    }
   }
 
   private handleMapOpen(visualizationJson: string): void {
@@ -4382,12 +4393,15 @@ export struct ChatPage {
               knowledgeEnabled: this.knowledgeConversationEnabled,
               knowledgeAvailable: this.isKnowledgeConversationAvailable(),
               workspaceActive: this.workspaceActive,
+              browserModelActive: this.browserState.sessionId === this.sessionId &&
+                this.browserState.modelRequestActive && this.browserState.owner === 'model',
               onKnowledgeToggle: (enabled: boolean): void => {
                 this.updateKnowledgeConversationEnabled(enabled)
               },
               onOpenWorkspace: (): void => {
                 this.handleWorkspaceOpen()
               },
+              onOpenBrowser: (): void => this.handleBrowserOpen(),
               hasRecentScreenshot: this.hasRecentScreenshot,
               bottomAvoidHeight: this.getComposerBottomAvoidHeightVp(),
               contentMaxWidth: this.getChatContentMaxWidth(),
@@ -4723,6 +4737,9 @@ export struct ChatPage {
       this.schedulePageVisibilityUpdate(false)
     })
     .onBackPressed((): boolean => {
+      if (getBuiltinBrowserService().dismissOnBack()) {
+        return true
+      }
       if (this.taskAlertVisible) {
         this.dismissTaskAlert()
         return true

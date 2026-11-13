@@ -69,6 +69,8 @@ import { InteractiveMaterialButton } from '../components/InteractiveMaterialButt
 import { shouldUseWrappedMaterial, WRAPPED_MATERIAL_REGULAR } from '../utils/WrappedMaterialSupport'
 import { ImmersiveTaskAlertBanner } from '../components/ImmersiveTaskAlertBanner'
 import { PyodideWebHost } from '../components/PyodideWebHost'
+import { BuiltinBrowserHost } from '../components/BuiltinBrowserHost'
+import { getBuiltinBrowserService } from '../services/BuiltinBrowserService'
 import { KnowledgeBasePanel } from '../components/KnowledgeBasePanel'
 import { KnowledgeEmbeddingSelectSheetContent } from '../components/KnowledgeEmbeddingSelectSheetContent'
 import { ModelSelectorContent } from '../components/ModelSelector'
@@ -783,6 +785,9 @@ struct Index {
 
   // 处理返回键/返回手势
   onBackPress(): boolean {
+    if (getBuiltinBrowserService().dismissOnBack()) {
+      return true
+    }
     if (this.taskAlertVisible) {
       this.dismissTaskAlert()
       return true
@@ -1825,6 +1830,7 @@ struct Index {
       // Python 运行时必须跨导航常驻。如果挂在 ChatPage，用户打开工作区等子页时
       // WebView 会被销毁，正在加载包的请求只能等到超时。
       PyodideWebHost()
+      BuiltinBrowserHost()
     }
     .width('100%')
     .height('100%')
