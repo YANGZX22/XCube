@@ -326,9 +326,21 @@ struct AboutPage {
   private PrivacyPolicyRow() {
     Row() {
       Column() {
-        SymbolGlyph($r('sys.symbol.doc_text'))
-          .fontSize(20)
-          .fontColor([this.themePrimary])
+        Stack({ alignContent: Alignment.Center }) {
+          Image($r('app.media.privacy_policy'))
+            .width(20)
+            .height(20)
+            .objectFit(ImageFit.Contain)
+            .fillColor(this.themePrimary)
+            .draggable(false)
+          Image($r('app.media.privacy_policy_mark'))
+            .width(20)
+            .height(20)
+            .objectFit(ImageFit.Contain)
+            .draggable(false)
+        }
+        .width(20)
+        .height(20)
       }
       .width(36)
       .height(36)
