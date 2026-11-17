@@ -217,6 +217,14 @@
       "value": "新建"
     },
     {
+      "name": "navigation_collapse_hint",
+      "value": "长按收起或展开导航"
+    },
+    {
+      "name": "navigation_expand",
+      "value": "展开导航"
+    },
+    {
       "name": "no_sessions",
       "value": "暂无对话记录"
     },

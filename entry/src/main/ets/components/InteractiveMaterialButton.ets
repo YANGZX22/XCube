@@ -9,6 +9,7 @@ import { getBlurBottomShadow } from '../utils/BlurShadowUtils'
 export struct InteractiveMaterialButton {
   @Param surfaceWidth: number = 0
   @Param surfaceHeight: number = 0
+  @Param cornerRadius: number | undefined = undefined
   @Param buttonType: ButtonType = ButtonType.Normal
   @Param buttonPadding: number = 0
   @Param isEnabled: boolean = true
@@ -18,9 +19,15 @@ export struct InteractiveMaterialButton {
   @Param applyShadow: boolean = false
   @Param buttonShadow: ShadowOptions | undefined = undefined
   @Param responsePadding: number = 0
-  @Param accessibilityLabel: string = ''
+  @Param accessibilityLabel: ResourceStr = ''
   @Event onActivate: () => void = (): void => {}
   @BuilderParam content: () => void
+
+  private getAccessibilityLabel(): string {
+    const label = this.accessibilityLabel
+    return typeof label === 'string' ? label :
+      this.getUIContext().getHostContext()?.resourceManager.getStringSync(label.id) ?? ''
+  }
 
   private get hitPadding(): number {
     return Number.isFinite(this.responsePadding)
@@ -49,7 +56,7 @@ export struct InteractiveMaterialButton {
         .height(this.surfaceHeight)
         .padding(this.buttonPadding)
         .backgroundColor(Color.Transparent)
-        .borderRadius(Math.min(this.surfaceWidth, this.surfaceHeight) / 2)
+        .borderRadius(this.cornerRadius ?? Math.min(this.surfaceWidth, this.surfaceHeight) / 2)
         .attributeModifier(new WrappedMaterialModifier(() => new uiMaterial.ImmersiveMaterial({
           style: this.materialStyle,
           materialColor: this.materialColor,
@@ -60,7 +67,7 @@ export struct InteractiveMaterialButton {
         .clip(false)
         .shadow(this.buttonShadow ?? (!shouldUseWrappedMaterial() && this.applyShadow ? getBlurBottomShadow() : undefined))
         .enabled(this.isEnabled)
-        .accessibilityText(this.accessibilityLabel)
+        .accessibilityText(this.getAccessibilityLabel())
         .responseRegion({
           x: -this.hitPadding,
           y: -this.hitPadding,

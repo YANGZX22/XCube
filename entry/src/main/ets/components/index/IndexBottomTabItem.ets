@@ -75,7 +75,7 @@ export struct IndexBottomTabItem {
         this.pressed = pressed
       }))
     } else {
-      Column({ space: 2 }) {
+      Column({ space: 1 }) {
       Stack({ alignContent: Alignment.Center }) {
         SymbolGlyph(this.active ? this.activeIcon : this.inactiveIcon)
           .fontSize(22)
@@ -99,7 +99,12 @@ export struct IndexBottomTabItem {
       .height(24)
 
       Text(this.label)
+        .width('100%')
+        .textAlign(TextAlign.Center)
         .fontSize(10)
+        .minFontSize(9)
+        .maxFontSize(10)
+        .heightAdaptivePolicy(TextHeightAdaptivePolicy.MIN_FONT_SIZE_FIRST)
         .fontWeight(FontWeight.Medium)
         .fontColor(this.active ? this.themePrimary : $r('app.color.text_secondary'))
         .maxLines(1)

@@ -67,6 +67,7 @@ import { ChatMultiSelectToolbar } from '../components/chat/ChatMultiSelectToolba
 import { ChatFloatingImmersiveButton } from '../components/ChatFloatingImmersiveButton'
 import { InteractiveMaterialButton } from '../components/InteractiveMaterialButton'
 import { shouldUseWrappedMaterial, WRAPPED_MATERIAL_REGULAR } from '../utils/WrappedMaterialSupport'
+import { withColorAlpha } from '../utils/ColorAlphaUtils'
 import { ImmersiveTaskAlertBanner } from '../components/ImmersiveTaskAlertBanner'
 import { PyodideWebHost } from '../components/PyodideWebHost'
 import { BuiltinBrowserHost } from '../components/BuiltinBrowserHost'
@@ -205,6 +206,7 @@ struct Index {
   @Local handAdaptiveFollowTarget: HandAdaptiveFollowTarget = HandAdaptiveFollowTarget.PLUS
   @Local handAdaptiveUnsupported: boolean = false
   @Local compactBottomBarsWidthVp: number = 0
+  @Local compactNavigationCollapsed: boolean = false
   private get handAdaptiveSettingsChangedAt(): number {
     return getAppUiState().settingsHandAdaptiveChangedAt
   }
@@ -2236,6 +2238,10 @@ struct Index {
   }
 
   private getCompactBottomTabBarWidth(): number {
+    return this.compactNavigationCollapsed ? Index.COMPACT_TABS_BAR_HEIGHT : this.getExpandedCompactTabBarWidth()
+  }
+
+  private getExpandedCompactTabBarWidth(): number {
     let preferredWidth = Index.COMPACT_TABS_WITH_ACTION_SMALL_WIDTH
     if (this.windowWidthVp >= 840) {
       preferredWidth = Index.COMPACT_TABS_WITH_ACTION_LARGE_WIDTH
@@ -2305,6 +2311,62 @@ struct Index {
     this.openChatRoute({} as ChatPageRouteParams)
   }
 
+  private setCompactNavigationCollapsed(collapsed: boolean): void {
+    if (this.compactNavigationCollapsed === collapsed) {
+      return
+    }
+    this.getUIContext().animateTo({ duration: 420, curve: curves.springMotion(0.75, 0.86) }, () => {
+      this.compactNavigationCollapsed = collapsed
+    })
+  }
+
+  private getCompactNavigationSymbol(): Resource {
+    switch (this.currentTabIndex) {
+      case Index.TAB_ASSISTANTS:
+        return $r('sys.symbol.person_fill')
+      case Index.TAB_KNOWLEDGE:
+        return $r('sys.symbol.externaldrive_fill')
+      case Index.TAB_SETTINGS:
+        return $r('sys.symbol.gearshape_fill')
+      default:
+        return $r('sys.symbol.ellipsis_message_fill')
+    }
+  }
+
+  private getManuscriptNavigationWidth(): number | string {
+    return this.compactNavigationCollapsed ? Index.COMPACT_TABS_BAR_HEIGHT : '100%'
+  }
+
+  private getManuscriptNavigationHeight(): number {
+    return this.compactNavigationCollapsed ? Index.COMPACT_TABS_BAR_HEIGHT : this.getManuscriptBottomBarHeight()
+  }
+
+  private getManuscriptNavigationX(): number {
+    if (!this.compactNavigationCollapsed) {
+      return 0
+    }
+    return this.shouldPlaceFabOnLeft() ?
+      Math.max(16, this.getCompactBottomBarsWidth() - 16 - Index.COMPACT_TABS_BAR_HEIGHT) : 16
+  }
+
+  @Builder
+  private CompactBottomMiniBarControl() {
+    Stack() {
+      this.CompactBottomMiniBarBuilder()
+    }
+    .width(this.isManuscriptMode() ? 40 : Index.COMPACT_MINI_BAR_WIDTH)
+    .height(this.isManuscriptMode() ? 40 : Index.COMPACT_TABS_BAR_HEIGHT)
+    .clip(false)
+    // 长按与子 Button 的短按互斥，避免松手时继续触发新建／上传。
+    .priorityGesture(
+      LongPressGesture({ duration: 500, repeat: false })
+        .onAction(() => {
+          this.setCompactNavigationCollapsed(!this.compactNavigationCollapsed)
+        })
+    )
+    .accessibilityDescription($r('app.string.navigation_collapse_hint'))
+  }
+
   @Builder
   private CompactBottomBarsOverlay() {
     if (this.isManuscriptMode()) {
@@ -2312,13 +2374,14 @@ struct Index {
         Row() {
           this.CompactBottomTabBarBuilder()
         }
-        .width('100%')
-        .height(this.getManuscriptBottomBarHeight())
+        .width(this.getManuscriptNavigationWidth())
+        .height(this.getManuscriptNavigationHeight())
         .alignItems(VerticalAlign.Top)
-        .position({ x: 0, y: 0 })
+        .position({ x: this.getManuscriptNavigationX(), y: 0 })
+        .animation({ duration: 420, curve: curves.springMotion(0.75, 0.86) })
 
         Row() {
-          this.CompactBottomMiniBarBuilder()
+          this.CompactBottomMiniBarControl()
         }
         .width(40)
         .height(40)
@@ -2352,7 +2415,7 @@ struct Index {
         .animation({ duration: 420, curve: curves.springMotion(0.75, 0.86) })
 
         Row() {
-          this.CompactBottomMiniBarBuilder()
+          this.CompactBottomMiniBarControl()
         }
         .width(Index.COMPACT_MINI_BAR_WIDTH)
         .height(Index.COMPACT_TABS_BAR_HEIGHT)
@@ -2448,11 +2511,13 @@ struct Index {
         this.CompactBottomTabBarContent()
       }
       .width('100%')
-      .height(this.getManuscriptBottomBarHeight())
+      .height(this.getManuscriptNavigationHeight())
       .alignItems(VerticalAlign.Top)
       .backgroundColor(this.themeSurface)
-      .borderRadius(0)
-      .border({ width: { top: 1 }, color: this.themeDivider })
+      .borderRadius(this.compactNavigationCollapsed ? Index.COMPACT_TABS_BAR_HEIGHT / 2 : 0)
+      .border({ width: { top: 1, bottom: this.compactNavigationCollapsed ? 1 : 0,
+        left: this.compactNavigationCollapsed ? 1 : 0, right: this.compactNavigationCollapsed ? 1 : 0 },
+        color: this.themeDivider })
     } else if (!shouldUseWrappedMaterial()) {
       // 降级时不用 HDS 悬浮宿主：材质 NONE 不等同于禁用其形变/选中态交互。
       // 将原有 24vp 透明背景模糊直接交给实际可见的 Row，不额外叠加模糊层。
@@ -2498,12 +2563,12 @@ struct Index {
 
   @Builder
   private CompactBottomTabBarContent() {
-    Stack({ alignContent: Alignment.Top }) {
+    Stack({ alignContent: Alignment.Center }) {
       Row() {
         Row() {
           this.TabBarAssistants()
         }
-        .layoutWeight(this.isManuscriptMode() ? 1 : 1.12)
+        .layoutWeight(1)
         .height('100%')
         .onClick(() => {
           this.switchToTab(Index.TAB_ASSISTANTS)
@@ -2512,7 +2577,7 @@ struct Index {
         Row() {
           this.TabBarChat()
         }
-        .layoutWeight(this.isManuscriptMode() ? 1 : 0.76)
+        .layoutWeight(1)
         .height('100%')
         .onClick(() => {
           this.switchToTab(Index.TAB_CHAT)
@@ -2521,7 +2586,7 @@ struct Index {
         Row() {
           this.TabBarKnowledge()
         }
-        .layoutWeight(this.isManuscriptMode() ? 1 : 1.12)
+        .layoutWeight(1)
         .height('100%')
         .onClick(() => {
           this.switchToTab(Index.TAB_KNOWLEDGE)
@@ -2536,14 +2601,45 @@ struct Index {
           this.switchToTab(Index.TAB_SETTINGS)
         })
       }
+      // 跟随 HDS 内容区的实际宽度，避免外框固定宽度让首尾标签越过裁剪边界。
       .width('100%')
       .height(Index.COMPACT_TABS_BAR_HEIGHT)
-      .padding({ left: this.isManuscriptMode() ? 0 : 6, right: this.isManuscriptMode() ? 0 : 6 })
+      // HDS 宿主已为内容留边，不再叠加内边距压缩 Knowledge 等完整标签。
+      .padding({
+        left: this.isManuscriptMode() || shouldUseWrappedMaterial() ? 0 : 12,
+        right: this.isManuscriptMode() || shouldUseWrappedMaterial() ? 0 : 12
+      })
       .backgroundColor(Color.Transparent)
-      .translate({ y: this.isManuscriptMode() || shouldUseDrawnNavigation() ? 0 : -3 })
+      .opacity(this.compactNavigationCollapsed ? 0 : 1)
+      .animation({ duration: 140, curve: Curve.EaseOut })
+      .enabled(!this.compactNavigationCollapsed)
+      .hitTestBehavior(this.compactNavigationCollapsed ? HitTestMode.None : HitTestMode.Default)
+      .accessibilityLevel(this.compactNavigationCollapsed ? 'no-hide-descendants' : 'auto')
+
+      Button({ type: ButtonType.Circle, stateEffect: false }) {
+        SymbolGlyph(this.getCompactNavigationSymbol())
+          .fontSize(24)
+          .fontColor([this.themePrimary])
+      }
+      .width(Index.COMPACT_TABS_BAR_HEIGHT)
+      .height(Index.COMPACT_TABS_BAR_HEIGHT)
+      .padding(0)
+      .backgroundColor(Color.Transparent)
+      .opacity(this.compactNavigationCollapsed ? 1 : 0)
+      .animation({ duration: 180, delay: this.compactNavigationCollapsed ? 120 : 0, curve: Curve.EaseOut })
+      .enabled(this.compactNavigationCollapsed)
+      .hitTestBehavior(this.compactNavigationCollapsed ? HitTestMode.Default : HitTestMode.None)
+      .accessibilityLevel(this.compactNavigationCollapsed ? 'auto' : 'no-hide-descendants')
+      .accessibilityText($r('app.string.navigation_expand'))
+      .onClick(() => {
+        this.setCompactNavigationCollapsed(false)
+      })
     }
     .width('100%')
     .height(Index.COMPACT_TABS_BAR_HEIGHT)
+    // HDS 自定义 tabBar 的位置补偿同时作用于标签和收缩图标，保持两种状态居中。
+    .translate({ y: this.isManuscriptMode() || shouldUseDrawnNavigation() ? 0 : -3 })
+    .clip(true)
   }
 
   @Builder
@@ -5272,19 +5368,51 @@ struct Index {
   }
 
   @Builder
+  private AssistantSwitchAvatar() {
+    if (!this.isManuscriptMode() && shouldUseWrappedMaterial()) {
+      InteractiveMaterialButton({
+        surfaceWidth: 36,
+        surfaceHeight: 36,
+        cornerRadius: 12,
+        // 保留头像色相，同时让材质透射和光照可见；透明底色不叠加染色。
+        materialColor: this.getCurrentAssistantColor() === TRANSPARENT_BG_COLOR ? Color.Transparent :
+          withColorAlpha(this.getCurrentAssistantColor(), 'CC'),
+        interactive: true,
+        applyShadow: true,
+        accessibilityLabel: this.getCurrentAssistantName(),
+        onActivate: (): void => {
+          this.showAssistantSwitchSheet = true
+        }
+      }) {
+        AssistantAvatarView({
+          value: this.getCurrentAssistantSymbol(),
+          color: this.getCurrentAssistantColor(),
+          avatarSize: 36,
+          radius: 12,
+          fontSize: 20,
+          cacheKey: this.assistantAvatarRenderTick,
+          contentOnly: true
+        })
+      }
+    } else {
+      Stack() {
+        this.AssistantAvatarBadge(this.getCurrentAssistantSymbol(), this.getCurrentAssistantColor(), 36, 12, 20)
+      }
+      .width(36)
+      .height(36)
+      .borderRadius(12)
+      .backgroundColor(Color.Transparent)
+      .backdropBlur(16)
+      .shadow(getBlurBottomShadow())
+    }
+  }
+
+  @Builder
   private AssistantSwitchPill() {
     Stack() {
       ForEach([this.getCurrentAssistantSwitchRenderKey()], (_renderKey: string) => {
         Row({ space: 8 }) {
-          Stack() {
-            this.AssistantAvatarBadge(this.getCurrentAssistantSymbol(), this.getCurrentAssistantColor(), 36, 12, 20)
-          }
-          .width(36)
-          .height(36)
-          .borderRadius(12)
-          .backgroundColor(Color.Transparent)
-          .backdropBlur(16)
-          .shadow(getBlurBottomShadow())
+          this.AssistantSwitchAvatar()
 
           Text(this.getCurrentAssistantName())
             .fontFamily(this.isManuscriptMode() ? MANUSCRIPT_HEADING_FONT : '')
@@ -5990,6 +6118,7 @@ struct Index {
     .width('100%')
     .height('100%')
     .scrollBar(BarState.Off)
+    .edgeEffect(EdgeEffect.Spring)
     .backgroundColor(this.themeBackground)
   }
 

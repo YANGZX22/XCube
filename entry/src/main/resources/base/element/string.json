@@ -217,6 +217,14 @@
       "value": "New"
     },
     {
+      "name": "navigation_collapse_hint",
+      "value": "Long press to collapse or expand navigation"
+    },
+    {
+      "name": "navigation_expand",
+      "value": "Expand navigation"
+    },
+    {
       "name": "no_sessions",
       "value": "No conversations yet"
     },

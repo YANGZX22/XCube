@@ -842,6 +842,7 @@ struct UsageStatsPage {
     .width('100%')
     .layoutWeight(1)
     .scrollBar(BarState.Off)
+    .edgeEffect(EdgeEffect.Spring)
     .translate({ x: this.rangeSwipeOffsetX, y: 0 })
     .parallelGesture(
       PanGesture({ fingers: 1, distance: 18 })

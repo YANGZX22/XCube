@@ -1,5 +1,6 @@
 import { shouldUseDrawnNavigation } from '../utils/DrawnNavigationSupport'
-import { ImmersiveButtonSurface } from '../components/ImmersiveButtonSurface'
+import { InteractiveMaterialButton } from '../components/InteractiveMaterialButton'
+import { WRAPPED_MATERIAL_REGULAR } from '../utils/WrappedMaterialSupport'
 import { getBlurBottomShadow } from '../utils/BlurShadowUtils'
 import { Want, bundleManager, common } from '@kit.AbilityKit'
 import { privacyManager } from '@kit.AppGalleryKit'
@@ -183,46 +184,36 @@ struct AboutPage {
   @Builder
   private AppLogoBuilder() {
     Stack({ alignContent: Alignment.TopStart }) {
-      ImmersiveButtonSurface({
-        materialFactory: () => (new uiMaterial.ImmersiveMaterial({
-          style: uiMaterial.ImmersiveStyle.REGULAR,
-          materialColor: '#17132E',
-          applyShadow: false,
-          interactive: true,
-          lightEffect: { color: undefined }
-        })),
-        fallbackShadow: false,
-        cornerRadius: 22
-      }) {
-        Button({ type: ButtonType.Normal, stateEffect: false }) {
-          if (this.isLogoAnimating) {
-            this.AnimatedLogoBuilder()
-          } else {
-            Image($r('app.media.foreground'))
-              .width(96)
-              .height(96)
-          }
-        }
-        .width(96)
-        .height(96)
-        .padding(0)
-        .backgroundColor(Color.Transparent)
-        .borderRadius(22)
-        .clip(false)
-        .shadow({
+      InteractiveMaterialButton({
+        surfaceWidth: LOGO_CANVAS_SIZE,
+        surfaceHeight: LOGO_CANVAS_SIZE,
+        cornerRadius: 22,
+        materialStyle: WRAPPED_MATERIAL_REGULAR,
+        materialColor: '#17132E',
+        interactive: true,
+        applyShadow: false,
+        buttonShadow: {
           radius: 22,
           color: 'rgba(23, 19, 46, 0.32)',
           offsetX: 0,
           offsetY: 8
-        })
-        .accessibilityText($r('app.string.about_play_logo_animation'))
-        .onClick((): void => {
+        },
+        accessibilityLabel: $r('app.string.about_play_logo_animation'),
+        onActivate: (): void => {
           this.startLogoAnimation()
-        })
+        }
+      }) {
+        if (this.isLogoAnimating) {
+          this.AnimatedLogoBuilder()
+        } else {
+          Image($r('app.media.foreground'))
+            .width(LOGO_CANVAS_SIZE)
+            .height(LOGO_CANVAS_SIZE)
+        }
       }
     }
-    .width(96)
-    .height(96)
+    .width(LOGO_CANVAS_SIZE)
+    .height(LOGO_CANVAS_SIZE)
     .clip(false)
   }
 
@@ -672,6 +663,7 @@ struct AboutPage {
     .width('100%')
     .layoutWeight(1)
     .scrollBar(BarState.Off)
+    .edgeEffect(EdgeEffect.Spring)
   }
 
   @Builder
