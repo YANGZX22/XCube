@@ -174,7 +174,8 @@ export class RequestMessage {
         continue
       }
       message.attachments = message.attachments.filter((attachment: MessageAttachment): boolean => {
-        if (!/^browser-\d+-\d+$/.test(attachment.id)) {
+        // Include the runtime/instance-scoped format and older two-part frame IDs.
+        if (!/^browser-\d+(?:-\d+){1,3}$/.test(attachment.id)) {
           return true
         }
         retained++

@@ -73,8 +73,8 @@ import { shouldUseWrappedMaterial, WRAPPED_MATERIAL_REGULAR } from '../utils/Wra
 import { withColorAlpha } from '../utils/ColorAlphaUtils'
 import { ImmersiveTaskAlertBanner } from '../components/ImmersiveTaskAlertBanner'
 import { PyodideWebHost } from '../components/PyodideWebHost'
-import { BuiltinBrowserHost } from '../components/BuiltinBrowserHost'
-import { getBuiltinBrowserService } from '../services/BuiltinBrowserService'
+import { BuiltinBrowserHosts } from '../components/BuiltinBrowserHost'
+import { BuiltinBrowserManagerState, getBuiltinBrowserManager } from '../services/BuiltinBrowserManager'
 import { KnowledgeBasePanel } from '../components/KnowledgeBasePanel'
 import { KnowledgeEmbeddingSelectSheetContent } from '../components/KnowledgeEmbeddingSelectSheetContent'
 import { ModelSelectorContent } from '../components/ModelSelector'
@@ -164,6 +164,7 @@ interface CompactNavigationTab {
 @Entry
 @ComponentV2
 struct Index {
+  @Local browserManagerState: BuiltinBrowserManagerState = getBuiltinBrowserManager().state
   private static readonly COMPACT_TABS_BAR_HEIGHT: number = 56
   private static readonly ASSISTANT_SWIPE_BUTTON_SIZE: number = 56
   private static readonly TAB_TITLE_BAR_HEIGHT: number = 56
@@ -814,7 +815,7 @@ struct Index {
 
   // 处理返回键/返回手势
   onBackPress(): boolean {
-    if (getBuiltinBrowserService().dismissOnBack()) {
+    if (getBuiltinBrowserManager().dismissOnBack()) {
       return true
     }
     if (this.taskAlertVisible) {
@@ -1859,7 +1860,7 @@ struct Index {
       // Python 运行时必须跨导航常驻。如果挂在 ChatPage，用户打开工作区等子页时
       // WebView 会被销毁，正在加载包的请求只能等到超时。
       PyodideWebHost()
-      BuiltinBrowserHost()
+      BuiltinBrowserHosts(this.browserManagerState)
     }
     .width('100%')
     .height('100%')

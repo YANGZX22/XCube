@@ -1,5 +1,5 @@
-import { getBuiltinBrowserService } from './BuiltinBrowserService'
-import { BUILTIN_BROWSER_TOOL_ID } from './BuiltinBrowserPolicy'
+import { getBuiltinBrowserManager } from './BuiltinBrowserManager'
+import { BUILTIN_BROWSER_TOOL_ID, parseBrowserRequest } from './BuiltinBrowserPolicy'
 import { PromptLanguage } from '../utils/PromptLanguageUtils'
 import { ToolCall, ToolConfig, ToolPermissionLevel, ToolResult } from '../models/ChatModels'
 import { ASK_USER_TOOL_ID } from '../config/BuiltinTools'
@@ -40,11 +40,14 @@ export function formatToolExecutionError(error: Object): string {
   return '未知错误（工具未提供错误码或错误信息）'
 }
 
-export function requiresToolApproval(config: ToolConfig, argumentsJson: string = ''): boolean {
+export function requiresToolApproval(config: ToolConfig, argumentsJson: string = '', sessionId: string = ''): boolean {
   if (config.id === BUILTIN_BROWSER_TOOL_ID) {
-    // Browser controls and explicit handoff never need a separate approval dialog.
-    // The executor still validates arguments, session ownership and the current screenshot.
-    return false
+    try {
+      return getBuiltinBrowserManager().requiresLaunchApproval(parseBrowserRequest(argumentsJson), sessionId)
+    } catch (_error) {
+      // Invalid requests go to the executor's validation without opening a confirmation sheet.
+      return false
+    }
   }
   if (config.permissionLevel === ToolPermissionLevel.WRITE || config.requiresUserApproval) {
     return true
@@ -378,8 +381,9 @@ export class ToolExecutionService {
     )
   }
 
-  private async requestApprovalIfNeeded(toolCall: ToolCall, tool: RegisteredTool): Promise<ToolApprovalResult> {
-    if (!requiresToolApproval(tool.config, toolCall.arguments)) {
+  private async requestApprovalIfNeeded(toolCall: ToolCall, tool: RegisteredTool,
+    sessionId: string): Promise<ToolApprovalResult> {
+    if (!requiresToolApproval(tool.config, toolCall.arguments, sessionId)) {
       return ToolApprovalResult.approve()
     }
     if (this.approvalCallback === null) {
@@ -534,7 +538,7 @@ export class ToolExecutionService {
 
   endToolRequest(requestId: string): void {
     this.progressGuard.endRequest(requestId)
-    getBuiltinBrowserService().endRequest(requestId)
+    getBuiltinBrowserManager().endRequest(requestId)
   }
 
   shouldStopToolLoop(requestId: string, actorId: string = 'main'): boolean {
@@ -609,7 +613,7 @@ export class ToolExecutionService {
       this.applyWebSearchPagination(toolCall)
     }
 
-    const approval = await this.requestApprovalIfNeeded(toolCall, registeredTool)
+    const approval = await this.requestApprovalIfNeeded(toolCall, registeredTool, context.sessionId)
     if (approval.status !== ToolApprovalStatus.APPROVED) {
       return this.buildApprovalDeniedResult(toolCall, registeredTool, approval)
     }

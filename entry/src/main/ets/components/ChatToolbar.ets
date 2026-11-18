@@ -17,6 +17,11 @@ import { getLocalizedBuiltinToolName } from '../utils/ToolDisplayTextUtils'
 import { resolveToolSymbolResource } from '../utils/ToolIconUtils'
 import { BrowserEdgeFlowLight } from './BrowserEdgeFlowLight'
 
+enum ToolbarPage {
+  WORKSPACE,
+  BROWSER
+}
+
 @ComponentV2
 export struct ChatToolbar {
   // 外扩滚动视口抵消输入区内边距，让渐隐贴近页面边缘。
@@ -39,6 +44,7 @@ export struct ChatToolbar {
   @Event onKnowledgeToggle: (enabled: boolean) => void =
     (_enabled: boolean): void => {}
   @Param workspaceActive: boolean = false
+  @Param browserActive: boolean = false
   @Param browserModelActive: boolean = false
   @Param showScrollTopAction: boolean = false
   @Param showScrollBottomAction: boolean = false
@@ -106,6 +112,10 @@ export struct ChatToolbar {
     return this.isManuscriptMode ? MANUSCRIPT_COMPOSER_TOOLBAR_HEIGHT : 36
   }
 
+  private get chipLetterSpacing(): number {
+    return this.isManuscriptMode ? (isChineseAppLanguage() ? 1.3 : 0.2) : 0
+  }
+
   private get viewportOutsetVp(): number {
     return this.isManuscriptMode ? 0 : Math.max(0, this.horizontalViewportOutsetVp)
   }
@@ -124,7 +134,7 @@ export struct ChatToolbar {
       fontSize: this.isManuscriptMode ? 11.5 : 14,
       fontFamily: fontFamily,
       fontWeight: fontWeight,
-      letterSpacing: this.isManuscriptMode ? (isChineseAppLanguage() ? 1.3 : 0.2) : 0
+      letterSpacing: this.chipLetterSpacing
     })
     const levelSize = measure.measureTextSize({
       textContent: this.getReasoningLevelText(this.reasoningLevel),
@@ -141,47 +151,27 @@ export struct ChatToolbar {
     return isChineseAppLanguage() ? 96 : 128
   }
 
-  private getWorkspaceChipWidth(): number {
-    return isChineseAppLanguage() ? 84 : 112
-  }
-
-  private getBrowserChipWidth(): number {
+  private getPageChipWidth(page: ToolbarPage): number {
+    if (page === ToolbarPage.WORKSPACE) {
+      return isChineseAppLanguage() ? 84 : 112
+    }
     const uiContext = this.getUIContext()
     const titleSize = uiContext.getMeasureUtils().measureTextSize({
       textContent: getLocalizedBuiltinToolName('builtin_browser'),
       fontSize: this.isManuscriptMode ? 11.5 : 14,
       fontFamily: this.isManuscriptMode ? MANUSCRIPT_BODY_FONT : '',
-      fontWeight: FontWeight.Medium
+      fontWeight: FontWeight.Medium,
+      letterSpacing: this.chipLetterSpacing
     })
     return Math.ceil(uiContext.px2vp(Number(titleSize.width) + uiContext.fp2px(16))) + 28
   }
 
-  private getToolChipForegroundColor(): ResourceColor {
-    if (this.isManuscriptMode) {
-      return this.hasSelectedTools ? this.themePrimary : getAppUiState().themeTextSecondary
-    }
-    return this.hasSelectedTools ? this.themePrimary : $r('app.color.text_secondary')
+  private isPageChipActive(page: ToolbarPage): boolean {
+    return page === ToolbarPage.WORKSPACE ? this.workspaceActive : this.browserActive || this.browserModelActive
   }
 
-  private getReasoningChipForegroundColor(): ResourceColor {
-    if (this.isManuscriptMode) {
-      return this.isReasoningEnabled() ? this.themePrimary : getAppUiState().themeTextSecondary
-    }
-    return this.isReasoningEnabled() ? this.themePrimary : $r('app.color.text_secondary')
-  }
-
-  private getKnowledgeChipForegroundColor(): ResourceColor {
-    if (this.isManuscriptMode) {
-      return this.knowledgeEnabled ? this.themePrimary : getAppUiState().themeTextSecondary
-    }
-    if (this.knowledgeEnabled) {
-      return this.themePrimary
-    }
-    return $r('app.color.text_secondary')
-  }
-
-  private getWorkspaceChipForegroundColor(): ResourceColor {
-    if (this.workspaceActive) {
+  private getChipForegroundColor(active: boolean): ResourceColor {
+    if (active) {
       return this.themePrimary
     }
     return this.isManuscriptMode ? getAppUiState().themeTextSecondary : $r('app.color.text_secondary')
@@ -200,8 +190,8 @@ export struct ChatToolbar {
 
         this.KnowledgeImmersiveChip()
 
-        this.WorkspaceImmersiveChip()
-        this.BrowserChip()
+        this.PageChip(ToolbarPage.WORKSPACE, (): void => this.onOpenWorkspace())
+        this.PageChip(ToolbarPage.BROWSER, (): void => this.onOpenBrowser())
 
         if (!this.isManuscriptMode) {
           if (this.showScrollTopAction) {
@@ -330,15 +320,15 @@ export struct ChatToolbar {
   @Builder
   private ToolChipContent() {
     Row() {
-      SymbolGlyph($r('sys.symbol.gearshape'))
+      SymbolGlyph($r('sys.symbol.wrench_and_screwdriver'))
         .fontSize(16)
-        .fontColor([this.getToolChipForegroundColor()])
+        .fontColor([this.getChipForegroundColor(this.hasSelectedTools)])
 
       Text($r('app.string.chat_toolbar_tools'))
         .fontFamily(this.isManuscriptMode ? MANUSCRIPT_BODY_FONT : '')
         .fontSize(this.isManuscriptMode ? 11.5 : 14)
-        .letterSpacing(this.isManuscriptMode ? (isChineseAppLanguage() ? 1.3 : 0.2) : 0)
-        .fontColor(this.getToolChipForegroundColor())
+        .letterSpacing(this.chipLetterSpacing)
+        .fontColor(this.getChipForegroundColor(this.hasSelectedTools))
         .fontWeight(this.hasSelectedTools ? FontWeight.Medium : FontWeight.Regular)
         .maxLines(1)
         .textOverflow({ overflow: TextOverflow.Ellipsis })
@@ -426,13 +416,13 @@ export struct ChatToolbar {
     Row() {
       SymbolGlyph($r('sys.symbol.lightbulb'))
         .fontSize(16)
-        .fontColor([this.getReasoningChipForegroundColor()])
+        .fontColor([this.getChipForegroundColor(this.isReasoningEnabled())])
 
       Text($r('app.string.chat_toolbar_reasoning'))
         .fontFamily(this.isManuscriptMode ? MANUSCRIPT_BODY_FONT : '')
         .fontSize(this.isManuscriptMode ? 11.5 : 14)
-        .letterSpacing(this.isManuscriptMode ? (isChineseAppLanguage() ? 1.3 : 0.2) : 0)
-        .fontColor(this.getReasoningChipForegroundColor())
+        .letterSpacing(this.chipLetterSpacing)
+        .fontColor(this.getChipForegroundColor(this.isReasoningEnabled()))
         .fontWeight(this.isReasoningEnabled() ? FontWeight.Medium : FontWeight.Regular)
         .maxLines(1)
         .flexShrink(0)
@@ -441,7 +431,7 @@ export struct ChatToolbar {
       Text(this.getReasoningLevelText(this.reasoningLevel))
         .fontFamily(this.isManuscriptMode ? MANUSCRIPT_BODY_FONT : '')
         .fontSize(this.isManuscriptMode ? 11 : 13)
-        .fontColor(this.getReasoningChipForegroundColor())
+        .fontColor(this.getChipForegroundColor(this.isReasoningEnabled()))
         .fontWeight(this.isReasoningEnabled() ? FontWeight.Medium : FontWeight.Regular)
         .maxLines(1)
         .flexShrink(0)
@@ -449,7 +439,7 @@ export struct ChatToolbar {
 
       SymbolGlyph($r('sys.symbol.chevron_up'))
         .fontSize(12)
-        .fontColor([this.getReasoningChipForegroundColor()])
+        .fontColor([this.getChipForegroundColor(this.isReasoningEnabled())])
         .margin({ left: 2 })
         .rotate({ angle: this.showReasoningPanel ? 180 : 0 })
         .animation({ duration: 200, curve: Curve.EaseInOut })
@@ -518,13 +508,13 @@ export struct ChatToolbar {
     Row() {
       SymbolGlyph($r('sys.symbol.externaldrive'))
         .fontSize(16)
-        .fontColor([this.getKnowledgeChipForegroundColor()])
+        .fontColor([this.getChipForegroundColor(this.knowledgeEnabled)])
 
       Text($r('app.string.tab_knowledge'))
         .fontFamily(this.isManuscriptMode ? MANUSCRIPT_BODY_FONT : '')
         .fontSize(this.isManuscriptMode ? 11.5 : 14)
-        .letterSpacing(this.isManuscriptMode ? (isChineseAppLanguage() ? 1.3 : 0.2) : 0)
-        .fontColor(this.getKnowledgeChipForegroundColor())
+        .letterSpacing(this.chipLetterSpacing)
+        .fontColor(this.getChipForegroundColor(this.knowledgeEnabled))
         .fontWeight(this.knowledgeEnabled ? FontWeight.Medium : FontWeight.Regular)
         .maxLines(1)
         .textOverflow({ overflow: TextOverflow.Ellipsis })
@@ -534,7 +524,7 @@ export struct ChatToolbar {
         ? $r('sys.symbol.checkmark_circle_fill')
         : $r('sys.symbol.xmark_circle_fill'))
         .fontSize(14)
-        .fontColor([this.getKnowledgeChipForegroundColor()])
+        .fontColor([this.getChipForegroundColor(this.knowledgeEnabled)])
         .margin({ left: 4 })
     }
     .width(this.getKnowledgeChipWidth())
@@ -545,103 +535,69 @@ export struct ChatToolbar {
   }
 
   @Builder
-  private WorkspaceImmersiveChip() {
+  private PageChip(page: ToolbarPage, onOpen: () => void) {
     if (this.isManuscriptMode) {
       Stack({ alignContent: Alignment.Center }) {
         Button({ type: ButtonType.Normal, stateEffect: false }) {
-          this.WorkspaceChipContent()
+          this.PageChipContent(page)
         }
-        .width(this.getWorkspaceChipWidth())
+        .width(this.getPageChipWidth(page))
         .height(this.getToolbarChipBarHeight())
         .padding(0)
         .backgroundColor(Color.Transparent)
         .borderRadius(0)
         .border({ width: 0, color: Color.Transparent })
-        .onClick(() => {
-          this.onOpenWorkspace()
-        })
+        .onClick(onOpen)
       }
-      .width(this.getWorkspaceChipWidth())
+      .width(this.getPageChipWidth(page))
       .height(this.getToolbarChipBarHeight())
       .backgroundColor(Color.Transparent)
       .borderRadius(this.getToolbarChipBarHeight() / 2)
       .border({
         width: { bottom: 1 },
-        color: this.workspaceActive ? this.manuscriptAccentDeep : this.manuscriptAccent
+        color: this.isPageChipActive(page) ? this.manuscriptAccentDeep : this.manuscriptAccent
       })
     } else {
       InteractiveMaterialButton({
-        surfaceWidth: this.getWorkspaceChipWidth(),
+        surfaceWidth: this.getPageChipWidth(page),
         surfaceHeight: this.getToolbarChipBarHeight(),
         applyShadow: !shouldUseWrappedMaterial(),
-        onActivate: () => {
-          this.onOpenWorkspace()
-        }
+        onActivate: onOpen
       }) {
-        this.WorkspaceChipContent()
+        this.PageChipContent(page)
       }
     }
   }
 
   @Builder
-  private WorkspaceChipContent() {
-    Row() {
-      SymbolGlyph($r('sys.symbol.folder'))
-        .fontSize(16)
-        .fontColor([this.getWorkspaceChipForegroundColor()])
-
-      Text($r('app.string.chat_toolbar_workspace'))
-        .fontFamily(this.isManuscriptMode ? MANUSCRIPT_BODY_FONT : '')
-        .fontSize(this.isManuscriptMode ? 11.5 : 14)
-        .letterSpacing(this.isManuscriptMode ? (isChineseAppLanguage() ? 1.3 : 0.2) : 0)
-        .fontColor(this.getWorkspaceChipForegroundColor())
-        .fontWeight(this.workspaceActive ? FontWeight.Medium : FontWeight.Regular)
-        .maxLines(1)
-        .textOverflow({ overflow: TextOverflow.Ellipsis })
-        .margin({ left: 4 })
-    }
-    .width(this.getWorkspaceChipWidth())
-    .height(this.getToolbarChipBarHeight())
-    .padding({ left: 8, right: 8 })
-    .alignItems(VerticalAlign.Center)
-    .justifyContent(FlexAlign.Center)
-  }
-
-  @Builder
-  private BrowserChip() {
-    InteractiveMaterialButton({
-      surfaceWidth: this.getBrowserChipWidth(),
-      surfaceHeight: this.getToolbarChipBarHeight(),
-      applyShadow: !this.isManuscriptMode && !shouldUseWrappedMaterial(),
-      onActivate: () => this.onOpenBrowser()
-    }) {
-      Stack() {
-        if (this.browserModelActive) {
-          BrowserEdgeFlowLight({
-            surfaceWidth: this.getBrowserChipWidth(),
-            surfaceHeight: this.getToolbarChipBarHeight(),
-            cornerRadius: this.getToolbarChipBarHeight() / 2
-          })
-        }
-        Row({ space: 4 }) {
-          SymbolGlyph(resolveToolSymbolResource('builtin_browser')).fontSize(16)
-            .fontColor([this.browserModelActive ? this.themePrimary : getAppUiState().themeTextSecondary])
-          Text(getLocalizedBuiltinToolName('builtin_browser'))
-            .fontSize(this.isManuscriptMode ? 11.5 : 14)
-            .fontFamily(this.isManuscriptMode ? MANUSCRIPT_BODY_FONT : '')
-            .fontWeight(this.browserModelActive ? FontWeight.Medium : FontWeight.Regular)
-            .fontColor(this.browserModelActive ? this.themePrimary : getAppUiState().themeTextSecondary)
-            .maxLines(1)
-        }
-        .height(this.getToolbarChipBarHeight())
-        .justifyContent(FlexAlign.Center)
+  private PageChipContent(page: ToolbarPage) {
+    Stack({ alignContent: Alignment.Center }) {
+      if (page === ToolbarPage.BROWSER && this.browserModelActive) {
+        BrowserEdgeFlowLight({ cornerRadius: this.getToolbarChipBarHeight() / 2 })
       }
-      // Clip the shader output inside the capsule, while keeping the label above the light.
-      .width(this.getBrowserChipWidth())
+      Row({ space: 4 }) {
+        SymbolGlyph(page === ToolbarPage.BROWSER ? resolveToolSymbolResource('builtin_browser') : $r('sys.symbol.folder'))
+          .fontSize(16)
+          .fontColor([this.getChipForegroundColor(this.isPageChipActive(page))])
+        Text(page === ToolbarPage.BROWSER ? getLocalizedBuiltinToolName('builtin_browser') : $r('app.string.chat_toolbar_workspace'))
+          .fontFamily(this.isManuscriptMode ? MANUSCRIPT_BODY_FONT : '')
+          .fontSize(this.isManuscriptMode ? 11.5 : 14)
+          .letterSpacing(this.chipLetterSpacing)
+          .fontColor(this.getChipForegroundColor(this.isPageChipActive(page)))
+          .fontWeight(this.isPageChipActive(page) ? FontWeight.Medium : FontWeight.Regular)
+          .maxLines(1)
+          .textOverflow({ overflow: TextOverflow.Ellipsis })
+      }
+      .width('100%')
       .height(this.getToolbarChipBarHeight())
-      .borderRadius(this.getToolbarChipBarHeight() / 2)
-      .clip(true)
+      .padding({ left: 8, right: 8 })
+      .alignItems(VerticalAlign.Center)
+      .justifyContent(FlexAlign.Center)
     }
+    .width('100%')
+    .height(this.getToolbarChipBarHeight())
+    .borderRadius(this.getToolbarChipBarHeight() / 2)
+    .clip(true)
   }
 
   private isReasoningEnabled(): boolean {

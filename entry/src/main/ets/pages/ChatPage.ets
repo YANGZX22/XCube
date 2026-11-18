@@ -1,5 +1,7 @@
 import { ImmersiveFieldSurface } from '../components/ImmersiveFieldSurface'
-import { BuiltinBrowserState, getBuiltinBrowserService } from '../services/BuiltinBrowserService'
+import { BuiltinBrowserState } from '../services/BuiltinBrowserService'
+import { getBuiltinBrowserManager } from '../services/BuiltinBrowserManager'
+import { BUILTIN_BROWSER_TOOL_ID } from '../services/BuiltinBrowserPolicy'
 import { shouldUseDrawnNavigation } from '../utils/DrawnNavigationSupport'
 import { ImmersiveButtonSurface } from '../components/ImmersiveButtonSurface'
 import { getBlurBottomShadow } from '../utils/BlurShadowUtils'
@@ -355,7 +357,7 @@ export struct ChatPage {
   // 聊天输入区的独立持久化开关；不会预检索或把知识片段拼入提示词。
   @Local knowledgeConversationEnabled: boolean = false
   @Local workspaceActive: boolean = false
-  @Local browserState: BuiltinBrowserState = getBuiltinBrowserService().state
+  @Local browserState: BuiltinBrowserState = new BuiltinBrowserState()
   @Local selectedToolIds: string[] = []
   @Local availableChatTools: ToolConfig[] = []
   @Local isRefreshingMcpToolAvailability: boolean = false
@@ -371,6 +373,7 @@ export struct ChatPage {
   @Local showToolExecutionApprovalSafetyUi: boolean = true
   @Local showToolExecutionApprovalRiskNotice: boolean = true
   @Local toolExecutionApprovalTitle: string = ''
+  @Local toolExecutionApprovalMessage: string = ''
   @Local showReadScheduleRangeUi: boolean = false
   @Local readScheduleDaysBeforeText: string = '0'
   @Local readScheduleDaysAfterText: string = '7'
@@ -765,6 +768,7 @@ export struct ChatPage {
   }
 
   aboutToDisappear(): void {
+    getBuiltinBrowserManager().leaveSession(this.sessionId)
     this.isPageVisible = false
     this.clearTaskAlertTimer()
     this.taskAlertVisible = false
@@ -909,6 +913,7 @@ export struct ChatPage {
     this.pendingInitialToolIds = loadResult.pendingInitialToolIds
     this.initialPromptAutoSent = loadResult.initialPromptAutoSent
     this.sessionId = loadResult.sessionId
+    this.bindBrowserSession()
     this.sessionTitle = loadResult.sessionTitle
     this.branchIndex = loadResult.branchIndex
     this.branchCount = loadResult.branchCount
@@ -1829,6 +1834,7 @@ export struct ChatPage {
   }
 
   private syncActiveSessionBinding(): void {
+    this.bindBrowserSession()
     const activeSessionId = this.isPageVisible && this.sessionId !== '' ? this.sessionId : ''
     setAppUiStateValue(AppStorageKeys.ACTIVE_CHAT_SESSION_ID, activeSessionId)
   }
@@ -1922,6 +1928,7 @@ export struct ChatPage {
         this.handlePageShown()
         return
       }
+      getBuiltinBrowserManager().leaveSession(this.sessionId)
       if (this.isMultiSelectMode) {
         this.handleExitMultiSelectMode()
       }
@@ -2092,10 +2099,20 @@ export struct ChatPage {
     })
   }
 
-  private handleBrowserOpen(): void {
+  private bindBrowserSession(): void {
+    if (this.sessionId === '') {
+      this.browserState = new BuiltinBrowserState()
+      return
+    }
+    this.browserState = getBuiltinBrowserManager().getSession(this.sessionId).state
+    if (this.isPageVisible) getBuiltinBrowserManager().setActiveSession(this.sessionId)
+    else getBuiltinBrowserManager().leaveSession(this.sessionId)
+  }
+
+  private async handleBrowserOpen(): Promise<void> {
     this.safeStopInputSession()
     try {
-      getBuiltinBrowserService().showForUser(this.sessionId)
+      await getBuiltinBrowserManager().showForUser(this.sessionId)
     } catch (error) {
       this.showError(error instanceof Error ? error.message : String(error))
     }
@@ -4400,6 +4417,7 @@ export struct ChatPage {
               knowledgeEnabled: this.knowledgeConversationEnabled,
               knowledgeAvailable: this.isKnowledgeConversationAvailable(),
               workspaceActive: this.workspaceActive,
+              browserActive: this.browserState.hasPage,
               browserModelActive: this.browserState.sessionId === this.sessionId &&
                 this.browserState.modelRequestActive && this.browserState.owner === 'model',
               onKnowledgeToggle: (enabled: boolean): void => {
@@ -4408,7 +4426,7 @@ export struct ChatPage {
               onOpenWorkspace: (): void => {
                 this.handleWorkspaceOpen()
               },
-              onOpenBrowser: (): void => this.handleBrowserOpen(),
+              onOpenBrowser: (): void => { this.handleBrowserOpen() },
               hasRecentScreenshot: this.hasRecentScreenshot,
               bottomAvoidHeight: this.getComposerBottomAvoidHeightVp(),
               contentMaxWidth: this.getChatContentMaxWidth(),
@@ -4744,7 +4762,7 @@ export struct ChatPage {
       this.schedulePageVisibilityUpdate(false)
     })
     .onBackPressed((): boolean => {
-      if (getBuiltinBrowserService().dismissOnBack()) {
+      if (getBuiltinBrowserManager().dismissOnBack()) {
         return true
       }
       if (this.taskAlertVisible) {
@@ -5025,6 +5043,7 @@ export struct ChatPage {
       sourceLabel: this.toolExecutionApprovalSourceLabel,
       toolName: this.toolExecutionApprovalName,
       titleText: this.toolExecutionApprovalTitle,
+      approvalMessage: this.toolExecutionApprovalMessage,
       argumentSummary: this.toolExecutionApprovalArgumentSummary,
       argumentEntries: this.toolExecutionApprovalArgumentEntries,
       argumentsPreview: this.toolExecutionApprovalArgumentsPreview,
@@ -5980,6 +5999,7 @@ export struct ChatPage {
 
   private shouldDeleteEmptySessionOnDisappear(): boolean {
     return this.isNewEmptySession &&
+      this.browserState.sessionId === '' &&
       !this.isSending &&
       this.currentTaskId === '' &&
       this.messages.length === 0 &&
@@ -6664,6 +6684,7 @@ export struct ChatPage {
     this.showToolExecutionApprovalSafetyUi = true
     this.showToolExecutionApprovalRiskNotice = true
     this.toolExecutionApprovalTitle = ''
+    this.toolExecutionApprovalMessage = ''
     this.showReadScheduleRangeUi = false
     this.readScheduleDaysBeforeText = '0'
     this.readScheduleDaysAfterText = '7'
@@ -6747,8 +6768,14 @@ export struct ChatPage {
       this.toolExecutionApprovalArgumentsTruncated = preview.rawTruncated
       this.showRawToolExecutionApprovalArguments = false
       this.showToolExecutionApprovalSafetyUi = toolId !== WRITE_SCHEDULE_TOOL_ID &&
-        toolId !== READ_SCHEDULE_TOOL_ID && toolId !== EMAIL_READ_TOOL_ID && toolId !== SAVED_PLACES_TOOL_ID
+        toolId !== READ_SCHEDULE_TOOL_ID && toolId !== EMAIL_READ_TOOL_ID && toolId !== SAVED_PLACES_TOOL_ID &&
+        toolId !== BUILTIN_BROWSER_TOOL_ID
       this.showToolExecutionApprovalRiskNotice = toolId !== OPEN_MAP_ROUTE_TOOL_ID && toolId !== EMAIL_SEND_TOOL_ID
+      this.toolExecutionApprovalMessage = toolId === BUILTIN_BROWSER_TOOL_ID ? pickLocalizedText(
+        '确认后，模型可连续查看和操作网页，包括点击、滚动、输入和导航。关闭浏览器或回到空白页后，再次打开网页会重新请求确认。',
+        'After approval, the model can view and interact with pages, including clicking, scrolling, typing and navigating. ' +
+          'Opening a page after the browser is closed or returns to a blank tab requires confirmation again.'
+      ) : ''
       this.showReadScheduleRangeUi = toolId === READ_SCHEDULE_TOOL_ID
       if (this.showReadScheduleRangeUi) {
         this.configureReadScheduleRangeState(argumentsJson)
@@ -6835,6 +6862,9 @@ export struct ChatPage {
   }
 
   private resolveToolExecutionApprovalTitle(toolId: string): string {
+    if (toolId === BUILTIN_BROWSER_TOOL_ID) {
+      return pickLocalizedText('确认使用浏览器？', 'Approve Browser Use')
+    }
     if (toolId === WRITE_SCHEDULE_TOOL_ID) {
       return pickLocalizedText('确认写入日程？', 'Approve Schedule Write')
     }

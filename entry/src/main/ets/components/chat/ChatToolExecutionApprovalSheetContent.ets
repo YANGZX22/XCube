@@ -11,6 +11,7 @@ export struct ChatToolExecutionApprovalSheetContent {
   @Param sourceLabel: string = ''
   @Param toolName: string = ''
   @Param titleText: string = ''
+  @Param approvalMessage: string = ''
   @Param argumentSummary: string = ''
   @Param argumentEntries: ToolPreviewEntry[] = []
   @Param argumentsPreview: string = '{}'
@@ -51,6 +52,14 @@ export struct ChatToolExecutionApprovalSheetContent {
       })
 
       Column({ space: 16 }) {
+        if (this.approvalMessage.trim() !== '') {
+          Text(this.approvalMessage)
+            .fontSize(13)
+            .lineHeight(20)
+            .fontColor($r('app.color.text_secondary'))
+            .width('100%')
+        }
+
         if (this.showWriteSafetyUi) {
           Row({ space: 10 }) {
             Text(pickLocalizedText(

@@ -1,4 +1,4 @@
-import { getBuiltinBrowserService } from '../services/BuiltinBrowserService'
+import { getBuiltinBrowserManager } from '../services/BuiltinBrowserManager'
 import { AbilityConstant, Configuration, ConfigurationConstant, UIAbility, Want } from '@kit.AbilityKit';
 import { hilog } from '@kit.PerformanceAnalysisKit';
 import { window } from '@kit.ArkUI';
@@ -92,6 +92,7 @@ export default class EntryAbility extends UIAbility {
       // 初始化偏好设置服务
       await ServiceRegistry.preferences().initialize(this.context);
       hilog.info(DOMAIN, 'testTag', 'PreferencesService initialized successfully');
+      await getBuiltinBrowserManager().initialize();
 
       await ServiceRegistry.language().migrateStoredLanguagePreference();
       hilog.info(DOMAIN, 'testTag', 'Language preference migrated successfully');
@@ -229,6 +230,9 @@ export default class EntryAbility extends UIAbility {
 
   onDestroy(): void {
     hilog.info(DOMAIN, 'testTag', '%{public}s', 'Ability onDestroy');
+    getBuiltinBrowserManager().flush().catch((): void => {
+      hilog.warn(DOMAIN, 'testTag', 'Could not finish saving browser state');
+    });
     // 取消注册回调
     if (this.settingsCallback !== null) {
       ServiceRegistry.settings().unregisterCallback(this.settingsCallback);
@@ -493,7 +497,7 @@ export default class EntryAbility extends UIAbility {
     // Ability has brought to foreground
     hilog.info(DOMAIN, 'testTag', '%{public}s', 'Ability onForeground');
     setAppUiStateValue(AppStorageKeys.APP_IN_BACKGROUND, false);
-    getBuiltinBrowserService().setForeground(true)
+    getBuiltinBrowserManager().setForeground(true)
     this.updateWindowAppearance();
     ServiceRegistry.backgroundGuard().onAppBackgroundChanged(false)
   }
@@ -502,7 +506,7 @@ export default class EntryAbility extends UIAbility {
     // Ability has back to background
     hilog.info(DOMAIN, 'testTag', '%{public}s', 'Ability onBackground');
     setAppUiStateValue(AppStorageKeys.APP_IN_BACKGROUND, true);
-    getBuiltinBrowserService().setForeground(false)
+    getBuiltinBrowserManager().setForeground(false)
     ServiceRegistry.backgroundGuard().onAppBackgroundChanged(true)
   }
 }

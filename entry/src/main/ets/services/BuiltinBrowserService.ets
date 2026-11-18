@@ -1,4 +1,4 @@
-import { assertBrowserPoint, BrowserRequest, isBrowserUrlAllowed } from './BuiltinBrowserPolicy'
+import { assertBrowserPoint, BrowserRequest, isBrowserPageUrl, isBrowserUrlAllowed } from './BuiltinBrowserPolicy'
 import { BrowserPageText } from './BuiltinBrowserPage'
 
 @ObservedV2
@@ -9,9 +9,12 @@ export class BuiltinBrowserState {
   @Trace owner: string = 'idle'
   @Trace pauseReason: string = ''
   @Trace url: string = 'about:blank'
-  initialUrl: string = 'about:blank'
+  @Trace initialUrl: string = 'about:blank'
   @Trace title: string = ''
+  @Trace canGoBack: boolean = false
+  @Trace canGoForward: boolean = false
   @Trace pageMode: string = 'mobile'
+  @Trace saveCookies: boolean = false
   @Trace loading: boolean = false
   @Trace progress: number = 0
   @Trace busy: boolean = false
@@ -22,6 +25,18 @@ export class BuiltinBrowserState {
   @Trace findQuery: string = ''
   @Trace findMatches: number = 0
   @Trace findDone: boolean = true
+
+  get rememberedUrl(): string {
+    // Use Web.src until the tab mounts and ArkWeb reports its first address.
+    const useInitialUrl = this.sessionId === '' || (this.loading && this.url === 'about:blank')
+    const url = useInitialUrl ? this.initialUrl : this.url
+    return isBrowserPageUrl(url) ? url : ''
+  }
+
+  @Computed
+  get hasPage(): boolean {
+    return this.rememberedUrl !== ''
+  }
 }
 
 export class BrowserCapture {
@@ -44,6 +59,7 @@ export class BrowserTypingResult {
 }
 
 export interface BuiltinBrowserHostAdapter {
+  destroy(): void
   setActive(active: boolean): void
   navigate(url: string): void
   find(text: string): void
@@ -91,9 +107,15 @@ export function browserDelay(ms: number): Promise<void> {
   return new Promise<void>((resolve) => { setTimeout(resolve, ms) })
 }
 
-// One persistent tab shared by the user and the main model. Presentation does not determine control ownership.
+const browserRuntimeId: number = Date.now()
+let nextBrowserInstanceId: number = 0
+
+// One conversation's tab. The manager owns presentation and persistence across conversations.
 export class BuiltinBrowserService {
+  readonly instanceId: number = ++nextBrowserInstanceId
   readonly state: BuiltinBrowserState = new BuiltinBrowserState()
+  private onStateChanged: () => void = (): void => {}
+  private requestPresentation: () => boolean = (): boolean => true
   private host: BuiltinBrowserHostAdapter | null = null
   private revision: number = 0
   private frameRevision: number = -1
@@ -106,17 +128,56 @@ export class BuiltinBrowserService {
   private running: boolean = false
   private handoffPending: boolean = false
 
+  configure(onStateChanged: () => void, requestPresentation: () => boolean,
+    saveCookies: boolean, restoredUrl: string = 'about:blank', restoredPageMode: string = 'mobile'): void {
+    this.onStateChanged = onStateChanged
+    this.requestPresentation = requestPresentation
+    this.state.saveCookies = saveCookies
+    if (this.state.sessionId === '') {
+      this.state.initialUrl = restoredUrl
+      this.state.pageMode = restoredPageMode
+    }
+  }
+
+  notifyPageChanged(): void {
+    this.onStateChanged()
+  }
+
+  changeCookieMode(saveCookies: boolean): void {
+    if (this.state.saveCookies === saveCookies) return
+    this.state.saveCookies = saveCookies
+    if (this.state.sessionId === '') return
+    const sessionId = this.state.sessionId
+    const url = this.state.rememberedUrl || 'about:blank'
+    const pageMode = this.state.pageMode
+    const visible = this.state.visible
+    const owner = this.state.owner === 'model' ? 'idle' : this.state.owner
+    const pauseReason = this.state.pauseReason
+    // Rebuild the native Web with its new storage mode and invalidate every old frame/callback.
+    this.closeSession(sessionId)
+    this.start(sessionId, owner, url, pageMode)
+    this.state.pauseReason = owner === 'paused' ? pauseReason : ''
+    this.state.visible = visible
+  }
+
+  requiresLaunchApproval(request: BrowserRequest): boolean {
+    // Confirm entry into browsing, not every action within an already open page.
+    // Looking at an empty tab or waiting for the user must not produce repeated dialogs.
+    const url = this.state.url.trim()
+    return request.action === 'open' && (this.state.sessionId === '' || url === '' || /^about:blank(?:[?#]|$)/i.test(url))
+  }
+
   showForUser(sessionId: string): void {
     if (sessionId.trim() === '') {
       throw new Error('请先打开一个会话')
     }
     if (this.state.sessionId !== '' && this.state.sessionId !== sessionId) {
-      throw new Error('单标签浏览器仍属于另一个会话，请先关闭该浏览器')
+      throw new Error('浏览器与当前会话不匹配')
     }
     if (this.state.sessionId === '') {
-      this.start(sessionId, 'idle')
+      this.start(sessionId, 'idle', this.state.initialUrl, this.state.pageMode)
     }
-    this.state.visible = true
+    this.state.visible = this.requestPresentation()
     this.syncHostActivity()
   }
 
@@ -125,7 +186,7 @@ export class BuiltinBrowserService {
     this.state.sessionId = sessionId
     this.state.owner = owner
     this.state.pauseReason = ''
-    this.state.visible = true
+    this.state.visible = this.requestPresentation()
     this.state.url = 'about:blank'
     this.state.initialUrl = initialUrl
     this.state.loading = initialUrl !== 'about:blank'
@@ -149,6 +210,8 @@ export class BuiltinBrowserService {
   detach(generation: number): void {
     if (generation === this.state.generation) {
       this.host = null
+      this.state.canGoBack = false
+      this.state.canGoForward = false
       this.invalidate()
     }
   }
@@ -162,6 +225,7 @@ export class BuiltinBrowserService {
     this.frameId = ''
     this.frame = null
     this.lastChange = Date.now()
+    this.onStateChanged()
   }
 
   // Only the browser header's explicit Take over button may call this method.
@@ -235,9 +299,9 @@ export class BuiltinBrowserService {
     if (this.state.sessionId !== sessionId) {
       return
     }
-    this.host?.resetKeyboard()
-    this.invalidate()
-    this.host = null
+    const host = this.host
+    host?.resetKeyboard()
+    this.detach(this.state.generation)
     this.state.owner = 'idle'
     this.state.pauseReason = ''
     this.state.sessionId = ''
@@ -248,6 +312,12 @@ export class BuiltinBrowserService {
     this.activeRequestId = ''
     this.state.modelRequestActive = false
     this.handoffPending = false
+    this.state.initialUrl = 'about:blank'
+    this.state.pageMode = 'mobile'
+    this.onStateChanged()
+    // Dispose immediately, including before a switch of the shared Cookie store.
+    // Later ArkUI disappearance callbacks can safely destroy the same node again.
+    host?.destroy()
   }
 
   endRequest(requestId: string): void {
@@ -359,7 +429,7 @@ export class BuiltinBrowserService {
       this.start(sessionId, 'model', request.url, request.page_mode === '' ? 'mobile' : request.page_mode)
     }
     if (this.state.sessionId !== sessionId) {
-      throw new Error('单标签浏览器正由另一会话使用；请用户关闭后再打开')
+      throw new Error('浏览器与当前会话不匹配')
     }
     this.running = true
     this.state.busy = true
@@ -507,13 +577,14 @@ export class BuiltinBrowserService {
       if (capture.url !== '') {
         this.state.url = capture.url
         this.state.title = capture.title
+        this.onStateChanged()
       }
       if (request.action === 'open' && !resumedBeforeOpen && request.url !== 'about:blank' && this.state.url === 'about:blank') {
         throw new Error('首次导航尚未生效，当前仍为 about:blank，不能视为已打开目标页面；先 snapshot 确认加载状态，仍为空白时再 open')
       }
       this.frameRevision = revision
       this.handoffPending = false
-      this.frameId = `browser-${generation}-${++this.frameSequence}`
+      this.frameId = `browser-${browserRuntimeId}-${this.instanceId}-${generation}-${++this.frameSequence}`
       // Only geometry is retained by the tab. Raw screenshot data belongs to the per-call side channel.
       this.frame = new BrowserCapture()
       this.frame.width = capture.width
@@ -584,9 +655,4 @@ export class BuiltinBrowserService {
       }
     }
   }
-}
-
-const browserService: BuiltinBrowserService = new BuiltinBrowserService()
-export function getBuiltinBrowserService(): BuiltinBrowserService {
-  return browserService
 }

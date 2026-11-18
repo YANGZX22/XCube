@@ -50,6 +50,7 @@ export struct ChatInputAreaSection {
     (_enabled: boolean): void => {}
   @Param workspaceActive: boolean = false
   @Param browserModelActive: boolean = false
+  @Param browserActive: boolean = false
   @Param hasRecentScreenshot: boolean = false
   @Param bottomAvoidHeight: number = 0
   @Param contentMaxWidth: number = 99999
@@ -205,6 +206,7 @@ export struct ChatInputAreaSection {
           },
           workspaceActive: this.workspaceActive,
           browserModelActive: this.browserModelActive,
+          browserActive: this.browserActive,
           showScrollTopAction: this.showManuscriptScrollTop,
           showScrollBottomAction: this.showManuscriptScrollBottom,
           scrollBottomActionLoading: this.manuscriptScrollBottomLoading,

@@ -19,6 +19,8 @@ import {
   SUB_AGENT_RESULT_TOOL_ID,
   USE_SKILL_TOOL_ID
 } from '../config/BuiltinTools'
+import { getBuiltinBrowserManager } from '../services/BuiltinBrowserManager'
+import { BrowserSettingsSheet } from './BrowserSettingsSheet'
 import { MODLENS_DEFAULT_GATEWAY_URL } from '../services/ModLensVisionService'
 import { ContextCompactionService } from '../services/ContextCompactionService'
 import {
@@ -97,6 +99,7 @@ export struct ToolsCenterPanel {
   @Local knowledgeSearchCallLimit: number = UNLIMITED_RETRIEVAL_CALL_LIMIT
   @Local isLoading: boolean = false
   @Local isRefreshingMcpServers: boolean = false
+  @Local showBrowserConfigSheet: boolean = false
   @Local showSearchConfigSheet: boolean = false
   @Local showModLensConfigSheet: boolean = false
   @Local modLensGatewayUrl: string = ''
@@ -400,6 +403,7 @@ export struct ToolsCenterPanel {
     registerBuiltinTools()
     this.syncBuiltinToolsFromRegistry()
     try {
+      await getBuiltinBrowserManager().initialize()
       await this.loadToolEnabledStates()
       await this.loadSelectedToolIds()
       await this.loadModLensConfig()
@@ -1567,6 +1571,16 @@ export struct ToolsCenterPanel {
     await this.mcpService.refreshServer(serverId)
     await this.loadMcpServers()
     this.showToolsSnack(pickLocalizedText('MCP 工具已刷新', 'MCP tools refreshed'), 2000, SnackBarTone.SUCCESS)
+  }
+
+  @Builder
+  private BrowserConfigSheetBuilder() {
+    BrowserSettingsSheet({
+      onClose: (): void => { this.showBrowserConfigSheet = false },
+      onFeedback: (message: string, failed: boolean): void => {
+        this.showToolsSnack(message, 2500, failed ? SnackBarTone.ERROR : SnackBarTone.SUCCESS)
+      }
+    })
   }
 
   @Builder
@@ -2790,12 +2804,16 @@ export struct ToolsCenterPanel {
                   BuiltinToolCardItem({
                     tool: tool,
                     selected: this.isToolSelected(tool.id),
-                    configurable: tool.id === MODLENS_READ_IMAGE_TOOL_ID,
+                    configurable: tool.id === MODLENS_READ_IMAGE_TOOL_ID || tool.id === BUILTIN_BROWSER_TOOL_ID,
                     onToggle: (enabled: boolean): void => {
                       this.handleBuiltinToolSelectionChanged(tool.id, enabled)
                     },
                     onConfigure: (): void => {
-                      this.openModLensConfig()
+                      if (tool.id === BUILTIN_BROWSER_TOOL_ID) {
+                        this.showBrowserConfigSheet = true
+                      } else {
+                        this.openModLensConfig()
+                      }
                     }
                   })
                 }, (tool: ToolConfig) => tool.id)
@@ -2932,6 +2950,21 @@ export struct ToolsCenterPanel {
       .backgroundColor(getAppUiState().themeBackground)
 
       // bindSheet 宿主分离：布尔状态模式下不要把多个 sheet 链到同一个组件上
+      Column()
+        .width(0)
+        .height(0)
+        .bindSheet($$this.showBrowserConfigSheet, this.BrowserConfigSheetBuilder(), {
+          height: SheetSize.FIT_CONTENT,
+          showClose: false,
+          dragBar: true,
+          backgroundColor: Color.Transparent,
+          systemMaterial: new uiMaterial.ImmersiveMaterial({
+            style: uiMaterial.ImmersiveStyle.REGULAR
+          }),
+          preferType: SheetType.BOTTOM,
+          onDisappear: (): void => { this.showBrowserConfigSheet = false }
+        })
+
       Column()
         .width(0)
         .height(0)

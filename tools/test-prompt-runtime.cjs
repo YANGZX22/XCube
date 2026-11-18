@@ -16,6 +16,7 @@ const noop = () => {};
 global.ObservedV2 = cls => cls;
 global.Observed = cls => cls;
 global.Trace = noop;
+global.Computed = noop;
 global.$r = name => name;
 const hypium = {
   describe: (_name, fn) => fn(),
@@ -30,6 +31,7 @@ const oldLoad = Module._load;
 Module._load = function(request, parent, isMain) {
   if (request === '@ohos/hypium') return hypium;
   if (request === '@kit.ArkTS') return { util: {} };
+  if (request === '@kit.ArkWeb') return { webview: {} };
   if (request === '@kit.NetworkKit') return { http: {} };
   if (request === '@kit.LocalizationKit') return { i18n: { System: { getSystemLanguage: () => systemLanguage } } };
   if (request === '../viewmodels/SettingsManager') return { getSettingsManager: () => ({ getLanguage: () => configuredLanguage }) };

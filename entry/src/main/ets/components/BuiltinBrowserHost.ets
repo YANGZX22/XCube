@@ -1,3 +1,5 @@
+import { ImmersiveInputSurface } from './ImmersiveInputSurface'
+import { WRAPPED_MATERIAL_REGULAR } from '../utils/WrappedMaterialSupport'
 import { BuilderNode, componentUtils, FrameNode, NodeController, UIContext } from '@kit.ArkUI'
 import { webview } from '@kit.ArkWeb'
 import { image } from '@kit.ImageKit'
@@ -10,6 +12,7 @@ import { pickLocalizedText } from '../utils/LocalizedTextUtils'
 import { getLocalizedBuiltinToolName } from '../utils/ToolDisplayTextUtils'
 import { withColorAlpha } from '../utils/ColorAlphaUtils'
 import { InteractiveMaterialButton } from './InteractiveMaterialButton'
+import { InteractiveMaterialRow } from './InteractiveMaterialRow'
 import {
   BROWSER_VIEWPORT_CORNER_RADIUS, BROWSER_VIEWPORT_FLOW_WIDTH, BROWSER_VIEWPORT_FLOW_DURATION, BrowserEdgeFlowLight
 } from './BrowserEdgeFlowLight'
@@ -17,12 +20,16 @@ import { assertBrowserPoint, buildBrowserUserAgent, isBrowserUrlAllowed } from '
 import { BROWSER_FOCUSED_EDITOR_SCRIPT, buildBrowserInsertTextScript, parseBrowserInputStatus } from '../services/BuiltinBrowserInput'
 import { BrowserPageText, buildBrowserPageTextScript, buildBrowserFragmentScript, parseBrowserPageText } from '../services/BuiltinBrowserPage'
 import {
-  browserDelay, BrowserCapture, BrowserTypingResult, BuiltinBrowserHostAdapter, BuiltinBrowserState, getBuiltinBrowserService
+  browserDelay, BrowserCapture, BrowserTypingResult, BuiltinBrowserHostAdapter, BuiltinBrowserService, BuiltinBrowserState
 } from '../services/BuiltinBrowserService'
+import { BuiltinBrowserManagerState } from '../services/BuiltinBrowserManager'
 
 const MODEL_POINTER_ID: number = 787
 const BROWSER_PRESENT_DURATION: number = 320
 const BROWSER_DISMISS_DURATION: number = 260
+const BROWSER_TOOLBAR_CONTROL_SIZE: number = 32
+const BROWSER_HISTORY_BUTTON_WIDTH: number = 38
+const BROWSER_ADDRESS_RADIUS: number = BROWSER_TOOLBAR_CONTROL_SIZE / 2
 
 class BrowserBuilderParams {
   node: BrowserNodeController
@@ -34,7 +41,8 @@ class BrowserBuilderParams {
 @Builder
 function BrowserWebBuilder(params: BrowserBuilderParams) {
   // Canvas rendering includes the Web content in component snapshots (not a separate surface).
-  Web({ src: params.node.initialUrl, controller: params.node.web, renderMode: RenderMode.SYNC_RENDER })
+  Web({ src: params.node.initialUrl, controller: params.node.web, renderMode: RenderMode.SYNC_RENDER,
+    incognitoMode: !params.node.browser.state.saveCookies })
     .id(params.node.componentId)
     .width('100%')
     .height('100%')
@@ -49,15 +57,16 @@ function BrowserWebBuilder(params: BrowserBuilderParams) {
     .onPageEnd((event) => params.node.pageChanged(event.url, false))
     .onLoadFinished((event) => params.node.pageChanged(event.url, false))
     .onNavigationEntryCommitted((event) => params.node.navigationCommitted(event))
+    .onRefreshAccessedHistory(() => params.node.syncHistoryAvailability())
     .onSearchResultReceive((event) => params.node.searchResult(event))
     .onProgressChange((event) => {
       if (params.node.isCurrent()) {
-        getBuiltinBrowserService().state.progress = event.newProgress
+        params.node.browser.state.progress = event.newProgress
       }
     })
     .onTitleReceive((event) => {
       if (params.node.isCurrent()) {
-        getBuiltinBrowserService().state.title = event.title
+        params.node.browser.state.title = event.title
       }
     })
     .onScroll(() => params.node.changed())
@@ -78,6 +87,7 @@ function BrowserWebBuilder(params: BrowserBuilderParams) {
 }
 
 class BrowserNodeController extends NodeController implements BuiltinBrowserHostAdapter {
+  browser: BuiltinBrowserService = new BuiltinBrowserService()
   readonly web: webview.WebviewController = new webview.WebviewController()
   componentId: string = ''
   generation: number = 0
@@ -101,15 +111,15 @@ class BrowserNodeController extends NodeController implements BuiltinBrowserHost
 
   makeNode(uiContext: UIContext): FrameNode | null {
     this.ui = uiContext
-    this.componentId = `builtin-browser-web-${this.generation}`
-    this.initialUrl = getBuiltinBrowserService().state.initialUrl
+    this.componentId = `builtin-browser-web-${this.browser.instanceId}-${this.generation}`
+    this.initialUrl = this.browser.state.initialUrl
     this.root = new BuilderNode<[BrowserBuilderParams]>(uiContext)
     this.root.build(wrapBuilder(BrowserWebBuilder), new BrowserBuilderParams(this))
     return this.root.getFrameNode()
   }
 
   isCurrent(): boolean {
-    return getBuiltinBrowserService().isCurrent(this.generation)
+    return this.browser.isCurrent(this.generation)
   }
 
   attach(): void {
@@ -117,16 +127,17 @@ class BrowserNodeController extends NodeController implements BuiltinBrowserHost
       return
     }
     try {
-      this.setPageMode(getBuiltinBrowserService().state.pageMode)
-      getBuiltinBrowserService().attach(this.generation, this)
+      this.setPageMode(this.browser.state.pageMode)
+      this.browser.attach(this.generation, this)
+      this.syncHistoryAvailability()
     } catch (error) {
       this.failed(`浏览器页面模式初始化失败，请关闭浏览器后重新打开：${error instanceof Error ? error.message : String(error)}`)
-      getBuiltinBrowserService().pause('page_mode_initialization_failed')
+      this.browser.pause('page_mode_initialization_failed')
     }
   }
 
   setActive(active: boolean): void {
-    if (getBuiltinBrowserService().state.owner === 'model') {
+    if (this.browser.state.owner === 'model') {
       // Activating a background tab must not pop up the keyboard over the chat or another app.
       this.web.setSoftKeyboardBehaviorMode(webview.WebSoftKeyboardBehaviorMode.DISABLE_AUTO_KEYBOARD_ON_ACTIVE)
     } else {
@@ -142,7 +153,7 @@ class BrowserNodeController extends NodeController implements BuiltinBrowserHost
   handleBlur(): void {
     // Window/UI focus can move to chat while the DOM input stays focused. Keep the callback controller
     // for model typing; navigation and explicit handoff still reset it.
-    if (getBuiltinBrowserService().state.owner !== 'model') {
+    if (this.browser.state.owner !== 'model') {
       this.resetKeyboard()
     }
   }
@@ -150,7 +161,7 @@ class BrowserNodeController extends NodeController implements BuiltinBrowserHost
   destroy(): void {
     // Release the owning ArkUI component before closing native callbacks or disposing the Web subtree.
     this.modelKeyboardBuilder = null
-    getBuiltinBrowserService().detach(this.generation)
+    this.browser.detach(this.generation)
     this.resetKeyboard()
     this.root?.dispose()
     this.root = null
@@ -159,7 +170,7 @@ class BrowserNodeController extends NodeController implements BuiltinBrowserHost
 
   changed(): void {
     if (this.isCurrent()) {
-      getBuiltinBrowserService().invalidate()
+      this.browser.invalidate()
     }
   }
 
@@ -167,7 +178,7 @@ class BrowserNodeController extends NodeController implements BuiltinBrowserHost
     if (!this.isCurrent()) {
       return
     }
-    const state = getBuiltinBrowserService().state
+    const state = this.browser.state
     if (!loading && url === this.initialUrl) {
       this.initialDocumentFinished = true
       if (this.pendingNavigation !== '') {
@@ -197,8 +208,9 @@ class BrowserNodeController extends NodeController implements BuiltinBrowserHost
 
   navigationCommitted(event: LoadCommittedDetails): void {
     if (!this.isCurrent() || !event.isMainFrame) return
+    this.syncHistoryAvailability()
     if (event.isSameDocument) {
-      const state = getBuiltinBrowserService().state
+      const state = this.browser.state
       state.url = event.url
       state.loading = false
       this.changed()
@@ -207,9 +219,21 @@ class BrowserNodeController extends NodeController implements BuiltinBrowserHost
     }
   }
 
+  syncHistoryAvailability(): void {
+    if (!this.isCurrent()) return
+    const state = this.browser.state
+    try {
+      state.canGoBack = this.web.accessBackward()
+      state.canGoForward = this.web.accessForward()
+    } catch (_error) {
+      state.canGoBack = false
+      state.canGoForward = false
+    }
+  }
+
   searchResult(event: OnSearchResultReceiveEvent): void {
     if (!this.isCurrent()) return
-    const state = getBuiltinBrowserService().state
+    const state = this.browser.state
     state.findMatches = event.numberOfMatches
     state.findDone = event.isDoneCounting
     this.changed()
@@ -217,8 +241,8 @@ class BrowserNodeController extends NodeController implements BuiltinBrowserHost
 
   failed(message: string): void {
     if (this.isCurrent()) {
-      getBuiltinBrowserService().state.error = message
-      getBuiltinBrowserService().state.loading = false
+      this.browser.state.error = message
+      this.browser.state.loading = false
       this.changed()
     }
   }
@@ -226,8 +250,8 @@ class BrowserNodeController extends NodeController implements BuiltinBrowserHost
   renderExited(): void {
     this.failed('网页渲染进程已退出，请关闭浏览器后重新打开')
     if (this.isCurrent()) {
-      getBuiltinBrowserService().pause('render_exited')
-      getBuiltinBrowserService().detach(this.generation)
+      this.browser.pause('render_exited')
+      this.browser.detach(this.generation)
     }
   }
 
@@ -235,7 +259,7 @@ class BrowserNodeController extends NodeController implements BuiltinBrowserHost
     const controller = info.controller
     if (this.isCurrent() && this.modelKeyboardBuilder !== null) {
       this.keyboard = controller
-      if (getBuiltinBrowserService().state.owner === 'user') {
+      if (this.browser.state.owner === 'user') {
         return { useSystemKeyboard: true }
       }
     }
@@ -244,7 +268,7 @@ class BrowserNodeController extends NodeController implements BuiltinBrowserHost
       customKeyboard: (): void => {
         // ArkWeb calls this later without a receiver. Use the tab-bound builder, never an unbound
         // global @Builder or this NodeController (neither supplies the owning ArkUI component).
-        if (this.isCurrent() && getBuiltinBrowserService().state.owner === 'model' &&
+        if (this.isCurrent() && this.browser.state.owner === 'model' &&
           this.keyboard === controller) {
           this.modelKeyboardBuilder?.()
         }
@@ -266,7 +290,7 @@ class BrowserNodeController extends NodeController implements BuiltinBrowserHost
     }
     this.navigationTarget = url
     this.pendingNavigation = ''
-    const state = getBuiltinBrowserService().state
+    const state = this.browser.state
     const current = this.web.getUrl()
     if (this.initialNavigationPending) {
       this.initialNavigationPending = false
@@ -310,7 +334,7 @@ class BrowserNodeController extends NodeController implements BuiltinBrowserHost
   }
 
   find(text: string): void {
-    const state = getBuiltinBrowserService().state
+    const state = this.browser.state
     state.error = ''
     if (state.findQuery === text && state.findDone && state.findMatches > 0) {
       this.web.searchNext(true)
@@ -534,7 +558,7 @@ class BrowserNodeController extends NodeController implements BuiltinBrowserHost
   }
 
   blockHardwareKey(event: KeyEvent): boolean {
-    if (getBuiltinBrowserService().state.owner === 'user') return false
+    if (this.browser.state.owner === 'user') return false
     return !(this.dispatchingModelEnter && event.keyCode === KeyCode.KEYCODE_ENTER &&
       (event.type === KeyType.Down || event.type === KeyType.Up))
   }
@@ -675,10 +699,12 @@ class BrowserNodeController extends NodeController implements BuiltinBrowserHost
 
 @ComponentV2
 struct BuiltinBrowserTab {
+  @Param browser: BuiltinBrowserService = new BuiltinBrowserService()
   @Param generation: number = 0
   private node: BrowserNodeController = new BrowserNodeController()
 
   aboutToAppear(): void {
+    this.node.browser = this.browser
     this.node.generation = this.generation
     this.node.setModelKeyboardBuilder(this.ModelKeyboard.bind(this))
   }
@@ -699,7 +725,8 @@ struct BuiltinBrowserTab {
 
 @ComponentV2
 export struct BuiltinBrowserHost {
-  @Local state: BuiltinBrowserState = getBuiltinBrowserService().state
+  @Param browser: BuiltinBrowserService = new BuiltinBrowserService()
+  @Param state: BuiltinBrowserState = new BuiltinBrowserState()
   @Local appState: AppUiState = getAppUiState()
   @Local address: string = ''
   @Local addressEditing: boolean = false
@@ -807,7 +834,7 @@ export struct BuiltinBrowserHost {
       return
     }
     this.addressEditing = false
-    this.perform(() => getBuiltinBrowserService().userNavigate(
+    this.perform(() => this.browser.userNavigate(
       /^[a-z][a-z0-9+.-]*:/i.test(value) ? value : `https://${value}`))
   }
 
@@ -819,51 +846,60 @@ export struct BuiltinBrowserHost {
     }
   }
 
+  private canUseHistory(direction: 'back' | 'forward'): boolean {
+    return this.state.owner === 'user' && (direction === 'back' ? this.state.canGoBack : this.state.canGoForward)
+  }
+
   @Builder
-  private NavigationButton(icon: Resource, label: string, action: () => void, enabled: boolean = true) {
-    Button({ type: ButtonType.Circle }) {
-      SymbolGlyph(icon).fontSize(19).fontColor([this.appState.themeTextPrimary])
+  private HistoryButton(direction: 'back' | 'forward') {
+    Button({ type: ButtonType.Normal, stateEffect: false }) {
+      SymbolGlyph(direction === 'back' ? $r('sys.symbol.chevron_left') : $r('sys.symbol.chevron_right'))
+        .fontSize(18).fontColor([this.appState.themeTextPrimary])
     }
-    .width(36).height(36).backgroundColor(Color.Transparent)
-    .accessibilityText(label)
-    .enabled(enabled)
-    .opacity(enabled ? 1 : 0.4)
-    .onClick(() => this.perform(action))
+    .width(BROWSER_HISTORY_BUTTON_WIDTH).height(BROWSER_TOOLBAR_CONTROL_SIZE)
+    .borderRadius(direction === 'back' ? { topLeft: BROWSER_ADDRESS_RADIUS, bottomLeft: BROWSER_ADDRESS_RADIUS } :
+      { topRight: BROWSER_ADDRESS_RADIUS, bottomRight: BROWSER_ADDRESS_RADIUS })
+    .padding(0).backgroundColor(Color.Transparent)
+    .enabled(this.canUseHistory(direction))
+    .opacity(this.canUseHistory(direction) ? 1 : 0.35)
+    .accessibilityText(direction === 'back' ? pickLocalizedText('后退', 'Back') : pickLocalizedText('前进', 'Forward'))
+    .onClick(() => this.perform(() => this.browser.userNavigateHistory(direction)))
   }
 
   private getHeaderActionWidth(label: string, icon: Resource | null): number {
     if (icon !== null) {
-      return 32
+      return BROWSER_TOOLBAR_CONTROL_SIZE
     }
     const uiContext = this.getUIContext()
     const size = uiContext.getMeasureUtils().measureTextSize({
       textContent: label, fontSize: 13, fontWeight: FontWeight.Medium
     })
-    return Math.max(32, Math.ceil(uiContext.px2vp(Number(size.width))) + 20)
+    return Math.max(BROWSER_TOOLBAR_CONTROL_SIZE, Math.ceil(uiContext.px2vp(Number(size.width))) + 20)
   }
 
   @Builder
-  private HeaderActionButton(label: string, icon: Resource | null, color: string,
+  private HeaderActionButton(getLabel: () => string, icon: Resource | null, color: string,
     foreground: ResourceColor, action: () => void) {
     Stack({ alignContent: Alignment.TopStart }) {
       // Material and touch handling belong to the same native Button, as on the send button.
       InteractiveMaterialButton({
-        surfaceWidth: this.getHeaderActionWidth(label, icon),
-        surfaceHeight: 32,
+        // Read the live label inside ArkUI's render callbacks so the mounted button tracks control changes.
+        surfaceWidth: this.getHeaderActionWidth(getLabel(), icon),
+        surfaceHeight: BROWSER_TOOLBAR_CONTROL_SIZE,
         buttonType: icon === null ? ButtonType.Capsule : ButtonType.Circle,
         materialColor: withColorAlpha(color, '40'),
         interactive: true,
-        accessibilityLabel: label,
+        accessibilityLabel: getLabel(),
         onActivate: () => this.perform(action)
       }) {
         if (icon !== null) {
           SymbolGlyph(icon).fontSize(19).fontColor([foreground])
         } else {
-          Text(label).fontSize(13).fontWeight(FontWeight.Medium).fontColor(foreground).maxLines(1)
+          Text(getLabel()).fontSize(13).fontWeight(FontWeight.Medium).fontColor(foreground).maxLines(1)
         }
       }
     }
-    .height(32)
+    .height(BROWSER_TOOLBAR_CONTROL_SIZE)
     .flexShrink(0)
     .clip(false)
   }
@@ -896,52 +932,88 @@ export struct BuiltinBrowserHost {
               .maxLines(1).textOverflow({ overflow: TextOverflow.Ellipsis })
           }.alignItems(HorizontalAlign.Start).layoutWeight(1)
           if (this.state.owner === 'paused') {
-            this.HeaderActionButton(pickLocalizedText('继续模型', 'Resume'), null,
-              this.appState.themePrimary, this.appState.themePrimary, () => getBuiltinBrowserService().resume())
+            this.HeaderActionButton(() => pickLocalizedText('继续模型', 'Resume'), null,
+              this.appState.themePrimary, this.appState.themePrimary, () => this.browser.resume())
           }
           Row({ space: 8 }) {
-            this.HeaderActionButton(pickLocalizedText('关闭浏览器', 'Close browser'), $r('sys.symbol.xmark'),
+            this.HeaderActionButton(() => pickLocalizedText('关闭浏览器', 'Close browser'), $r('sys.symbol.xmark'),
               '#EF4444', $r('app.color.status_error'),
-              () => getBuiltinBrowserService().closeSession(this.state.sessionId))
-            this.HeaderActionButton(pickLocalizedText('隐藏浏览器', 'Hide browser'), $r('sys.symbol.chevron_down'),
-              '#F5C542', '#F5C542', () => getBuiltinBrowserService().hide())
-            this.HeaderActionButton(this.state.owner === 'user' ? pickLocalizedText('交给模型', 'Give control') :
+              () => this.browser.closeSession(this.state.sessionId))
+            this.HeaderActionButton(() => pickLocalizedText('隐藏浏览器', 'Hide browser'), $r('sys.symbol.chevron_down'),
+              '#F5C542', '#F5C542', () => this.browser.hide())
+            this.HeaderActionButton(() => this.state.owner === 'user' ? pickLocalizedText('交给模型', 'Give control') :
               pickLocalizedText('接管页面', 'Take over'), null, this.appState.themePrimary, this.appState.themePrimary, () => {
                 if (this.state.owner === 'user') {
-                  getBuiltinBrowserService().resume()
+                  this.browser.resume()
                 } else {
-                  getBuiltinBrowserService().takeOver()
+                  this.browser.takeOver()
                 }
               })
           }.flexShrink(0)
         }.width('100%').padding({ left: 8, right: 8, top: 6, bottom: 6 })
 
-        Row({ space: 2 }) {
-          this.NavigationButton($r('sys.symbol.chevron_left'), pickLocalizedText('后退', 'Back'),
-            () => getBuiltinBrowserService().userNavigateHistory('back'), this.state.owner === 'user')
-          this.NavigationButton($r('sys.symbol.chevron_right'), pickLocalizedText('前进', 'Forward'),
-            () => getBuiltinBrowserService().userNavigateHistory('forward'), this.state.owner === 'user')
-          TextInput({ text: this.address, placeholder: pickLocalizedText('输入网址', 'Enter URL') })
-            .layoutWeight(1).height(38).fontSize(14).enterKeyType(EnterKeyType.Go)
-            .enabled(this.state.owner === 'user')
-            .onFocus(() => {
-              this.addressEditing = true
-            })
-            .onChange((value: string) => { this.address = value })
-            .onSubmit(() => this.navigate())
-            .onBlur(() => { this.addressEditing = false })
-          this.NavigationButton($r('sys.symbol.arrow_clockwise'), pickLocalizedText('刷新', 'Reload'),
-            () => getBuiltinBrowserService().userNavigateHistory('reload'), this.state.owner === 'user')
-          Button(this.state.pageMode === 'desktop' ? pickLocalizedText('电脑版', 'Desktop') :
-            pickLocalizedText('手机版', 'Mobile'))
-            .fontSize(12).height(34).fontColor(this.appState.themePrimary)
-            .backgroundColor(Color.Transparent)
-            .enabled(this.state.owner === 'user')
-            .accessibilityText(this.state.pageMode === 'desktop' ? pickLocalizedText('切换为手机版', 'Switch to mobile') :
-              pickLocalizedText('切换为电脑版', 'Switch to desktop'))
-            .onClick(() => this.perform(() => getBuiltinBrowserService().userSetPageMode(
-              this.state.pageMode === 'desktop' ? 'mobile' : 'desktop')))
-        }.width('100%').padding({ left: 6, right: 6, bottom: 6 })
+        Row({ space: 6 }) {
+          InteractiveMaterialRow({
+            surfaceWidth: BROWSER_HISTORY_BUTTON_WIDTH * 2 + 1,
+            surfaceHeight: BROWSER_TOOLBAR_CONTROL_SIZE,
+            spacing: 0,
+            horizontalPadding: 0
+          }) {
+            this.HistoryButton('back')
+            Divider().vertical(true).width(1).strokeWidth(1).height(20)
+              .color(this.appState.themeTextPrimary).opacity(0.16)
+              .hitTestBehavior(HitTestMode.None).accessibilityLevel('no')
+            this.HistoryButton('forward')
+          }
+          ImmersiveInputSurface({
+            minSurfaceHeight: BROWSER_TOOLBAR_CONTROL_SIZE,
+            maxSurfaceHeight: BROWSER_TOOLBAR_CONTROL_SIZE,
+            cornerRadius: BROWSER_ADDRESS_RADIUS,
+            materialStyle: WRAPPED_MATERIAL_REGULAR,
+            applyShadow: true,
+            layoutWeightValue: 1
+          }) {
+            TextInput({ text: this.address, placeholder: pickLocalizedText('输入网址', 'Enter URL') })
+              .width('100%')
+              .backgroundColor(Color.Transparent)
+              .borderRadius(BROWSER_ADDRESS_RADIUS)
+              .height(BROWSER_TOOLBAR_CONTROL_SIZE)
+              .fontSize(14)
+              .enterKeyType(EnterKeyType.Go)
+              .enabled(this.state.owner === 'user')
+              .onFocus(() => {
+                this.addressEditing = true
+              })
+              .onChange((value: string) => { this.address = value })
+              .onSubmit(() => this.navigate())
+              .onBlur(() => { this.addressEditing = false })
+          }
+          InteractiveMaterialButton({
+            surfaceWidth: BROWSER_TOOLBAR_CONTROL_SIZE,
+            surfaceHeight: BROWSER_TOOLBAR_CONTROL_SIZE,
+            buttonType: ButtonType.Circle,
+            applyShadow: true,
+            isEnabled: this.state.owner === 'user',
+            accessibilityLabel: pickLocalizedText('刷新', 'Reload'),
+            onActivate: () => this.perform(() => this.browser.userNavigateHistory('reload'))
+          }) {
+            SymbolGlyph($r('sys.symbol.arrow_clockwise')).fontSize(19).fontColor([this.appState.themeTextPrimary])
+          }
+          InteractiveMaterialButton({
+            surfaceWidth: BROWSER_TOOLBAR_CONTROL_SIZE,
+            surfaceHeight: BROWSER_TOOLBAR_CONTROL_SIZE,
+            buttonType: ButtonType.Circle,
+            applyShadow: true,
+            isEnabled: this.state.owner === 'user',
+            accessibilityLabel: this.state.pageMode === 'desktop' ? pickLocalizedText('切换为手机版', 'Switch to mobile') :
+              pickLocalizedText('切换为电脑版', 'Switch to desktop'),
+            onActivate: () => this.perform(() => this.browser.userSetPageMode(
+              this.state.pageMode === 'desktop' ? 'mobile' : 'desktop'))
+          }) {
+            SymbolGlyph(this.state.pageMode === 'desktop' ? $r('sys.symbol.computer') : $r('sys.symbol.phone_1'))
+              .fontSize(19).fontColor([this.appState.themePrimary])
+          }
+        }.width('100%').padding({ left: 8, right: 8, bottom: 6 })
 
         Progress({ value: this.state.progress, total: 100, type: ProgressType.Linear })
           .width('100%').height(2).color(this.appState.themePrimary)
@@ -956,7 +1028,7 @@ export struct BuiltinBrowserHost {
         }
         Stack() {
           ForEach([this.state.generation], (generation: number) => {
-            BuiltinBrowserTab({ generation: generation })
+            BuiltinBrowserTab({ browser: this.browser, generation: generation })
           }, (generation: number): string => generation.toString())
           // This sibling blocks physical pointer/scroll input until explicit takeover.
           // Model events target the Web's BuilderNode directly, so they never hit this surface.
@@ -992,4 +1064,11 @@ export struct BuiltinBrowserHost {
     .accessibilityLevel(this.state.visible ? 'auto' : 'no-hide-descendants')
     .zIndex(this.presentationOnTop ? 100 : -1)
   }
+}
+
+@Builder
+export function BuiltinBrowserHosts(state: BuiltinBrowserManagerState) {
+  ForEach(state.sessions, (browser: BuiltinBrowserService) => {
+    BuiltinBrowserHost({ browser: browser, state: browser.state })
+  }, (browser: BuiltinBrowserService): string => `${browser.instanceId}`)
 }

@@ -65,6 +65,8 @@ export class PreferenceKeys {
   static readonly CHAT_SELECTED_TOOL_IDS_JSON: string = 'chat_selected_tool_ids_json'
   static readonly MODLENS_GATEWAY_URL: string = 'modlens_gateway_url'
   static readonly MODLENS_GATEWAY_TOKEN: string = 'modlens_gateway_token'
+  static readonly BROWSER_SAVE_COOKIES: string = 'browser_save_cookies'
+  static readonly BROWSER_OPEN_PAGES_JSON: string = 'browser_open_pages_json'
   static readonly EMAIL_ACCOUNT_CONFIG_JSON: string = 'email_account_config_json'
   static readonly EMAIL_ACCOUNT_SECRET: string = 'email_account_secret'
   static readonly SAVED_PLACES_JSON: string = 'saved_places_json'
@@ -239,8 +241,9 @@ export class PreferencesService {
   }
 
   // 设置字符串值
-  async setString(key: string, value: string): Promise<void> {
+  async setString(key: string, value: string, throwOnError: boolean = false): Promise<void> {
     if (this.dataPreferences === null) {
+      if (throwOnError) throw new Error('偏好设置尚未就绪')
       return
     }
     try {
@@ -248,6 +251,7 @@ export class PreferencesService {
       await this.dataPreferences.flush()
     } catch (error) {
       console.error('PreferencesService', `Failed to set string: ${JSON.stringify(error)}`)
+      if (throwOnError) throw new Error(`偏好设置保存失败：${toErrorDetail(error as Object)}`)
     }
   }
 
@@ -293,8 +297,9 @@ export class PreferencesService {
   }
 
   // 设置布尔值
-  async setBoolean(key: string, value: boolean): Promise<void> {
+  async setBoolean(key: string, value: boolean, throwOnError: boolean = false): Promise<void> {
     if (this.dataPreferences === null) {
+      if (throwOnError) throw new Error('偏好设置尚未就绪')
       return
     }
     try {
@@ -302,6 +307,7 @@ export class PreferencesService {
       await this.dataPreferences.flush()
     } catch (error) {
       console.error('PreferencesService', `Failed to set boolean: ${JSON.stringify(error)}`)
+      if (throwOnError) throw new Error(`偏好设置保存失败：${toErrorDetail(error as Object)}`)
     }
   }
 

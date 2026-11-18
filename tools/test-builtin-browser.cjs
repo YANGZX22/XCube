@@ -11,7 +11,7 @@ const modules = new Map();
 let now = 100000;
 let delayHook = null;
 function transpile(source) {
-  return ts.transpileModule(source.replace(/@ObservedV2\s*/g, '').replace(/@Trace\s*/g, ''), {
+  return ts.transpileModule(source.replace(/@(ObservedV2|Trace|Computed)\s*/g, ''), {
     compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.CommonJS }
   }).outputText;
 }
@@ -35,7 +35,24 @@ function load(relative) {
   return exports;
 }
 const policy = load('services/BuiltinBrowserPolicy');
-const { browserDelay, BuiltinBrowserService, BrowserCapture, BrowserTypingResult, getBuiltinBrowserService } = load('services/BuiltinBrowserService');
+const { browserDelay, BuiltinBrowserService, BrowserCapture, BrowserTypingResult } = load('services/BuiltinBrowserService');
+const adapterBrowser = new BuiltinBrowserService();
+const getTestBrowser = () => adapterBrowser;
+function managerForBrowser(browser) {
+  return {
+    initialize: async () => {},
+    getSession: sessionId => { assert.equal(sessionId, 'chat-a'); return browser; },
+    execute: (request, sessionId, requestId, cancelled) => {
+      assert.equal(sessionId, 'chat-a');
+      return browser.execute(request, sessionId, requestId, cancelled);
+    },
+    requiresLaunchApproval: (request, sessionId) => {
+      assert.equal(sessionId, 'chat-a');
+      return browser.requiresLaunchApproval(request);
+    },
+    endRequest: requestId => browser.endRequest(requestId)
+  };
+}
 const inputBridge = load('services/BuiltinBrowserInput');
 const pageBridge = load('services/BuiltinBrowserPage');
 const cases = [];
@@ -49,6 +66,7 @@ function fixture(service = new BuiltinBrowserService()) {
   const calls = [];
   const activity = [];
   const host = {
+    destroy: () => {},
     setActive: active => activity.push(active),
     navigate: url => { calls.push(['open', url]); service.state.url = url; },
     find: text => { calls.push(['find', text]); service.state.findMatches = 2; service.state.findDone = true; },
@@ -306,8 +324,8 @@ test('parallel operations and other sessions cannot use the active tab', async (
   const first = run('snapshot');
   await assert.rejects(run('snapshot'), /必须串行/);
   await first;
-  await assert.rejects(service.execute(request('snapshot'), 'chat-b', 'b', () => false), /另一会话/);
-  assert.throws(() => service.showForUser('chat-b'), /另一个会话/);
+  await assert.rejects(service.execute(request('snapshot'), 'chat-b', 'b', () => false), /当前会话不匹配/);
+  assert.throws(() => service.showForUser('chat-b'), /当前会话不匹配/);
 });
 
 test('request cancellation, endRequest and session deletion release a human wait', async () => {
@@ -443,7 +461,7 @@ test('a first open mounts a model-owned tab and rejects a cancelled open without
   await assert.rejects(service.execute(open, 'new-chat', 'new-request', () => true), /取消/);
   assert.equal(service.state.sessionId, '');
   const host = {
-    setActive() {},
+    destroy() {}, setActive() {},
     navigate: url => { service.state.url = url; }, resetKeyboard() {},
     capture: async () => screenshot()
   };
@@ -461,7 +479,7 @@ test('a first open mounts a model-owned tab and rejects a cancelled open without
 test('first open can initialize while the application is already in the background', async () => {
   const service = new BuiltinBrowserService();
   service.setForeground(false);
-  const host = { setActive() {}, resetKeyboard() {},
+  const host = { destroy() {}, setActive() {}, resetKeyboard() {},
     navigate: url => { service.state.url = url; }, capture: async () => screenshot() };
   delayHook = () => { service.attach(service.state.generation, host); delayHook = null; };
   const output = await service.execute(request('open', { url: 'https://example.com/' }), 'chat', 'request', () => false);
@@ -482,7 +500,7 @@ test('human wait expires without a screenshot or implicit control grant', async 
 });
 
 test('executor returns screenshot bytes through the image side channel, never tool JSON', async () => {
-  const service = getBuiltinBrowserService();
+  const service = getTestBrowser();
   if (service.state.sessionId) service.closeSession(service.state.sessionId);
   fixture(service);
   const exports = {};
@@ -491,7 +509,7 @@ test('executor returns screenshot bytes through the image side channel, never to
     exports,
     require: dependency => {
       if (dependency.endsWith('/BuiltinBrowserPolicy')) return policy;
-      if (dependency.endsWith('/BuiltinBrowserService')) return { getBuiltinBrowserService };
+      if (dependency.endsWith('/BuiltinBrowserManager')) return { getBuiltinBrowserManager: () => managerForBrowser(service) };
       if (dependency.endsWith('/NativeFileInputService')) return {
         canOfferNativeFileInput: context => context?.supportsVision,
         pushNativeFileInput: (context, id, name, mimeType, size, base64Data, filePath) => {
@@ -533,7 +551,7 @@ const adapterContext = {
       setMobile(value) { this.mobile = value; }
       setFormFactors(value) { this.formFactors = Array.from(value); }
     }, UserAgentFormFactor: { MOBILE: 'Mobile', DESKTOP: 'Desktop' } }, ...enumValues,
-  MODEL_POINTER_ID: 787, getBuiltinBrowserService, isBrowserUrlAllowed: policy.isBrowserUrlAllowed,
+  MODEL_POINTER_ID: 787, BuiltinBrowserService, isBrowserUrlAllowed: policy.isBrowserUrlAllowed,
   assertBrowserPoint: policy.assertBrowserPoint, buildBrowserUserAgent: policy.buildBrowserUserAgent,
   browserDelay, BrowserCapture, BrowserTypingResult, ...inputBridge, ...pageBridge, setTimeout, clearTimeout,
   inputMethod: { EnterKeyType: { UNSPECIFIED: 0, DONE: 6 } },
@@ -547,6 +565,7 @@ const adapterContext = {
 vm.runInNewContext(transpile(`${hostSource.slice(classStart, classEnd)}\nexports.Adapter = BrowserNodeController;`), adapterContext);
 function adapterFixture() {
   const adapter = new adapterContext.exports.Adapter();
+  adapter.browser = getTestBrowser();
   adapter.componentId = 'builtin-browser-web-test';
   adapter.web.runJavaScript = async () => '"editable"';
   adapter.web.getUrl = () => 'https://example.com/';
@@ -602,8 +621,38 @@ test('slide animations and hidden presentation do not shift local clicks or canc
   assert.equal(events.at(-1).touches[0].y, 200);
 });
 
+test('history arrows track the native history position and ignore callbacks from a closed tab', () => {
+  const { service } = fixture();
+  const { adapter } = adapterFixture();
+  adapter.browser = service;
+  adapter.generation = service.state.generation;
+  let index = 0;
+  let entries = 1;
+  adapter.web.accessBackward = () => index > 0;
+  adapter.web.accessForward = () => index < entries - 1;
+  const arrows = () => [service.state.canGoBack, service.state.canGoForward];
+  assert.deepEqual(arrows(), [false, false]);
+
+  entries = 2;
+  index = 1;
+  adapter.navigationCommitted({ isMainFrame: true, isSameDocument: true, url: 'https://example.com/#section' });
+  assert.deepEqual(arrows(), [true, false]);
+  index = 0;
+  adapter.syncHistoryAvailability();
+  assert.deepEqual(arrows(), [false, true]);
+  entries = 3;
+  index = 1;
+  adapter.navigationCommitted({ isMainFrame: true, isSameDocument: false, url: 'https://example.com/next' });
+  assert.deepEqual(arrows(), [true, true]);
+
+  service.closeSession('chat-a');
+  service.showForUser('chat-a');
+  adapter.syncHistoryAvailability();
+  assert.deepEqual(arrows(), [false, false]);
+});
+
 test('initial Web.src navigation is not duplicated and late blank callbacks cannot overwrite it', () => {
-  const service = getBuiltinBrowserService();
+  const service = getTestBrowser();
   fixture(service);
   const { adapter } = adapterFixture();
   adapter.generation = service.state.generation;
@@ -624,7 +673,7 @@ test('initial Web.src navigation is not duplicated and late blank callbacks cann
 });
 
 test('navigating a newly opened empty browser waits for its bootstrap document only once', () => {
-  const service = getBuiltinBrowserService();
+  const service = getTestBrowser();
   fixture(service);
   const { adapter } = adapterFixture();
   adapter.generation = service.state.generation;
@@ -644,7 +693,7 @@ test('navigating a newly opened empty browser waits for its bootstrap document o
 });
 
 test('same-document fragments do not reload; missing anchors produce explicit guidance', async () => {
-  const service = getBuiltinBrowserService();
+  const service = getTestBrowser();
   fixture(service);
   const { adapter } = adapterFixture();
   adapter.generation = service.state.generation;
@@ -659,7 +708,7 @@ test('same-document fragments do not reload; missing anchors produce explicit gu
 });
 
 test('native find uses the first query then next match, and reads native match counts', () => {
-  const service = getBuiltinBrowserService();
+  const service = getTestBrowser();
   fixture(service);
   const { adapter } = adapterFixture();
   adapter.generation = service.state.generation;
@@ -763,14 +812,16 @@ test('only explicit header takeover enters user control; focus/page/lifecycle wo
   assert.ok((await run('snapshot')).capture);
 });
 
-test('all browser controls and wait_for_user bypass approval; other tools retain their policy', () => {
+test('browser launch and blank-page navigation require approval; active-page controls and handoff do not', () => {
   const source = fs.readFileSync(path.join(base, 'services/ToolExecutionService.ets'), 'utf8');
   const parsed = ts.createSourceFile('approval.ts', source, ts.ScriptTarget.Latest, true);
   const fn = parsed.statements.find(node => ts.isFunctionDeclaration(node) && node.name.text === 'requiresToolApproval');
+  const service = new BuiltinBrowserService();
   const context = { exports: {}, BUILTIN_BROWSER_TOOL_ID: 'builtin_browser',
+    parseBrowserRequest: policy.parseBrowserRequest, getBuiltinBrowserManager: () => managerForBrowser(service),
     ToolPermissionLevel: { WRITE: 'write', READ: 'read' } };
   vm.runInNewContext(transpile(fn.getText(parsed)), context);
-  const needsApproval = context.exports.requiresToolApproval;
+  const needsApproval = (tool, args) => context.exports.requiresToolApproval(tool, args, 'chat-a');
   const browser = { id: 'builtin_browser', permissionLevel: 'write', requiresUserApproval: true,
     approvalRequiredActions: Array.from(policy.BROWSER_ACTIONS) };
   const actions = [
@@ -792,10 +843,29 @@ test('all browser controls and wait_for_user bypass approval; other tools retain
     for (const raw of [JSON.stringify(args), JSON.stringify(JSON.stringify(args)),
       JSON.stringify({ arguments: JSON.stringify(args) })]) {
       assert.equal(policy.parseBrowserRequest(raw).action, args.action);
-      assert.equal(needsApproval(browser, raw), false, args.action);
+      assert.equal(needsApproval(browser, raw), args.action === 'open', args.action);
       assert.equal(needsApproval({ ...browser, id: 'other-write-tool' }, raw), true);
     }
   }
+  const open = JSON.stringify(actions[0]);
+  service.showForUser('chat-a');
+  assert.equal(needsApproval(browser, open), true, 'a manually opened blank tab still needs confirmation');
+  for (const url of ['', 'about:blank', 'about:blank#section', 'about:blank?test=1']) {
+    service.state.url = url;
+    assert.equal(needsApproval(browser, open), true, url);
+  }
+  service.state.url = 'https://example.com/';
+  service.hide();
+  service.setForeground(false);
+  for (const args of actions) {
+    assert.equal(needsApproval(browser, JSON.stringify(args)), false, `existing page: ${args.action}`);
+  }
+  service.state.url = 'about:blank';
+  assert.equal(needsApproval(browser, open), true, 'returning to a blank page requires confirmation again');
+  assert.equal(needsApproval(browser, '{"action":"wait_for_user"}'), false);
+  service.state.url = 'https://example.com/';
+  service.closeSession('chat-a');
+  assert.equal(needsApproval(browser, open), true, 'closed tabs require approval even if the previous URL is retained');
   const readTool = { id: 'other-read-tool', permissionLevel: 'read', requiresUserApproval: false,
     approvalRequiredActions: ['delete'] };
   assert.equal(needsApproval(readTool, '{"action":"list"}'), false);
@@ -806,6 +876,114 @@ test('all browser controls and wait_for_user bypass approval; other tools retain
     assert.equal(needsApproval(browser, raw), false);
     assert.throws(() => policy.parseBrowserRequest(raw));
   }
+});
+
+test('launch confirmation blocks execution until approved; rejection and cancellation never create a tab', async () => {
+  const service = new BuiltinBrowserService();
+  const { calls, host } = fixture(service);
+  service.closeSession('chat-a');
+  calls.length = 0;
+  const browser = { id: 'builtin_browser', name: 'Browser', sourceType: 'builtin', sourceLabel: 'Built-in',
+    permissionLevel: 'write', requiresUserApproval: false, approvalRequiredActions: [] };
+  const executor = { execute: async (args, context) => JSON.stringify((await service.execute(
+    policy.parseBrowserRequest(args), context.sessionId, context.requestId, context.isCancelled)).result) };
+  const registered = { id: browser.id, config: browser, definition: { function: { name: browser.id } }, executor };
+  const registry = {
+    getToolIdByFunctionName: name => name === browser.id ? browser.id : undefined,
+    getTool: id => id === browser.id ? registered : undefined,
+    getToolExecutor: id => id === browser.id ? executor : undefined
+  };
+  class ToolContext {
+    constructor() {
+      this.sessionId = 'chat-a'; this.requestId = 'request-a'; this.actorId = 'main';
+      this.inputAttachments = []; this.isCancelled = () => false;
+    }
+    withActor(actorId) { return Object.assign(new ToolContext(), this, { actorId, inputAttachments: [] }); }
+  }
+  class ToolResult {
+    constructor(toolCallId, content, isError, displayName, sourceLabel) {
+      Object.assign(this, { toolCallId, content, isError, displayName, sourceLabel });
+    }
+  }
+  const exports = {};
+  vm.runInNewContext(transpile(fs.readFileSync(path.join(base, 'services/ToolExecutionService.ets'), 'utf8')), {
+    exports, console, Date,
+    require: dependency => {
+      if (dependency.endsWith('/BuiltinBrowserPolicy')) return policy;
+      if (dependency.endsWith('/BuiltinBrowserManager')) return { getBuiltinBrowserManager: () => managerForBrowser(service) };
+      if (dependency.endsWith('/ToolRegistry')) return { getToolRegistry: () => registry, ToolExecutionContext: ToolContext };
+      if (dependency.endsWith('/ChatModels')) return { ToolResult, ToolPermissionLevel: { WRITE: 'write', READ: 'read' } };
+      if (dependency.endsWith('/BuiltinTools')) return { ASK_USER_TOOL_ID: 'ask_user' };
+      if (dependency.endsWith('/ToolIdAliases')) return { resolveLegacyToolId: id => id };
+      if (dependency.endsWith('/PromptLanguageUtils')) return { PromptLanguage: { ZH_CN: 'zh-CN' } };
+      if (dependency.endsWith('/ToolProgressGuard')) return { ToolProgressGuard: class {
+        shouldStop() { return false; } observe() { return ''; }
+      } };
+      return {};
+    }
+  });
+  const execution = exports.ToolExecutionService.getInstance();
+  const context = new ToolContext();
+  let decision, confirmations = 0, sequence = 0;
+  execution.setApprovalCallback(() => {
+    confirmations++;
+    return new Promise(resolve => { decision = resolve; });
+  });
+  const run = (action, fields = {}) => execution.executeToolCall({
+    id: `approval-test-${++sequence}`, functionName: browser.id,
+    arguments: JSON.stringify({ action, ...fields }), displayName: '', sourceLabel: ''
+  }, [browser.id], context);
+
+  let pending = run('open', { url: 'https://example.com/' });
+  assert.equal(confirmations, 1);
+  assert.equal(service.state.sessionId, '', 'no browser is mounted while confirmation is pending');
+  assert.equal(calls.length, 0);
+  decision(exports.ToolApprovalResult.reject());
+  assert.equal(JSON.parse((await pending).content).rejected, true);
+  assert.equal(service.state.sessionId, '');
+  assert.equal(calls.length, 0);
+
+  pending = run('open', { url: 'https://example.com/' });
+  decision(exports.ToolApprovalResult.cancel());
+  assert.equal(JSON.parse((await pending).content).cancelled, true);
+  assert.equal(service.state.sessionId, '');
+  assert.equal(calls.length, 0);
+
+  delayHook = () => service.attach(service.state.generation, host);
+  pending = run('open', { url: 'https://example.com/' });
+  assert.equal(confirmations, 3);
+  assert.equal(service.state.sessionId, '');
+  decision(exports.ToolApprovalResult.approve());
+  const opened = await pending;
+  assert.equal(opened.isError, false);
+  assert.equal(service.state.url, 'https://example.com/');
+  assert.equal(calls.filter(call => call[0] === 'open').length, 1);
+  delayHook = null;
+
+  service.hide();
+  service.setForeground(false);
+  assert.equal((await run('snapshot')).isError, false);
+  assert.equal((await run('open', { url: 'https://example.com/next' })).isError, false);
+  assert.equal(confirmations, 3, 'normal browsing continues without another prompt');
+
+  service.state.url = 'about:blank';
+  const navigationCount = calls.filter(call => call[0] === 'open').length;
+  pending = run('open', { url: 'https://example.com/again' });
+  assert.equal(confirmations, 4);
+  assert.equal(calls.filter(call => call[0] === 'open').length, navigationCount);
+  decision(exports.ToolApprovalResult.reject());
+  assert.equal(JSON.parse((await pending).content).rejected, true);
+  assert.equal(service.state.url, 'about:blank');
+  assert.equal(calls.filter(call => call[0] === 'open').length, navigationCount);
+
+  service.closeSession('chat-a');
+  pending = run('open', { url: 'https://example.com/reopen' });
+  assert.equal(confirmations, 5);
+  context.isCancelled = () => true;
+  decision(exports.ToolApprovalResult.approve());
+  assert.equal((await pending).isError, true);
+  assert.equal(service.state.sessionId, '', 'cancelling the request during approval never mounts a tab');
+  assert.equal(calls.filter(call => call[0] === 'open').length, navigationCount);
 });
 
 test('text uses the real keyboard callback controller without invoking the fallback after insertion', async () => {
@@ -826,7 +1004,7 @@ test('text uses the real keyboard callback controller without invoking the fallb
 });
 
 test('same-input clicks and delayed load completion preserve the keyboard; navigation closes it', async () => {
-  const service = getBuiltinBrowserService();
+  const service = getTestBrowser();
   fixture(service);
   const { adapter } = adapterFixture();
   adapter.generation = service.state.generation;
@@ -866,7 +1044,7 @@ test('focused editor without a keyboard sends native Enter to its Web node after
 });
 
 test('Enter-only works on a focused control in a hidden tab without reinserting text or taking focus', async () => {
-  const service = getBuiltinBrowserService();
+  const service = getTestBrowser();
   fixture(service);
   service.hide();
   service.setForeground(false);
@@ -892,7 +1070,7 @@ test('Enter-only works on a focused control in a hidden tab without reinserting 
 });
 
 test('physical keys remain blocked, except Enter synchronously dispatched by the model', async () => {
-  const service = getBuiltinBrowserService();
+  const service = getTestBrowser();
   fixture(service);
   const { adapter } = adapterFixture();
   const enter = { keyCode: 2054, type: 0 };
@@ -964,7 +1142,7 @@ test('cancellation after insertion does not submit; replaced keyboard is never u
 });
 
 test('navigation between text insertion and Enter never submits into the next document', async () => {
-  const service = getBuiltinBrowserService();
+  const service = getTestBrowser();
   fixture(service);
   const { adapter, keys } = adapterFixture();
   adapter.generation = service.state.generation;
@@ -1041,7 +1219,7 @@ test('mobile/desktop UA and Client Hints agree without replacing installed engin
 });
 
 test('page mode initialization errors pause the host instead of escaping the native attach callback', () => {
-  const service = getBuiltinBrowserService();
+  const service = getTestBrowser();
   fixture(service);
   service.detach(service.state.generation);
   const { adapter } = adapterFixture();
@@ -1120,7 +1298,7 @@ test('scroll cancellation, takeover, layout changes and dispatch errors release 
 
 test('background activation does not request automatic keyboard display and window blur preserves model input', async () => {
   const { adapter } = adapterFixture();
-  const service = getBuiltinBrowserService();
+  const service = getTestBrowser();
   const calls = [];
   service.state.owner = 'model';
   adapter.web.setSoftKeyboardBehaviorMode = mode => calls.push(['mode', mode]);
@@ -1156,22 +1334,25 @@ test('image pixels and packer are released on success and encoding failure', asy
   assert.equal(releasePacker - packerBefore, 2);
 });
 
-test('request context retains two latest browser images and preserves user/file images and tool results', () => {
+test('request context retains two latest browser images and preserves user/file images and tool results', async () => {
   const source = fs.readFileSync(path.join(base, 'services/AIApiService.ets'), 'utf8');
   const parsed = ts.createSourceFile('api.ts', source, ts.ScriptTarget.Latest, true);
   const requestClass = parsed.statements.find(node => ts.isClassDeclaration(node) && node.name.text === 'RequestMessage');
   const method = requestClass.members.find(node => node.name?.getText(parsed) === 'trimBrowserSnapshots');
   const context = { exports: {} };
   vm.runInNewContext(transpile(`export class Message { ${method.getText(parsed)} }`), context);
+  const { run } = fixture();
+  const frames = ['browser-1-1', 'browser-1-2'];
+  for (let i = 0; i < 4; i++) frames.push((await run('snapshot')).result.snapshot_id);
   const messages = [
     { sourceToolCallId: '', attachments: [{ id: 'user-image' }] },
-    ...[1, 2, 3, 4].map(id => ({ sourceToolCallId: `tool-${id}`, attachments: [{ id: `browser-1-${id}` }] })),
+    ...frames.map((id, i) => ({ sourceToolCallId: `tool-${i}`, attachments: [{ id }] })),
     { sourceToolCallId: 'read-file', attachments: [{ id: 'workspace-image' }] },
     { sourceToolCallId: '', role: 'tool', content: '{"snapshot_id":"browser-1-1"}', attachments: [] }
   ];
   context.exports.Message.trimBrowserSnapshots(messages);
   assert.deepEqual(messages.flatMap(message => message.attachments.map(attachment => attachment.id)),
-    ['user-image', 'browser-1-3', 'browser-1-4', 'workspace-image']);
+    ['user-image', ...frames.slice(-2), 'workspace-image']);
   assert.equal(messages.at(-1).content, '{"snapshot_id":"browser-1-1"}');
 });
 

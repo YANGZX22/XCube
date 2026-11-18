@@ -19,10 +19,13 @@ export class BrowserRequest {
   max_chars: number = 8000
 }
 
-// External pages never gain access to file:, data:, javascript: or application schemes.
+export function isBrowserPageUrl(value: string): boolean {
+  return /^https?:\/\/[^\s/\\?#@]+(?:[/?#]|$)/i.test(value) && !/[\u0000-\u0020\\]/.test(value)
+}
+
 export function isBrowserUrlAllowed(value: string): boolean {
-  return value === 'about:blank' ||
-    (/^https?:\/\/[^\s/\\?#@]+(?:[/?#]|$)/i.test(value) && !/[\u0000-\u0020\\]/.test(value))
+  // ArkWeb also needs an empty document when a user opens a new tab.
+  return value === 'about:blank' || isBrowserPageUrl(value)
 }
 
 function stringField(data: Record<string, Object>, key: string): string {

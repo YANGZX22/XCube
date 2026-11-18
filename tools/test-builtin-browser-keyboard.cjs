@@ -27,7 +27,7 @@ const observations = [];
 const rows = [];
 const context = {
   exports: {},
-  getBuiltinBrowserService: () => service,
+  BuiltinBrowserService: class { isCurrent() { return false; } },
   NodeController: class {},
   webview: { WebviewController: class {} },
   ViewV2: class {
@@ -50,7 +50,7 @@ const javascript = ts.transpileModule(`${code.replace(/@Param\s*/g, '')}\nexport
 }).outputText;
 vm.runInNewContext(javascript, context, { filename: compiledPath });
 function tabFixture(mount = true) {
-  const tab = new context.exports.Tab(null, { generation: service.state.generation });
+  const tab = new context.exports.Tab(null, { browser: service, generation: service.state.generation });
   if (mount) tab.aboutToAppear();
   let closes = 0;
   const controller = { close: () => { closes++; } };
