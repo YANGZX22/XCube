@@ -75,7 +75,7 @@ export function resolveToolSymbolResource(toolId: string): Resource {
     case 'saved_places':
       return $r('sys.symbol.location_north_up_right')
     case 'open_map_route':
-      return $r('sys.symbol.navigation')
+      return $r('sys.symbol.route')
     case 'email_send':
       return $r('sys.symbol.envelope_badge_arrowshape_turn_up_right')
     case 'email_read':

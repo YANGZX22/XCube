@@ -228,7 +228,7 @@ struct MapRoutePageContent {
               }) {
                 Button() {
                   Row({ space: 6 }) {
-                    SymbolGlyph($r('sys.symbol.navigation'))
+                    SymbolGlyph($r('sys.symbol.route'))
                       .fontSize(16)
                       .fontColor([this.isFollowing ? this.themePrimary : $r('app.color.text_secondary')])
                     Text(pickLocalizedText('回到当前位置', 'My location'))
