@@ -1,6 +1,11 @@
-import { shouldUseDrawnNavigation } from '../utils/DrawnNavigationSupport'
+import { SettingsSectionHeading } from '../components/settings/SettingsSectionHeading'
+import { getSettingsTypography, SETTINGS_SUBTITLE_LINE_HEIGHT } from '../components/settings/SettingsTypography'
+import { ImmersiveListSurface, LIST_MATERIAL_CARD_RADIUS } from '../components/ImmersiveListSurface'
 import { ImmersiveButtonSurface } from '../components/ImmersiveButtonSurface'
+import { ImmersiveSheetHeader } from '../components/ImmersiveSheetHeader'
+import { uiMaterial } from '@kit.ArkUI'
 import { getBlurBottomShadow } from '../utils/BlurShadowUtils'
+import { shouldUseDrawnNavigation } from '../utils/DrawnNavigationSupport'
 // 默认模型配置页面
 import { DefaultModelService } from '../services/DefaultModelService'
 import { ProviderViewModel } from '../viewmodels/ProviderViewModel'
@@ -20,11 +25,9 @@ import {
   getHdsTopNavigationContentTopPadding,
   getHdsStatusBarContentColor
 } from '../utils/HdsVisualEffectUtil'
-import { uiMaterial } from '@kit.ArkUI'
-import { ImmersiveSheetHeader } from '../components/ImmersiveSheetHeader'
+import { getStaticSheetMaterial, shouldUseWrappedMaterial } from '../utils/WrappedMaterialSupport'
 
 let defaultModelPagePathStack: NavPathStack | null = null
-
 @Entry
 @ComponentV2
 struct DefaultModelPage {
@@ -157,9 +160,8 @@ struct DefaultModelPage {
     Column() {
       Row() {
         Text($r('app.string.settings_default_model'))
-          .fontSize(18)
-          .fontWeight(FontWeight.Bold)
-          .fontColor($r('app.color.text_primary'))
+          .font(getSettingsTypography().pageTitle)
+          .fontColor(getAppUiState().themeTextPrimary)
           .layoutWeight(1)
       }
       .width('100%')
@@ -228,9 +230,9 @@ struct DefaultModelPage {
           dragBar: true,
           showClose: false,
           backgroundColor: Color.Transparent,
-          systemMaterial: new uiMaterial.ImmersiveMaterial({
-            style: uiMaterial.ImmersiveStyle.REGULAR
-          })
+          blurStyle: shouldUseWrappedMaterial() ? undefined : BlurStyle.Regular,
+          systemMaterial: getStaticSheetMaterial(),
+          preferType: SheetType.BOTTOM
         })
 
       Column()
@@ -241,9 +243,10 @@ struct DefaultModelPage {
           dragBar: true,
           showClose: false,
           backgroundColor: Color.Transparent,
-          systemMaterial: new uiMaterial.ImmersiveMaterial({
-            style: uiMaterial.ImmersiveStyle.REGULAR
-          })
+          blurStyle: shouldUseWrappedMaterial() ? undefined : BlurStyle.Regular,
+          systemMaterial: getStaticSheetMaterial(),
+          preferType: SheetType.BOTTOM,
+          keyboardAvoidMode: SheetKeyboardAvoidMode.TRANSLATE_AND_RESIZE
         })
     }
     .width('100%')
@@ -289,7 +292,7 @@ struct DefaultModelPage {
   @Builder
   ChatModelSection() {
     Column() {
-      this.SectionTitle($r('app.string.default_model_section_chat'))
+      SettingsSectionHeading({ title: $r('app.string.default_model_section_chat'), topGap: 24 })
       ModelConfigCard({
         roleName: $r('app.string.default_model_role_chat'),
         description: $r('app.string.default_model_desc_chat'),
@@ -311,7 +314,7 @@ struct DefaultModelPage {
   @Builder
   TitleModelSection() {
     Column() {
-      this.SectionTitle($r('app.string.default_model_section_title_generation'))
+      SettingsSectionHeading({ title: $r('app.string.default_model_section_title_generation'), topGap: 24 })
       ModelConfigCard({
         roleName: $r('app.string.default_model_role_title_generation'),
         description: $r('app.string.default_model_desc_title_generation'),
@@ -337,7 +340,7 @@ struct DefaultModelPage {
   @Builder
   SearchOptimizationModelSection() {
     Column() {
-      this.SectionTitle($r('app.string.search_optimization_model'))
+      SettingsSectionHeading({ title: $r('app.string.search_optimization_model'), topGap: 24 })
       ModelConfigCard({
         roleName: $r('app.string.search_optimization_model'),
         description: $r('app.string.search_optimization_desc'),
@@ -357,16 +360,6 @@ struct DefaultModelPage {
   }
 
   @Builder
-  SectionTitle(title: string | Resource) {
-    Text(title)
-      .fontSize(14)
-      .fontWeight(FontWeight.Medium)
-      .fontColor($r('app.color.text_secondary'))
-      .padding({ top: 24, bottom: 8 })
-      .width('100%')
-  }
-
-  @Builder
   ModelSelectSheet() {
     DefaultModelSelectSheetContent({
       title: this.getSheetTitle(),
@@ -374,6 +367,7 @@ struct DefaultModelPage {
       isProvidersLoaded: this.isProvidersLoaded,
       providers: this.providers,
       currentModelId: this.currentModelConfig.modelId,
+      currentProviderId: this.currentModelConfig.providerId,
       onSelectModel: (providerId: string, modelId: string, modelName: string): void => {
         this.selectModel(providerId, modelId, modelName)
       },
@@ -585,82 +579,83 @@ struct ModelConfigCard {
   @Event onPromptClick: () => void = () => {}
 
   build() {
-    Column() {
-      Row() {
-        Column() {
-          Row() {
-            Text(this.roleName)
-              .fontSize(16)
-              .fontWeight(FontWeight.Medium)
-              .fontColor($r('app.color.text_primary'))
-
-            if (this.isConfigured) {
-              Text(this.displayName)
-                .fontSize(13)
-                .fontColor(this.themePrimary)
-                .margin({ left: 8 })
-                .maxLines(1)
-                .textOverflow({ overflow: TextOverflow.Ellipsis })
-                .layoutWeight(1)
-            } else {
-              Text($r('app.string.default_model_unconfigured'))
-                .fontSize(13)
-                .fontColor($r('app.color.text_tertiary'))
-                .margin({ left: 8 })
-            }
-          }
-          .width('100%')
-
-          Text(this.description)
-            .fontSize(13)
-            .fontColor($r('app.color.text_secondary'))
-            .margin({ top: 4 })
-        }
-        .alignItems(HorizontalAlign.Start)
-        .layoutWeight(1)
-
-        SymbolGlyph($r('sys.symbol.chevron_right'))
-          .fontSize(18)
-          .fontColor([$r('app.color.text_tertiary')])
-      }
-      .width('100%')
-      .padding(16)
-      .onClick(() => {
-        this.onCardClick()
-      })
-
-      if (this.showPromptEdit) {
-        Divider().color(getAppUiState().themePrimaryLight).margin({ left: 16 })
-
+    ImmersiveListSurface({ isImmersive: true, cornerRadius: LIST_MATERIAL_CARD_RADIUS }) {
+      Column() {
         Row() {
-          Text($r('app.string.default_model_prompt_template'))
-            .fontSize(14)
-            .fontColor($r('app.color.text_primary'))
+          Column() {
+            Row() {
+              Text(this.roleName)
+                .font(getSettingsTypography().itemTitle)
+                .fontColor(getAppUiState().themeTextPrimary)
 
-          Blank()
+              if (this.isConfigured) {
+                Text(this.displayName)
+                  .fontSize(13)
+                  .fontColor(this.themePrimary)
+                  .margin({ left: 8 })
+                  .maxLines(1)
+                  .textOverflow({ overflow: TextOverflow.Ellipsis })
+                  .layoutWeight(1)
+              } else {
+                Text($r('app.string.default_model_unconfigured'))
+                  .fontSize(13)
+                  .fontColor($r('app.color.text_tertiary'))
+                  .margin({ left: 8 })
+              }
+            }
+            .width('100%')
 
-          Text(this.isDefaultPrompt ?
-            $r('app.string.default_model_prompt_template_default') :
-            $r('app.string.default_model_prompt_template_custom'))
-            .fontSize(13)
-            .fontColor($r('app.color.text_secondary'))
+            Text(this.description)
+              .font(getSettingsTypography().subtitle)
+              .lineHeight(SETTINGS_SUBTITLE_LINE_HEIGHT)
+              .fontColor(getAppUiState().themeTextSecondary)
+              .margin({ top: 4 })
+          }
+          .alignItems(HorizontalAlign.Start)
+          .layoutWeight(1)
 
-          SymbolGlyph($r('sys.symbol.gearshape'))
-            .fontSize(16)
+          SymbolGlyph($r('sys.symbol.chevron_right'))
+            .fontSize(18)
             .fontColor([$r('app.color.text_tertiary')])
-            .margin({ left: 8 })
         }
         .width('100%')
         .padding(16)
         .onClick(() => {
-          this.onPromptClick()
+          this.onCardClick()
         })
+
+        if (this.showPromptEdit) {
+          Divider().color(getAppUiState().themePrimaryLight).margin({ left: 16 })
+
+          Row() {
+            Text($r('app.string.default_model_prompt_template'))
+              .font(getSettingsTypography().itemTitle)
+              .fontColor(getAppUiState().themeTextPrimary)
+
+            Blank()
+
+            Text(this.isDefaultPrompt ?
+              $r('app.string.default_model_prompt_template_default') :
+              $r('app.string.default_model_prompt_template_custom'))
+              .fontSize(13)
+              .fontColor($r('app.color.text_secondary'))
+
+            SymbolGlyph($r('sys.symbol.gearshape'))
+              .fontSize(16)
+              .fontColor([$r('app.color.text_tertiary')])
+              .margin({ left: 8 })
+          }
+          .width('100%')
+          .padding(16)
+          .onClick(() => {
+            this.onPromptClick()
+          })
+        }
       }
+      .width('100%')
+      .backgroundColor(Color.Transparent)
+      .borderRadius(LIST_MATERIAL_CARD_RADIUS)
     }
-    .width('100%')
-    .backgroundColor(getAppUiState().themeSurface)
-    .borderRadius(16)
-    .border({ width: 1, color: this.themePrimaryLight })
   }
 }
 

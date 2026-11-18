@@ -7,6 +7,7 @@ import { shouldUseDrawnNavigation } from '../utils/DrawnNavigationSupport'
 import { ImmersiveButtonSurface } from '../components/ImmersiveButtonSurface'
 import { getBlurBottomShadow } from '../utils/BlurShadowUtils'
 import { KeyboardAvoidMode, SymbolGlyphModifier, uiMaterial } from '@kit.ArkUI'
+import { getStaticSheetMaterial, shouldUseWrappedMaterial } from '../utils/WrappedMaterialSupport'
 import { common } from '@kit.AbilityKit'
 import {
   HdsNavDestination,
@@ -4504,7 +4505,8 @@ export struct ChatPage {
           dragBar: true,
           showClose: false,
           backgroundColor: Color.Transparent,
-          systemMaterial: new uiMaterial.ImmersiveMaterial({
+          blurStyle: this.modelSheetActivePanel === 'selector' && !shouldUseWrappedMaterial() ? BlurStyle.Regular : undefined,
+          systemMaterial: this.modelSheetActivePanel === 'selector' ? getStaticSheetMaterial() : new uiMaterial.ImmersiveMaterial({
             style: uiMaterial.ImmersiveStyle.REGULAR
           }),
           preferType: SheetType.BOTTOM,

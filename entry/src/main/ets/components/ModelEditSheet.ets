@@ -1,5 +1,6 @@
+import { getSettingsTypography, SETTINGS_HEADING_CONTENT_GAP, SETTINGS_SUBTITLE_LINE_HEIGHT } from './settings/SettingsTypography'
+import { ImmersiveFieldSurface } from './ImmersiveFieldSurface'
 import { ImmersiveButtonSurface } from './ImmersiveButtonSurface'
-import { getBlurBottomShadow } from '../utils/BlurShadowUtils'
 /**
  * 模型编辑半模态组件
  * 单页滚动布局：核心信息 → 能力标签 → 可折叠高级参数
@@ -367,11 +368,10 @@ export struct ModelEditSheet {
   private BillingTimePickerDialog() {
     Column({ space: 16 }) {
       Text(this.billingTimePickerTitle)
-        .fontSize(18)
-        .fontWeight(FontWeight.Bold)
-        .fontColor($r('app.color.text_primary'))
+        .font(getSettingsTypography().pageTitle)
+        .fontColor(getAppUiState().themeTextPrimary)
         .width('100%')
-        .textAlign(TextAlign.Start)
+        .textAlign(TextAlign.Center)
 
       TimePicker({ selected: this.billingPickerInitialTime })
         .useMilitaryTime(true)
@@ -578,6 +578,8 @@ export struct ModelEditSheet {
   @Builder
   HeaderBar() {
     ImmersiveSheetHeader({
+      titleFont: getSettingsTypography().pageTitle,
+      titleColor: getAppUiState().themeTextPrimary,
       title: '编辑模型',
       showTrailing: true,
       trailingColor: this.themePrimary,
@@ -595,9 +597,9 @@ export struct ModelEditSheet {
     Row() {
       Column() {
         Text('模型 ID')
-          .fontSize(13)
-          .fontColor($r('app.color.text_primary'))
-          .margin({ bottom: 4 })
+          .font(getSettingsTypography().fieldLabel)
+          .fontColor(getAppUiState().themeTextSecondary)
+          .margin({ bottom: SETTINGS_HEADING_CONTENT_GAP })
 
         Text(this.model.id)
           .fontSize(15)
@@ -627,21 +629,21 @@ export struct ModelEditSheet {
   ModelNameSection() {
     Column() {
       Text('模型名称')
-        .fontSize(13)
-        .fontColor($r('app.color.text_primary'))
-        .margin({ bottom: 8 })
+        .font(getSettingsTypography().fieldLabel)
+        .fontColor(getAppUiState().themeTextSecondary)
+        .margin({ bottom: SETTINGS_HEADING_CONTENT_GAP })
 
-      TextInput({ text: this.tempName, placeholder: '输入模型显示名称' })
-        .width('100%')
-        .height(44)
-        .backgroundColor(Color.Transparent)
-        .borderRadius(16)
-        .backdropBlur(16)
-        .shadow(getBlurBottomShadow())
-        .padding({ left: 16, right: 16 })
-        .onChange((value: string) => {
-          this.tempName = value
-        })
+      ImmersiveFieldSurface({ cornerRadius: 16 }) {
+        TextInput({ text: this.tempName, placeholder: '输入模型显示名称' })
+          .width('100%')
+          .backgroundColor(Color.Transparent)
+          .height(44)
+          .borderRadius(16)
+          .padding({ left: 16, right: 16 })
+          .onChange((value: string) => {
+            this.tempName = value
+          })
+      }
     }
     .width('100%')
     .alignItems(HorizontalAlign.Start)
@@ -651,26 +653,26 @@ export struct ModelEditSheet {
 
   @Builder
   ContextLengthSection() {
-    Column({ space: 8 }) {
+    Column({ space: SETTINGS_HEADING_CONTENT_GAP }) {
       Text(pickLocalizedText('上下文长度（Token）', 'Context length (tokens)'))
-        .fontSize(13)
-        .fontColor($r('app.color.text_primary'))
+        .font(getSettingsTypography().fieldLabel)
+        .fontColor(getAppUiState().themeTextSecondary)
 
-      TextInput({
-        text: this.contextLengthText,
-        placeholder: pickLocalizedText('默认 256000', 'Default: 256000')
-      })
-        .width('100%')
-        .height(44)
-        .type(InputType.Number)
-        .backgroundColor(Color.Transparent)
-        .borderRadius(16)
-        .backdropBlur(16)
-        .shadow(getBlurBottomShadow())
-        .padding({ left: 16, right: 16 })
-        .onChange((value: string) => {
-          this.contextLengthText = value
+      ImmersiveFieldSurface({ cornerRadius: 16 }) {
+        TextInput({
+          text: this.contextLengthText,
+          placeholder: pickLocalizedText('默认 256000', 'Default: 256000')
         })
+          .width('100%')
+          .backgroundColor(Color.Transparent)
+          .height(44)
+          .type(InputType.Number)
+          .borderRadius(16)
+          .padding({ left: 16, right: 16 })
+          .onChange((value: string) => {
+            this.contextLengthText = value
+          })
+      }
     }
     .width('100%')
     .alignItems(HorizontalAlign.Start)
@@ -682,9 +684,9 @@ export struct ModelEditSheet {
   CapabilityChipsSection() {
     Column() {
       Text('模型能力')
-        .fontSize(13)
-        .fontColor($r('app.color.text_primary'))
-        .margin({ bottom: 12 })
+        .font(getSettingsTypography().fieldLabel)
+        .fontColor(getAppUiState().themeTextSecondary)
+        .margin({ bottom: SETTINGS_HEADING_CONTENT_GAP })
 
       Flex({ wrap: FlexWrap.Wrap, space: { main: LengthMetrics.vp(8), cross: LengthMetrics.vp(8) } }) {
         ModelCapabilityButton({
@@ -750,16 +752,16 @@ export struct ModelEditSheet {
       Row() {
         Column({ space: 3 }) {
           Text(pickLocalizedText('模型计费', 'Model billing'))
-            .fontSize(15)
-            .fontWeight(FontWeight.Medium)
-            .fontColor($r('app.color.text_primary'))
+            .font(getSettingsTypography().sectionTitle)
+            .fontColor(getAppUiState().themeTextPrimary)
 
           Text(pickLocalizedText(
             '预估对话费用，可能因缓存和 Token 统计方式不同而与实际费用略有差异',
             'Estimated conversation costs may differ slightly from actual charges due to caching and token-counting methods'
           ))
-            .fontSize(12)
-            .fontColor($r('app.color.text_tertiary'))
+            .font(getSettingsTypography().subtitle)
+            .lineHeight(SETTINGS_SUBTITLE_LINE_HEIGHT)
+            .fontColor(getAppUiState().themeTextSecondary)
         }
         .layoutWeight(1)
         .alignItems(HorizontalAlign.Start)
@@ -782,8 +784,8 @@ export struct ModelEditSheet {
 
         Row() {
           Text(pickLocalizedText('币种', 'Currency'))
-            .fontSize(13)
-            .fontColor($r('app.color.text_primary'))
+            .font(getSettingsTypography().fieldLabel)
+            .fontColor(getAppUiState().themeTextSecondary)
             .layoutWeight(1)
 
           Select(this.billingCurrencyOptions)
@@ -814,15 +816,16 @@ export struct ModelEditSheet {
         Row() {
           Column({ space: 3 }) {
             Text(pickLocalizedText('缓存命中计费', 'Cache-hit billing'))
-              .fontSize(13)
-              .fontColor($r('app.color.text_primary'))
+              .font(getSettingsTypography().itemTitle)
+              .fontColor(getAppUiState().themeTextPrimary)
 
             Text(pickLocalizedText(
               '输入分为未命中与缓存命中价',
               'Split input into cache-miss and cache-hit prices'
             ))
-              .fontSize(11)
-              .fontColor($r('app.color.text_tertiary'))
+              .font(getSettingsTypography().subtitle)
+              .lineHeight(SETTINGS_SUBTITLE_LINE_HEIGHT)
+              .fontColor(getAppUiState().themeTextSecondary)
           }
           .layoutWeight(1)
           .alignItems(HorizontalAlign.Start)
@@ -841,13 +844,14 @@ export struct ModelEditSheet {
         Row() {
           Column({ space: 3 }) {
             Text(pickLocalizedText('峰谷计费', 'Time-of-use pricing'))
-              .fontSize(13)
-              .fontColor($r('app.color.text_primary'))
+              .font(getSettingsTypography().itemTitle)
+              .fontColor(getAppUiState().themeTextPrimary)
 
             Text(pickLocalizedText('按设备当前时区选择峰时或谷时价格',
               'Choose peak or off-peak prices using the device time zone'))
-              .fontSize(11)
-              .fontColor($r('app.color.text_tertiary'))
+              .font(getSettingsTypography().subtitle)
+              .lineHeight(SETTINGS_SUBTITLE_LINE_HEIGHT)
+              .fontColor(getAppUiState().themeTextSecondary)
           }
           .layoutWeight(1)
           .alignItems(HorizontalAlign.Start)
@@ -867,8 +871,8 @@ export struct ModelEditSheet {
           Column({ space: 8 }) {
             Row() {
               Text(pickLocalizedText('峰时段（设备本地时间）', 'Peak periods (device local time)'))
-                .fontSize(12)
-                .fontColor($r('app.color.text_secondary'))
+                .font(getSettingsTypography().fieldLabel)
+                .fontColor(getAppUiState().themeTextSecondary)
                 .layoutWeight(1)
 
               if (this.billingPeakPeriods.length < 3) {
@@ -916,8 +920,8 @@ export struct ModelEditSheet {
               .hitTestBehavior(HitTestMode.None)
 
             Text(pickLocalizedText('法定休息日为谷价', 'Use off-peak prices on statutory rest days'))
-              .fontSize(12)
-              .fontColor($r('app.color.text_secondary'))
+              .font(getSettingsTypography().itemTitle)
+              .fontColor(getAppUiState().themeTextPrimary)
               .layoutWeight(1)
           }
           .width('100%')
@@ -998,8 +1002,9 @@ export struct ModelEditSheet {
           `单位：${this.billingCurrency} / 百万 Token`,
           `Unit: ${this.billingCurrency} / million tokens`
         ))
-          .fontSize(11)
-          .fontColor($r('app.color.text_tertiary'))
+          .font(getSettingsTypography().subtitle)
+          .lineHeight(SETTINGS_SUBTITLE_LINE_HEIGHT)
+          .fontColor(getAppUiState().themeTextSecondary)
           .width('100%')
       }
     }
@@ -1105,11 +1110,10 @@ export struct ModelEditSheet {
     onInputChange: (value: string) => void,
     onOutputChange: (value: string) => void
   ) {
-    Column({ space: 7 }) {
+    Column({ space: SETTINGS_HEADING_CONTENT_GAP }) {
       Text(title)
-        .fontSize(12)
-        .fontWeight(FontWeight.Medium)
-        .fontColor($r('app.color.text_secondary'))
+        .font(getSettingsTypography().fieldLabel)
+        .fontColor(getAppUiState().themeTextSecondary)
         .width('100%')
 
       Row({ space: 10 }) {
@@ -1136,26 +1140,26 @@ export struct ModelEditSheet {
 
   @Builder
   BillingPriceInput(label: string, value: string, onChange: (value: string) => void) {
-    Column({ space: 7 }) {
+    Column({ space: SETTINGS_HEADING_CONTENT_GAP }) {
       Text(label)
-        .fontSize(12)
-        .fontColor($r('app.color.text_secondary'))
+        .font(getSettingsTypography().fieldLabel)
+        .fontColor(getAppUiState().themeTextSecondary)
         .width('100%')
 
-      TextInput({ text: value, placeholder: '0.00' })
-        .width('100%')
-        .height(42)
-        .fontSize(14)
-        .fontColor($r('app.color.text_primary'))
-        .placeholderColor($r('app.color.text_tertiary'))
-        .backgroundColor(Color.Transparent)
-        .borderRadius(14)
-        .padding({ left: 12, right: 12 })
-        .backdropBlur(16)
-        .shadow(getBlurBottomShadow())
-        .onChange((text: string) => {
-          onChange(text)
-        })
+      ImmersiveFieldSurface({ cornerRadius: 14 }) {
+        TextInput({ text: value, placeholder: '0.00' })
+          .width('100%')
+          .backgroundColor(Color.Transparent)
+          .height(42)
+          .fontSize(14)
+          .fontColor($r('app.color.text_primary'))
+          .placeholderColor($r('app.color.text_tertiary'))
+          .borderRadius(14)
+          .padding({ left: 12, right: 12 })
+          .onChange((text: string) => {
+            onChange(text)
+          })
+      }
     }
     .layoutWeight(1)
     .alignItems(HorizontalAlign.Start)
@@ -1163,27 +1167,26 @@ export struct ModelEditSheet {
 
   @Builder
   BillingCacheReadPriceInput(title: string, value: string, onChange: (value: string) => void) {
-    Column({ space: 7 }) {
+    Column({ space: SETTINGS_HEADING_CONTENT_GAP }) {
       Text(title)
-        .fontSize(12)
-        .fontWeight(FontWeight.Medium)
-        .fontColor($r('app.color.text_secondary'))
+        .font(getSettingsTypography().fieldLabel)
+        .fontColor(getAppUiState().themeTextSecondary)
         .width('100%')
 
-      TextInput({ text: value, placeholder: '0.00' })
-        .width('100%')
-        .height(42)
-        .fontSize(14)
-        .fontColor($r('app.color.text_primary'))
-        .placeholderColor($r('app.color.text_tertiary'))
-        .backgroundColor(Color.Transparent)
-        .borderRadius(14)
-        .padding({ left: 12, right: 12 })
-        .backdropBlur(16)
-        .shadow(getBlurBottomShadow())
-        .onChange((text: string) => {
-          onChange(text)
-        })
+      ImmersiveFieldSurface({ cornerRadius: 14 }) {
+        TextInput({ text: value, placeholder: '0.00' })
+          .width('100%')
+          .backgroundColor(Color.Transparent)
+          .height(42)
+          .fontSize(14)
+          .fontColor($r('app.color.text_primary'))
+          .placeholderColor($r('app.color.text_tertiary'))
+          .borderRadius(14)
+          .padding({ left: 12, right: 12 })
+          .onChange((text: string) => {
+            onChange(text)
+          })
+      }
     }
     .width('100%')
     .alignItems(HorizontalAlign.Start)
@@ -1195,9 +1198,8 @@ export struct ModelEditSheet {
       // 折叠标题行
       Row() {
         Text('高级参数')
-          .fontSize(15)
-          .fontWeight(FontWeight.Medium)
-          .fontColor($r('app.color.text_primary'))
+          .font(getSettingsTypography().sectionTitle)
+          .fontColor(getAppUiState().themeTextPrimary)
           .layoutWeight(1)
 
         SymbolGlyph($r('sys.symbol.chevron_right'))
@@ -1224,29 +1226,30 @@ export struct ModelEditSheet {
         Column() {
           Column({ space: 8 }) {
             Text(pickLocalizedText('最大输出 Token', 'Maximum output tokens'))
-              .fontSize(15)
-              .fontColor($r('app.color.text_primary'))
+              .font(getSettingsTypography().itemTitle)
+              .fontColor(getAppUiState().themeTextPrimary)
               .width('100%')
 
-            TextInput({ text: this.maxOutputTokensText, placeholder: '32768' })
-              .width('100%')
-              .height(42)
-              .type(InputType.Number)
-              .backgroundColor(Color.Transparent)
-              .borderRadius(14)
-              .padding({ left: 12, right: 12 })
-              .backdropBlur(16)
-              .shadow(getBlurBottomShadow())
-              .onChange((value: string) => {
-                this.maxOutputTokensText = value
-              })
+            ImmersiveFieldSurface({ cornerRadius: 14 }) {
+              TextInput({ text: this.maxOutputTokensText, placeholder: '32768' })
+                .width('100%')
+                .backgroundColor(Color.Transparent)
+                .height(42)
+                .type(InputType.Number)
+                .borderRadius(14)
+                .padding({ left: 12, right: 12 })
+                .onChange((value: string) => {
+                  this.maxOutputTokensText = value
+                })
+            }
 
             Text(pickLocalizedText(
               '该预算会从上下文总窗口中预留；发送时还会按实际输入自动收紧。',
               'Reserved from the total context window and tightened against actual input at send time.'
             ))
-              .fontSize(11)
-              .fontColor($r('app.color.text_tertiary'))
+              .font(getSettingsTypography().subtitle)
+              .lineHeight(SETTINGS_SUBTITLE_LINE_HEIGHT)
+              .fontColor(getAppUiState().themeTextSecondary)
               .width('100%')
           }
           .width('100%')
@@ -1261,11 +1264,12 @@ export struct ModelEditSheet {
             Row() {
               Column() {
                 Text('温度 (Temperature)')
-                  .fontSize(15)
-                  .fontColor($r('app.color.text_primary'))
+                  .font(getSettingsTypography().itemTitle)
+                  .fontColor(getAppUiState().themeTextPrimary)
                 Text('控制输出的随机性，值越高越有创意')
-                  .fontSize(12)
-                  .fontColor($r('app.color.text_tertiary'))
+                  .font(getSettingsTypography().subtitle)
+                  .lineHeight(SETTINGS_SUBTITLE_LINE_HEIGHT)
+                  .fontColor(getAppUiState().themeTextSecondary)
                   .margin({ top: 2 })
               }
               .alignItems(HorizontalAlign.Start)
@@ -1313,11 +1317,12 @@ export struct ModelEditSheet {
             Row() {
               Column() {
                 Text('Top P')
-                  .fontSize(15)
-                  .fontColor($r('app.color.text_primary'))
+                  .font(getSettingsTypography().itemTitle)
+                  .fontColor(getAppUiState().themeTextPrimary)
                 Text('核采样参数，控制词汇选择范围')
-                  .fontSize(12)
-                  .fontColor($r('app.color.text_tertiary'))
+                  .font(getSettingsTypography().subtitle)
+                  .lineHeight(SETTINGS_SUBTITLE_LINE_HEIGHT)
+                  .fontColor(getAppUiState().themeTextSecondary)
                   .margin({ top: 2 })
               }
               .alignItems(HorizontalAlign.Start)
@@ -1365,11 +1370,12 @@ export struct ModelEditSheet {
             Row() {
               Column() {
                 Text('存在惩罚 (Presence Penalty)')
-                  .fontSize(15)
-                  .fontColor($r('app.color.text_primary'))
+                  .font(getSettingsTypography().itemTitle)
+                  .fontColor(getAppUiState().themeTextPrimary)
                 Text('减少重复话题的出现')
-                  .fontSize(12)
-                  .fontColor($r('app.color.text_tertiary'))
+                  .font(getSettingsTypography().subtitle)
+                  .lineHeight(SETTINGS_SUBTITLE_LINE_HEIGHT)
+                  .fontColor(getAppUiState().themeTextSecondary)
                   .margin({ top: 2 })
               }
               .alignItems(HorizontalAlign.Start)
@@ -1417,11 +1423,12 @@ export struct ModelEditSheet {
             Row() {
               Column() {
                 Text('频率惩罚 (Frequency Penalty)')
-                  .fontSize(15)
-                  .fontColor($r('app.color.text_primary'))
+                  .font(getSettingsTypography().itemTitle)
+                  .fontColor(getAppUiState().themeTextPrimary)
                 Text('减少重复词汇的出现')
-                  .fontSize(12)
-                  .fontColor($r('app.color.text_tertiary'))
+                  .font(getSettingsTypography().subtitle)
+                  .lineHeight(SETTINGS_SUBTITLE_LINE_HEIGHT)
+                  .fontColor(getAppUiState().themeTextSecondary)
                   .margin({ top: 2 })
               }
               .alignItems(HorizontalAlign.Start)

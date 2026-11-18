@@ -1,3 +1,4 @@
+import { getSettingsTypography } from '../settings/SettingsTypography'
 import { ModelProvider } from '../../models/ChatModels'
 import { ModelSelectorContent } from '../ModelSelector'
 import { getAppUiState } from '../../state/AppUiState'
@@ -10,6 +11,7 @@ export struct DefaultModelSelectSheetContent {
   @Param isProvidersLoaded: boolean = false
   @Param providers: ModelProvider[] = []
   @Param currentModelId: string = ''
+  @Param currentProviderId: string = ''
   private get themePrimary(): string {
     return getAppUiState().themePrimary
   }
@@ -21,7 +23,10 @@ export struct DefaultModelSelectSheetContent {
   build() {
     Column() {
       ImmersiveSheetHeader({
+        titleFont: getSettingsTypography().pageTitle,
+        titleColor: getAppUiState().themeTextPrimary,
         title: this.title,
+        materialFeedback: false,
         onLeadingClick: (): void => {
           this.onClose()
         }
@@ -29,8 +34,8 @@ export struct DefaultModelSelectSheetContent {
 
       Row() {
         Text($r('app.string.default_model_current_selection'))
-          .fontSize(14)
-          .fontColor($r('app.color.text_secondary'))
+          .font(getSettingsTypography().fieldLabel)
+          .fontColor(getAppUiState().themeTextSecondary)
 
         Text(this.currentSelectionText)
           .fontSize(14)
@@ -41,7 +46,7 @@ export struct DefaultModelSelectSheetContent {
           .textOverflow({ overflow: TextOverflow.Ellipsis })
       }
       .width('100%')
-      .justifyContent(FlexAlign.Center)
+      .justifyContent(FlexAlign.Start)
       .padding({ left: 16, right: 16, top: 8, bottom: 12 })
 
       if (!this.isProvidersLoaded) {
@@ -62,6 +67,7 @@ export struct DefaultModelSelectSheetContent {
         ModelSelectorContent({
           providers: this.providers,
           currentModelId: this.currentModelId,
+          currentProviderId: this.currentProviderId,
           showEditEntry: false,
           showFavoriteActions: false,
           showFavoriteFilter: false,
@@ -71,8 +77,6 @@ export struct DefaultModelSelectSheetContent {
           includeModelIdInSearch: true,
           emptyStateMode: 'default',
           immersiveMaterial: true,
-          narrowSearchBar: true,
-          showImmersiveGroupBorder: true,
           onSelectModel: (providerId: string, modelId: string, modelName: string): void => {
             this.onSelectModel(providerId, modelId, modelName)
           },
@@ -85,5 +89,6 @@ export struct DefaultModelSelectSheetContent {
     }
     .width('100%')
     .height('100%')
+    .backgroundColor(Color.Transparent)
   }
 }

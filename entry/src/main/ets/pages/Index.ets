@@ -69,7 +69,7 @@ import { ManuscriptTopArcButton } from '../components/index/ManuscriptTopArcButt
 import { ChatMultiSelectToolbar } from '../components/chat/ChatMultiSelectToolbar'
 import { ChatFloatingImmersiveButton } from '../components/ChatFloatingImmersiveButton'
 import { InteractiveMaterialButton } from '../components/InteractiveMaterialButton'
-import { shouldUseWrappedMaterial, WRAPPED_MATERIAL_REGULAR } from '../utils/WrappedMaterialSupport'
+import { getStaticSheetMaterial, shouldUseWrappedMaterial, WRAPPED_MATERIAL_REGULAR } from '../utils/WrappedMaterialSupport'
 import { withColorAlpha } from '../utils/ColorAlphaUtils'
 import { ImmersiveTaskAlertBanner } from '../components/ImmersiveTaskAlertBanner'
 import { PyodideWebHost } from '../components/PyodideWebHost'
@@ -1715,9 +1715,8 @@ struct Index {
           dragBar: true,
           showClose: false,
           backgroundColor: Color.Transparent,
-          systemMaterial: new uiMaterial.ImmersiveMaterial({
-            style: uiMaterial.ImmersiveStyle.REGULAR
-          }),
+          blurStyle: shouldUseWrappedMaterial() ? undefined : BlurStyle.Regular,
+          systemMaterial: getStaticSheetMaterial(),
           preferType: SheetType.BOTTOM,
           maskColor: '#66000000',
           onDisappear: () => {
@@ -1733,9 +1732,8 @@ struct Index {
           dragBar: true,
           showClose: false,
           backgroundColor: Color.Transparent,
-          systemMaterial: new uiMaterial.ImmersiveMaterial({
-            style: uiMaterial.ImmersiveStyle.REGULAR
-          }),
+          blurStyle: shouldUseWrappedMaterial() ? undefined : BlurStyle.Regular,
+          systemMaterial: getStaticSheetMaterial(),
           preferType: SheetType.BOTTOM,
           maskColor: '#66000000',
           onDisappear: () => {
@@ -1851,9 +1849,8 @@ struct Index {
           dragBar: true,
           showClose: false,
           backgroundColor: Color.Transparent,
-          systemMaterial: new uiMaterial.ImmersiveMaterial({
-            style: uiMaterial.ImmersiveStyle.REGULAR
-          }),
+          blurStyle: shouldUseWrappedMaterial() ? undefined : BlurStyle.Regular,
+          systemMaterial: getStaticSheetMaterial(),
           preferType: SheetType.BOTTOM
         })
 
@@ -4876,27 +4873,31 @@ struct Index {
 
   @Builder
   private AssistantListMetaItem(label: ResourceStr, value: ResourceStr) {
-    Row({ space: 4 }) {
-      Text(label)
-        .fontSize(11)
-        .fontColor($r('app.color.text_tertiary'))
-        .maxLines(1)
-        .textOverflow({ overflow: TextOverflow.Ellipsis })
-      Text(value)
-        .fontSize(11)
-        .fontWeight(FontWeight.Medium)
-        .fontColor($r('app.color.text_secondary'))
-        .maxLines(1)
-        .textOverflow({ overflow: TextOverflow.Ellipsis })
+    Stack() {
+      ImmersiveListSurface({ isImmersive: true, cornerRadius: 10 }) {
+        Row({ space: 4 }) {
+          Text(label)
+            .fontSize(11)
+            .fontColor($r('app.color.text_tertiary'))
+            .maxLines(1)
+            .textOverflow({ overflow: TextOverflow.Ellipsis })
+          Text(value)
+            .fontSize(11)
+            .fontWeight(FontWeight.Medium)
+            .fontColor($r('app.color.text_secondary'))
+            .maxLines(1)
+            .textOverflow({ overflow: TextOverflow.Ellipsis })
+        }
+        .width('100%')
+        .height(28)
+        .padding({ left: 10, right: 10 })
+        .backgroundColor(Color.Transparent)
+        .borderRadius(10)
+      }
     }
     .layoutWeight(1)
-    .height(28)
-    .padding({ left: 10, right: 10 })
-    .backgroundColor(Color.Transparent)
-    .borderRadius(10)
-    .border({ width: 0.5, color: this.themePrimaryLight })
-    .backdropBlur(16)
-    .shadow(getBlurBottomShadow())
+    .clip(false)
+    .hitTestBehavior(HitTestMode.Transparent)
   }
 
   @Builder
@@ -5166,70 +5167,74 @@ struct Index {
 
   @Builder
   private AssistantDefaultModelRow() {
-    Row({ space: 12 }) {
-      Column({ space: 2 }) {
-        Text($r('app.string.assistant_default_model'))
-          .fontSize(14)
-          .fontWeight(FontWeight.Medium)
-          .fontColor($r('app.color.text_primary'))
-        Text(this.getAssistantFormDefaultModelText())
-          .fontSize(12)
-          .fontColor($r('app.color.text_secondary'))
-          .maxLines(1)
-          .textOverflow({ overflow: TextOverflow.Ellipsis })
-      }
-      .layoutWeight(1)
-      .alignItems(HorizontalAlign.Start)
+    Stack() {
+      ImmersiveListSurface({ isImmersive: true, cornerRadius: LIST_MATERIAL_CARD_RADIUS }) {
+        Row({ space: 12 }) {
+          Column({ space: 2 }) {
+            Text($r('app.string.assistant_default_model'))
+              .fontSize(14)
+              .fontWeight(FontWeight.Medium)
+              .fontColor($r('app.color.text_primary'))
+            Text(this.getAssistantFormDefaultModelText())
+              .fontSize(12)
+              .fontColor($r('app.color.text_secondary'))
+              .maxLines(1)
+              .textOverflow({ overflow: TextOverflow.Ellipsis })
+          }
+          .layoutWeight(1)
+          .alignItems(HorizontalAlign.Start)
 
-      if (this.assistantFormDefaultModelId !== '') {
-        Stack({ alignContent: Alignment.TopStart }) {
-          ImmersiveButtonSurface({
-            materialFactory: () => (new uiMaterial.ImmersiveMaterial({
-              style: uiMaterial.ImmersiveStyle.REGULAR,
-              materialColor: Color.Transparent,
-              applyShadow: false,
-              interactive: true,
-              lightEffect: { color: undefined }
-            })),
-            fallbackShadow: false,
-            cornerRadius: 17
-          }) {
-            Button() {
-              SymbolGlyph($r('sys.symbol.xmark'))
-                .fontSize(16)
-                .fontColor([$r('app.color.text_secondary')])
+          if (this.assistantFormDefaultModelId !== '') {
+            Stack({ alignContent: Alignment.TopStart }) {
+              ImmersiveButtonSurface({
+                materialFactory: () => (new uiMaterial.ImmersiveMaterial({
+                  style: uiMaterial.ImmersiveStyle.REGULAR,
+                  materialColor: Color.Transparent,
+                  applyShadow: false,
+                  interactive: true,
+                  lightEffect: { color: undefined }
+                })),
+                fallbackShadow: false,
+                cornerRadius: 17
+              }) {
+                Button() {
+                  SymbolGlyph($r('sys.symbol.xmark'))
+                    .fontSize(16)
+                    .fontColor([$r('app.color.text_secondary')])
+                }
+                .width(34)
+                .height(34)
+                .borderRadius(17)
+                .backgroundColor(Color.Transparent)
+                .stateEffect(false)
+                .onClick(() => {
+                  this.clearAssistantDefaultModel()
+                })
+              }
             }
             .width(34)
             .height(34)
-            .borderRadius(17)
-            .backgroundColor(Color.Transparent)
-            .stateEffect(false)
-            .onClick(() => {
-              this.clearAssistantDefaultModel()
-            })
+            .clip(false)
           }
-        }
-        .width(34)
-        .height(34)
-        .clip(false)
-      }
 
-      SymbolGlyph($r('sys.symbol.chevron_right'))
-        .fontSize(16)
-        .fontColor([$r('app.color.text_tertiary')])
+          SymbolGlyph($r('sys.symbol.chevron_right'))
+            .fontSize(16)
+            .fontColor([$r('app.color.text_tertiary')])
+        }
+        .width('100%')
+        .padding({ left: 14, right: 12, top: 12, bottom: 12 })
+        .backgroundColor(Color.Transparent)
+        .borderRadius(LIST_MATERIAL_CARD_RADIUS)
+        .onClick(() => {
+          this.showAssistantModelSheet = true
+          this.loadAssistantProvidersIfNeeded()
+        })
+      }
     }
     .width('100%')
-    .padding({ left: 14, right: 12, top: 12, bottom: 12 })
-    .backgroundColor(Color.Transparent)
-    .borderRadius(16)
-    .border({ width: 1, color: this.themePrimaryLight })
-    .backdropBlur(24)
-    .shadow(getBlurBottomShadow())
     .margin({ top: 16, bottom: 16 })
-    .onClick(() => {
-      this.showAssistantModelSheet = true
-      this.loadAssistantProvidersIfNeeded()
-    })
+    .clip(false)
+    .hitTestBehavior(HitTestMode.Transparent)
   }
 
   @Builder
@@ -5288,6 +5293,7 @@ struct Index {
     Column() {
       ImmersiveSheetHeader({
         title: $r('app.string.assistant_default_model'),
+        materialFeedback: false,
         onLeadingClick: (): void => {
           this.showAssistantModelSheet = false
         }
@@ -5304,8 +5310,6 @@ struct Index {
         clearSelectionText: $r('app.string.assistant_model_follow_global'),
         emptyStateMode: 'settings',
         immersiveMaterial: true,
-        narrowSearchBar: true,
-        showImmersiveGroupBorder: true,
         onSelectModel: (providerId: string, modelId: string, modelName: string): void => {
           this.selectAssistantDefaultModel(providerId, modelId, modelName)
         },
@@ -5549,76 +5553,75 @@ struct Index {
 
   @Builder
   private AssistantSwitchSheetRow(assistant: Assistant) {
-    Row({ space: 12 }) {
-      this.AssistantAvatarBadge(assistant.avatarSymbol, this.getAssistantAvatarColor(assistant), 42, 14, 22,
-        assistant.defaultProviderId, assistant.defaultModelId, assistant.defaultModelName, true)
+    ImmersiveListSurface({ isImmersive: true, cornerRadius: LIST_MATERIAL_CARD_RADIUS }) {
+      Row({ space: 12 }) {
+        this.AssistantAvatarBadge(assistant.avatarSymbol, this.getAssistantAvatarColor(assistant), 42, 14, 22,
+          assistant.defaultProviderId, assistant.defaultModelId, assistant.defaultModelName, true)
 
-      Column({ space: 5 }) {
-        Row({ space: 6 }) {
-          Text(assistant.name)
-            .fontSize(16)
-            .fontWeight(FontWeight.Bold)
-            .fontColor($r('app.color.text_primary'))
-            .maxLines(1)
-            .textOverflow({ overflow: TextOverflow.Ellipsis })
-            .layoutWeight(1)
+        Column({ space: 5 }) {
+          Row({ space: 6 }) {
+            Text(assistant.name)
+              .fontSize(16)
+              .fontWeight(FontWeight.Bold)
+              .fontColor($r('app.color.text_primary'))
+              .maxLines(1)
+              .textOverflow({ overflow: TextOverflow.Ellipsis })
+              .layoutWeight(1)
 
-          if (assistant.id === this.currentAssistantId) {
-            this.AssistantStatusBadge($r('app.string.assistant_active_badge'), this.getAssistantAccentColor(assistant))
+            if (assistant.id === this.currentAssistantId) {
+              this.AssistantStatusBadge($r('app.string.assistant_active_badge'), this.getAssistantAccentColor(assistant))
+            }
           }
-        }
-        .width('100%')
-        .alignItems(VerticalAlign.Center)
+          .width('100%')
+          .alignItems(VerticalAlign.Center)
 
-        Row({ space: 8 }) {
-          Text(this.getAssistantDefaultModelText(assistant))
-            .fontSize(12)
-            .fontColor($r('app.color.text_secondary'))
-            .maxLines(1)
-            .textOverflow({ overflow: TextOverflow.Ellipsis })
-            .layoutWeight(1)
-
-          Row({ space: 3 }) {
-            SymbolGlyph($r('sys.symbol.message'))
-              .fontSize(11)
-              .fontColor([$r('app.color.text_tertiary')])
-            Text(this.getAssistantSessionCount(assistant.id).toString())
+          Row({ space: 8 }) {
+            Text(this.getAssistantDefaultModelText(assistant))
               .fontSize(12)
-              .fontWeight(FontWeight.Medium)
               .fontColor($r('app.color.text_secondary'))
-          }
-        }
-        .width('100%')
-        .alignItems(VerticalAlign.Center)
-      }
-      .layoutWeight(1)
-      .alignItems(HorizontalAlign.Start)
+              .maxLines(1)
+              .textOverflow({ overflow: TextOverflow.Ellipsis })
+              .layoutWeight(1)
 
-      SymbolGlyph(assistant.id === this.currentAssistantId ? $r('sys.symbol.checkmark_circle_fill') :
-      $r('sys.symbol.chevron_right'))
-        .fontSize(18)
-        .fontColor([assistant.id === this.currentAssistantId ? this.getAssistantAccentColor(assistant) :
-        $r('app.color.text_tertiary')])
-    }
-    .width('100%')
-    .constraintSize({ minHeight: 70 })
-    .padding({ left: 14, right: 14, top: 12, bottom: 12 })
-    .backgroundColor(Color.Transparent)
-    .borderRadius(16)
-    .border({ width: 1, color: this.themePrimaryLight })
-    .backdropBlur(24)
-    .shadow(getBlurBottomShadow())
-    .onClick(() => {
-      this.showAssistantSwitchSheet = false
-      if (assistant.id !== this.currentAssistantId) {
-        this.getUIContext().animateTo({
-          duration: 180,
-          curve: Curve.EaseOut
-        }, () => {
-          this.switchAssistant(assistant.id)
-        })
+            Row({ space: 3 }) {
+              SymbolGlyph($r('sys.symbol.message'))
+                .fontSize(11)
+                .fontColor([$r('app.color.text_tertiary')])
+              Text(this.getAssistantSessionCount(assistant.id).toString())
+                .fontSize(12)
+                .fontWeight(FontWeight.Medium)
+                .fontColor($r('app.color.text_secondary'))
+            }
+          }
+          .width('100%')
+          .alignItems(VerticalAlign.Center)
+        }
+        .layoutWeight(1)
+        .alignItems(HorizontalAlign.Start)
+
+        SymbolGlyph(assistant.id === this.currentAssistantId ? $r('sys.symbol.checkmark_circle_fill') :
+        $r('sys.symbol.chevron_right'))
+          .fontSize(18)
+          .fontColor([assistant.id === this.currentAssistantId ? this.getAssistantAccentColor(assistant) :
+          $r('app.color.text_tertiary')])
       }
-    })
+      .width('100%')
+      .constraintSize({ minHeight: 70 })
+      .padding({ left: 14, right: 14, top: 12, bottom: 12 })
+      .backgroundColor(Color.Transparent)
+      .borderRadius(LIST_MATERIAL_CARD_RADIUS)
+      .onClick(() => {
+        this.showAssistantSwitchSheet = false
+        if (assistant.id !== this.currentAssistantId) {
+          this.getUIContext().animateTo({
+            duration: 180,
+            curve: Curve.EaseOut
+          }, () => {
+            this.switchAssistant(assistant.id)
+          })
+        }
+      })
+    }
   }
 
   @Builder

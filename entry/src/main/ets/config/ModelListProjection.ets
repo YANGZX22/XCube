@@ -37,8 +37,14 @@ export interface ModelSelectorModelRow {
 
 export type ModelSelectorRow = ModelSelectorProviderHeaderRow | ModelSelectorModelRow
 
+export interface ModelSelectorProviderGroup {
+  provider: ModelProvider
+  modelRows: ModelSelectorModelRow[]
+}
+
 export interface ModelSelectorBuildResult {
   rows: ModelSelectorRow[]
+  groups: ModelSelectorProviderGroup[]
   enabledModelCount: number
   favoriteEnabledCount: number
   matchedModelCount: number
@@ -55,6 +61,7 @@ export function buildModelSelectorRows(
   includeModelIdInSearch: boolean
 ): ModelSelectorBuildResult {
   const rows: ModelSelectorRow[] = []
+  const groups: ModelSelectorProviderGroup[] = []
   const trimmedKeyword = searchKeywords.trim().toLowerCase()
   let enabledModelCount = 0
   let favoriteEnabledCount = 0
@@ -62,7 +69,7 @@ export function buildModelSelectorRows(
 
   for (let i = 0; i < providers.length; i++) {
     const provider = providers[i]
-    const matchedModels: ModelInfo[] = []
+    const modelRows: ModelSelectorModelRow[] = []
 
     for (let j = 0; j < provider.models.length; j++) {
       const model = provider.models[j]
@@ -71,8 +78,7 @@ export function buildModelSelectorRows(
       }
 
       enabledModelCount++
-      const favoriteKey = `${provider.id}::${model.id}`
-      const isFavorite = favoriteKeys.has(favoriteKey)
+      const isFavorite = favoriteKeys.has(`${provider.id}::${model.id}`)
       if (isFavorite) {
         favoriteEnabledCount++
       }
@@ -89,35 +95,36 @@ export function buildModelSelectorRows(
         continue
       }
 
-      matchedModels.push(model)
-      matchedModelCount++
-    }
-
-    if (matchedModels.length === 0) {
-      continue
-    }
-
-    rows.push({
-      type: ModelSelectorRowType.PROVIDER_HEADER,
-      key: `${provider.id}::header`,
-      provider: provider
-    } as ModelSelectorProviderHeaderRow)
-
-    for (let j = 0; j < matchedModels.length; j++) {
-      const favoriteStateKey = favoriteKeys.has(`${provider.id}::${matchedModels[j].id}`) ? 'favorite' : 'normal'
-      rows.push({
+      if (modelRows.length === 0) {
+        rows.push({
+          type: ModelSelectorRowType.PROVIDER_HEADER,
+          key: `${provider.id}::header`,
+          provider: provider
+        } as ModelSelectorProviderHeaderRow)
+      }
+      const row: ModelSelectorModelRow = {
         type: ModelSelectorRowType.MODEL_ITEM,
-        key: `${provider.id}::${matchedModels[j].id}::${favoriteStateKey}`,
+        key: `${provider.id}::model::${model.id}`,
         provider: provider,
-        model: matchedModels[j],
-        isFavorite: favoriteKeys.has(`${provider.id}::${matchedModels[j].id}`),
-        groupPosition: resolveGroupPosition(j, matchedModels.length)
-      } as ModelSelectorModelRow)
+        model: model,
+        isFavorite: isFavorite,
+        groupPosition: ModelRowGroupPosition.MIDDLE
+      }
+      modelRows.push(row)
+      rows.push(row)
+    }
+    if (modelRows.length > 0) {
+      const lastIndex = modelRows.length - 1
+      modelRows[0].groupPosition = resolveGroupPosition(0, modelRows.length)
+      modelRows[lastIndex].groupPosition = resolveGroupPosition(lastIndex, modelRows.length)
+      groups.push({ provider: provider, modelRows: modelRows })
+      matchedModelCount += modelRows.length
     }
   }
 
   return {
     rows: rows,
+    groups: groups,
     enabledModelCount: enabledModelCount,
     favoriteEnabledCount: favoriteEnabledCount,
     matchedModelCount: matchedModelCount,
@@ -149,7 +156,7 @@ export function buildModelPickerRows(
   const filteredModelIds = filterAvailableModels(availableModels, searchKeywords)
   const visibleModelIds = showSelectedOnly
     ? collectSelectedModelIds(filteredModelIds, selectedModelIds)
-    : filteredModelIds.slice()
+    : filteredModelIds
   const groups = buildPickerModelGroups(visibleModelIds)
 
   return {
@@ -186,7 +193,7 @@ function collectSelectedModelIds(modelIds: string[], selectedModelIds: Set<strin
   return selected
 }
 
-function resolveGroupPosition(index: number, totalCount: number): ModelRowGroupPosition {
+export function resolveGroupPosition(index: number, totalCount: number): ModelRowGroupPosition {
   if (totalCount <= 1) {
     return ModelRowGroupPosition.SINGLE
   }

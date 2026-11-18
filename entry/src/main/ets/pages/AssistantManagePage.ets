@@ -1,5 +1,8 @@
+import { getSettingsTypography, SETTINGS_HEADING_CONTENT_GAP, SETTINGS_SUBTITLE_LINE_HEIGHT } from '../components/settings/SettingsTypography'
+import { ImmersiveFieldSurface } from '../components/ImmersiveFieldSurface'
 import { shouldUseDrawnNavigation } from '../utils/DrawnNavigationSupport'
 import { uiMaterial } from '@kit.ArkUI'
+import { getStaticSheetMaterial, shouldUseWrappedMaterial } from '../utils/WrappedMaterialSupport'
 import { Assistant, DEFAULT_ASSISTANT_ID } from '../models/AssistantModels'
 import { ModelProvider } from '../models/ChatModels'
 import { ServiceRegistry } from '../services/ServiceRegistry'
@@ -444,9 +447,8 @@ struct AssistantManagePage {
     Column() {
       Row() {
         Text($r('app.string.assistant_manage_title'))
-          .fontSize(18)
-          .fontWeight(FontWeight.Bold)
-          .fontColor($r('app.color.text_primary'))
+          .font(getSettingsTypography().pageTitle)
+          .fontColor(getAppUiState().themeTextPrimary)
           .layoutWeight(1)
 
         Button() {
@@ -487,9 +489,8 @@ struct AssistantManagePage {
             Column() {
               Row() {
                 Text($r('app.string.assistant_manage_title'))
-                  .fontSize(22)
-                  .fontWeight(FontWeight.Bold)
-                  .fontColor($r('app.color.text_primary'))
+                  .font(getSettingsTypography().pageTitle)
+                  .fontColor(getAppUiState().themeTextPrimary)
                   .layoutWeight(1)
 
                 Button() {
@@ -578,9 +579,8 @@ struct AssistantManagePage {
         Column({ space: 5 }) {
           Row({ space: 6 }) {
             Text(assistant.name)
-              .fontSize(16)
-              .fontWeight(FontWeight.Bold)
-              .fontColor($r('app.color.text_primary'))
+              .font(getSettingsTypography().itemTitle)
+              .fontColor(getAppUiState().themeTextPrimary)
               .maxLines(1)
               .textOverflow({ overflow: TextOverflow.Ellipsis })
               .layoutWeight(1)
@@ -598,8 +598,9 @@ struct AssistantManagePage {
           .alignItems(VerticalAlign.Center)
 
           Text(this.getAssistantDefaultModelText(assistant))
-            .fontSize(12)
-            .fontColor($r('app.color.text_secondary'))
+            .font(getSettingsTypography().subtitle)
+            .lineHeight(SETTINGS_SUBTITLE_LINE_HEIGHT)
+            .fontColor(getAppUiState().themeTextSecondary)
             .maxLines(1)
             .textOverflow({ overflow: TextOverflow.Ellipsis })
         }
@@ -671,23 +672,24 @@ struct AssistantManagePage {
       this.NameAvatarRow()
 
       Text($r('app.string.assistant_prompt'))
-        .fontSize(13)
-        .fontWeight(FontWeight.Medium)
-        .fontColor($r('app.color.text_secondary'))
+        .font(getSettingsTypography().fieldLabel)
+        .fontColor(getAppUiState().themeTextSecondary)
         .width('100%')
 
-      TextArea({ text: this.formSystemPrompt, placeholder: $r('app.string.assistant_prompt_placeholder') })
-        .width('100%')
-        .height(150)
-        .fontSize(14)
-        .fontColor($r('app.color.text_primary'))
-        .placeholderColor($r('app.color.text_tertiary'))
-        .backgroundColor(getAppUiState().themeBackground)
-        .borderRadius(16)
-        .padding(14)
-        .onChange((value: string) => {
-          this.formSystemPrompt = value
-        })
+      ImmersiveFieldSurface({ cornerRadius: 16 }) {
+        TextArea({ text: this.formSystemPrompt, placeholder: $r('app.string.assistant_prompt_placeholder') })
+          .width('100%')
+          .backgroundColor(Color.Transparent)
+          .height(150)
+          .fontSize(14)
+          .fontColor($r('app.color.text_primary'))
+          .placeholderColor($r('app.color.text_tertiary'))
+          .borderRadius(16)
+          .padding(14)
+          .onChange((value: string) => {
+            this.formSystemPrompt = value
+          })
+      }
 
       this.DefaultModelRow()
       this.TemperatureRow()
@@ -754,9 +756,8 @@ struct AssistantManagePage {
           .width('100%')
 
           Text(this.formName.trim() !== '' ? this.formName.trim() : $r('app.string.assistant_name_placeholder'))
-            .fontSize(18)
-            .fontWeight(FontWeight.Bold)
-            .fontColor($r('app.color.text_primary'))
+            .font(getSettingsTypography().sectionTitle)
+            .fontColor(getAppUiState().themeTextPrimary)
             .maxLines(1)
             .textOverflow({ overflow: TextOverflow.Ellipsis })
         }
@@ -877,26 +878,27 @@ struct AssistantManagePage {
 
   @Builder
   private NameAvatarRow() {
-    Column({ space: 8 }) {
+    Column({ space: SETTINGS_HEADING_CONTENT_GAP }) {
       Text($r('app.string.assistant_name'))
-        .fontSize(13)
-        .fontWeight(FontWeight.Medium)
-        .fontColor($r('app.color.text_secondary'))
+        .font(getSettingsTypography().fieldLabel)
+        .fontColor(getAppUiState().themeTextSecondary)
         .width('100%')
 
       Row({ space: 12 }) {
-        TextInput({ text: this.formName, placeholder: $r('app.string.assistant_name_placeholder') })
-          .layoutWeight(1)
-          .height(52)
-          .fontSize(15)
-          .fontColor($r('app.color.text_primary'))
-          .placeholderColor($r('app.color.text_tertiary'))
-          .backgroundColor(getAppUiState().themeBackground)
-          .borderRadius(18)
-          .padding({ left: 14, right: 14 })
-          .onChange((text: string) => {
-            this.formName = text
-          })
+        ImmersiveFieldSurface({ cornerRadius: 18, layoutWeightValue: 1 }) {
+          TextInput({ text: this.formName, placeholder: $r('app.string.assistant_name_placeholder') })
+            .width('100%')
+            .backgroundColor(Color.Transparent)
+            .height(52)
+            .fontSize(15)
+            .fontColor($r('app.color.text_primary'))
+            .placeholderColor($r('app.color.text_tertiary'))
+            .borderRadius(18)
+            .padding({ left: 14, right: 14 })
+            .onChange((text: string) => {
+              this.formName = text
+            })
+        }
 
         Button() {
           this.FormAssistantAvatarBadge(60, 20, 34)
@@ -941,12 +943,12 @@ struct AssistantManagePage {
     Row({ space: 12 }) {
       Column({ space: 2 }) {
         Text($r('app.string.assistant_default_model'))
-          .fontSize(14)
-          .fontWeight(FontWeight.Medium)
-          .fontColor($r('app.color.text_primary'))
+          .font(getSettingsTypography().itemTitle)
+          .fontColor(getAppUiState().themeTextPrimary)
         Text(this.getDefaultModelText())
-          .fontSize(12)
-          .fontColor($r('app.color.text_secondary'))
+          .font(getSettingsTypography().subtitle)
+          .lineHeight(SETTINGS_SUBTITLE_LINE_HEIGHT)
+          .fontColor(getAppUiState().themeTextSecondary)
           .maxLines(1)
           .textOverflow({ overflow: TextOverflow.Ellipsis })
       }
@@ -986,9 +988,8 @@ struct AssistantManagePage {
     Column({ space: 10 }) {
       Row() {
         Text($r('app.string.assistant_temperature_override'))
-          .fontSize(14)
-          .fontWeight(FontWeight.Medium)
-          .fontColor($r('app.color.text_primary'))
+          .font(getSettingsTypography().itemTitle)
+          .fontColor(getAppUiState().themeTextPrimary)
           .layoutWeight(1)
 
         Toggle({ type: ToggleType.Switch, isOn: this.formTemperatureEnabled })
@@ -1030,7 +1031,10 @@ struct AssistantManagePage {
   private ModelSheetBuilder() {
     Column() {
       ImmersiveSheetHeader({
+        titleFont: getSettingsTypography().pageTitle,
+        titleColor: getAppUiState().themeTextPrimary,
         title: $r('app.string.assistant_default_model'),
+        materialFeedback: false,
         onLeadingClick: (): void => {
           this.showModelSheet = false
         }
@@ -1046,6 +1050,7 @@ struct AssistantManagePage {
         showClearSelectionOption: true,
         clearSelectionText: $r('app.string.assistant_model_follow_global'),
         emptyStateMode: 'settings',
+        immersiveMaterial: true,
         onSelectModel: (providerId: string, modelId: string, modelName: string): void => {
           this.selectDefaultModel(providerId, modelId, modelName)
         },
@@ -1057,7 +1062,7 @@ struct AssistantManagePage {
     }
     .width('100%')
     .height('100%')
-    .backgroundColor(getAppUiState().themeBackground)
+    .backgroundColor(Color.Transparent)
   }
 
   build() {
@@ -1112,7 +1117,10 @@ struct AssistantManagePage {
         .bindSheet($$this.showModelSheet, this.ModelSheetBuilder(), {
           height: SheetSize.LARGE,
           dragBar: true,
-          showClose: false
+          showClose: false,
+          backgroundColor: Color.Transparent,
+          blurStyle: shouldUseWrappedMaterial() ? undefined : BlurStyle.Regular,
+          systemMaterial: getStaticSheetMaterial()
         })
 
       Column()

@@ -1,3 +1,5 @@
+import { getSettingsTypography, SETTINGS_HEADING_CONTENT_GAP, SETTINGS_SUBTITLE_LINE_HEIGHT } from './settings/SettingsTypography'
+import { ImmersiveFieldSurface } from './ImmersiveFieldSurface'
 import { ImmersiveButtonSurface } from './ImmersiveButtonSurface'
 import { getBlurBottomShadow } from '../utils/BlurShadowUtils'
 import { fileIo, fileUri } from '@kit.CoreFileKit'
@@ -236,6 +238,8 @@ export struct AssistantAvatarEditorSheet {
   build() {
     Column() {
       ImmersiveSheetHeader({
+        titleFont: getSettingsTypography().pageTitle,
+        titleColor: getAppUiState().themeTextPrimary,
         title: $r('app.string.assistant_avatar_edit_title'),
         showTrailing: true,
         trailingColor: this.themePrimary,
@@ -288,26 +292,26 @@ export struct AssistantAvatarEditorSheet {
       .width('100%')
 
       if (this.editMode === ASSISTANT_AVATAR_MODE_SYMBOL) {
-        Column({ space: 12 }) {
+        Column({ space: SETTINGS_HEADING_CONTENT_GAP }) {
           Text($r('app.string.assistant_avatar_text_label'))
-            .fontSize(13)
-            .fontColor($r('app.color.text_secondary'))
+            .font(getSettingsTypography().fieldLabel)
+            .fontColor(getAppUiState().themeTextSecondary)
             .width('100%')
-          TextInput({ text: this.textValue, placeholder: $r('app.string.assistant_avatar_text_placeholder') })
-            .width('100%')
-            .height(46)
-            .maxLength(8)
-            .fontSize(15)
-            .fontColor($r('app.color.text_primary'))
-            .placeholderColor($r('app.color.text_tertiary'))
-            .backgroundColor(Color.Transparent)
-            .borderRadius(16)
-            .backdropBlur(16)
-            .shadow(getBlurBottomShadow())
-            .padding({ left: 14, right: 14 })
-            .onChange((text: string) => {
-              this.textValue = text
-            })
+          ImmersiveFieldSurface({ cornerRadius: 16 }) {
+            TextInput({ text: this.textValue, placeholder: $r('app.string.assistant_avatar_text_placeholder') })
+              .width('100%')
+              .backgroundColor(Color.Transparent)
+              .height(46)
+              .maxLength(8)
+              .fontSize(15)
+              .fontColor($r('app.color.text_primary'))
+              .placeholderColor($r('app.color.text_tertiary'))
+              .borderRadius(16)
+              .padding({ left: 14, right: 14 })
+              .onChange((text: string) => {
+                this.textValue = text
+              })
+          }
 
           this.TextAvatarColorRow()
         }
@@ -316,8 +320,9 @@ export struct AssistantAvatarEditorSheet {
       } else if (this.editMode === ASSISTANT_AVATAR_MODE_MODEL) {
         Column({ space: 8 }) {
           Text($r('app.string.assistant_avatar_model_hint'))
-            .fontSize(13)
-            .fontColor($r('app.color.text_secondary'))
+            .font(getSettingsTypography().subtitle)
+            .lineHeight(SETTINGS_SUBTITLE_LINE_HEIGHT)
+            .fontColor(getAppUiState().themeTextSecondary)
             .width('100%')
           Text(this.defaultModelName !== '' ? this.defaultModelName :
             $r('app.string.assistant_avatar_model_missing'))
@@ -335,47 +340,47 @@ export struct AssistantAvatarEditorSheet {
         .width('100%')
         .alignItems(HorizontalAlign.Start)
       } else if (this.editMode === ASSISTANT_AVATAR_MODE_IMAGE) {
-        Column({ space: 10 }) {
+        Column({ space: SETTINGS_HEADING_CONTENT_GAP }) {
           Text($r('app.string.assistant_avatar_link_label'))
-            .fontSize(13)
-            .fontColor($r('app.color.text_secondary'))
+            .font(getSettingsTypography().fieldLabel)
+            .fontColor(getAppUiState().themeTextSecondary)
             .width('100%')
-          TextInput({ text: this.linkValue, placeholder: $r('app.string.assistant_avatar_link_placeholder') })
-            .width('100%')
-            .height(46)
-            .fontSize(14)
-            .fontColor($r('app.color.text_primary'))
-            .placeholderColor($r('app.color.text_tertiary'))
-            .backgroundColor(Color.Transparent)
-            .borderRadius(16)
-            .border({ width: 1, color: this.themePrimaryLight })
-            .backdropBlur(16)
-            .shadow(getBlurBottomShadow())
-            .padding({ left: 14, right: 14 })
-            .onChange((text: string) => {
-              this.linkValue = text
-            })
+          ImmersiveFieldSurface({ cornerRadius: 16 }) {
+            TextInput({ text: this.linkValue, placeholder: $r('app.string.assistant_avatar_link_placeholder') })
+              .width('100%')
+              .backgroundColor(Color.Transparent)
+              .height(46)
+              .fontSize(14)
+              .fontColor($r('app.color.text_primary'))
+              .placeholderColor($r('app.color.text_tertiary'))
+              .borderRadius(16)
+              .border({ width: 1, color: this.themePrimaryLight })
+              .padding({ left: 14, right: 14 })
+              .onChange((text: string) => {
+                this.linkValue = text
+              })
+          }
         }
         .width('100%')
         .alignItems(HorizontalAlign.Start)
       } else if (this.editMode === ASSISTANT_AVATAR_MODE_QQ) {
         Column({ space: 10 }) {
           Row({ space: 8 }) {
-            TextInput({ text: this.qqNumberValue, placeholder: $r('app.string.assistant_avatar_qq_placeholder') })
-              .layoutWeight(1)
-              .height(46)
-              .maxLength(12)
-              .fontSize(14)
-              .fontColor($r('app.color.text_primary'))
-              .placeholderColor($r('app.color.text_tertiary'))
-              .backgroundColor(Color.Transparent)
-              .borderRadius(16)
-              .backdropBlur(16)
-              .shadow(getBlurBottomShadow())
-              .padding({ left: 14, right: 14 })
-              .onChange((text: string) => {
-                this.useCustomQqAvatar(text)
-              })
+            ImmersiveFieldSurface({ cornerRadius: 16, layoutWeightValue: 1 }) {
+              TextInput({ text: this.qqNumberValue, placeholder: $r('app.string.assistant_avatar_qq_placeholder') })
+                .width('100%')
+                .backgroundColor(Color.Transparent)
+                .height(46)
+                .maxLength(12)
+                .fontSize(14)
+                .fontColor($r('app.color.text_primary'))
+                .placeholderColor($r('app.color.text_tertiary'))
+                .borderRadius(16)
+                .padding({ left: 14, right: 14 })
+                .onChange((text: string) => {
+                  this.useCustomQqAvatar(text)
+                })
+            }
             Stack({ alignContent: Alignment.TopStart }) {
               ImmersiveButtonSurface({
                 materialFactory: () => (new uiMaterial.ImmersiveMaterial({
@@ -411,8 +416,9 @@ export struct AssistantAvatarEditorSheet {
       } else {
         Column({ space: 10 }) {
           Text($r('app.string.assistant_avatar_gallery_hint'))
-            .fontSize(13)
-            .fontColor($r('app.color.text_secondary'))
+            .font(getSettingsTypography().subtitle)
+            .lineHeight(SETTINGS_SUBTITLE_LINE_HEIGHT)
+            .fontColor(getAppUiState().themeTextSecondary)
             .width('100%')
           Stack({ alignContent: Alignment.TopStart }) {
             ImmersiveButtonSurface({
@@ -461,8 +467,8 @@ export struct AssistantAvatarEditorSheet {
     Column({ space: 8 }) {
       Row() {
         Text($r('app.string.assistant_avatar_background_color'))
-          .fontSize(13)
-          .fontColor($r('app.color.text_secondary'))
+          .font(getSettingsTypography().fieldLabel)
+          .fontColor(getAppUiState().themeTextSecondary)
           .layoutWeight(1)
         Stack({ alignContent: Alignment.TopStart }) {
           ImmersiveButtonSurface({
@@ -518,8 +524,9 @@ export struct AssistantAvatarEditorSheet {
 
         Text(this.tempAvatarColor === TRANSPARENT_BG_COLOR ? $r('app.string.icon_transparent_hint') :
           this.tempAvatarColor)
-          .fontSize(14)
-          .fontColor($r('app.color.text_secondary'))
+          .font(getSettingsTypography().subtitle)
+          .lineHeight(SETTINGS_SUBTITLE_LINE_HEIGHT)
+          .fontColor(getAppUiState().themeTextSecondary)
           .layoutWeight(1)
 
         Stack({ alignContent: Alignment.TopStart }) {
@@ -560,6 +567,8 @@ export struct AssistantAvatarEditorSheet {
   private ColorPickerSheet() {
     Column() {
       ImmersiveSheetHeader({
+        titleFont: getSettingsTypography().pageTitle,
+        titleColor: getAppUiState().themeTextPrimary,
         title: $r('app.string.icon_color_picker_title'),
         onLeadingClick: (): void => {
           this.showColorPicker = false
@@ -588,8 +597,9 @@ export struct AssistantAvatarEditorSheet {
         })
 
         Text($r('app.string.icon_transparent_hint'))
-          .fontSize(13)
-          .fontColor($r('app.color.text_secondary'))
+          .font(getSettingsTypography().subtitle)
+          .lineHeight(SETTINGS_SUBTITLE_LINE_HEIGHT)
+          .fontColor(getAppUiState().themeTextSecondary)
           .margin({ left: 12 })
       }
       .width('100%')

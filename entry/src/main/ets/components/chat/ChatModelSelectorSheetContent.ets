@@ -1,3 +1,5 @@
+import { getAppUiState } from '../../state/AppUiState'
+import { getSettingsTypography } from '../settings/SettingsTypography'
 import { ModelProvider, ModelInfo, ModelInfoExtendedJson } from '../../models/ChatModels'
 import { ModelSelectorContent } from '../ModelSelector'
 import { ModelEditSheet } from '../ModelEditSheet'
@@ -44,7 +46,10 @@ export struct ChatModelSelectorSheetContent {
     if (this.activePanel === 'selector') {
       Column() {
         ImmersiveSheetHeader({
+          titleFont: getSettingsTypography().pageTitle,
+          titleColor: getAppUiState().themeTextPrimary,
           title: $r('app.string.select_model'),
+          materialFeedback: false,
           onLeadingClick: (): void => {
             this.onClose()
           }

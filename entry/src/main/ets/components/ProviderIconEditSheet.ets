@@ -1,3 +1,5 @@
+import { getSettingsTypography, SETTINGS_HEADING_CONTENT_GAP, SETTINGS_SUBTITLE_LINE_HEIGHT } from './settings/SettingsTypography'
+import { ImmersiveFieldSurface } from './ImmersiveFieldSurface'
 import { fileIo, fileUri } from '@kit.CoreFileKit'
 import { photoAccessHelper } from '@kit.MediaLibraryKit'
 import { ModelProvider, ProviderIconType } from '../models/ChatModels'
@@ -216,6 +218,8 @@ export struct ProviderIconEditSheet {
   build() {
     Column() {
       ImmersiveSheetHeader({
+        titleFont: getSettingsTypography().pageTitle,
+        titleColor: getAppUiState().themeTextPrimary,
         title: $r('app.string.icon_edit_title'),
         showTrailing: true,
         trailingColor: this.themePrimary,
@@ -313,25 +317,27 @@ export struct ProviderIconEditSheet {
   @Builder
   private TextModeContent() {
     Column({ space: 12 }) {
-      Column({ space: 8 }) {
+      Column({ space: SETTINGS_HEADING_CONTENT_GAP }) {
         Text($r('app.string.icon_text_input_label'))
-          .fontSize(13)
-          .fontColor($r('app.color.text_secondary'))
+          .font(getSettingsTypography().fieldLabel)
+          .fontColor(getAppUiState().themeTextSecondary)
           .width('100%')
 
-        TextInput({ text: this.textValue })
-          .width('100%')
-          .height(46)
-          .maxLength(2)
-          .fontSize(15)
-          .fontColor($r('app.color.text_primary'))
-          .placeholderColor($r('app.color.text_tertiary'))
-          .backgroundColor(getAppUiState().themeSurface)
-          .borderRadius(16)
-          .padding({ left: 14, right: 14 })
-          .onChange((text: string) => {
-            this.textValue = text
-          })
+        ImmersiveFieldSurface({ cornerRadius: 16 }) {
+          TextInput({ text: this.textValue })
+            .width('100%')
+            .backgroundColor(Color.Transparent)
+            .height(46)
+            .maxLength(2)
+            .fontSize(15)
+            .fontColor($r('app.color.text_primary'))
+            .placeholderColor($r('app.color.text_tertiary'))
+            .borderRadius(16)
+            .padding({ left: 14, right: 14 })
+            .onChange((text: string) => {
+              this.textValue = text
+            })
+        }
       }
       .alignItems(HorizontalAlign.Start)
       .width('100%')
@@ -346,8 +352,9 @@ export struct ProviderIconEditSheet {
   private GalleryModeContent() {
     Column({ space: 10 }) {
       Text($r('app.string.icon_gallery_hint'))
-        .fontSize(13)
-        .fontColor($r('app.color.text_secondary'))
+        .font(getSettingsTypography().subtitle)
+        .lineHeight(SETTINGS_SUBTITLE_LINE_HEIGHT)
+        .fontColor(getAppUiState().themeTextSecondary)
         .width('100%')
 
       Button(this.isPickingImage ? $r('app.string.loading') : $r('app.string.icon_pick_gallery'))
@@ -369,29 +376,32 @@ export struct ProviderIconEditSheet {
 
   @Builder
   private LinkModeContent() {
-    Column({ space: 10 }) {
+    Column({ space: SETTINGS_HEADING_CONTENT_GAP }) {
       Text($r('app.string.icon_link_hint'))
-        .fontSize(13)
-        .fontColor($r('app.color.text_secondary'))
+        .font(getSettingsTypography().subtitle)
+        .lineHeight(SETTINGS_SUBTITLE_LINE_HEIGHT)
+        .fontColor(getAppUiState().themeTextSecondary)
         .width('100%')
 
       Text($r('app.string.icon_link_label'))
-        .fontSize(13)
-        .fontColor($r('app.color.text_secondary'))
+        .font(getSettingsTypography().fieldLabel)
+        .fontColor(getAppUiState().themeTextSecondary)
         .width('100%')
 
-      TextInput({ text: this.linkValue, placeholder: $r('app.string.icon_link_placeholder') })
-        .width('100%')
-        .height(46)
-        .fontSize(14)
-        .fontColor($r('app.color.text_primary'))
-        .placeholderColor($r('app.color.text_tertiary'))
-        .backgroundColor(getAppUiState().themeSurface)
-        .borderRadius(16)
-        .padding({ left: 14, right: 14 })
-        .onChange((text: string) => {
-          this.linkValue = text
-        })
+      ImmersiveFieldSurface({ cornerRadius: 16 }) {
+        TextInput({ text: this.linkValue, placeholder: $r('app.string.icon_link_placeholder') })
+          .width('100%')
+          .backgroundColor(Color.Transparent)
+          .height(46)
+          .fontSize(14)
+          .fontColor($r('app.color.text_primary'))
+          .placeholderColor($r('app.color.text_tertiary'))
+          .borderRadius(16)
+          .padding({ left: 14, right: 14 })
+          .onChange((text: string) => {
+            this.linkValue = text
+          })
+      }
     }
     .width('100%')
     .alignItems(HorizontalAlign.Start)
@@ -402,8 +412,8 @@ export struct ProviderIconEditSheet {
     Column({ space: 8 }) {
       Row() {
         Text($r('app.string.icon_background_color'))
-          .fontSize(13)
-          .fontColor($r('app.color.text_secondary'))
+          .font(getSettingsTypography().fieldLabel)
+          .fontColor(getAppUiState().themeTextSecondary)
           .layoutWeight(1)
         Button($r('app.string.icon_random_generate'))
           .fontSize(12)
@@ -440,8 +450,9 @@ export struct ProviderIconEditSheet {
         }
 
         Text(this.bgColor === TRANSPARENT_BG_COLOR ? $r('app.string.icon_transparent_hint') : this.bgColor)
-          .fontSize(14)
-          .fontColor($r('app.color.text_secondary'))
+          .font(getSettingsTypography().subtitle)
+          .lineHeight(SETTINGS_SUBTITLE_LINE_HEIGHT)
+          .fontColor(getAppUiState().themeTextSecondary)
           .layoutWeight(1)
 
         Button($r('app.string.icon_select_color'))
@@ -464,6 +475,8 @@ export struct ProviderIconEditSheet {
   private ColorPickerSheet() {
     Column() {
       ImmersiveSheetHeader({
+        titleFont: getSettingsTypography().pageTitle,
+        titleColor: getAppUiState().themeTextPrimary,
         title: $r('app.string.icon_color_picker_title'),
         onLeadingClick: (): void => {
           this.showColorPicker = false
@@ -492,8 +505,9 @@ export struct ProviderIconEditSheet {
         })
 
         Text($r('app.string.icon_transparent_hint'))
-          .fontSize(13)
-          .fontColor($r('app.color.text_secondary'))
+          .font(getSettingsTypography().subtitle)
+          .lineHeight(SETTINGS_SUBTITLE_LINE_HEIGHT)
+          .fontColor(getAppUiState().themeTextSecondary)
           .margin({ left: 12 })
       }
       .width('100%')

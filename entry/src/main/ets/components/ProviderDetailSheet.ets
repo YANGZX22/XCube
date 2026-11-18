@@ -1,7 +1,15 @@
+import { getSettingsTypography, SettingsFont, SETTINGS_HEADING_CONTENT_GAP, SETTINGS_SUBTITLE_LINE_HEIGHT } from './settings/SettingsTypography'
+import { ImmersiveFieldSurface } from './ImmersiveFieldSurface'
+import {
+  ModelFilterSearchField,
+  MODEL_FILTER_SEARCH_HEIGHT,
+  MODEL_FILTER_SEARCH_RADIUS,
+  MODEL_FILTER_SEARCH_HORIZONTAL_INSET
+} from './ModelFilterSearchField'
+import { InteractiveMaterialButton } from './InteractiveMaterialButton'
 import { shouldUseDrawnNavigation } from '../utils/DrawnNavigationSupport'
 import { DrawnFloatingTabBar } from './DrawnFloatingTabBar'
 import { ImmersiveButtonSurface } from './ImmersiveButtonSurface'
-import { getBlurBottomShadow } from '../utils/BlurShadowUtils'
 import { KeyboardAvoidMode, SymbolGlyphModifier, uiMaterial } from '@kit.ArkUI'
 import {
   HdsNavigation,
@@ -11,7 +19,7 @@ import {
   HdsTabs
 } from '@kit.UIDesignKit'
 import { getHdsSystemMaterialEffect, HdsTabsBlurModifier, DrawnTabsContentModifier, getHdsMaterialLightColor } from '../utils/HdsMaterialSupport'
-import { shouldUseWrappedMaterial } from '../utils/WrappedMaterialSupport'
+import { getStaticSheetMaterial, shouldUseWrappedMaterial, WRAPPED_MATERIAL_REGULAR } from '../utils/WrappedMaterialSupport'
 import {
   ModelProvider,
   ModelInfo,
@@ -66,6 +74,14 @@ import {
   getHdsStatusBarContentColor
 } from '../utils/HdsVisualEffectUtil'
 import { ImmersiveSheetHeader } from './ImmersiveSheetHeader'
+
+@Extend(TextInput)
+function providerTitleFont(font: SettingsFont) {
+  .fontSize(font.size)
+  .fontWeight(font.weight)
+  .fontFamily(font.family ?? 'HarmonyOS Sans')
+  .fontColor(getAppUiState().themeTextPrimary)
+}
 
 @ObservedV2
 class ProviderHeaderEntry {
@@ -1208,11 +1224,12 @@ export struct ProviderDetailPanel {
         showClose: false,
         dragBar: true,
         backgroundColor: this.activeSheet === 'edit' || this.activeSheet === 'picker' ? Color.Transparent : undefined,
-        blurStyle: this.activeSheet === 'edit' || this.activeSheet === 'picker' ? undefined : BlurStyle.Regular,
-        systemMaterial: this.activeSheet === 'edit' || this.activeSheet === 'picker' ?
+        blurStyle: this.activeSheet === 'edit' || (this.activeSheet === 'picker' && shouldUseWrappedMaterial())
+          ? undefined : BlurStyle.Regular,
+        systemMaterial: this.activeSheet === 'edit' ?
           new uiMaterial.ImmersiveMaterial({
             style: uiMaterial.ImmersiveStyle.REGULAR
-          }) : undefined,
+          }) : (this.activeSheet === 'picker' ? getStaticSheetMaterial() : undefined),
         shouldDismiss: (dismissAction: SheetDismiss) => {
           dismissAction.dismiss()
         },
@@ -1383,13 +1400,13 @@ export struct ProviderDetailPanel {
           (this.isCreateMode ? $r('app.string.add_custom_provider') :
             (this.provider?.name ?? $r('app.string.provider_detail_title'))) :
           $r('app.string.provider_detail_title'))
-          .fontSize(18)
-          .fontWeight(FontWeight.Bold)
-          .fontColor($r('app.color.text_primary'))
+          .font(getSettingsTypography().pageTitle)
+          .fontColor(getAppUiState().themeTextPrimary)
           .width('100%')
         Text(this.currentTabIndex === 0 ? $r('app.string.provider_api_config') : $r('app.string.provider_models_manage'))
-          .fontSize(11)
-          .fontColor($r('app.color.text_secondary'))
+          .font(getSettingsTypography().subtitle)
+          .lineHeight(SETTINGS_SUBTITLE_LINE_HEIGHT)
+          .fontColor(getAppUiState().themeTextSecondary)
           .width('100%')
       }
       .alignItems(HorizontalAlign.Start)
@@ -1427,13 +1444,13 @@ export struct ProviderDetailPanel {
 
           Column({ space: 2 }) {
             Text($r('app.string.provider_detail_title'))
-              .fontSize(18)
-              .fontWeight(FontWeight.Bold)
-              .fontColor($r('app.color.text_primary'))
+              .font(getSettingsTypography().pageTitle)
+              .fontColor(getAppUiState().themeTextPrimary)
               .width('100%')
             Text(this.currentTabIndex === 0 ? $r('app.string.provider_api_config') : $r('app.string.provider_models_manage'))
-              .fontSize(11)
-              .fontColor($r('app.color.text_secondary'))
+              .font(getSettingsTypography().subtitle)
+              .lineHeight(SETTINGS_SUBTITLE_LINE_HEIGHT)
+              .fontColor(getAppUiState().themeTextSecondary)
               .width('100%')
           }
           .alignItems(HorizontalAlign.Start)
@@ -1491,17 +1508,17 @@ export struct ProviderDetailPanel {
           Column({ space: 2 }) {
             Text(this.isCreateMode ? $r('app.string.add_custom_provider') :
               (this.provider?.name ?? $r('app.string.provider_detail_title')))
-              .fontSize(18)
-              .fontWeight(FontWeight.Bold)
-              .fontColor($r('app.color.text_primary'))
+              .font(getSettingsTypography().pageTitle)
+              .fontColor(getAppUiState().themeTextPrimary)
               .width('100%')
               .maxLines(1)
               .textOverflow({ overflow: TextOverflow.Ellipsis })
 
             Text(this.currentTabIndex === 0 ? $r('app.string.provider_api_config') :
               $r('app.string.provider_models_manage'))
-              .fontSize(11)
-              .fontColor($r('app.color.text_secondary'))
+              .font(getSettingsTypography().subtitle)
+              .lineHeight(SETTINGS_SUBTITLE_LINE_HEIGHT)
+              .fontColor(getAppUiState().themeTextSecondary)
               .width('100%')
           }
           .alignItems(HorizontalAlign.Start)
@@ -1545,6 +1562,8 @@ export struct ProviderDetailPanel {
       .border({ width: { bottom: 1 }, color: getAppUiState().themePrimaryLight })
     } else {
       ImmersiveSheetHeader({
+        titleFont: getSettingsTypography().pageTitle,
+        titleColor: getAppUiState().themeTextPrimary,
         title: this.isCreateMode ? $r('app.string.add_custom_provider') :
           (this.provider?.name ?? $r('app.string.provider_detail_title')),
         leadingSymbol: this.headerLeadingSymbol(),
@@ -1591,8 +1610,10 @@ export struct ProviderDetailPanel {
         .fontColor([$r('app.color.text_tertiary')])
 
       Text($r('app.string.provider_detail_not_found'))
-        .fontSize(16)
-        .fontColor($r('app.color.text_secondary'))
+        .font(getSettingsTypography().itemTitle)
+        .width('100%')
+        .textAlign(TextAlign.Start)
+        .fontColor(getAppUiState().themeTextPrimary)
         .margin({ top: 16 })
 
       Button() {
@@ -1610,6 +1631,7 @@ export struct ProviderDetailPanel {
         })
     }
     .width('100%')
+    .padding({ left: 16, right: 16 })
     .layoutWeight(1)
     .justifyContent(FlexAlign.Center)
   }
@@ -1650,57 +1672,53 @@ export struct ProviderDetailPanel {
 
             Column({ space: 2 }) {
               if (this.isCreateMode) {
-                TextInput({ text: this.providerNameText, placeholder: $r('app.string.provider_name_placeholder') })
-                  .width('88%')
-                  .height(44)
-                  .fontSize(20)
-                  .fontWeight(FontWeight.Bold)
-                  .fontColor($r('app.color.text_primary'))
-                  .backgroundColor(Color.Transparent)
-                  .borderRadius(16)
-                  .backdropBlur(16)
-                  .shadow(getBlurBottomShadow())
-                  .padding({ left: 8, right: 4, top: 0, bottom: 0 })
-                  .onChange((value: string) => {
-                    this.providerNameText = value
-                    if (this.provider !== null) {
-                      this.provider.name = value
-                      if (this.provider.iconType === 'text') {
-                        const config = generateDefaultTextIcon(value)
-                        this.provider.textIcon = config.text
+                ImmersiveFieldSurface({ cornerRadius: 16, layoutWidth: '88%' }) {
+                  TextInput({ text: this.providerNameText, placeholder: $r('app.string.provider_name_placeholder') })
+                    .width('100%')
+                    .backgroundColor(Color.Transparent)
+                    .height(44)
+                    .providerTitleFont(getSettingsTypography().sectionTitle)
+                    .borderRadius(16)
+                    .padding({ left: 8, right: 4, top: 0, bottom: 0 })
+                    .onChange((value: string) => {
+                      this.providerNameText = value
+                      if (this.provider !== null) {
+                        this.provider.name = value
+                        if (this.provider.iconType === 'text') {
+                          const config = generateDefaultTextIcon(value)
+                          this.provider.textIcon = config.text
+                        }
                       }
-                    }
-                  })
+                    })
+                }
               } else if (this.provider !== null && !this.provider.isPreset) {
-                TextInput({ text: this.providerNameText, placeholder: $r('app.string.provider_name_placeholder') })
-                  .width('88%')
-                  .height(44)
-                  .fontSize(20)
-                  .fontWeight(FontWeight.Bold)
-                  .fontColor($r('app.color.text_primary'))
-                  .backgroundColor(Color.Transparent)
-                  .borderRadius(16)
-                  .backdropBlur(16)
-                  .shadow(getBlurBottomShadow())
-                  .padding({ left: 8, right: 4, top: 0, bottom: 0 })
-                  .onChange((value: string) => {
-                    this.providerNameText = value
-                    if (this.provider !== null) {
-                      this.provider.name = value
-                    }
-                  })
+                ImmersiveFieldSurface({ cornerRadius: 16, layoutWidth: '88%' }) {
+                  TextInput({ text: this.providerNameText, placeholder: $r('app.string.provider_name_placeholder') })
+                    .width('100%')
+                    .backgroundColor(Color.Transparent)
+                    .height(44)
+                    .providerTitleFont(getSettingsTypography().sectionTitle)
+                    .borderRadius(16)
+                    .padding({ left: 8, right: 4, top: 0, bottom: 0 })
+                    .onChange((value: string) => {
+                      this.providerNameText = value
+                      if (this.provider !== null) {
+                        this.provider.name = value
+                      }
+                    })
+                }
               } else {
                 Text(this.provider?.name ?? '')
-                  .fontSize(20)
-                  .fontWeight(FontWeight.Bold)
-                  .fontColor($r('app.color.text_primary'))
+                  .font(getSettingsTypography().sectionTitle)
+                  .fontColor(getAppUiState().themeTextPrimary)
                   .margin({ left: 8 })
                   .maxLines(1)
               }
 
               Text(this.provider?.baseUrl ?? '')
-                .fontSize(12)
-                .fontColor($r('app.color.text_secondary'))
+                .font(getSettingsTypography().subtitle)
+                .lineHeight(SETTINGS_SUBTITLE_LINE_HEIGHT)
+                .fontColor(getAppUiState().themeTextSecondary)
                 .margin({ left: 8 })
                 .maxLines(1)
                 .textOverflow({ overflow: TextOverflow.Ellipsis })
@@ -1817,57 +1835,53 @@ export struct ProviderDetailPanel {
 
           Column() {
             if (this.isCreateMode) {
-              TextInput({ text: this.providerNameText, placeholder: $r('app.string.provider_name_placeholder') })
-                .width('88%')
-                .height(44)
-                .fontSize(18)
-                .fontWeight(FontWeight.Bold)
-                .fontColor($r('app.color.text_primary'))
-                .backgroundColor(Color.Transparent)
-                .borderRadius(16)
-                .backdropBlur(16)
-                .shadow(getBlurBottomShadow())
-                .padding({ left: 8, right: 4, top: 0, bottom: 0 })
-                .onChange((value: string) => {
-                  this.providerNameText = value
-                  if (this.provider !== null) {
-                    this.provider.name = value
-                    // 自动更新文字图标
-                    if (this.provider.iconType === 'text') {
-                      const config = generateDefaultTextIcon(value)
-                      this.provider.textIcon = config.text
+              ImmersiveFieldSurface({ cornerRadius: 16, layoutWidth: '88%' }) {
+                TextInput({ text: this.providerNameText, placeholder: $r('app.string.provider_name_placeholder') })
+                  .width('100%')
+                  .backgroundColor(Color.Transparent)
+                  .height(44)
+                  .providerTitleFont(getSettingsTypography().sectionTitle)
+                  .borderRadius(16)
+                  .padding({ left: 8, right: 4, top: 0, bottom: 0 })
+                  .onChange((value: string) => {
+                    this.providerNameText = value
+                    if (this.provider !== null) {
+                      this.provider.name = value
+                      // 自动更新文字图标
+                      if (this.provider.iconType === 'text') {
+                        const config = generateDefaultTextIcon(value)
+                        this.provider.textIcon = config.text
+                      }
                     }
-                  }
-                })
+                  })
+              }
             } else if (this.provider !== null && !this.provider.isPreset) {
-              TextInput({ text: this.providerNameText, placeholder: $r('app.string.provider_name_placeholder') })
-                .width('88%')
-                .height(44)
-                .fontSize(18)
-                .fontWeight(FontWeight.Bold)
-                .fontColor($r('app.color.text_primary'))
-                .backgroundColor(Color.Transparent)
-                .borderRadius(16)
-                .backdropBlur(16)
-                .shadow(getBlurBottomShadow())
-                .padding({ left: 8, right: 4, top: 0, bottom: 0 })
-                .onChange((value: string) => {
-                  this.providerNameText = value
-                  if (this.provider !== null) {
-                    this.provider.name = value
-                  }
-                })
+              ImmersiveFieldSurface({ cornerRadius: 16, layoutWidth: '88%' }) {
+                TextInput({ text: this.providerNameText, placeholder: $r('app.string.provider_name_placeholder') })
+                  .width('100%')
+                  .backgroundColor(Color.Transparent)
+                  .height(44)
+                  .providerTitleFont(getSettingsTypography().sectionTitle)
+                  .borderRadius(16)
+                  .padding({ left: 8, right: 4, top: 0, bottom: 0 })
+                  .onChange((value: string) => {
+                    this.providerNameText = value
+                    if (this.provider !== null) {
+                      this.provider.name = value
+                    }
+                  })
+              }
             } else {
               Text(this.provider?.name ?? '')
-                .fontSize(18)
-                .fontWeight(FontWeight.Bold)
-                .fontColor($r('app.color.text_primary'))
+                .font(getSettingsTypography().sectionTitle)
+                .fontColor(getAppUiState().themeTextPrimary)
                 .margin({ left: 8 })
             }
 
             Text(this.provider?.baseUrl ?? '')
-              .fontSize(12)
-              .fontColor($r('app.color.text_secondary'))
+              .font(getSettingsTypography().subtitle)
+              .lineHeight(SETTINGS_SUBTITLE_LINE_HEIGHT)
+              .fontColor(getAppUiState().themeTextSecondary)
               .margin({ left: 8, top: 2 })
               .maxLines(1)
               .textOverflow({ overflow: TextOverflow.Ellipsis })
@@ -1917,9 +1931,8 @@ export struct ProviderDetailPanel {
     Column() {
       // 标题
       Text($r('app.string.provider_api_config'))
-        .fontSize(15)
-        .fontWeight(FontWeight.Bold)
-        .fontColor($r('app.color.text_primary'))
+        .font(getSettingsTypography().sectionTitle)
+        .fontColor(getAppUiState().themeTextPrimary)
         .width('100%')
         .padding({ left: 16, top: 16, bottom: 12 })
 
@@ -1927,8 +1940,8 @@ export struct ProviderDetailPanel {
       if (this.provider !== null) {
         Column() {
           Text($r('app.string.api_style'))
-            .fontSize(13)
-            .fontColor($r('app.color.text_secondary'))
+            .font(getSettingsTypography().fieldLabel)
+            .fontColor(getAppUiState().themeTextSecondary)
             .width('100%')
 
           Column() {
@@ -1948,13 +1961,13 @@ export struct ProviderDetailPanel {
 
                 Column() {
                   Text(option.name)
-                    .fontSize(14)
-                    .fontWeight(FontWeight.Medium)
-                    .fontColor($r('app.color.text_primary'))
+                    .font(getSettingsTypography().itemTitle)
+                    .fontColor(getAppUiState().themeTextPrimary)
 
                   Text(option.description)
-                    .fontSize(11)
-                    .fontColor($r('app.color.text_secondary'))
+                    .font(getSettingsTypography().subtitle)
+                    .lineHeight(SETTINGS_SUBTITLE_LINE_HEIGHT)
+                    .fontColor(getAppUiState().themeTextSecondary)
                     .margin({ top: 2 })
                 }
                 .alignItems(HorizontalAlign.Start)
@@ -1989,8 +2002,8 @@ export struct ProviderDetailPanel {
         if (this.provider?.apiStyle === ApiStyle.OPENAI) {
           Column() {
             Text('OpenAI 协议')
-              .fontSize(13)
-              .fontColor($r('app.color.text_secondary'))
+              .font(getSettingsTypography().fieldLabel)
+              .fontColor(getAppUiState().themeTextSecondary)
               .width('100%')
 
             Column() {
@@ -2010,13 +2023,13 @@ export struct ProviderDetailPanel {
 
                   Column() {
                     Text(option.name)
-                      .fontSize(14)
-                      .fontWeight(FontWeight.Medium)
-                      .fontColor($r('app.color.text_primary'))
+                      .font(getSettingsTypography().itemTitle)
+                      .fontColor(getAppUiState().themeTextPrimary)
 
                     Text(option.description)
-                      .fontSize(11)
-                      .fontColor($r('app.color.text_secondary'))
+                      .font(getSettingsTypography().subtitle)
+                      .lineHeight(SETTINGS_SUBTITLE_LINE_HEIGHT)
+                      .fontColor(getAppUiState().themeTextSecondary)
                       .margin({ top: 2 })
                   }
                   .alignItems(HorizontalAlign.Start)
@@ -2054,12 +2067,13 @@ export struct ProviderDetailPanel {
             Row() {
               Column() {
                 Text($r('app.string.provider_requires_api_key'))
-                  .fontSize(13)
-                  .fontColor($r('app.color.text_secondary'))
+                  .font(getSettingsTypography().itemTitle)
+                  .fontColor(getAppUiState().themeTextPrimary)
 
                 Text($r('app.string.provider_requires_api_key_desc'))
-                  .fontSize(11)
-                  .fontColor($r('app.color.text_tertiary'))
+                  .font(getSettingsTypography().subtitle)
+                  .lineHeight(SETTINGS_SUBTITLE_LINE_HEIGHT)
+                  .fontColor(getAppUiState().themeTextSecondary)
                   .margin({ top: 2 })
               }
               .alignItems(HorizontalAlign.Start)
@@ -2090,8 +2104,8 @@ export struct ProviderDetailPanel {
       Column() {
         Row() {
           Text($r('app.string.api_key'))
-            .fontSize(13)
-            .fontColor($r('app.color.text_secondary'))
+            .font(getSettingsTypography().fieldLabel)
+            .fontColor(getAppUiState().themeTextSecondary)
           if (this.provider?.requiresApiKey ?? true) {
             Text(' *')
               .fontSize(13)
@@ -2100,67 +2114,66 @@ export struct ProviderDetailPanel {
         }
         .width('100%')
 
-        Row() {
-          TextInput({ text: this.provider?.apiKey ?? '', placeholder: $r('app.string.provider_api_key_placeholder') })
-            .type(InputType.Password)
-            .enableAutoFill(false)
-            .showPasswordIcon(true)
-            .fontSize(14)
-            .fontColor($r('app.color.text_primary'))
-            .backgroundColor(Color.Transparent)
-            .layoutWeight(1)
-            .onChange((value: string) => {
-              if (this.provider !== null) {
-                this.provider.apiKey = value
-              }
-            })
-
-          // 测试按钮
-          Stack({ alignContent: Alignment.TopStart }) {
-            ImmersiveButtonSurface({
-              materialFactory: () => (new uiMaterial.ImmersiveMaterial({
-                style: uiMaterial.ImmersiveStyle.REGULAR,
-                materialColor: this.themePrimaryLight,
-                interactive: true,
-                lightEffect: { color: undefined }
-              })),
-              cornerRadius: 16
-            }) {
-              Button() {
-                if (this.isTesting) {
-                  LoadingProgress()
-                    .width(16)
-                    .height(16)
-                    .color(this.themePrimary)
-                } else {
-                  Text($r('app.string.test_connection'))
-                    .fontSize(13)
-                    .fontColor(this.themePrimary)
-                }
-              }
-              .height(32)
-              .padding({ left: 12, right: 12 })
+        ImmersiveFieldSurface({ cornerRadius: 16, layoutMargin: { top: SETTINGS_HEADING_CONTENT_GAP } }) {
+          Row() {
+            TextInput({ text: this.provider?.apiKey ?? '', placeholder: $r('app.string.provider_api_key_placeholder') })
+              .type(InputType.Password)
+              .enableAutoFill(false)
+              .showPasswordIcon(true)
+              .fontSize(14)
+              .fontColor($r('app.color.text_primary'))
               .backgroundColor(Color.Transparent)
-              .borderRadius(16)
-              .enabled(!this.isTesting)
-              .onClick(() => {
-                this.testConnection()
+              .layoutWeight(1)
+              .onChange((value: string) => {
+                if (this.provider !== null) {
+                  this.provider.apiKey = value
+                }
               })
+
+            // 测试按钮
+            Stack({ alignContent: Alignment.TopStart }) {
+              ImmersiveButtonSurface({
+                materialFactory: () => (new uiMaterial.ImmersiveMaterial({
+                  style: uiMaterial.ImmersiveStyle.REGULAR,
+                  materialColor: this.themePrimaryLight,
+                  interactive: true,
+                  lightEffect: { color: undefined }
+                })),
+                cornerRadius: 16
+              }) {
+                Button() {
+                  if (this.isTesting) {
+                    LoadingProgress()
+                      .width(16)
+                      .height(16)
+                      .color(this.themePrimary)
+                  } else {
+                    Text($r('app.string.test_connection'))
+                      .fontSize(13)
+                      .fontColor(this.themePrimary)
+                  }
+                }
+                .height(32)
+                .padding({ left: 12, right: 12 })
+                .backgroundColor(Color.Transparent)
+                .borderRadius(16)
+                .enabled(!this.isTesting)
+                .onClick(() => {
+                  this.testConnection()
+                })
+              }
             }
+            .height(32)
+            .margin({ left: 8 })
+            .enabled(!this.isTesting)
+            .clip(false)
           }
-          .height(32)
-          .margin({ left: 8 })
-          .enabled(!this.isTesting)
-          .clip(false)
+          .width('100%')
+          .height(48)
+          .backgroundColor(Color.Transparent)
+          .borderRadius(16)
+          .padding({ left: 12, right: 8 })
         }
-        .width('100%')
-        .height(48)
-        .backgroundColor(Color.Transparent)
-        .borderRadius(16)
-        .backdropBlur(16)
-        .shadow(getBlurBottomShadow())
-        .padding({ left: 12, right: 8 })
-        .margin({ top: 8 })
       }
       .width('100%')
       .padding({ left: 16, right: 16 })
@@ -2173,30 +2186,29 @@ export struct ProviderDetailPanel {
       Column() {
         Row() {
           Text($r('app.string.base_url'))
-            .fontSize(13)
-            .fontColor($r('app.color.text_secondary'))
+            .font(getSettingsTypography().fieldLabel)
+            .fontColor(getAppUiState().themeTextSecondary)
           Text(' *')
             .fontSize(13)
             .fontColor(Color.Red)
         }
         .width('100%')
 
-        TextInput({ text: this.provider?.baseUrl ?? '', placeholder: $r('app.string.provider_base_url_placeholder') })
-          .fontSize(14)
-          .fontColor($r('app.color.text_primary'))
-          .backgroundColor(Color.Transparent)
-          .borderRadius(16)
-          .backdropBlur(16)
-          .shadow(getBlurBottomShadow())
-          .height(48)
-          .width('100%')
-          .padding({ left: 12, right: 12 })
-          .margin({ top: 8 })
-          .onChange((value: string) => {
-            if (this.provider !== null) {
-              this.provider.baseUrl = value
-            }
-          })
+        ImmersiveFieldSurface({ cornerRadius: 16, layoutMargin: { top: SETTINGS_HEADING_CONTENT_GAP } }) {
+          TextInput({ text: this.provider?.baseUrl ?? '', placeholder: $r('app.string.provider_base_url_placeholder') })
+            .width('100%')
+            .backgroundColor(Color.Transparent)
+            .fontSize(14)
+            .fontColor($r('app.color.text_primary'))
+            .borderRadius(16)
+            .height(48)
+            .padding({ left: 12, right: 12 })
+            .onChange((value: string) => {
+              if (this.provider !== null) {
+                this.provider.baseUrl = value
+              }
+            })
+        }
       }
       .width('100%')
       .padding({ left: 16, right: 16 })
@@ -2208,26 +2220,25 @@ export struct ProviderDetailPanel {
       // API 路径（可选）
       Column() {
         Text($r('app.string.api_path_optional'))
-          .fontSize(13)
-          .fontColor($r('app.color.text_secondary'))
+          .font(getSettingsTypography().fieldLabel)
+          .fontColor(getAppUiState().themeTextSecondary)
           .width('100%')
 
-        TextInput({ text: this.provider?.apiPath ?? '', placeholder: $r('app.string.provider_api_path_placeholder') })
-          .fontSize(14)
-          .fontColor($r('app.color.text_primary'))
-          .backgroundColor(Color.Transparent)
-          .borderRadius(16)
-          .backdropBlur(16)
-          .shadow(getBlurBottomShadow())
-          .height(48)
-          .width('100%')
-          .padding({ left: 12, right: 12 })
-          .margin({ top: 8 })
-          .onChange((value: string) => {
-            if (this.provider !== null) {
-              this.provider.apiPath = value
-            }
-          })
+        ImmersiveFieldSurface({ cornerRadius: 16, layoutMargin: { top: SETTINGS_HEADING_CONTENT_GAP } }) {
+          TextInput({ text: this.provider?.apiPath ?? '', placeholder: $r('app.string.provider_api_path_placeholder') })
+            .width('100%')
+            .backgroundColor(Color.Transparent)
+            .fontSize(14)
+            .fontColor($r('app.color.text_primary'))
+            .borderRadius(16)
+            .height(48)
+            .padding({ left: 12, right: 12 })
+            .onChange((value: string) => {
+              if (this.provider !== null) {
+                this.provider.apiPath = value
+              }
+            })
+        }
       }
       .width('100%')
       .padding({ left: 16, right: 16 })
@@ -2239,9 +2250,8 @@ export struct ProviderDetailPanel {
       Column({ space: 12 }) {
         Row({ space: 8 }) {
           Text($r('app.string.provider_custom_headers_title'))
-            .fontSize(13)
-            .fontWeight(FontWeight.Medium)
-            .fontColor($r('app.color.text_secondary'))
+            .font(getSettingsTypography().fieldLabel)
+            .fontColor(getAppUiState().themeTextSecondary)
             .layoutWeight(1)
             .maxLines(1)
             .textOverflow({ overflow: TextOverflow.Ellipsis })
@@ -2287,9 +2297,8 @@ export struct ProviderDetailPanel {
             Column({ space: 10 }) {
               Row() {
                 Text(`${pickLocalizedText('请求头 ', 'Header ')}${index + 1}`)
-                  .fontSize(12)
-                  .fontWeight(FontWeight.Medium)
-                  .fontColor($r('app.color.text_primary'))
+                  .font(getSettingsTypography().itemTitle)
+                  .fontColor(getAppUiState().themeTextPrimary)
                   .layoutWeight(1)
 
                 if (this.isSensitiveProviderHeaderName(entry.name)) {
@@ -2317,61 +2326,61 @@ export struct ProviderDetailPanel {
               }
               .width('100%')
 
-              Column({ space: 6 }) {
+              Column({ space: SETTINGS_HEADING_CONTENT_GAP }) {
                 Text($r('app.string.provider_custom_header_name'))
-                  .fontSize(11)
-                  .fontColor($r('app.color.text_tertiary'))
+                  .font(getSettingsTypography().fieldLabel)
+                  .fontColor(getAppUiState().themeTextSecondary)
                   .width('100%')
 
-                TextInput({ text: entry.name, placeholder: $r('app.string.provider_custom_header_name_placeholder') })
-                  .onChange((value: string) => {
-                    this.updateProviderHeaderEntryName(entry.id, value)
-                  })
-                  .fontSize(14)
-                  .width('100%')
-                  .height(44)
-                  .borderRadius(14)
-                  .backgroundColor(Color.Transparent)
-                  .backdropBlur(16)
-                  .shadow(getBlurBottomShadow())
-                  .padding({ left: 14, right: 14 })
+                ImmersiveFieldSurface({ cornerRadius: 14 }) {
+                  TextInput({ text: entry.name, placeholder: $r('app.string.provider_custom_header_name_placeholder') })
+                    .width('100%')
+                    .backgroundColor(Color.Transparent)
+                    .onChange((value: string) => {
+                      this.updateProviderHeaderEntryName(entry.id, value)
+                    })
+                    .fontSize(14)
+                    .height(44)
+                    .borderRadius(14)
+                    .padding({ left: 14, right: 14 })
+                }
               }
               .width('100%')
 
-              Column({ space: 6 }) {
+              Column({ space: SETTINGS_HEADING_CONTENT_GAP }) {
                 Text($r('app.string.provider_custom_header_value'))
-                  .fontSize(11)
-                  .fontColor($r('app.color.text_tertiary'))
+                  .font(getSettingsTypography().fieldLabel)
+                  .fontColor(getAppUiState().themeTextSecondary)
                   .width('100%')
 
                 if (this.isSensitiveProviderHeaderName(entry.name)) {
-                  TextInput({ text: entry.value, placeholder: $r('app.string.provider_custom_header_value_placeholder') })
-                    .onChange((value: string) => {
-                      this.updateProviderHeaderEntryValue(entry.id, value)
-                    })
-                    .type(InputType.Password)
-                    .enableAutoFill(false)
-                    .fontSize(14)
-                    .width('100%')
-                    .height(44)
-                    .borderRadius(14)
-                    .backgroundColor(Color.Transparent)
-                    .backdropBlur(16)
-                    .shadow(getBlurBottomShadow())
-                    .padding({ left: 14, right: 14 })
+                  ImmersiveFieldSurface({ cornerRadius: 14 }) {
+                    TextInput({ text: entry.value, placeholder: $r('app.string.provider_custom_header_value_placeholder') })
+                      .width('100%')
+                      .backgroundColor(Color.Transparent)
+                      .onChange((value: string) => {
+                        this.updateProviderHeaderEntryValue(entry.id, value)
+                      })
+                      .type(InputType.Password)
+                      .enableAutoFill(false)
+                      .fontSize(14)
+                      .height(44)
+                      .borderRadius(14)
+                      .padding({ left: 14, right: 14 })
+                  }
                 } else {
-                  TextInput({ text: entry.value, placeholder: $r('app.string.provider_custom_header_value_placeholder') })
-                    .onChange((value: string) => {
-                      this.updateProviderHeaderEntryValue(entry.id, value)
-                    })
-                    .fontSize(14)
-                    .width('100%')
-                    .height(44)
-                    .borderRadius(14)
-                    .backgroundColor(Color.Transparent)
-                    .backdropBlur(16)
-                    .shadow(getBlurBottomShadow())
-                    .padding({ left: 14, right: 14 })
+                  ImmersiveFieldSurface({ cornerRadius: 14 }) {
+                    TextInput({ text: entry.value, placeholder: $r('app.string.provider_custom_header_value_placeholder') })
+                      .width('100%')
+                      .backgroundColor(Color.Transparent)
+                      .onChange((value: string) => {
+                        this.updateProviderHeaderEntryValue(entry.id, value)
+                      })
+                      .fontSize(14)
+                      .height(44)
+                      .borderRadius(14)
+                      .padding({ left: 14, right: 14 })
+                  }
                 }
               }
               .width('100%')
@@ -2403,9 +2412,8 @@ BalanceConfigSection() {
   Column({ space: 12 }) {
     Row({ space: 8 }) {
       Text($r('app.string.balance_config_title'))
-        .fontSize(13)
-        .fontWeight(FontWeight.Medium)
-        .fontColor($r('app.color.text_secondary'))
+        .font(getSettingsTypography().fieldLabel)
+        .fontColor(getAppUiState().themeTextSecondary)
         .layoutWeight(1)
         .maxLines(1)
         .textOverflow({ overflow: TextOverflow.Ellipsis })
@@ -2440,25 +2448,25 @@ BalanceConfigSection() {
 // 单个余额配置输入项；field 指定写入 balanceConfig 的哪个字段
 @Builder
 BalanceInput(label: Resource, placeholder: Resource, value: string, field: string) {
-  Column({ space: 6 }) {
+  Column({ space: SETTINGS_HEADING_CONTENT_GAP }) {
     Text(label)
-      .fontSize(12)
-      .fontColor($r('app.color.text_tertiary'))
+      .font(getSettingsTypography().fieldLabel)
+      .fontColor(getAppUiState().themeTextSecondary)
       .width('100%')
 
-    TextInput({ text: value, placeholder: placeholder })
-      .fontSize(14)
-      .fontColor($r('app.color.text_primary'))
-      .backgroundColor(Color.Transparent)
-      .borderRadius(14)
-      .backdropBlur(16)
-      .shadow(getBlurBottomShadow())
-      .height(44)
-      .width('100%')
-      .padding({ left: 12, right: 12 })
-      .onChange((v: string) => {
-        this.updateBalanceField(field, v)
-      })
+    ImmersiveFieldSurface({ cornerRadius: 14 }) {
+      TextInput({ text: value, placeholder: placeholder })
+        .width('100%')
+        .backgroundColor(Color.Transparent)
+        .fontSize(14)
+        .fontColor($r('app.color.text_primary'))
+        .borderRadius(14)
+        .height(44)
+        .padding({ left: 12, right: 12 })
+        .onChange((v: string) => {
+          this.updateBalanceField(field, v)
+        })
+    }
   }
   .width('100%')
 }
@@ -2469,9 +2477,8 @@ ModelsCard() {
       // 标题行
       Row() {
         Text($r('app.string.provider_models_manage'))
-          .fontSize(15)
-          .fontWeight(FontWeight.Bold)
-          .fontColor($r('app.color.text_primary'))
+          .font(getSettingsTypography().sectionTitle)
+          .fontColor(getAppUiState().themeTextPrimary)
 
         Text(` (${this.provider?.models.length ?? 0})`)
           .fontSize(13)
@@ -2603,67 +2610,75 @@ ModelsCard() {
       .padding({ left: 16, right: 16, top: 12, bottom: 8 })
 
       // 搜索框
-      Search({ value: this.searchKeywords, placeholder: $r('app.string.filter_models_placeholder') })
-        .width(this.windowWidthVp >= 600 ? 360 : '82%')
-        .height(40)
-        .borderRadius(20)
-        .backgroundColor(Color.Transparent)
-        .backdropBlur(16)
-        .shadow(getBlurBottomShadow())
-        .padding({ left: 16, right: 16 })
-        .onChange((value: string) => {
+      ModelFilterSearchField({
+        value: this.searchKeywords,
+        onChange: (value: string): void => {
           this.searchKeywords = value
           this.buildModelGroups()
-        })
+        }
+      })
 
       // 手动添加模型输入行
       if (this.showAddModelInput) {
         Row({ space: 8 }) {
-          TextInput({ text: this.addModelIdText, placeholder: $r('app.string.provider_add_model_placeholder') })
-            .layoutWeight(1)
-            .height(36)
-            .fontSize(14)
-            .backgroundColor(Color.Transparent)
-            .borderRadius(14)
-            .backdropBlur(16)
-            .shadow(getBlurBottomShadow())
-            .onChange((value: string) => {
-              this.addModelIdText = value
-            })
-            .onSubmit(() => {
-              this.addManualModel()
-            })
+          ImmersiveFieldSurface({ cornerRadius: MODEL_FILTER_SEARCH_RADIUS, layoutWeightValue: 1 }) {
+            TextInput({ text: this.addModelIdText, placeholder: $r('app.string.provider_add_model_placeholder') })
+              .width('100%')
+              .backgroundColor(Color.Transparent)
+              .height(MODEL_FILTER_SEARCH_HEIGHT)
+              .fontSize(14)
+              .borderRadius(MODEL_FILTER_SEARCH_RADIUS)
+              .onChange((value: string) => {
+                this.addModelIdText = value
+              })
+              .onSubmit(() => {
+                this.addManualModel()
+              })
+          }
 
-          Button() {
+          InteractiveMaterialButton({
+            surfaceWidth: MODEL_FILTER_SEARCH_HEIGHT,
+            surfaceHeight: MODEL_FILTER_SEARCH_HEIGHT,
+            cornerRadius: MODEL_FILTER_SEARCH_RADIUS,
+            buttonType: ButtonType.Circle,
+            materialStyle: WRAPPED_MATERIAL_REGULAR,
+            materialColor: this.themePrimaryLight,
+            accessibilityLabel: pickLocalizedText('添加模型', 'Add model'),
+            onActivate: (): void => {
+              this.addManualModel()
+            }
+          }) {
             SymbolGlyph($r('sys.symbol.checkmark'))
               .fontSize(16)
               .fontColor([this.themePrimary])
           }
-          .type(ButtonType.Circle)
-          .width(36)
-          .height(36)
-          .backgroundColor(this.themePrimaryLight)
-          .onClick(() => {
-            this.addManualModel()
-          })
 
-          Button() {
+          InteractiveMaterialButton({
+            surfaceWidth: MODEL_FILTER_SEARCH_HEIGHT,
+            surfaceHeight: MODEL_FILTER_SEARCH_HEIGHT,
+            cornerRadius: MODEL_FILTER_SEARCH_RADIUS,
+            buttonType: ButtonType.Circle,
+            materialStyle: WRAPPED_MATERIAL_REGULAR,
+            accessibilityLabel: $r('app.string.cancel'),
+            onActivate: (): void => {
+              this.showAddModelInput = false
+              this.addModelIdText = ''
+              this.getUIContext().getFocusController().clearFocus()
+            }
+          }) {
             SymbolGlyph($r('sys.symbol.xmark'))
               .fontSize(16)
               .fontColor([$r('app.color.text_tertiary')])
           }
-          .type(ButtonType.Circle)
-          .width(36)
-          .height(36)
-          .backgroundColor(getAppUiState().themeBackground)
-          .onClick(() => {
-            this.showAddModelInput = false
-            this.addModelIdText = ''
-            this.getUIContext().getFocusController().clearFocus()
-          })
         }
         .width('100%')
-        .padding({ left: 16, right: 16, top: 8 })
+        .padding({
+          left: MODEL_FILTER_SEARCH_HORIZONTAL_INSET,
+          right: MODEL_FILTER_SEARCH_HORIZONTAL_INSET,
+          top: 8
+        })
+        .alignItems(VerticalAlign.Center)
+        .clip(false)
       }
 
       // 模型分组列表
@@ -2683,9 +2698,8 @@ ModelsCard() {
                         .animation({ duration: 200 })
 
                       Text(ri.item.groupName)
-                        .fontSize(14)
-                        .fontWeight(FontWeight.Medium)
-                        .fontColor($r('app.color.text_secondary'))
+                        .font(getSettingsTypography().sectionTitle)
+                        .fontColor(getAppUiState().themeTextPrimary)
                         .margin({ left: 8 })
 
                       Text(` (${ri.item.groupCount})`)
@@ -2766,13 +2780,18 @@ ModelsCard() {
             .fontColor([$r('app.color.text_tertiary')])
 
           Text($r('app.string.provider_no_models'))
-            .fontSize(14)
-            .fontColor($r('app.color.text_secondary'))
+            .font(getSettingsTypography().itemTitle)
+            .width('100%')
+            .textAlign(TextAlign.Start)
+            .fontColor(getAppUiState().themeTextPrimary)
             .margin({ top: 12 })
 
           Text($r('app.string.provider_no_models_hint'))
-            .fontSize(12)
-            .fontColor($r('app.color.text_secondary'))
+            .font(getSettingsTypography().subtitle)
+            .width('100%')
+            .textAlign(TextAlign.Start)
+            .lineHeight(SETTINGS_SUBTITLE_LINE_HEIGHT)
+            .fontColor(getAppUiState().themeTextSecondary)
             .margin({ top: 4 })
         }
         .width('100%')
@@ -2781,8 +2800,10 @@ ModelsCard() {
         // 搜索无结果
         Column() {
           Text($r('app.string.provider_models_not_found'))
-            .fontSize(14)
-            .fontColor($r('app.color.text_secondary'))
+            .font(getSettingsTypography().itemTitle)
+            .width('100%')
+            .textAlign(TextAlign.Start)
+            .fontColor(getAppUiState().themeTextPrimary)
         }
         .width('100%')
         .padding({ top: 40, bottom: 40 })
@@ -3019,9 +3040,8 @@ export struct ModelItemCard {
         // 模型信息
         Column() {
           Text(this.model.name)
-            .fontSize(15)
-            .fontWeight(FontWeight.Medium)
-            .fontColor(this.model.isEnabled ? $r('app.color.text_primary') : $r('app.color.text_tertiary'))
+            .font(getSettingsTypography().itemTitle)
+            .fontColor(this.model.isEnabled ? getAppUiState().themeTextPrimary : getAppUiState().themeTextTertiary)
             .maxLines(2)
             .textOverflow({ overflow: TextOverflow.Ellipsis })
 

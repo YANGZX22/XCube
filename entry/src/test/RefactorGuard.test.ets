@@ -343,6 +343,9 @@ export default function refactorGuardTest() {
       expect(result.rows[2].type).assertEqual(ModelSelectorRowType.PROVIDER_HEADER)
       expect(result.rows[3].type).assertEqual(ModelSelectorRowType.MODEL_ITEM)
       expect((result.rows[1] as ModelSelectorModelRow).groupPosition).assertEqual(ModelRowGroupPosition.SINGLE)
+      expect(result.groups.length).assertEqual(2)
+      expect(result.groups[0].modelRows[0]).assertEqual(result.rows[1])
+      expect(result.groups[1].modelRows[0]).assertEqual(result.rows[3])
     })
 
     it('buildModelSelectorRows_should_support_favorite_and_model_id_search', 0, () => {
@@ -362,6 +365,11 @@ export default function refactorGuardTest() {
       expect(favoriteOnly.favoriteEnabledCount).assertEqual(1)
       expect(byId.rows.length).assertEqual(2)
       expect((byId.rows[1] as ModelSelectorModelRow).model.id).assertEqual('gpt-4o')
+      const all = buildModelSelectorRows([provider], '', new Set<string>(), false, false)
+      expect(favoriteOnly.groups[0].modelRows[0].key).assertEqual(all.groups[0].modelRows[0].key)
+      expect(favoriteOnly.groups[0].modelRows[0].groupPosition).assertEqual(ModelRowGroupPosition.SINGLE)
+      expect(all.groups[0].modelRows[0].groupPosition).assertEqual(ModelRowGroupPosition.FIRST)
+      expect(all.groups[0].modelRows[1].groupPosition).assertEqual(ModelRowGroupPosition.LAST)
     })
 
     it('buildModelPickerRows_should_group_visible_models_by_brand', 0, () => {

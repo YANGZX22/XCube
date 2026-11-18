@@ -1,17 +1,28 @@
-import { getBlurBottomShadow } from '../utils/BlurShadowUtils'
+import { getSettingsTypography, SETTINGS_SUBTITLE_LINE_HEIGHT } from './settings/SettingsTypography'
+import { ModelFilterSearchField } from './ModelFilterSearchField'
+import { ModelListMaterialHost } from './ModelListMaterialHost'
 import { ModelInfo } from '../models/ChatModels'
 import {
   ModelRowGroupPosition,
   ModelRowRadius,
   ModelPickerBuildResult,
-  ModelPickerModelRow,
-  buildModelPickerRows
+  buildModelPickerRows,
+  resolveGroupPosition
 } from '../config/ModelListProjection'
 import { PickerModelGroup } from '../config/ProviderDetailShared'
 import { buildModelIconRenderData, ModelIconRenderData } from '../utils/ModelIconRenderUtils'
 import { getAppUiState } from '../state/AppUiState'
 import { withColorAlpha } from '../utils/ColorAlphaUtils'
 import { ImmersiveSheetHeader } from './ImmersiveSheetHeader'
+
+interface PickerHeaderParams {
+  group: PickerModelGroup
+}
+
+interface PickerRowParams {
+  modelId: string
+  groupPosition: ModelRowGroupPosition
+}
 
 @ComponentV2
 export struct ModelPickerSheet {
@@ -27,25 +38,33 @@ export struct ModelPickerSheet {
   private get isDarkMode(): boolean {
     return getAppUiState().isDarkMode
   }
-  private get windowWidthVp(): number {
-    return getAppUiState().windowWidthVp
-  }
 
   @Local searchKeywords: string = ''
   @Local selectedIds: Set<string> = new Set<string>()
   @Local showSelectedOnly: boolean = false
-  @Local activeGroupFilter: number = -1
+  @Local activeGroupName: string = ''
 
   @Event onConfirm: (selectedIds: string[]) => void = () => {}
   @Event onCancel: () => void = () => {}
 
   @Local private groups: PickerModelGroup[] = []
-  @Local private displayedGroups: PickerModelGroup[] = []
-  private existingModelIdSet: Set<string> = new Set<string>()
-  private filteredModelIds: string[] = []
-  private visibleModelIds: string[] = []
-  private listScroller: Scroller = new Scroller()
+  @Local private filteredModelIds: string[] = []
+  @Local private visibleModelIds: string[] = []
   private iconRenderCache: Map<string, ModelIconRenderData> = new Map<string, ModelIconRenderData>()
+
+  @Computed
+  private get activeGroup(): PickerModelGroup | undefined {
+    return this.groups.find((group: PickerModelGroup) => group.name === this.activeGroupName)
+  }
+
+  @Computed
+  private get displayedGroups(): PickerModelGroup[] {
+    return this.activeGroup === undefined ? this.groups : [this.activeGroup]
+  }
+
+  private get displayedModelIds(): string[] {
+    return this.activeGroup?.modelIds ?? this.visibleModelIds
+  }
 
   aboutToAppear(): void {
     this.initializeSelection()
@@ -54,21 +73,17 @@ export struct ModelPickerSheet {
 
   private initializeSelection(): void {
     const selected = new Set<string>()
-    const existingModelIdSet = new Set<string>()
     const availableModelSet = new Set<string>(this.availableModels)
     for (let i = 0; i < this.existingModels.length; i++) {
       const modelId = this.existingModels[i].id
-      existingModelIdSet.add(modelId)
       if (availableModelSet.has(modelId)) {
         selected.add(modelId)
       }
     }
-    this.existingModelIdSet = existingModelIdSet
     this.selectedIds = selected
   }
 
   private rebuildRows(): void {
-    const startAt = Date.now()
     const result: ModelPickerBuildResult = buildModelPickerRows(
       this.availableModels,
       this.selectedIds,
@@ -76,20 +91,11 @@ export struct ModelPickerSheet {
       this.showSelectedOnly
     )
     this.groups = result.groups
-    if (this.activeGroupFilter >= 0 && this.activeGroupFilter < result.groups.length) {
-      const filteredGroup = result.groups[this.activeGroupFilter]
-      const filteredModelIdSet = new Set<string>(filteredGroup.modelIds)
-      this.visibleModelIds = result.visibleModelIds.filter((id: string) => filteredModelIdSet.has(id))
-      this.displayedGroups = [filteredGroup]
-    } else {
-      this.visibleModelIds = result.visibleModelIds
-      this.displayedGroups = result.groups
-    }
     this.filteredModelIds = result.filteredModelIds
-    console.info(
-      'ModelPickerSheet',
-      `[rebuildRows] available=${this.availableModels.length}, visible=${this.visibleModelIds.length}, groups=${this.groups.length}, filtered=${this.filteredModelIds.length}, cost=${Date.now() - startAt}ms`
-    )
+    this.visibleModelIds = result.visibleModelIds
+    if (this.activeGroupName !== '' && !result.groups.some((group: PickerModelGroup) => group.name === this.activeGroupName)) {
+      this.activeGroupName = ''
+    }
   }
 
   private toggleModel(modelId: string): void {
@@ -100,7 +106,9 @@ export struct ModelPickerSheet {
       newSet.add(modelId)
     }
     this.selectedIds = newSet
-    this.rebuildRows()
+    if (this.showSelectedOnly) {
+      this.rebuildRows()
+    }
   }
 
   private isSelected(modelId: string): boolean {
@@ -108,16 +116,8 @@ export struct ModelPickerSheet {
   }
 
   private isAllSelected(): boolean {
-    const scopeModelIds = this.getSelectableModelIds()
-    if (scopeModelIds.length === 0) {
-      return false
-    }
-    for (let i = 0; i < scopeModelIds.length; i++) {
-      if (!this.selectedIds.has(scopeModelIds[i])) {
-        return false
-      }
-    }
-    return true
+    return this.showSelectedOnly ? this.displayedModelIds.length > 0 :
+      this.filteredModelIds.length > 0 && this.selectedCountInFiltered === this.filteredModelIds.length
   }
 
   private toggleSelectAll(): void {
@@ -133,11 +133,13 @@ export struct ModelPickerSheet {
       }
     }
     this.selectedIds = newSet
-    this.rebuildRows()
+    if (this.showSelectedOnly) {
+      this.rebuildRows()
+    }
   }
 
   private toggleSelectedOnly(): void {
-    if (!this.showSelectedOnly && this.getSelectedCountInFiltered() === 0) {
+    if (!this.showSelectedOnly && this.selectedCountInFiltered === 0) {
       return
     }
     this.showSelectedOnly = !this.showSelectedOnly
@@ -154,28 +156,27 @@ export struct ModelPickerSheet {
     return renderData
   }
 
-  private getRowIconRenderData(row: ModelPickerModelRow): ModelIconRenderData {
-    return this.getModelIconRenderData(row.modelId)
-  }
-
   private getListCachedCount(): number {
-    if (this.visibleModelIds.length >= 120) {
+    if (this.displayedModelIds.length >= 120) {
       return 2
     }
-    if (this.visibleModelIds.length >= 40) {
+    if (this.displayedModelIds.length >= 40) {
       return 3
     }
     return 4
   }
 
   private getSelectableModelIds(): string[] {
-    return this.showSelectedOnly ? this.visibleModelIds : this.filteredModelIds
+    return this.showSelectedOnly ? this.displayedModelIds : this.filteredModelIds
   }
 
-  private getSelectedCountInFiltered(): number {
+  @Computed
+  private get selectedCountInFiltered(): number {
     let count = 0
-    for (let i = 0; i < this.filteredModelIds.length; i++) {
-      if (this.selectedIds.has(this.filteredModelIds[i])) {
+    const filtered = this.filteredModelIds
+    const selected = this.selectedIds
+    for (let i = 0; i < filtered.length; i++) {
+      if (selected.has(filtered[i])) {
         count++
       }
     }
@@ -183,50 +184,7 @@ export struct ModelPickerSheet {
   }
 
   private getCurrentResultCount(): number {
-    return this.showSelectedOnly ? this.visibleModelIds.length : this.filteredModelIds.length
-  }
-
-
-  private buildModelRow(group: PickerModelGroup, modelId: string, index: number): ModelPickerModelRow {
-    return {
-      groupName: group.name,
-      modelId: modelId,
-      isExisting: this.existingModelIdSet.has(modelId),
-      groupPosition: this.resolveGroupPosition(index, group.modelIds.length)
-    } as ModelPickerModelRow
-  }
-
-  private resolveGroupPosition(index: number, totalCount: number): ModelRowGroupPosition {
-    if (totalCount <= 1) {
-      return ModelRowGroupPosition.SINGLE
-    }
-    if (index === 0) {
-      return ModelRowGroupPosition.FIRST
-    }
-    if (index === totalCount - 1) {
-      return ModelRowGroupPosition.LAST
-    }
-    return ModelRowGroupPosition.MIDDLE
-  }
-
-  private buildGroupRenderKey(group: PickerModelGroup): string {
-    const modeKey = this.showSelectedOnly ? 'selected' : 'all'
-    return `${modeKey}::${group.name}::${group.modelIds.join('|')}`
-  }
-
-  private getGroupJumpItemIndex(groupIndex: number): number {
-    let itemIndex = 0
-    for (let i = 0; i < groupIndex; i++) {
-      itemIndex += this.groups[i].modelIds.length
-    }
-    return itemIndex
-  }
-
-  private scrollToGroup(groupIndex: number): void {
-    if (groupIndex < 0 || groupIndex >= this.groups.length) {
-      return
-    }
-    this.listScroller.scrollToIndex(this.getGroupJumpItemIndex(groupIndex), true, ScrollAlign.START)
+    return this.showSelectedOnly ? this.displayedModelIds.length : this.filteredModelIds.length
   }
 
   private confirmSelection(): void {
@@ -243,7 +201,9 @@ export struct ModelPickerSheet {
       this.SearchBar()
       this.SelectionToolbar()
       this.GroupJumpTags()
-      this.ModelList()
+      ModelListMaterialHost({ useMaterial: this.displayedGroups.length > 0 }) {
+        this.ModelList()
+      }
     }
     .width('100%')
     .height('100%')
@@ -253,7 +213,10 @@ export struct ModelPickerSheet {
   @Builder
   SheetHeader() {
     ImmersiveSheetHeader({
+      titleFont: getSettingsTypography().pageTitle,
+      titleColor: getAppUiState().themeTextPrimary,
       title: $r('app.string.select_models'),
+      materialFeedback: false,
       showTrailing: true,
       trailingColor: this.themePrimary,
       onLeadingClick: (): void => {
@@ -267,19 +230,14 @@ export struct ModelPickerSheet {
 
   @Builder
   SearchBar() {
-    Search({ value: this.searchKeywords, placeholder: $r('app.string.filter_models_placeholder') })
-      .width(this.windowWidthVp >= 600 ? 360 : '82%')
-      .height(40)
-      .borderRadius(20)
-      .backgroundColor(Color.Transparent)
-      .backdropBlur(16)
-      .shadow(getBlurBottomShadow())
-      .padding({ left: 16, right: 16 })
-      .onChange((value: string) => {
+    ModelFilterSearchField({
+      value: this.searchKeywords,
+      onChange: (value: string): void => {
         this.searchKeywords = value
-        this.activeGroupFilter = -1
+        this.activeGroupName = ''
         this.rebuildRows()
-      })
+      }
+    })
   }
 
   @Builder
@@ -331,8 +289,8 @@ export struct ModelPickerSheet {
       .padding({ left: 12, right: 12 })
       .backgroundColor(this.showSelectedOnly ? this.themePrimaryLight : getAppUiState().themeSurface)
       .borderRadius(16)
-      .enabled(this.showSelectedOnly || this.getSelectedCountInFiltered() > 0)
-      .opacity(this.showSelectedOnly || this.getSelectedCountInFiltered() > 0 ? 1 : 0.45)
+      .enabled(this.showSelectedOnly || this.selectedCountInFiltered > 0)
+      .opacity(this.showSelectedOnly || this.selectedCountInFiltered > 0 ? 1 : 0.45)
       .onClick(() => {
         this.toggleSelectedOnly()
       })
@@ -347,12 +305,12 @@ export struct ModelPickerSheet {
       Row() {
         Scroll() {
           Row({ space: 8 }) {
-            ForEach(this.groups, (group: PickerModelGroup, index: number) => {
+            ForEach(this.groups, (group: PickerModelGroup) => {
               Button() {
                 Text(group.name)
                   .fontSize(13)
                   .fontWeight(FontWeight.Medium)
-                  .fontColor(this.activeGroupFilter === index
+                  .fontColor(this.activeGroupName === group.name
                     ? Color.White
                     : $r('app.color.text_secondary'))
               }
@@ -360,13 +318,12 @@ export struct ModelPickerSheet {
               .stateEffect(false)
               .height(32)
               .padding({ left: 12, right: 12 })
-              .backgroundColor(this.activeGroupFilter === index
+              .backgroundColor(this.activeGroupName === group.name
                 ? this.themePrimary
                 : getAppUiState().themeSurface)
               .borderRadius(16)
               .onClick(() => {
-                this.activeGroupFilter = this.activeGroupFilter === index ? -1 : index
-                this.rebuildRows()
+                this.activeGroupName = this.activeGroupName === group.name ? '' : group.name
               })
             }, (group: PickerModelGroup) => `jump::${group.name}`)
           }
@@ -385,14 +342,13 @@ export struct ModelPickerSheet {
   }
 
   @Builder
-  GroupHeader(group: PickerModelGroup) {
+  GroupHeader($$: PickerHeaderParams) {
     Row({ space: 4 }) {
-      Text(group.name)
-        .fontSize(14)
-        .fontWeight(FontWeight.Medium)
-        .fontColor($r('app.color.text_secondary'))
+      Text($$.group.name)
+        .font(getSettingsTypography().sectionTitle)
+        .fontColor(getAppUiState().themeTextPrimary)
 
-      Text(`(${group.modelIds.length})`)
+      Text(`(${$$.group.modelIds.length})`)
         .fontSize(12)
         .fontColor($r('app.color.text_tertiary'))
         .margin({ top: 1 })
@@ -408,27 +364,29 @@ export struct ModelPickerSheet {
     if (this.displayedGroups.length === 0) {
       this.EmptyState()
     } else {
-      List({ scroller: this.listScroller }) {
-        ListItemGroup({ space: 0 }) {
-          ForEach(this.displayedGroups, (group: PickerModelGroup) => {
-            ListItem() {
-              this.GroupHeader(group)
+      List() {
+        Repeat<PickerModelGroup>(this.displayedGroups)
+          .each((group: RepeatItem<PickerModelGroup>) => {
+            ListItemGroup({ header: this.GroupHeader({ group: group.item }) }) {
+              Repeat<string>(group.item.modelIds)
+                .each((model: RepeatItem<string>) => {
+                  ListItem() {
+                    this.ModelRow({
+                      modelId: model.item,
+                      groupPosition: resolveGroupPosition(model.index, group.item.modelIds.length)
+                    })
+                  }
+                })
+                .key((modelId: string) => modelId)
+                .virtualScroll()
             }
-
-            ForEach(group.modelIds, (modelId: string, index: number) => {
-              ListItem() {
-                this.ModelRow(this.buildModelRow(group, modelId, index))
-              }
-            }, (modelId: string) => `${group.name}::${modelId}`)
-          }, (group: PickerModelGroup) => this.buildGroupRenderKey(group))
+            .divider(null)
+          })
+          .key((group: PickerModelGroup) => group.name)
+          .virtualScroll()
+        ListItem() {
+          Column().height(40)
         }
-        .divider(null)
-        .margin({ left: 16, right: 16, bottom: 40 })
-        .backgroundColor(Color.Transparent)
-        .borderRadius(16)
-        .border({ width: 1, color: this.themePrimaryLight })
-        .backdropBlur(24)
-        .shadow(getBlurBottomShadow())
       }
       .sticky(StickyStyle.None)
       .width('100%')
@@ -440,23 +398,23 @@ export struct ModelPickerSheet {
   }
 
   @Builder
-  ModelRow(row: ModelPickerModelRow) {
+  ModelRow($$: PickerRowParams) {
     Column() {
       Row() {
         Checkbox()
-          .select(this.isSelected(row.modelId))
+          .select(this.isSelected($$.modelId))
           .selectedColor(this.themePrimary)
           .hitTestBehavior(HitTestMode.None)
 
         Column() {
-          if (this.getRowIconRenderData(row).hasIcon()) {
-            if (this.getRowIconRenderData(row).isRawfile()) {
-              Image($rawfile(this.getRowIconRenderData(row).resourcePath))
+          if (this.getModelIconRenderData($$.modelId).hasIcon()) {
+            if (this.getModelIconRenderData($$.modelId).isRawfile()) {
+              Image($rawfile(this.getModelIconRenderData($$.modelId).resourcePath))
                 .width(20)
                 .height(20)
                 .objectFit(ImageFit.Contain)
             } else {
-              Image(this.getRowIconRenderData(row).resourcePath)
+              Image(this.getModelIconRenderData($$.modelId).resourcePath)
                 .width(20)
                 .height(20)
                 .objectFit(ImageFit.Contain)
@@ -476,9 +434,9 @@ export struct ModelPickerSheet {
         .margin({ left: 12 })
 
         Column() {
-          Text(row.modelId)
-            .fontSize(14)
-            .fontColor($r('app.color.text_primary'))
+          Text($$.modelId)
+            .font(getSettingsTypography().itemTitle)
+            .fontColor(getAppUiState().themeTextPrimary)
             .maxLines(2)
             .textOverflow({ overflow: TextOverflow.Ellipsis })
         }
@@ -489,15 +447,15 @@ export struct ModelPickerSheet {
       .width('100%')
       .constraintSize({ minHeight: 56 })
       .padding({ left: 12, right: 12, top: 12, bottom: 12 })
-      .backgroundColor(this.isSelected(row.modelId)
+      .backgroundColor(this.isSelected($$.modelId)
         ? withColorAlpha(this.themePrimaryLight, '80')
         : Color.Transparent)
-      .borderRadius(this.buildRowRadius(row.groupPosition))
+      .borderRadius(this.buildRowRadius($$.groupPosition))
       .onClick(() => {
-        this.toggleModel(row.modelId)
+        this.toggleModel($$.modelId)
       })
 
-      if (this.shouldShowDivider(row.groupPosition)) {
+      if (this.shouldShowDivider($$.groupPosition)) {
         Divider()
           .color(getAppUiState().themePrimaryLight)
           .margin({ left: 54, right: 12 })
@@ -515,18 +473,24 @@ export struct ModelPickerSheet {
       Text(this.showSelectedOnly
         ? $r('app.string.model_picker_selected_only_empty')
         : (this.availableModels.length === 0 ? $r('app.string.provider_no_models') : $r('app.string.provider_models_not_found')))
-        .fontSize(16)
-        .fontColor($r('app.color.text_secondary'))
+        .font(getSettingsTypography().itemTitle)
+        .width('100%')
+        .textAlign(TextAlign.Start)
+        .fontColor(getAppUiState().themeTextPrimary)
         .margin({ top: 16 })
 
       Text(this.showSelectedOnly
         ? $r('app.string.model_picker_selected_only_empty_hint')
         : (this.availableModels.length === 0 ? $r('app.string.provider_no_models_hint') : $r('app.string.try_different_keyword')))
-        .fontSize(14)
-        .fontColor($r('app.color.text_tertiary'))
+        .font(getSettingsTypography().subtitle)
+        .width('100%')
+        .textAlign(TextAlign.Start)
+        .lineHeight(SETTINGS_SUBTITLE_LINE_HEIGHT)
+        .fontColor(getAppUiState().themeTextSecondary)
         .margin({ top: 4 })
     }
     .width('100%')
+    .padding({ left: 12, right: 12 })
     .layoutWeight(1)
     .justifyContent(FlexAlign.Center)
   }

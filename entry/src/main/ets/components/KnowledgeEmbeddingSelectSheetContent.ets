@@ -1,4 +1,4 @@
-import { getBlurBottomShadow } from '../utils/BlurShadowUtils'
+import { ImmersiveListSurface, LIST_MATERIAL_CARD_RADIUS } from './ImmersiveListSurface'
 import { deviceInfo } from '@kit.BasicServicesKit'
 import { ModelProvider } from '../models/ChatModels'
 import {
@@ -6,7 +6,6 @@ import {
 } from '../services/KnowledgeEmbeddingService'
 import { getAppUiState } from '../state/AppUiState'
 import { pickLocalizedText } from '../utils/LocalizedTextUtils'
-import { withColorAlpha } from '../utils/ColorAlphaUtils'
 import { ModelSelectorContent } from './ModelSelector'
 import { ImmersiveSheetHeader } from './ImmersiveSheetHeader'
 
@@ -39,6 +38,7 @@ export struct KnowledgeEmbeddingSelectSheetContent {
   private Header() {
     ImmersiveSheetHeader({
       title: pickLocalizedText('向量模型', 'Embedding model'),
+      materialFeedback: false,
       leadingButtonEnabled: !this.isApplying,
       onLeadingClick: (): void => {
         this.onClose()
@@ -69,73 +69,69 @@ export struct KnowledgeEmbeddingSelectSheetContent {
 
   @Builder
   private LocalModelRow() {
-    Row() {
-      Column() {
-        SymbolGlyph($r('sys.symbol.square_stack_3d'))
-          .fontSize(20)
-          .fontColor([this.currentSelection.isApi()
-            ? this.themePrimary
-            : Color.White])
-      }
-      .width(36)
-      .height(36)
-      .borderRadius(10)
-      .backgroundColor(this.currentSelection.isApi()
-        ? withColorAlpha(this.themePrimary, this.isDarkMode ? '2E' : '16')
-        : '#24FFFFFF')
-      .justifyContent(FlexAlign.Center)
-      .alignItems(HorizontalAlign.Center)
+    Stack() {
+      ImmersiveListSurface({ isImmersive: true, cornerRadius: LIST_MATERIAL_CARD_RADIUS }) {
+        Row() {
+          Column() {
+            SymbolGlyph($r('sys.symbol.square_stack_3d'))
+              .fontSize(20)
+              .fontColor([this.themePrimary])
+          }
+          .width(36)
+          .height(36)
+          .borderRadius(10)
+          .backgroundColor($r('app.color.model_icon_bg'))
+          .justifyContent(FlexAlign.Center)
+          .alignItems(HorizontalAlign.Center)
 
-      Column({ space: 3 }) {
-        Text(pickLocalizedText('本地 ArkData', 'Local ArkData'))
-          .fontSize(15)
-          .fontWeight(FontWeight.Medium)
-          .fontColor(this.currentSelection.isApi() ? $r('app.color.text_primary') : Color.White)
+          Column({ space: 3 }) {
+            Text(pickLocalizedText('本地 ArkData', 'Local ArkData'))
+              .fontSize(15)
+              .fontWeight(FontWeight.Medium)
+              .fontColor(this.currentSelection.isApi() ? $r('app.color.text_primary') : this.themePrimary)
 
-        Text(pickLocalizedText(
-          this.isLocalEmbeddingSupported
-            ? '在设备侧生成向量，不上传文档片段'
-            : 'ArkData 文本向量仅支持 PC/2in1；当前设备不可用。',
-          this.isLocalEmbeddingSupported
-            ? 'Generate vectors on device without uploading document chunks'
-            : 'ArkData text embeddings require a 2-in-1 device; use an API here'
-        ))
-          .fontSize(11)
-          .fontColor(this.currentSelection.isApi() ? $r('app.color.text_secondary') : Color.White)
-          .opacity(this.currentSelection.isApi() ? 1 : 0.82)
-          .maxLines(2)
-      }
-      .layoutWeight(1)
-      .alignItems(HorizontalAlign.Start)
-      .margin({ left: 10 })
+            Text(pickLocalizedText(
+              this.isLocalEmbeddingSupported
+                ? '在设备侧生成向量，不上传文档片段'
+                : 'ArkData 文本向量仅支持 PC/2in1；当前设备不可用。',
+              this.isLocalEmbeddingSupported
+                ? 'Generate vectors on device without uploading document chunks'
+                : 'ArkData text embeddings require a 2-in-1 device; use an API here'
+            ))
+              .fontSize(11)
+              .fontColor($r('app.color.text_secondary'))
+              .maxLines(2)
+          }
+          .layoutWeight(1)
+          .alignItems(HorizontalAlign.Start)
+          .margin({ left: 10 })
 
-      if (!this.currentSelection.isApi()) {
-        SymbolGlyph($r('sys.symbol.checkmark_circle_fill'))
-          .fontSize(20)
-          .fontColor([Color.White])
+          if (!this.currentSelection.isApi()) {
+            SymbolGlyph($r('sys.symbol.checkmark_circle_fill'))
+              .fontSize(20)
+              .fontColor([this.themePrimary])
+          }
+        }
+        .width('100%')
+        .alignItems(VerticalAlign.Center)
+        .padding({ left: 12, right: 12, top: 11, bottom: 11 })
+        .borderRadius(LIST_MATERIAL_CARD_RADIUS)
+        .clip(true)
+        .backgroundColor(Color.Transparent)
+        .hitTestBehavior(this.isApplying || !this.isLocalEmbeddingSupported
+          ? HitTestMode.None
+          : HitTestMode.Block)
+        .onClick(() => {
+          if (!this.isApplying && this.isLocalEmbeddingSupported) {
+            this.onSelectLocal()
+          }
+        })
       }
     }
     .width('100%')
-    .alignItems(VerticalAlign.Center)
-    .padding({ left: 12, right: 12, top: 11, bottom: 11 })
-    .borderRadius(EMBEDDING_OPTION_CORNER_RADIUS)
-    .clip(true)
-    .backgroundColor(Color.Transparent)
-    .border({
-      width: !this.currentSelection.isApi() ? 1 : 0.5,
-      color: !this.currentSelection.isApi() ? this.themePrimary : getAppUiState().themePrimaryLight
-    })
-    .backdropBlur(24)
-    .shadow(getBlurBottomShadow())
-    .hitTestBehavior(this.isApplying || !this.isLocalEmbeddingSupported
-      ? HitTestMode.None
-      : HitTestMode.Block)
     .opacity(this.isApplying || !this.isLocalEmbeddingSupported ? 0.55 : 1)
-    .onClick(() => {
-      if (!this.isApplying && this.isLocalEmbeddingSupported) {
-        this.onSelectLocal()
-      }
-    })
+    .clip(false)
+    .hitTestBehavior(HitTestMode.Transparent)
   }
 
   @Builder
@@ -163,28 +159,27 @@ export struct KnowledgeEmbeddingSelectSheetContent {
 
   @Builder
   private ApiNotice() {
-    Row() {
-      SymbolGlyph($r('sys.symbol.info_circle'))
-        .fontSize(16)
-        .fontColor([this.themePrimary])
+    ImmersiveListSurface({ isImmersive: true, cornerRadius: LIST_MATERIAL_CARD_RADIUS }) {
+      Row() {
+        SymbolGlyph($r('sys.symbol.info_circle'))
+          .fontSize(16)
+          .fontColor([this.themePrimary])
 
-      Text(pickLocalizedText(
-        'API 模式会把文档片段发送给所选服务商并重新生成全部向量；实际检索 query 仅在模型调用知识库工具后发送，可能产生费用。',
-        'API mode sends document chunks to the selected provider and rebuilds all vectors. Query text is sent only after the model calls the knowledge tool, and charges may apply.'
-      ))
-        .fontSize(11)
-        .fontColor($r('app.color.text_secondary'))
-        .layoutWeight(1)
-        .margin({ left: 8 })
+        Text(pickLocalizedText(
+          'API 模式会把文档片段发送给所选服务商并重新生成全部向量；实际检索 query 仅在模型调用知识库工具后发送，可能产生费用。',
+          'API mode sends document chunks to the selected provider and rebuilds all vectors. Query text is sent only after the model calls the knowledge tool, and charges may apply.'
+        ))
+          .fontSize(11)
+          .fontColor($r('app.color.text_secondary'))
+          .layoutWeight(1)
+          .margin({ left: 8 })
+      }
+      .width('100%')
+      .padding(12)
+      .borderRadius(LIST_MATERIAL_CARD_RADIUS)
+      .backgroundColor(Color.Transparent)
+      .alignItems(VerticalAlign.Top)
     }
-    .width('100%')
-    .padding(12)
-    .borderRadius(EMBEDDING_OPTION_CORNER_RADIUS)
-    .backgroundColor(Color.Transparent)
-    .border({ width: 0.5, color: getAppUiState().themePrimaryLight })
-    .backdropBlur(16)
-    .shadow(getBlurBottomShadow())
-    .alignItems(VerticalAlign.Top)
   }
 
   @Builder
@@ -215,35 +210,34 @@ export struct KnowledgeEmbeddingSelectSheetContent {
 
   @Builder
   private ApplyingOverlay() {
-    Column({ space: 12 }) {
-      LoadingProgress()
-        .width(34)
-        .height(34)
-        .color(this.themePrimary)
+    ImmersiveListSurface({ isImmersive: true, layoutWidth: 240, cornerRadius: LIST_MATERIAL_CARD_RADIUS }) {
+      Column({ space: 12 }) {
+        LoadingProgress()
+          .width(34)
+          .height(34)
+          .color(this.themePrimary)
 
-      Text(pickLocalizedText(
-        '正在检查并重建语义向量...',
-        'Checking and rebuilding semantic vectors...'
-      ))
-        .fontSize(14)
-        .fontWeight(FontWeight.Medium)
-        .fontColor($r('app.color.text_primary'))
-        .textAlign(TextAlign.Center)
+        Text(pickLocalizedText(
+          '正在检查并重建语义向量...',
+          'Checking and rebuilding semantic vectors...'
+        ))
+          .fontSize(14)
+          .fontWeight(FontWeight.Medium)
+          .fontColor($r('app.color.text_primary'))
+          .textAlign(TextAlign.Center)
 
-      Text(pickLocalizedText(
-        '重建期间关键词检索仍可使用',
-        'Keyword retrieval remains available during the rebuild'
-      ))
-        .fontSize(11)
-        .fontColor($r('app.color.text_secondary'))
+        Text(pickLocalizedText(
+          '重建期间关键词检索仍可使用',
+          'Keyword retrieval remains available during the rebuild'
+        ))
+          .fontSize(11)
+          .fontColor($r('app.color.text_secondary'))
+      }
+      .width(240)
+      .padding({ left: 20, right: 20, top: 22, bottom: 22 })
+      .borderRadius(LIST_MATERIAL_CARD_RADIUS)
+      .backgroundColor(Color.Transparent)
     }
-    .width(240)
-    .padding({ left: 20, right: 20, top: 22, bottom: 22 })
-    .borderRadius(18)
-    .backgroundColor(Color.Transparent)
-    .border({ width: 0.5, color: getAppUiState().themePrimaryLight })
-    .backdropBlur(24)
-    .shadow(getBlurBottomShadow())
   }
 
   build() {
@@ -288,8 +282,6 @@ export struct KnowledgeEmbeddingSelectSheetContent {
             includeModelIdInSearch: true,
             emptyStateMode: 'default',
             immersiveMaterial: true,
-            narrowSearchBar: true,
-            showImmersiveGroupBorder: true,
             onSelectModel: (providerId: string, modelId: string, modelName: string): void => {
               if (!this.isApplying) {
                 this.onSelectApi(providerId, modelId, modelName)

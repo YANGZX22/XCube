@@ -1,12 +1,15 @@
+import { getSettingsTypography, SETTINGS_SUBTITLE_LINE_HEIGHT } from './settings/SettingsTypography'
+import { ModelFilterSearchField } from './ModelFilterSearchField'
+import { ModelListMaterialHost } from './ModelListMaterialHost'
 import { ImmersiveButtonSurface } from './ImmersiveButtonSurface'
-import { uiMaterial } from '@kit.ArkUI'
-import { getBlurBottomShadow } from '../utils/BlurShadowUtils'
+import { createStaticRegularMaterial } from '../utils/WrappedMaterialSupport'
 import { ModelProvider, ModelInfo } from '../models/ChatModels'
 import {
   ModelRowGroupPosition,
   ModelRowRadius,
   ModelSelectorBuildResult,
   ModelSelectorModelRow,
+  ModelSelectorProviderGroup,
   ModelSelectorRow,
   ModelSelectorRowType,
   buildModelSelectorRows
@@ -15,15 +18,13 @@ import { FavoriteModelsService, getFavoriteModelsService } from '../services/Fav
 import { ProviderIcon } from './ProviderIcon'
 import { buildModelIconRenderData, ModelIconRenderData } from '../utils/ModelIconRenderUtils'
 import { getAppUiState } from '../state/AppUiState'
-import { withColorAlpha } from '../utils/ColorAlphaUtils'
 
-class ModelSelectorProviderGroup {
+interface ProviderHeaderParams {
   provider: ModelProvider
-  modelRows: ModelSelectorModelRow[] = []
+}
 
-  constructor(provider: ModelProvider) {
-    this.provider = provider
-  }
+interface SelectorRowParams {
+  row: ModelSelectorModelRow
 }
 
 @ComponentV2
@@ -40,8 +41,6 @@ export struct ModelSelectorContent {
   @Param includeModelIdInSearch: boolean = false
   @Param emptyStateMode: string = 'chat'
   @Param immersiveMaterial: boolean = false
-  @Param narrowSearchBar: boolean = false
-  @Param showImmersiveGroupBorder: boolean = false
   @Local searchKeywords: string = ''
   @Local showFavoritesOnly: boolean = false
   @Local hasEnabledModels: boolean = false
@@ -56,32 +55,12 @@ export struct ModelSelectorContent {
   private get isDarkMode(): boolean {
     return getAppUiState().isDarkMode
   }
-  private get windowWidthVp(): number {
-    return getAppUiState().windowWidthVp
-  }
   private get favoriteAccentColor(): Resource {
     return $r('app.color.status_error')
   }
   private get favoriteFilterActiveBackground(): string {
     return this.isDarkMode ? 'rgba(239, 68, 68, 0.20)' : 'rgba(239, 68, 68, 0.10)'
   }
-  private getImmersiveMaterial(
-    interactive: boolean,
-    materialColor: ResourceColor = Color.Transparent,
-    applyShadow: boolean = true
-  ): uiMaterial.Material | undefined {
-    if (!this.immersiveMaterial) {
-      return undefined
-    }
-    return new uiMaterial.ImmersiveMaterial({
-      style: uiMaterial.ImmersiveStyle.REGULAR,
-      materialColor: materialColor,
-      applyShadow: applyShadow,
-      interactive: interactive,
-      lightEffect: interactive ? { color: undefined } : undefined
-    })
-  }
-
   @Event onSelectModel: (providerId: string, modelId: string, modelName: string) => void =
     (_providerId: string, _modelId: string, _modelName: string): void => {}
   @Event onLongPressModel: (model: ModelInfo, provider: ModelProvider) => void =
@@ -90,6 +69,7 @@ export struct ModelSelectorContent {
 
   private favoriteService: FavoriteModelsService = getFavoriteModelsService()
   @Local private rows: ModelSelectorRow[] = []
+  @Local private providerGroups: ModelSelectorProviderGroup[] = []
   @Local private favoriteKeySet: Set<string> = new Set<string>()
   private iconRenderCache: Map<string, ModelIconRenderData> = new Map<string, ModelIconRenderData>()
   private favoriteLoadRequestId: number = 0
@@ -140,8 +120,7 @@ export struct ModelSelectorContent {
     } else {
       nextSet.delete(key)
     }
-    this.favoriteKeySet = nextSet
-    this.rebuildRows()
+    this.setFavoriteKeys(nextSet)
 
     try {
       if (willFavorite) {
@@ -152,18 +131,25 @@ export struct ModelSelectorContent {
       this.syncFavoriteKeysFromService()
     } catch (error) {
       console.error('ModelSelectorContent', `[toggleFavorite] failed: ${JSON.stringify(error)}`)
-      this.favoriteKeySet = previousSet
-      this.rebuildRows()
+      this.setFavoriteKeys(previousSet)
     }
   }
 
   private syncFavoriteKeysFromService(): void {
-    this.favoriteKeySet = new Set<string>(this.favoriteService.getFavoriteKeys())
-    this.rebuildRows()
+    const keys = this.favoriteService.getFavoriteKeys()
+    if (keys.length !== this.favoriteKeySet.size || keys.some((key: string) => !this.favoriteKeySet.has(key))) {
+      this.setFavoriteKeys(new Set<string>(keys))
+    }
+  }
+
+  private setFavoriteKeys(keys: Set<string>): void {
+    this.favoriteKeySet = keys
+    if (this.showFavoritesOnly) {
+      this.rebuildRows()
+    }
   }
 
   private rebuildRows(): void {
-    const startAt = Date.now()
     const result: ModelSelectorBuildResult = buildModelSelectorRows(
       this.providers,
       this.searchKeywords,
@@ -175,10 +161,7 @@ export struct ModelSelectorContent {
     this.hasFavoriteModels = result.hasFavoriteModels
     this.hasFilteredModels = result.hasFilteredModels
     this.rows = result.rows
-    console.info(
-      'ModelSelectorContent',
-      `[rebuildRows] providers=${this.providers.length}, rows=${result.rows.length}, enabled=${result.enabledModelCount}, matched=${result.matchedModelCount}, cost=${Date.now() - startAt}ms`
-    )
+    this.providerGroups = result.groups
   }
 
   private getModelIconRenderData(modelId: string, providerId: string, modelName: string): ModelIconRenderData {
@@ -234,33 +217,12 @@ export struct ModelSelectorContent {
     return 4
   }
 
-  private getProviderGroups(): ModelSelectorProviderGroup[] {
-    const groups: ModelSelectorProviderGroup[] = []
-    let currentGroup: ModelSelectorProviderGroup | null = null
-    for (let i = 0; i < this.rows.length; i++) {
-      const row = this.rows[i]
-      if (row.type === ModelSelectorRowType.PROVIDER_HEADER) {
-        currentGroup = new ModelSelectorProviderGroup(row.provider)
-        groups.push(currentGroup)
-      } else if (currentGroup !== null) {
-        currentGroup.modelRows.push(row as ModelSelectorModelRow)
-      }
-    }
-    return groups
-  }
-
-  private getProviderGroupRenderKey(group: ModelSelectorProviderGroup): string {
-    let key = group.provider.id
-    for (let i = 0; i < group.modelRows.length; i++) {
-      key += `::${group.modelRows[i].key}`
-    }
-    return key
-  }
-
   build() {
     Column() {
       this.SearchBar()
-      this.ModelList()
+      ModelListMaterialHost({ useMaterial: this.immersiveMaterial }) {
+        this.ModelList()
+      }
     }
     .width('100%')
     .layoutWeight(1)
@@ -268,26 +230,20 @@ export struct ModelSelectorContent {
 
   @Builder
   SearchBar() {
-    Row() {
-      Search({ value: this.searchKeywords, placeholder: this.searchPlaceholder })
-        .layoutWeight(1)
-        .height(40)
-        .borderRadius(20)
-        .backgroundColor(this.immersiveMaterial ? Color.Transparent : (this.immersiveMaterial ? Color.Transparent : getAppUiState().themeBackground))
-        .backdropBlur(this.immersiveMaterial ? 24 : 0)
-        .shadow(getBlurBottomShadow(this.immersiveMaterial))
-        .onChange((value: string) => {
-          this.searchKeywords = value
-          this.rebuildRows()
-        })
-
+    ModelFilterSearchField({
+      value: this.searchKeywords,
+      placeholder: this.searchPlaceholder,
+      onChange: (value: string): void => {
+        this.searchKeywords = value
+        this.rebuildRows()
+      }
+    }) {
       if (this.showFavoriteFilter) {
         Stack({ alignContent: Alignment.TopStart }) {
           ImmersiveButtonSurface({
-            materialFactory: () => (this.getImmersiveMaterial(
-              true,
+            materialFactory: this.immersiveMaterial ? () => createStaticRegularMaterial(
               this.showFavoritesOnly ? this.favoriteFilterActiveBackground : Color.Transparent
-            )),
+            ) : undefined,
             cornerRadius: undefined
           }) {
             Button({ type: ButtonType.Capsule, stateEffect: false }) {
@@ -304,8 +260,8 @@ export struct ModelSelectorContent {
             }
             .height(32)
             .padding({ left: 10, right: 10 })
-            .backgroundColor(this.immersiveMaterial ? Color.Transparent : (this.immersiveMaterial ? Color.Transparent :
-              (this.showFavoritesOnly ? this.favoriteFilterActiveBackground : getAppUiState().themeSurface)))
+            .backgroundColor(this.immersiveMaterial ? Color.Transparent :
+              (this.showFavoritesOnly ? this.favoriteFilterActiveBackground : getAppUiState().themeSurface))
             .border({
               width: this.immersiveMaterial ? 0 : (this.showFavoritesOnly ? 1 : 0.5),
               color: this.showFavoritesOnly ? this.favoriteAccentColor : getAppUiState().themePrimaryLight
@@ -317,12 +273,10 @@ export struct ModelSelectorContent {
           }
         }
         .height(32)
-        .margin({ left: 8 })
+        .margin({ right: 4 })
         .clip(false)
       }
     }
-    .width(this.narrowSearchBar ? (this.windowWidthVp >= 600 ? 360 : '82%') : '100%')
-    .padding({ left: 16, right: 16, top: 6, bottom: 6 })
   }
 
   @Builder
@@ -346,53 +300,48 @@ export struct ModelSelectorContent {
             }
             .width('100%')
             .padding(16)
-            .backgroundColor(this.immersiveMaterial ? Color.Transparent : (this.immersiveMaterial ? Color.Transparent : getAppUiState().themeSurface))
+            .backgroundColor(this.immersiveMaterial ? Color.Transparent : getAppUiState().themeSurface)
             .borderRadius(16)
-            .border({
-              width: this.immersiveMaterial ? 1 : 0,
-              color: this.immersiveMaterial ? this.themePrimaryLight : Color.Transparent
-            })
-            .backdropBlur(this.immersiveMaterial ? 24 : 0)
-            .shadow(getBlurBottomShadow(this.immersiveMaterial))
             .onClick(() => {
               this.onClearSelection()
             })
           }
-          .padding({ left: 16, right: 16, top: 6, bottom: 6 })
+          .padding({ left: this.immersiveMaterial ? 0 : 16, right: this.immersiveMaterial ? 0 : 16, top: 6, bottom: 6 })
         }
 
         if (this.immersiveMaterial) {
-          ForEach(this.getProviderGroups(), (group: ModelSelectorProviderGroup) => {
-            ListItemGroup({
-              header: this.ProviderHeader(group.provider)
-            }) {
-              ForEach(group.modelRows, (row: ModelSelectorModelRow) => {
-                ListItem() {
-                  this.ModelRow(row)
-                }
-              }, (row: ModelSelectorModelRow) => row.key)
-            }
-            .divider(null)
-            .margin({ left: 16, right: 16, bottom: 8 })
-            .borderRadius(16)
-            .backgroundColor(Color.Transparent)
-            .border({
-              width: this.showImmersiveGroupBorder ? 1 : 0,
-              color: this.showImmersiveGroupBorder ? this.themePrimaryLight : Color.Transparent
-            })
-            .backdropBlur(this.immersiveMaterial ? 24 : 0)
-            .shadow(getBlurBottomShadow(this.immersiveMaterial))
-          }, (group: ModelSelectorProviderGroup) => this.getProviderGroupRenderKey(group))
-        } else {
-          ForEach(this.rows, (row: ModelSelectorRow) => {
-            ListItem() {
-              if (row.type === ModelSelectorRowType.PROVIDER_HEADER) {
-                this.ProviderHeader(row.provider)
-              } else {
-                this.ModelRow(row as ModelSelectorModelRow)
+          Repeat<ModelSelectorProviderGroup>(this.providerGroups)
+            .each((group: RepeatItem<ModelSelectorProviderGroup>) => {
+              ListItemGroup({ header: this.ProviderHeader({ provider: group.item.provider }) }) {
+                Repeat<ModelSelectorModelRow>(group.item.modelRows)
+                  .each((model: RepeatItem<ModelSelectorModelRow>) => {
+                    ListItem() {
+                      this.ModelRow({ row: model.item })
+                    }
+                  })
+                  .key((row: ModelSelectorModelRow) => row.key)
+                  .virtualScroll()
               }
-            }
-          }, (row: ModelSelectorRow) => row.key)
+              .divider(null)
+              .margin({ bottom: 8 })
+              .borderRadius(16)
+              .backgroundColor(Color.Transparent)
+            })
+            .key((group: ModelSelectorProviderGroup) => group.provider.id)
+            .virtualScroll()
+        } else {
+          Repeat<ModelSelectorRow>(this.rows)
+            .each((entry: RepeatItem<ModelSelectorRow>) => {
+              ListItem() {
+                if (entry.item.type === ModelSelectorRowType.PROVIDER_HEADER) {
+                  this.ProviderHeader({ provider: entry.item.provider })
+                } else {
+                  this.ModelRow({ row: entry.item as ModelSelectorModelRow })
+                }
+              }
+            })
+            .key((row: ModelSelectorRow) => row.key)
+            .virtualScroll()
         }
 
         ListItem() {
@@ -413,26 +362,25 @@ export struct ModelSelectorContent {
   }
 
   @Builder
-  ProviderHeader(provider: ModelProvider) {
+  ProviderHeader($$: ProviderHeaderParams) {
     Row() {
       ProviderIcon({
-        iconType: provider.iconType,
-        iconPath: provider.iconPath,
-        textIcon: provider.textIcon,
-        textIconBgColor: provider.textIconBgColor,
-        customImagePath: provider.customImagePath,
+        iconType: $$.provider.iconType,
+        iconPath: $$.provider.iconPath,
+        textIcon: $$.provider.textIcon,
+        textIconBgColor: $$.provider.textIconBgColor,
+        customImagePath: $$.provider.customImagePath,
         iconSize: 28,
         radius: 7,
-        bgColor: provider.brandColor,
-        brandColor: provider.brandColor,
+        bgColor: $$.provider.brandColor,
+        brandColor: $$.provider.brandColor,
         fallbackSymbol: $r('sys.symbol.message'),
         fallbackColor: Color.White
       })
 
-      Text(provider.name)
-        .fontSize(14)
-        .fontWeight(FontWeight.Medium)
-        .fontColor($r('app.color.text_secondary'))
+      Text($$.provider.name)
+        .font(getSettingsTypography().sectionTitle)
+        .fontColor(getAppUiState().themeTextPrimary)
         .margin({ left: 8 })
     }
     .width('100%')
@@ -445,34 +393,34 @@ export struct ModelSelectorContent {
   }
 
   @Builder
-  ModelRow(row: ModelSelectorModelRow) {
+  ModelRow($$: SelectorRowParams) {
     Column() {
       Row() {
         Row() {
           Column() {
-            if (this.getRowModelIconRenderData(row).hasIcon()) {
-              if (this.getRowModelIconRenderData(row).isRawfile()) {
-                Image($rawfile(this.getRowModelIconRenderData(row).resourcePath))
+            if (this.getRowModelIconRenderData($$.row).hasIcon()) {
+              if (this.getRowModelIconRenderData($$.row).isRawfile()) {
+                Image($rawfile(this.getRowModelIconRenderData($$.row).resourcePath))
                   .width(20)
                   .height(20)
                   .objectFit(ImageFit.Contain)
               } else {
-                Image(this.getRowModelIconRenderData(row).resourcePath)
+                Image(this.getRowModelIconRenderData($$.row).resourcePath)
                   .width(20)
                   .height(20)
                   .objectFit(ImageFit.Contain)
               }
             } else {
               ProviderIcon({
-                iconType: row.provider.iconType,
-                iconPath: row.provider.iconPath,
-                textIcon: row.provider.textIcon,
-                textIconBgColor: row.provider.textIconBgColor,
-                customImagePath: row.provider.customImagePath,
+                iconType: $$.row.provider.iconType,
+                iconPath: $$.row.provider.iconPath,
+                textIcon: $$.row.provider.textIcon,
+                textIconBgColor: $$.row.provider.textIconBgColor,
+                customImagePath: $$.row.provider.customImagePath,
                 iconSize: 20,
                 radius: 5,
-                bgColor: row.provider.brandColor,
-                brandColor: row.provider.brandColor,
+                bgColor: $$.row.provider.brandColor,
+                brandColor: $$.row.provider.brandColor,
                 fallbackSymbol: $r('sys.symbol.ai_edit'),
                 fallbackColor: $r('app.color.text_tertiary')
               })
@@ -486,25 +434,24 @@ export struct ModelSelectorContent {
           .alignItems(HorizontalAlign.Center)
 
           Column() {
-            Text(this.getRowModelDisplayName(row))
-              .fontSize(15)
-              .fontWeight(FontWeight.Medium)
-              .fontColor($r('app.color.text_primary'))
+            Text(this.getRowModelDisplayName($$.row))
+              .font(getSettingsTypography().itemTitle)
+              .fontColor(this.isSelectedModel($$.row) ? this.themePrimary : getAppUiState().themeTextPrimary)
 
             Row() {
-              if (row.model.capabilities.supportsReasoning) {
+              if ($$.row.model.capabilities.supportsReasoning) {
                 this.CapabilityIcon('sys.symbol.AI_deep_thinking')
               }
-              if (row.model.capabilities.supportsVision) {
+              if ($$.row.model.capabilities.supportsVision) {
                 this.CapabilityIcon('sys.symbol.ohos_photo')
               }
-              if (row.model.capabilities.supportsDocuments) {
+              if ($$.row.model.capabilities.supportsDocuments) {
                 this.CapabilityIcon('sys.symbol.pdf_doc')
               }
-              if (row.model.capabilities.supportsTools) {
+              if ($$.row.model.capabilities.supportsTools) {
                 this.CapabilityIcon('sys.symbol.wrench_and_screwdriver')
               }
-              if (row.model.capabilities.supportsWebSearch) {
+              if ($$.row.model.capabilities.supportsWebSearch) {
                 this.CapabilityIcon('sys.symbol.ohos_wifi')
               }
             }
@@ -517,12 +464,12 @@ export struct ModelSelectorContent {
         .layoutWeight(1)
         .alignItems(VerticalAlign.Center)
         .onClick(() => {
-          this.onSelectModel(row.provider.id, row.model.id, this.getRowModelDisplayName(row))
+          this.onSelectModel($$.row.provider.id, $$.row.model.id, this.getRowModelDisplayName($$.row))
         })
         .gesture(LongPressGesture({ duration: 500 })
           .onAction(() => {
             if (this.showEditEntry) {
-              this.onLongPressModel(row.model, row.provider)
+              this.onLongPressModel($$.row.model, $$.row.provider)
             }
           }))
 
@@ -539,15 +486,15 @@ export struct ModelSelectorContent {
           .backgroundColor(Color.Transparent)
           .hitTestBehavior(HitTestMode.Block)
           .onClick(() => {
-            this.onLongPressModel(row.model, row.provider)
+            this.onLongPressModel($$.row.model, $$.row.provider)
           })
         }
 
         if (this.showFavoriteActions) {
           Button() {
-            SymbolGlyph(this.isModelFavorite(row.provider.id, row.model.id) ? $r('sys.symbol.heart_fill') : $r('sys.symbol.heart'))
+            SymbolGlyph(this.isModelFavorite($$.row.provider.id, $$.row.model.id) ? $r('sys.symbol.heart_fill') : $r('sys.symbol.heart'))
               .fontSize(18)
-              .fontColor([this.isModelFavorite(row.provider.id, row.model.id) ? $r('app.color.status_error') : $r('app.color.text_tertiary')])
+              .fontColor([this.isModelFavorite($$.row.provider.id, $$.row.model.id) ? $r('app.color.status_error') : $r('app.color.text_tertiary')])
           }
           .type(ButtonType.Circle)
           .width(32)
@@ -556,11 +503,11 @@ export struct ModelSelectorContent {
           .backgroundColor(Color.Transparent)
           .hitTestBehavior(HitTestMode.Block)
           .onClick(() => {
-            this.toggleFavorite(row.model, row.provider)
+            this.toggleFavorite($$.row.model, $$.row.provider)
           })
         }
 
-        if (this.isSelectedModel(row)) {
+        if (this.isSelectedModel($$.row)) {
           SymbolGlyph($r('sys.symbol.checkmark'))
             .fontSize(18)
             .fontColor([this.themePrimary])
@@ -568,19 +515,17 @@ export struct ModelSelectorContent {
       }
       .width('100%')
       .padding({ left: 12, right: 12, top: 10, bottom: 10 })
-      .backgroundColor(this.immersiveMaterial && this.isSelectedModel(row)
-        ? withColorAlpha(this.themePrimaryLight, '80') :
-        (this.immersiveMaterial ? Color.Transparent :
-          (this.isSelectedModel(row) ? this.themePrimaryLight : getAppUiState().themeSurface)))
-      .borderRadius(this.buildRowRadius(row.groupPosition))
+      .backgroundColor(this.immersiveMaterial ? Color.Transparent :
+        (this.isSelectedModel($$.row) ? this.themePrimaryLight : getAppUiState().themeSurface))
+      .borderRadius(this.buildRowRadius($$.row.groupPosition))
       .border({
-        width: this.immersiveMaterial ? 0 : (this.isSelectedModel(row) ? 1 : 0),
-        color: this.isSelectedModel(row) ? this.themePrimaryLight : Color.Transparent
+        width: this.immersiveMaterial ? 0 : (this.isSelectedModel($$.row) ? 1 : 0),
+        color: !this.immersiveMaterial && this.isSelectedModel($$.row) ? this.themePrimaryLight : Color.Transparent
       })
 
-      if (row.groupPosition === ModelRowGroupPosition.FIRST || row.groupPosition === ModelRowGroupPosition.MIDDLE) {
+      if ($$.row.groupPosition === ModelRowGroupPosition.FIRST || $$.row.groupPosition === ModelRowGroupPosition.MIDDLE) {
         Divider()
-          .color(getAppUiState().themePrimaryLight)
+          .color(this.immersiveMaterial ? $r('sys.color.ohos_id_color_list_separator') : this.themePrimaryLight)
           .margin({ left: 60, right: 12 })
       }
     }
@@ -599,16 +544,22 @@ export struct ModelSelectorContent {
         .fontColor([$r('app.color.text_tertiary')])
 
       Text(this.emptyStateMode === 'default' ? $r('app.string.default_model_no_provider') : '暂无可用模型')
-        .fontSize(16)
-        .fontColor($r('app.color.text_secondary'))
+        .font(getSettingsTypography().itemTitle)
+        .width('100%')
+        .textAlign(TextAlign.Start)
+        .fontColor(getAppUiState().themeTextPrimary)
         .margin({ top: 16 })
 
       Text(this.emptyStateMode === 'default' ? $r('app.string.default_model_no_provider_hint') : '请先添加或启用AI服务商')
-        .fontSize(14)
-        .fontColor($r('app.color.text_tertiary'))
+        .font(getSettingsTypography().subtitle)
+        .width('100%')
+        .textAlign(TextAlign.Start)
+        .lineHeight(SETTINGS_SUBTITLE_LINE_HEIGHT)
+        .fontColor(getAppUiState().themeTextSecondary)
         .margin({ top: 4 })
     }
     .width('100%')
+    .padding({ left: 12, right: 12 })
     .layoutWeight(1)
     .justifyContent(FlexAlign.Center)
   }
@@ -621,16 +572,22 @@ export struct ModelSelectorContent {
         .fontColor([$r('app.color.text_tertiary')])
 
       Text('未找到匹配的模型')
-        .fontSize(16)
-        .fontColor($r('app.color.text_secondary'))
+        .font(getSettingsTypography().itemTitle)
+        .width('100%')
+        .textAlign(TextAlign.Start)
+        .fontColor(getAppUiState().themeTextPrimary)
         .margin({ top: 16 })
 
       Text('请尝试其他关键词')
-        .fontSize(14)
-        .fontColor($r('app.color.text_tertiary'))
+        .font(getSettingsTypography().subtitle)
+        .width('100%')
+        .textAlign(TextAlign.Start)
+        .lineHeight(SETTINGS_SUBTITLE_LINE_HEIGHT)
+        .fontColor(getAppUiState().themeTextSecondary)
         .margin({ top: 4 })
     }
     .width('100%')
+    .padding({ left: 12, right: 12 })
     .layoutWeight(1)
     .justifyContent(FlexAlign.Center)
   }
@@ -643,16 +600,22 @@ export struct ModelSelectorContent {
         .fontColor([$r('app.color.text_tertiary')])
 
       Text($r('app.string.favorite_models_empty_title'))
-        .fontSize(16)
-        .fontColor($r('app.color.text_secondary'))
+        .font(getSettingsTypography().itemTitle)
+        .width('100%')
+        .textAlign(TextAlign.Start)
+        .fontColor(getAppUiState().themeTextPrimary)
         .margin({ top: 16 })
 
       Text($r('app.string.favorite_models_empty_desc'))
-        .fontSize(14)
-        .fontColor($r('app.color.text_tertiary'))
+        .font(getSettingsTypography().subtitle)
+        .width('100%')
+        .textAlign(TextAlign.Start)
+        .lineHeight(SETTINGS_SUBTITLE_LINE_HEIGHT)
+        .fontColor(getAppUiState().themeTextSecondary)
         .margin({ top: 4 })
     }
     .width('100%')
+    .padding({ left: 12, right: 12 })
     .layoutWeight(1)
     .justifyContent(FlexAlign.Center)
   }

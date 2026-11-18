@@ -1,3 +1,5 @@
+import { getSettingsTypography, SETTINGS_SUBTITLE_LINE_HEIGHT } from '../components/settings/SettingsTypography'
+import { ImmersiveListSurface, LIST_MATERIAL_CARD_RADIUS } from '../components/ImmersiveListSurface'
 import { DrawnFloatingTabBar } from '../components/DrawnFloatingTabBar'
 import { shouldUseDrawnNavigation } from '../utils/DrawnNavigationSupport'
 import { ImmersiveButtonSurface } from '../components/ImmersiveButtonSurface'
@@ -543,9 +545,8 @@ struct ModelManagePage {
     Column() {
       Row({ space: 10 }) {
         Text($r('app.string.model_manage_title'))
-          .fontSize(18)
-          .fontWeight(FontWeight.Bold)
-          .fontColor($r('app.color.text_primary'))
+          .font(getSettingsTypography().pageTitle)
+          .fontColor(getAppUiState().themeTextPrimary)
           .layoutWeight(1)
 
         Button() {
@@ -617,9 +618,8 @@ struct ModelManagePage {
         })
 
         Text($r('app.string.model_manage_title'))
-          .fontSize(18)
-          .fontWeight(FontWeight.Bold)
-          .fontColor($r('app.color.text_primary'))
+          .font(getSettingsTypography().pageTitle)
+          .fontColor(getAppUiState().themeTextPrimary)
           .layoutWeight(1)
 
         Button() {
@@ -802,8 +802,8 @@ struct ModelManagePage {
               })
             }
             .margin({ left: 16, right: 16 })
-            .borderRadius(16)
-            .clip(true)
+            .borderRadius(LIST_MATERIAL_CARD_RADIUS)
+            .clip(false)
           })
           .key((item: ModelProvider) => {
             return item.id
@@ -825,13 +825,18 @@ struct ModelManagePage {
                 .fontColor([$r('app.color.text_tertiary')])
 
               Text($r('app.string.provider_models_not_found'))
-                .fontSize(16)
-                .fontColor($r('app.color.text_secondary'))
+                .font(getSettingsTypography().itemTitle)
+                .width('100%')
+                .textAlign(TextAlign.Start)
+                .fontColor(getAppUiState().themeTextPrimary)
                 .margin({ top: 16 })
 
               Text($r('app.string.search_try_other_keywords'))
-                .fontSize(14)
-                .fontColor($r('app.color.text_tertiary'))
+                .font(getSettingsTypography().subtitle)
+                .width('100%')
+                .textAlign(TextAlign.Start)
+                .lineHeight(SETTINGS_SUBTITLE_LINE_HEIGHT)
+                .fontColor(getAppUiState().themeTextSecondary)
                 .margin({ top: 4 })
             }
             .width('100%')
@@ -936,8 +941,8 @@ struct ModelManagePage {
                 })
               }
               .margin({ left: 16, right: 16 })
-              .borderRadius(16)
-              .clip(true)
+              .borderRadius(LIST_MATERIAL_CARD_RADIUS)
+              .clip(false)
             })
             .key((item: ModelProvider) => {
               return item.id
@@ -959,13 +964,18 @@ struct ModelManagePage {
                   .fontColor([$r('app.color.text_tertiary')])
 
                 Text($r('app.string.provider_models_not_found'))
-                  .fontSize(16)
-                  .fontColor($r('app.color.text_secondary'))
+                  .font(getSettingsTypography().itemTitle)
+                  .width('100%')
+                  .textAlign(TextAlign.Start)
+                  .fontColor(getAppUiState().themeTextPrimary)
                   .margin({ top: 16 })
 
                 Text($r('app.string.search_try_other_keywords'))
-                  .fontSize(14)
-                  .fontColor($r('app.color.text_tertiary'))
+                  .font(getSettingsTypography().subtitle)
+                  .width('100%')
+                  .textAlign(TextAlign.Start)
+                  .lineHeight(SETTINGS_SUBTITLE_LINE_HEIGHT)
+                  .fontColor(getAppUiState().themeTextSecondary)
                   .margin({ top: 4 })
               }
               .width('100%')
@@ -1059,8 +1069,8 @@ struct ModelManagePage {
                 })
               }
               .margin({ left: 16, right: 16 })
-              .borderRadius(16)
-              .clip(true)
+              .borderRadius(LIST_MATERIAL_CARD_RADIUS)
+              .clip(false)
             })
             .key((item: ModelProvider) => {
               return item.id
@@ -1082,13 +1092,18 @@ struct ModelManagePage {
                   .fontColor([$r('app.color.text_tertiary')])
 
                 Text($r('app.string.provider_models_not_found'))
-                  .fontSize(16)
-                  .fontColor($r('app.color.text_secondary'))
+                  .font(getSettingsTypography().itemTitle)
+                  .width('100%')
+                  .textAlign(TextAlign.Start)
+                  .fontColor(getAppUiState().themeTextPrimary)
                   .margin({ top: 16 })
 
                 Text($r('app.string.search_try_other_keywords'))
-                  .fontSize(14)
-                  .fontColor($r('app.color.text_tertiary'))
+                  .font(getSettingsTypography().subtitle)
+                  .width('100%')
+                  .textAlign(TextAlign.Start)
+                  .lineHeight(SETTINGS_SUBTITLE_LINE_HEIGHT)
+                  .fontColor(getAppUiState().themeTextSecondary)
                   .margin({ top: 4 })
               }
               .width('100%')
@@ -1388,96 +1403,95 @@ struct ProviderCardItem {
   }
 
   build() {
-    Column() {
-      Row() {
-        // ① 拖拽手柄 — 不消费长按，长按可穿透到 ListItem 触发拖拽
-        if (this.searchKeywords.trim() === '') {
-          Column() {
-            SymbolGlyph($r('sys.symbol.line_3_horizontal'))
+    ImmersiveListSurface({ isImmersive: true, cornerRadius: LIST_MATERIAL_CARD_RADIUS }) {
+      Column() {
+        Row() {
+          // ① 拖拽手柄 — 不消费长按，长按可穿透到 ListItem 触发拖拽
+          if (this.searchKeywords.trim() === '') {
+            Column() {
+              SymbolGlyph($r('sys.symbol.line_3_horizontal'))
+                .fontSize(16)
+                .fontColor([$r('app.color.text_tertiary')])
+            }
+            .width(28)
+            .height(28)
+            .justifyContent(FlexAlign.Center)
+            .margin({ right: 4 })
+          }
+
+          // ② 内容区域 — 消费长按事件，阻止拖拽穿透
+          Row() {
+            ProviderIcon({
+              iconType: this.provider.iconType,
+              iconPath: this.provider.iconPath,
+              textIcon: this.provider.textIcon,
+              textIconBgColor: this.provider.textIconBgColor,
+              customImagePath: this.provider.customImagePath,
+              textIconDisplayMode: resolveProviderTextIconDisplayMode(this.provider.isConnected),
+              iconSize: 24,
+              radius: 6,
+              bgColor: getAppUiState().themePrimaryLight,
+              brandColor: this.provider.brandColor,
+              fallbackSymbol: $r('sys.symbol.cloud'),
+              fallbackColor: $r('app.color.text_tertiary')
+            })
+              .margin({ right: 8 })
+
+            Text(this.provider.name)
+              .font(getSettingsTypography().itemTitle)
+              .fontColor(this.provider.isConnected ? getAppUiState().themeTextPrimary : getAppUiState().themeTextTertiary)
+              .maxLines(1)
+              .textOverflow({ overflow: TextOverflow.Ellipsis })
+              .flexShrink(1)
+
+            Text(` (${this.getEnabledCount()})`)
+              .fontSize(13)
+              .fontWeight(FontWeight.Medium)
+              .fontColor($r('app.color.text_tertiary'))
+
+            Blank()
+
+            // Toggle 开关
+            Toggle({ type: ToggleType.Switch, isOn: this.provider.isConnected })
+              .selectedColor(this.themePrimary)
+              .systemMaterial(new uiMaterial.Material())
+              .switchPointColor(Color.White)
+              .onChange((isOn: boolean) => {
+                if (this.provider.isConnected !== isOn) {
+                  this.onToggleEnabled()
+                }
+              })
+
+            // 状态圆点：绿色=启用，灰色=停用
+            Column()
+              .width(8)
+              .height(8)
+              .borderRadius(4)
+              .backgroundColor(this.provider.isConnected ? '#4CAF50' : '#BDBDBD')
+              .margin({ left: 12 })
+
+            // 跳转箭头
+            SymbolGlyph($r('sys.symbol.chevron_right'))
               .fontSize(16)
               .fontColor([$r('app.color.text_tertiary')])
+              .margin({ left: 4 })
           }
-          .width(28)
-          .height(28)
-          .justifyContent(FlexAlign.Center)
-          .margin({ right: 4 })
+          .layoutWeight(1)
+          .gesture(LongPressGesture().onAction(() => {
+            // 空实现：仅消费长按事件，阻止穿透到 ListItem 触发拖拽
+          }))
         }
-
-        // ② 内容区域 — 消费长按事件，阻止拖拽穿透
-        Row() {
-          ProviderIcon({
-            iconType: this.provider.iconType,
-            iconPath: this.provider.iconPath,
-            textIcon: this.provider.textIcon,
-            textIconBgColor: this.provider.textIconBgColor,
-            customImagePath: this.provider.customImagePath,
-            textIconDisplayMode: resolveProviderTextIconDisplayMode(this.provider.isConnected),
-            iconSize: 24,
-            radius: 6,
-            bgColor: getAppUiState().themePrimaryLight,
-            brandColor: this.provider.brandColor,
-            fallbackSymbol: $r('sys.symbol.cloud'),
-            fallbackColor: $r('app.color.text_tertiary')
-          })
-            .margin({ right: 8 })
-
-          Text(this.provider.name.toUpperCase())
-            .fontSize(13)
-            .fontWeight(FontWeight.Bold)
-            .fontColor(this.provider.isConnected ? $r('app.color.text_secondary') : $r('app.color.text_tertiary'))
-            .letterSpacing(1)
-
-          Text(` (${this.getEnabledCount()})`)
-            .fontSize(13)
-            .fontWeight(FontWeight.Medium)
-            .fontColor($r('app.color.text_tertiary'))
-
-          Blank()
-
-          // Toggle 开关
-          Toggle({ type: ToggleType.Switch, isOn: this.provider.isConnected })
-            .selectedColor(this.themePrimary)
-            .systemMaterial(new uiMaterial.Material())
-            .switchPointColor(Color.White)
-            .onChange((isOn: boolean) => {
-              if (this.provider.isConnected !== isOn) {
-                this.onToggleEnabled()
-              }
-            })
-
-          // 状态圆点：绿色=启用，灰色=停用
-          Column()
-            .width(8)
-            .height(8)
-            .borderRadius(4)
-            .backgroundColor(this.provider.isConnected ? '#4CAF50' : '#BDBDBD')
-            .margin({ left: 12 })
-
-          // 跳转箭头
-          SymbolGlyph($r('sys.symbol.chevron_right'))
-            .fontSize(16)
-            .fontColor([$r('app.color.text_tertiary')])
-            .margin({ left: 4 })
-        }
-        .layoutWeight(1)
-        .gesture(LongPressGesture().onAction(() => {
-          // 空实现：仅消费长按事件，阻止穿透到 ListItem 触发拖拽
-        }))
+        .width('100%')
+        .padding({ left: 12, right: 16, top: 16, bottom: 16 })
+        .onClick(() => {
+          this.onCardClick()
+        })
       }
       .width('100%')
-      .padding({ left: 12, right: 16, top: 16, bottom: 16 })
-      .onClick(() => {
-        this.onCardClick()
-      })
+      .borderRadius(LIST_MATERIAL_CARD_RADIUS)
+      .clip(true)
+      .backgroundColor(this.active ? withColorAlpha(this.themePrimary, '14') : Color.Transparent)
     }
-    .width('100%')
-    .borderRadius(16)
-    .clip(true)
-    .backgroundColor(Color.Transparent)
-    .border({
-      width: this.active ? 1.5 : 1,
-      color: this.active ? this.themePrimary : this.themePrimaryLight
-    })
   }
 }
 
