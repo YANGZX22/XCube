@@ -38,3 +38,9 @@ docs/appgallery
 # Runtime JavaScript crash reports
 jscrash-*.txt
 /.codegenie/
+
+# 本地 Node 测试和校验脚本
+test-*.cjs
+*.test.cjs
+*.spec.cjs
+/tools/validate-*.cjs

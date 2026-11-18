@@ -16,6 +16,6 @@
 
 DeepSeek 的可选档位为关闭、默认、低、高、极限；低档发送 `reasoning_effort=low`，极限档发送 `max`。默认档仍使用供应商默认值，不根据任务自动调整用户选择。协议依据：[DeepSeek 思考模式](https://api-docs.deepseek.com/guides/thinking_mode/)。
 
-回归用例位于 `ToolProgressGuard.test.ets`、`ToolRoundPolicy.test.ets`、`PlanService.test.ets` 和 `RefactorGuard.test.ets`。可用 `node tools/test-prompt-runtime.cjs` 在主机转译运行策略测试和部分执行路径（模拟 HarmonyOS 存储与网络，不调用真实模型）。工具参数模板另用 `python3 tools/validate-tool-schemas.py` 检查运行时 JSON 转义。真实模型效果应在相同模型、档位和工具配置下对照回答质量、首次正文耗时、推理 token 和无效工具轮次。
+回归用例位于 `ToolProgressGuard.test.ets`、`ToolRoundPolicy.test.ets`、`PlanService.test.ets` 和 `RefactorGuard.test.ets`。工具参数模板另用 `python3 tools/validate-tool-schemas.py` 检查运行时 JSON 转义。真实模型效果应在相同模型、档位和工具配置下对照回答质量、首次正文耗时、推理 token 和无效工具轮次。
 
 `PromptLanguage.test.ets` 覆盖语言路由、默认模板切换、自定义正文保留、英文日期、检索预算和双语续答通知；主机执行用例还检查英文子智能体续轮与提醒去重。模型效果需另行对照：英文 App 下用英文提问并给中文资料、中文 App 下明确要求英文、中文提问要求翻译成日文、英文对话后仅发 URL/代码/“继续”，以及工具多轮和压缩后继续回答。预期语言由用户要求决定，不能把静态检查通过视为模型语言行为已获验证。

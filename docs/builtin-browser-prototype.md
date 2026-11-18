@@ -71,22 +71,14 @@
 
 ## 验证
 
-自动检查：
+在项目根目录校验工具参数并构建调试包。
 
 ```sh
-node tools/test-builtin-browser.cjs
-node tools/test-builtin-browser-manager.cjs
-node tools/test-builtin-browser-input.cjs
 python3 tools/validate-tool-schemas.py
 DEVECO_SDK_HOME=/Applications/DevEco-Studio.app/Contents/sdk /Applications/DevEco-Studio.app/Contents/tools/hvigor/bin/hvigorw assembleHap --mode module -p product=default -p module=entry@default -p buildMode=debug --no-daemon --no-incremental
-node tools/test-builtin-browser-keyboard.cjs
 ```
 
-Node 测试执行生产参数解析、控制权/会话状态机和原生适配器方法，ArkUI 边界使用模拟对象。它不替代真机的 Web 渲染、原生事件和输入法验证。
-
-`test-builtin-browser-keyboard.cjs` 必须在完整 ArkTS 构建后执行。它加载编译后的标签组件和原生适配器，以无接收对象的方式调用键盘构建器，覆盖组件上下文、后台、用户接管、输入框关闭、标签销毁及会话切换；可用 `XCUBE_COMPILED_BROWSER_HOST` 指定其他构建产物路径。
-
-`test-builtin-browser-input.cjs` 使用独立临时配置的无头 Chromium 执行生产输入脚本，验证中文/多行/选区替换、受控输入事件、contenteditable、同源 iframe、Shadow DOM、后台标签以及不可编辑/跨域/取消/过期情况。标准表单用本地 LuCI 风格控件验证插入后回车、点击提交及按钮焦点回车只提交一次，不连接路由器或发送登录请求。可用 `XCUBE_PLAYWRIGHT_PATH` 和 `XCUBE_CHROMIUM_PATH` 指定本地依赖和浏览器；不访问用户已有浏览器资料。
+输入回归覆盖中文、多行文本和选区替换，涉及受控表单、`contenteditable`、同源 iframe 和 Shadow DOM。表单中按回车或点击提交按钮，每次操作应只产生一次提交。关闭输入框、销毁页面或切换会话后，检查待处理的输入是否仍会写入旧目标。
 
 真机验收可在开发机运行 `python3 -m http.server 8765 --directory tools/fixtures`，由同一网络中的 HarmonyOS 设备打开 `http://开发机局域网地址:8765/builtin-browser.html`：
 
