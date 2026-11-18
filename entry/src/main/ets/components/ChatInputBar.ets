@@ -2,6 +2,7 @@ import { ImmersiveInputSurface } from './ImmersiveInputSurface'
 import { InteractiveMaterialButton } from './InteractiveMaterialButton'
 import { getModelIconPath, buildIconResourcePath } from '../utils/ProviderIconUtils'
 import { FileIcon } from './FileIcon'
+import { CHAT_ATTACHMENT_PREVIEW_HEIGHT_VP } from '../config/ChatLayout'
 import { MessageAttachment, AttachmentType } from '../models/ChatModels'
 import {
   BaseItemInfo,
@@ -22,6 +23,9 @@ import {
   MANUSCRIPT_BODY_FONT,
   MANUSCRIPT_HEADING_FONT
 } from '../utils/ManuscriptVisualUtils'
+
+const INPUT_ROW_MIN_HEIGHT_VP: number = 52
+const INPUT_ROW_MAX_HEIGHT_VP: number = 132
 
 @ComponentV2
 export struct ChatInputBar {
@@ -80,6 +84,10 @@ export struct ChatInputBar {
   }
   private get isManuscriptMode(): boolean {
     return getAppUiState().visualEffectsMode === VisualEffectsMode.MANUSCRIPT
+  }
+  private get contentAboveInputHeightVp(): number {
+    const previewHeight = this.attachments.length > 0 ? CHAT_ATTACHMENT_PREVIEW_HEIGHT_VP : 0
+    return previewHeight + (this.isEditing ? this.editingHeaderHeightVp : 0)
   }
   private get manuscriptAccent(): string {
     return getAppUiState().isDarkMode ? '#C99A52' : '#B68235'
@@ -177,15 +185,12 @@ export struct ChatInputBar {
       // 隐藏的 RecentPhotoComponent 用于检测截图
       this.HiddenRecentPhotoDetector()
 
-      // 附件预览区域
-      this.AttachmentPreview()
-
       if (this.isManuscriptMode) {
         this.ManuscriptBar()
       } else {
         ImmersiveInputSurface({
-          minSurfaceHeight: 52 + (this.isEditing ? this.editingHeaderHeightVp : 0),
-          maxSurfaceHeight: 132 + (this.isEditing ? this.editingHeaderHeightVp : 0)
+          minSurfaceHeight: INPUT_ROW_MIN_HEIGHT_VP + this.contentAboveInputHeightVp,
+          maxSurfaceHeight: INPUT_ROW_MAX_HEIGHT_VP + this.contentAboveInputHeightVp
         }) {
           this.InputSurfaceContent()
         }
@@ -274,40 +279,45 @@ export struct ChatInputBar {
           this.onModelIconClick()
         })
 
-        TextArea({ text: this.inputText, placeholder: $r('app.string.manuscript_reply_placeholder') })
-          .id('manuscriptChatInputTextArea')
-          .placeholderColor(getAppUiState().themeTextTertiary)
-          .placeholderFont({ size: 15, style: FontStyle.Italic, family: MANUSCRIPT_BODY_FONT })
-          .fontFamily(MANUSCRIPT_BODY_FONT)
-          .fontSize(15)
-          .fontColor(getAppUiState().themeTextPrimary)
-          .caretColor(this.manuscriptAccentDeep)
-          .enterKeyType(this.chatInputEnterKeySend ? EnterKeyType.Send : EnterKeyType.NEW_LINE)
-          .backgroundColor(Color.Transparent)
-          .border({ width: { bottom: 1 }, color: getAppUiState().themeTextSecondary })
-          .borderRadius(0)
-          .padding({ left: 0, right: 4, top: 8, bottom: 7 })
-          .layoutWeight(1)
-          .constraintSize({ minHeight: 44, maxHeight: 112 })
-          .onChange((value: string) => {
-            this.onInputTextChange(value)
-          })
-          .onSubmit(() => {
-            if (!this.chatInputEnterKeySend || !this.computeHasContent()) {
-              return
-            }
-            if (this.isSending) {
-              this.onQueueSend()
-            } else if (!this.isSendDispatching) {
-              this.onSend()
-            }
-          })
-          .onFocus(() => {
-            this.onInputFocus()
-          })
-          .onBlur(() => {
-            this.onInputBlur()
-          })
+        Column() {
+          this.AttachmentPreview()
+
+          TextArea({ text: this.inputText, placeholder: $r('app.string.manuscript_reply_placeholder') })
+            .id('manuscriptChatInputTextArea')
+            .placeholderColor(getAppUiState().themeTextTertiary)
+            .placeholderFont({ size: 15, style: FontStyle.Italic, family: MANUSCRIPT_BODY_FONT })
+            .fontFamily(MANUSCRIPT_BODY_FONT)
+            .fontSize(15)
+            .fontColor(getAppUiState().themeTextPrimary)
+            .caretColor(this.manuscriptAccentDeep)
+            .enterKeyType(this.chatInputEnterKeySend ? EnterKeyType.Send : EnterKeyType.NEW_LINE)
+            .backgroundColor(Color.Transparent)
+            .borderRadius(0)
+            .padding({ left: 0, right: 4, top: 8, bottom: 7 })
+            .width('100%')
+            .constraintSize({ minHeight: 44, maxHeight: 112 })
+            .onChange((value: string) => {
+              this.onInputTextChange(value)
+            })
+            .onSubmit(() => {
+              if (!this.chatInputEnterKeySend || !this.computeHasContent()) {
+                return
+              }
+              if (this.isSending) {
+                this.onQueueSend()
+              } else if (!this.isSendDispatching) {
+                this.onSend()
+              }
+            })
+            .onFocus(() => {
+              this.onInputFocus()
+            })
+            .onBlur(() => {
+              this.onInputBlur()
+            })
+        }
+        .layoutWeight(1)
+        .border({ width: { bottom: 1 }, color: getAppUiState().themeTextSecondary })
 
         Button({ type: ButtonType.Normal, stateEffect: false }) {
           SymbolGlyph(this.getAttachmentButtonSymbol())
@@ -483,11 +493,11 @@ export struct ChatInputBar {
   // TextArea 保持原生内容测高，外层材质只跟随结果，不固定输入高度。
   @Builder
   ImmersiveBar() {
-    Row() {
+    Column() {
+      this.AttachmentPreview()
       this.InputRow()
     }
     .width('100%')
-    .constraintSize({ minHeight: 52, maxHeight: 132 })
     .backgroundColor(Color.Transparent)
     .borderRadius(24)
     .border({
@@ -692,6 +702,7 @@ export struct ChatInputBar {
         })
       }
       .width('100%')
+      .constraintSize({ minHeight: INPUT_ROW_MIN_HEIGHT_VP, maxHeight: INPUT_ROW_MAX_HEIGHT_VP })
       .padding({
         left: 6,
         right: 6,
@@ -729,26 +740,22 @@ export struct ChatInputBar {
 
   @Builder
   AttachmentPreview() {
-    Scroll() {
-      Row() {
-        ForEach(this.attachments, (attachment: MessageAttachment, index: number) => {
-          this.AttachmentItem(attachment, index)
-        })
+    if (this.attachments.length > 0) {
+      Scroll() {
+        Row() {
+          ForEach(this.attachments, (attachment: MessageAttachment, index: number) => {
+            this.AttachmentItem(attachment, index)
+          })
+        }
+        .justifyContent(FlexAlign.Start)
+        .padding({ left: 12, right: 12, top: 12, bottom: 8 })
       }
-      .justifyContent(FlexAlign.Start)
-      .padding({
-        left: 8,
-        right: 8,
-        top: this.attachments.length > 0 ? 8 : 0,
-        bottom: this.attachments.length > 0 ? 4 : 0
-      })
-      .height(this.attachments.length > 0 ? 'auto' : 0)
+      .width('100%')
+      .height(CHAT_ATTACHMENT_PREVIEW_HEIGHT_VP)
+      .scrollable(ScrollDirection.Horizontal)
+      .scrollBar(BarState.Off)
+      .align(Alignment.Start)
     }
-    .width('100%')
-    .scrollable(ScrollDirection.Horizontal)
-    .scrollBar(BarState.Off)
-    .align(Alignment.Start)
-    .height(this.attachments.length > 0 ? 'auto' : 0)
   }
 
   // 隐藏的 RecentPhotoComponent 用于检测截图

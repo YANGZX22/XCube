@@ -1,4 +1,4 @@
-import { getChatAiNoticeExtraInsetVp } from '../../config/ChatLayout'
+import { CHAT_ATTACHMENT_PREVIEW_HEIGHT_VP, getChatAiNoticeExtraInsetVp } from '../../config/ChatLayout'
 
 export function shouldShowScrollToTopButtonForChat(
   isMultiSelectMode: boolean,
@@ -31,7 +31,7 @@ export function getListBottomPaddingForChat(pendingAttachmentCount: number, isEd
   bottomAvoidHeightVp: number): number {
   let base = 90
   if (pendingAttachmentCount > 0) {
-    base += 80
+    base += CHAT_ATTACHMENT_PREVIEW_HEIGHT_VP
   }
   if (isEditingMessage) {
     base += 80
