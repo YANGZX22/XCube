@@ -39,6 +39,55 @@ export class InlinePluginRect {
   }
 }
 
+const inlinePluginRectCache: Map<string, InlinePluginRect> = new Map()
+const inlinePluginRectCacheKeys: string[] = []
+const INLINE_PLUGIN_RECT_CACHE_LIMIT: number = 256
+
+function getInlinePluginPlacementCacheKey(pluginUnion: string, placement: InlinePluginPlacement): string {
+  return `${pluginUnion}_${placement.node.pluginKey}_${placement.node.raw}_${placement.start}_${placement.end}`
+}
+
+function rememberInlinePluginRect(key: string, rect: InlinePluginRect) {
+  if (!inlinePluginRectCache.has(key)) {
+    inlinePluginRectCacheKeys.push(key)
+  }
+  inlinePluginRectCache.set(key, rect)
+  while (inlinePluginRectCacheKeys.length > INLINE_PLUGIN_RECT_CACHE_LIMIT) {
+    const oldKey = inlinePluginRectCacheKeys.shift()
+    if (oldKey) {
+      inlinePluginRectCache.delete(oldKey)
+    }
+  }
+}
+
+export function restoreCachedInlinePluginRects(pluginUnion: string,
+  placements: InlinePluginPlacement[]): InlinePluginRect[] {
+  const list: InlinePluginRect[] = []
+  for (let i = 0; i < placements.length; i++) {
+    const placement = placements[i]
+    const cached = inlinePluginRectCache.get(getInlinePluginPlacementCacheKey(pluginUnion, placement))
+    if (cached) {
+      list.push(new InlinePluginRect(placement, {
+        left: cached.left,
+        right: cached.left + cached.width,
+        top: cached.top,
+        bottom: cached.top + cached.height
+      }))
+    }
+  }
+  return list
+}
+
+export function cacheInlinePluginRects(pluginUnion: string, rects: InlinePluginRect[]) {
+  for (let i = 0; i < rects.length; i++) {
+    const placement = new InlinePluginPlacement(rects[i].node, rects[i].start, rects[i].end, {
+      width: rects[i].width,
+      height: rects[i].height
+    })
+    rememberInlinePluginRect(getInlinePluginPlacementCacheKey(pluginUnion, placement), rects[i])
+  }
+}
+
 export function isSameInlinePluginRects(left: InlinePluginRect[], right: InlinePluginRect[]): boolean {
   if (left.length != right.length) {
     return false

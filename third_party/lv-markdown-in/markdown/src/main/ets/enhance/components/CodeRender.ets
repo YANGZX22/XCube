@@ -25,6 +25,14 @@ export struct CodeRender {
       (lang == "html" || lang == "htm")
   }
 
+  private isActionAreaVisible(): boolean {
+    const lang = (this.base?.lang || "").trim().toLowerCase()
+    if (lang == "html" || lang == "htm" || lang == "mermaid") {
+      return true
+    }
+    return MDBaseController.getMarkdownController(this.markdownUnion).getCodeBlockActionAreaVisible()
+  }
+
   build() {
     if (this.isMermaidCodeBlock()) {
       MermaidRender({ base: this.base, streamingActive: this.isPreviewSuppressed() })
@@ -38,7 +46,8 @@ export struct CodeRender {
         autoCollapse: this.base?.closed !== false,
         selectable: false,
         lineNumberWidth: 34,
-        contentBottomPadding: 12
+        contentBottomPadding: 12,
+        actionAreaVisible: this.isActionAreaVisible()
       })
     }
   }

@@ -5,24 +5,30 @@ import { PluginNode } from '../model/TreeNode'
 @Component
 export struct PluginBlockRenderHost {
   @Prop node: PluginNode
-  @BuilderParam renderer: (node: PluginNode) => void
+  renderer: WrappedBuilder<[PluginNode]> | undefined = undefined
 
   build() {
-    this.renderer(this.node)
+    if (this.renderer) {
+      this.renderer.builder(this.node)
+    } else {
+      Text(this.node.raw)
+    }
   }
 }
 
 @Component
 export struct PluginInlineRenderHost {
   @Prop node: PluginNode
-  @BuilderParam renderer: (node: PluginNode) => void
+  renderer: WrappedBuilder<[PluginNode]> | undefined = undefined
 
   build() {
-    this.renderer(this.node)
+    if (this.renderer) {
+      this.renderer.builder(this.node)
+    }
   }
 }
 
-export function getPluginRenderer(pluginUnion: string, node: PluginNode): ((node: PluginNode) => void) | undefined {
+export function getPluginRenderer(pluginUnion: string, node: PluginNode): WrappedBuilder<[PluginNode]> | undefined {
   return MarkdownPluginRegistry.getPlugin(pluginUnion, node.pluginKey)?.render
 }
 

@@ -4,6 +4,27 @@
 
 ### 版本更新描述
 
+v3.4.6版本
+
+1. 新增 `setTableCopyClickListener()` 接口，设置表格复制按钮点击监听，点击后返回当前表格的原始 Markdown
+2. 新增 `setTableDownloadClickListener()` 接口，设置表格下载按钮点击监听，点击后返回当前表格的原始 Markdown
+3. 新增 `setTableExpandClickListener()` 接口，设置表格放大按钮点击监听，点击后返回当前表格的原始 Markdown
+4. 新增 `setTableActionBackgroundColor()` 接口，支持自定义表格操作区背景色
+5. 新增 `setTableActionIconColor()` 接口，支持统一设置表格复制、下载和放大图标的滤镜颜色
+6. 优化表格操作区圆角和外边框，使操作区与表格形成统一容器
+7. 修复窄表格启用操作区后被拉伸至屏幕宽度的问题
+8. 修复异常表格列数不一致或表头连续下划线时可能触发的生命周期闪退
+9. 表宽缓存改为基于 AST 节点的 WeakMap，避免多实例、嵌套表格和内容更新时缓存碰撞
+10. 新增 `setCodeBlockActionAreaVisible()` 接口，支持隐藏普通代码块整个顶部操作区
+
+---
+
+v3.4.5版本
+
+1. 优化流式渲染时插件闪烁问题
+
+---
+
 v3.4.4版本
 
 1. 新增代码块自动折叠能力，超过阈值的代码块可默认折叠展示

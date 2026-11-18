@@ -6,7 +6,9 @@ import { MermaidSecurityLevel } from '../utils/MermaidHtmlBuilder';
 import { generateRandomString } from '../utils/RandomString';
 import { MDBaseController } from './BaseController';
 import { componentUtils, promptAction } from '@kit.ArkUI';
+import { drawing } from '@kit.ArkGraphics2D';
 import { image } from '@kit.ImageKit';
+import { iconColorFilter } from '../utils/iconFilter';
 
 /**
  * @description Markdown 组件的控制器，可以将此对象绑定至 Markdown 组件，然后通过它控制 Markdown 组件的自定义样式。同一个控制器可以控制多个 Markdown 组件，多个 API 支持链式调用语法。
@@ -85,6 +87,8 @@ export class MarkdownController {
   @Trace private codeBlockAutoCollapseEnable: boolean = true
   // 代码块-自动折叠阈值
   @Trace private codeBlockAutoCollapseThreshold: number = 10
+  // 普通代码块-操作区展示状态
+  @Trace private codeBlockActionAreaVisible: boolean = true
   // 代码块-代码高亮
   @Trace private codeHighlight: CodeHighlight = new CodeHighlight()
   // 代码块-点击复制回调
@@ -141,6 +145,12 @@ export class MarkdownController {
   @Trace private tableNormalTextColor: ResourceColor = this.textColor
   // 表格-错行背景色
   @Trace private tableInterleaveBackgroundColor: ResourceColor = "#80f5f7fa"
+  // 表格-操作区背景色；未设置时动态跟随错行背景色
+  @Trace private tableActionBackgroundColor: ResourceColor | undefined = undefined
+  // 表格-操作图标颜色
+  @Trace private tableActionIconColor: string = ""
+  // 表格-操作图标滤镜；三个图标共享同一个实例，颜色变化时才重新创建
+  private tableActionIconColorFilter: drawing.ColorFilter = iconColorFilter("")
   // 表格-圆角
   @Trace private tableBorderRadius: ResourceStr | number = 14
   // 表格-外边框颜色
@@ -153,6 +163,12 @@ export class MarkdownController {
   @Trace private tableInnerBorderWidth: ResourceStr | number = 1
   // 表格-对齐方式
   @Trace private tableAlign: FlexAlign = FlexAlign.Start
+  // 表格-复制点击监听
+  @Trace private tableCopyClickListener: ((rawTableMarkdown: string) => void) | undefined = undefined
+  // 表格-下载点击监听
+  @Trace private tableDownloadClickListener: ((rawTableMarkdown: string) => void) | undefined = undefined
+  // 表格-放大点击监听
+  @Trace private tableExpandClickListener: ((rawTableMarkdown: string) => void) | undefined = undefined
   // ** ================================================= 任务列表 ==================================================== **
   // 任务列表-选中颜色
   @Trace private todoSelectedColor: ResourceColor = "#0A59F7"
@@ -617,6 +633,21 @@ export class MarkdownController {
   }
 
   /**
+   * 设置普通代码块操作区是否展示
+   * @description 默认 true。HTML、HTM 和 Mermaid 代码块不受该接口影响。
+   * @param visible
+   * @version 3.4.6
+   */
+  setCodeBlockActionAreaVisible(visible: boolean) {
+    this.codeBlockActionAreaVisible = visible
+    return this
+  }
+
+  getCodeBlockActionAreaVisible(): boolean {
+    return this.codeBlockActionAreaVisible
+  }
+
+  /**
    * 设置代码高亮着色
    * @param codeHighlight
    */
@@ -894,6 +925,43 @@ export class MarkdownController {
   }
 
   /**
+   * 设置表格-操作区背景色
+   * @param tableActionBackgroundColor
+   * @version 3.4.6
+   */
+  setTableActionBackgroundColor(tableActionBackgroundColor: ResourceColor) {
+    this.tableActionBackgroundColor = tableActionBackgroundColor
+    return this
+  }
+
+  getTableActionBackgroundColor(): ResourceColor {
+    return this.tableActionBackgroundColor ?? this.tableInterleaveBackgroundColor
+  }
+
+  /**
+   * 设置表格-操作图标颜色。仅支持 #RRGGBB、RRGGBB 或空字符串，空字符串恢复图标原始颜色。
+   * @param iconColor
+   * @version 3.4.6
+   */
+  setTableActionIconColor(iconColor: string) {
+    const normalizedIconColor: string = iconColor.trim()
+    if (this.tableActionIconColor === normalizedIconColor) {
+      return this
+    }
+    this.tableActionIconColorFilter = iconColorFilter(normalizedIconColor)
+    this.tableActionIconColor = normalizedIconColor
+    return this
+  }
+
+  getTableActionIconColor(): string {
+    return this.tableActionIconColor
+  }
+
+  getTableActionIconColorFilter(): drawing.ColorFilter {
+    return this.tableActionIconColorFilter
+  }
+
+  /**
    * 设置表格-圆角
    * @param radius
    * @version 3.2.2
@@ -975,6 +1043,45 @@ export class MarkdownController {
 
   getTableAlign() {
     return this.tableAlign
+  }
+
+  /**
+   * 设置表格-复制点击监听。传入 undefined 时隐藏复制按钮。
+   * @version 3.4.6
+   */
+  setTableCopyClickListener(listener?: (rawTableMarkdown: string) => void) {
+    this.tableCopyClickListener = listener
+    return this
+  }
+
+  getTableCopyClickListener() {
+    return this.tableCopyClickListener
+  }
+
+  /**
+   * 设置表格-下载点击监听。传入 undefined 时隐藏下载按钮。
+   * @version 3.4.6
+   */
+  setTableDownloadClickListener(listener?: (rawTableMarkdown: string) => void) {
+    this.tableDownloadClickListener = listener
+    return this
+  }
+
+  getTableDownloadClickListener() {
+    return this.tableDownloadClickListener
+  }
+
+  /**
+   * 设置表格-放大点击监听。传入 undefined 时隐藏放大按钮。
+   * @version 3.4.6
+   */
+  setTableExpandClickListener(listener?: (rawTableMarkdown: string) => void) {
+    this.tableExpandClickListener = listener
+    return this
+  }
+
+  getTableExpandClickListener() {
+    return this.tableExpandClickListener
   }
 
   // ** ================================================= 任务列表 ==================================================== **

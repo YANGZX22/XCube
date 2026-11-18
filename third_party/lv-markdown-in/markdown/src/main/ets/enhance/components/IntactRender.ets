@@ -45,14 +45,10 @@ struct BlockNodeRender {
         CodeRender({ base: this.item })
       }
       if (this.item.type == "plugin" && (this.item as PluginNode).display == 'block') {
-        if (getPluginRenderer(this.pluginUnion, this.item as PluginNode)) {
-          PluginBlockRenderHost({
-            node: this.item as PluginNode,
-            renderer: getPluginRenderer(this.pluginUnion, this.item as PluginNode)
-          })
-        } else {
-          Text((this.item as PluginNode).raw)
-        }
+        PluginBlockRenderHost({
+          node: this.item as PluginNode,
+          renderer: getPluginRenderer(this.pluginUnion, this.item as PluginNode)
+        })
       }
       if (this.item.type == "footnotes") {
         FootnotesRender({ base: this.item })

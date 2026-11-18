@@ -122,6 +122,7 @@ export interface TableRowNode extends BaseNode {
 export interface TableNode extends BaseNode {
   type: "table";
   tableId: number,
+  rawMarkdown: string;
   header: TableCellNode[];
   rows: TableRowNode[];
   align?: ("none" | "left" | "center" | "right")[];

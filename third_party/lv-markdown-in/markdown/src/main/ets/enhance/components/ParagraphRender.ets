@@ -13,9 +13,11 @@ import { BlockSelectionStartInfo } from '../model/TextSelectionInfo'
 import {
   buildInlinePluginRects,
   buildParagraphInlinePluginPlacements,
+  cacheInlinePluginRects,
   InlinePluginPlacement,
   InlinePluginRect,
-  isSameInlinePluginRects
+  isSameInlinePluginRects,
+  restoreCachedInlinePluginRects
 } from '../utils/inlinePluginOverlay'
 import { getPluginRenderer, PluginInlineRenderHost } from './PluginRenderHost'
 import { TextSelectionMouseTracker } from '../utils/TextSelectionMouseUtil'
@@ -25,7 +27,7 @@ export struct ParagraphRender {
   @Consume markdownUnion: string
   @Consume selectionUnion: string
   @Consume pluginUnion: string
-  @State @Watch('loadParagraphLatex') base: TreeNode | undefined = undefined
+  @Prop @Watch('loadParagraphLatex') base: TreeNode | undefined = undefined
   @State private latexRefreshTick: number = 0
   @State private inlinePluginPlacements: InlinePluginPlacement[] = []
   @State private inlinePluginRects: InlinePluginRect[] = []
@@ -41,10 +43,41 @@ export struct ParagraphRender {
 
   private prepareInlinePluginPlacements() {
     const placements = buildParagraphInlinePluginPlacements(this.markdownUnion, this.pluginUnion, this.base)
-    if (placements.length == 0 && this.inlinePluginPlacements.length == 0) {
+    if (placements.length == 0) {
+      if (this.inlinePluginPlacements.length > 0) {
+        this.inlinePluginPlacements = []
+      }
+      if (this.inlinePluginRects.length > 0) {
+        this.inlinePluginRects = []
+      }
       return
     }
     this.inlinePluginPlacements = placements
+    const cachedRects = restoreCachedInlinePluginRects(this.pluginUnion, placements)
+    if (cachedRects.length > 0 && !isSameInlinePluginRects(this.inlinePluginRects, cachedRects)) {
+      this.inlinePluginRects = cachedRects
+    }
+  }
+
+  private getInlinePluginRectKey(item: InlinePluginRect): string {
+    return `${item.node.pluginKey}_${item.node.raw}_${item.start}_${item.end}`
+  }
+
+  private getChildNodeKey(item: TreeNode, index: number): string {
+    if (!item) {
+      return `empty_${index}`
+    }
+    if (item.type == 'plugin') {
+      const pluginNode = item as PluginNode
+      return `plugin_${index}_${pluginNode.pluginKey}_${pluginNode.raw}`
+    }
+    if (item.type == 'text') {
+      return `text_${index}_${(item as ESObject).text || ''}`
+    }
+    if (item.type == 'inlineCode' || item.type == 'inlineHtmlFont' || item.type == 'latex') {
+      return `${item.type}_${index}_${(item as ESObject).text || ''}`
+    }
+    return `${item.type}_${index}_${JSON.stringify(item)}`
   }
 
   private refreshInlinePluginRects() {
@@ -56,13 +89,14 @@ export struct ParagraphRender {
     }
     try {
       const rects = buildInlinePluginRects(this.textController, this.inlinePluginPlacements, this.getUIContext())
+      if (rects.length == 0) {
+        return
+      }
+      cacheInlinePluginRects(this.pluginUnion, rects)
       if (!isSameInlinePluginRects(this.inlinePluginRects, rects)) {
         this.inlinePluginRects = rects
       }
     } catch (_err) {
-      if (this.inlinePluginRects.length > 0) {
-        this.inlinePluginRects = []
-      }
     }
   }
 
@@ -227,7 +261,7 @@ export struct ParagraphRender {
               } else {
                 SpanRenderBuilder(this.markdownUnion, this.pluginUnion, item, this.getUIContext(), this.latexRefreshTick)
               }
-            })
+            }, (item: TreeNode, index: number) => this.getChildNodeKey(item, index))
           }
           .id(this.selectionId)
           .lineHeight(this.getParagraphLineHeight())
@@ -264,7 +298,7 @@ export struct ParagraphRender {
               } else {
                 SpanRenderBuilder(this.markdownUnion, this.pluginUnion, item, this.getUIContext(), this.latexRefreshTick)
               }
-            })
+            }, (item: TreeNode, index: number) => this.getChildNodeKey(item, index))
           }
           .id(this.selectionId)
           .lineHeight(this.getParagraphLineHeight())
@@ -289,7 +323,7 @@ export struct ParagraphRender {
                   SpanRenderBuilder(this.markdownUnion, this.pluginUnion, item, this.getUIContext(),
                     this.latexRefreshTick)
                 }
-              })
+              }, (item: TreeNode, index: number) => this.getChildNodeKey(item, index))
             }
             .id(this.selectionId)
             .lineHeight(this.getParagraphLineHeight())
@@ -330,7 +364,7 @@ export struct ParagraphRender {
                   SpanRenderBuilder(this.markdownUnion, this.pluginUnion, item, this.getUIContext(),
                     this.latexRefreshTick)
                 }
-              })
+              }, (item: TreeNode, index: number) => this.getChildNodeKey(item, index))
             }
             .id(this.selectionId)
             .lineHeight(this.getParagraphLineHeight())
@@ -352,7 +386,7 @@ export struct ParagraphRender {
             if (getPluginRenderer(this.pluginUnion, item.node)) {
               PluginInlineRenderHost({
                 node: item.node,
-                renderer: getPluginRenderer(this.pluginUnion, item.node) as (node: PluginNode) => void
+                renderer: getPluginRenderer(this.pluginUnion, item.node)
               })
                 .width(item.width)
                 .height(item.height)
@@ -360,7 +394,7 @@ export struct ParagraphRender {
                 .hitTestBehavior(HitTestMode.Transparent)
                 .zIndex(1)
             }
-          })
+          }, (item: InlinePluginRect) => this.getInlinePluginRectKey(item))
         }
       }
     }

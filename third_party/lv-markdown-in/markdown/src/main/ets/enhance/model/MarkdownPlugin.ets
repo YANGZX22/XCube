@@ -2,7 +2,7 @@ import { PluginNode } from './TreeNode'
 
 export type PluginDisplay = 'inline' | 'block'
 export type PluginMatchMode = 'inline-prefix' | 'full-line'
-export type PluginRenderer = (node: PluginNode) => void
+export type PluginRenderer = WrappedBuilder<[PluginNode]>
 
 export interface InlinePluginLayout {
   width: number

@@ -325,11 +325,12 @@ export function parseMarkdown(md, plugins, options) {
 
         // 表格（header + align）
         if (line.includes('|') && i + 1 < lines.length) {
+            const headerRaw = splitTableRowRespectingCode(lines[i]);
             const align = parseTableAlignLine(lines[i + 1]);
-            if (align) {
-                const headerRaw = splitTableRowRespectingCode(lines[i]);
+            // GFM 要求表头与分隔行列数完全一致，否则按普通段落处理。
+            if (align && align.length === headerRaw.length) {
+                const tableStart = i;
                 i += 2;
-                const colCount = headerRaw.length;
                 const rowRawLines = [];
 
                 let currentRow = null;
@@ -364,23 +365,24 @@ export function parseMarkdown(md, plugins, options) {
 
                 const headerCols = headerRaw.map((c) => c.trim());
                 const rows = rowRawLines.map((raw) => splitTableRowRespectingCode(raw).map((c) => c.trim()));
-                const headerNodes =
-                    headerCols.map((h) => ({ type: 'tableCell', children: withRecursionLimit(parseMarkdown)(h, plugins, options) }));
+                const headerNodes = headerCols.map((h) => {
+                    const inlineChildren = withRecursionLimit(parseInline)(h, plugins);
+                    return {
+                        type: 'tableCell',
+                        children: inlineChildren.length > 0 ? [{ type: 'paragraph', children: inlineChildren }] : []
+                    };
+                });
                 const rowNodes = rows.map((cols) => {
                     const cells = headerCols.map((_, idx) => {
                         const rawCell = (idx < cols.length) ? cols[idx] : '';
                         return { type: 'tableCell', children: withRecursionLimit(parseInline)(rawCell, plugins) };
                     });
-                    if (cols.length > headerCols.length) {
-                        for (let k = headerCols.length; k < cols.length; k++) {
-                            cells.push({ type: 'tableCell', children: withRecursionLimit(parseInline)(cols[k], plugins) });
-                        }
-                    }
                     return { type: 'tableRow', children: cells };
                 });
                 ast.push({
                     tableId: tableId,
                     type: 'table',
+                    rawMarkdown: lines.slice(tableStart, i).join('\n'),
                     header: headerNodes,
                     align,
                     rows: rowNodes
@@ -829,8 +831,7 @@ function collectIndentedLatexBlock(lines, start, stripLength, parentIndent) {
 function splitTableRowRespectingCode(line) {
     const cols = [];
     const curChars = []; // 用数组收集字符，减少临时对象
-    let inInlineCode = false;
-    let backtickSeq = 0;
+    let inlineCodeDelimiter = '';
     for (let i = 0; i < line.length; i++) {
         const ch = line[i];
         if (ch === '\\' && line[i + 1] === '|') {
@@ -845,9 +846,14 @@ function splitTableRowRespectingCode(line) {
             }
             const seq = line.slice(i, j);
             curChars.push(seq); // 直接 push 子串，减少循环
+            if (inlineCodeDelimiter === '') {
+                inlineCodeDelimiter = seq;
+            } else if (inlineCodeDelimiter === seq) {
+                inlineCodeDelimiter = '';
+            }
             i = j - 1;
             continue;
-        } else if (ch === '|' && !inInlineCode) {
+        } else if (ch === '|' && inlineCodeDelimiter === '') {
             cols.push(curChars.join('')); // 一次性 join
             curChars.length = 0; // 清空数组，复用内存
         } else {
@@ -1320,33 +1326,33 @@ function parseInline(text, plugins) {
                 p = j;
                 continue;
             }
-            if (count >= 3) {
-                const end = findEmphasisEnd(text, ch.repeat(3), p + 3);
+            if (count === 3) {
+                const end = findEmphasisEnd(text, ch.repeat(3), j);
                 if (end !== -1) {
                     const inner = text.slice(p + 3, end);
                     nodes.push({ type: 'bolditalic', children: parseInline(inner, plugins) });
                     p = end + 3;
                     continue;
                 }
-            }
-            if (count >= 2) {
-                const end = findEmphasisEnd(text, ch.repeat(2), p + 2);
+            } else if (count === 2) {
+                const end = findEmphasisEnd(text, ch.repeat(2), j);
                 if (end !== -1) {
                     const inner = text.slice(p + 2, end);
                     nodes.push({ type: 'bold', children: parseInline(inner, plugins) });
                     p = end + 2;
                     continue;
                 }
+            } else if (count === 1) {
+                const end = findEmphasisEnd(text, ch, j);
+                if (end !== -1) {
+                    const inner = text.slice(p + 1, end);
+                    nodes.push({ type: 'italic', children: parseInline(inner, plugins) });
+                    p = end + 1;
+                    continue;
+                }
             }
-            const end = findEmphasisEnd(text, ch, p + 1);
-            if (end !== -1) {
-                const inner = text.slice(p + 1, end);
-                nodes.push({ type: 'italic', children: parseInline(inner, plugins) });
-                p = end + 1;
-                continue;
-            }
-            nodes.push({ type: 'text', text: ch });
-            p++;
+            nodes.push({ type: 'text', text: ch.repeat(count) });
+            p = j;
             continue;
         }
 

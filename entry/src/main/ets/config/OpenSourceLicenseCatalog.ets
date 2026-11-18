@@ -26,7 +26,7 @@ export const RUNTIME_LICENSES: LicenseCatalogItem[] = [
     'Cache-hit percentage calculation derived from DeepSeek Harness; Copyright © 2026 DeepSeek.'
   ),
   new LicenseCatalogItem(
-    '@luvi/lv-markdown-in', '3.4.4', 'MIT',
+    '@luvi/lv-markdown-in', '3.4.6', 'MIT',
     'Copyright © 2023-present LiuWei。',
     'Copyright © 2023-present LiuWei.'
   ),

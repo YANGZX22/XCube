@@ -15,6 +15,7 @@ export struct CodeSourceRender {
   @Prop selectable: boolean = false
   @Prop lineNumberWidth: number = 34
   @Prop contentBottomPadding: number = 12
+  @Prop contentTopPadding: number = 0
   @State highlightNode: HighlightNode[] = []
   @State MAX_ROWS: number = 10
   @State codeTextStyleVersion: number = 0
@@ -230,6 +231,7 @@ export struct CodeSourceRender {
       }
       .alignItems(VerticalAlign.Top)
       .width('100%')
+      .padding({ top: this.contentTopPadding })
 
       if (this.shouldAutoCollapse() &&
         this.BASE_ROWS > MDBaseController.getMarkdownController(this.markdownUnion).getCodeBlockAutoCollapseThreshold() &&

@@ -13,6 +13,7 @@ export struct CodeSourceBlockRender {
   @Prop selectable: boolean = false
   @Prop lineNumberWidth: number = 34
   @Prop contentBottomPadding: number = 12
+  @Prop actionAreaVisible: boolean = true
   @State themeVersion: number = 0
   private codeThemeListener: (() => void) | null = null
   private codeTextStyleListener: (() => void) | null = null
@@ -63,7 +64,8 @@ export struct CodeSourceBlockRender {
 
   build() {
     Column() {
-      Row() {
+      if (this.actionAreaVisible) {
+        Row() {
         Text(this.lang || 'code')
           .fontSize(this.getCodeFontSize())
           .fontFamily(this.getCodeFontFamily())
@@ -122,7 +124,8 @@ export struct CodeSourceBlockRender {
       .height(44)
       .margin({ bottom: 10 })
       .justifyContent(FlexAlign.SpaceBetween)
-      .backgroundColor(this.isDarkTheme() ? '#24262B' : '#F3F4F6')
+        .backgroundColor(this.isDarkTheme() ? '#24262B' : '#F3F4F6')
+      }
 
       if (this.themeVersion >= 0) {
         CodeSourceRender({
@@ -132,7 +135,8 @@ export struct CodeSourceBlockRender {
           autoCollapse: this.autoCollapse,
           selectable: this.selectable,
           lineNumberWidth: this.lineNumberWidth,
-          contentBottomPadding: this.contentBottomPadding
+          contentBottomPadding: this.contentBottomPadding,
+          contentTopPadding: this.actionAreaVisible ? 0 : 12
         })
       }
     }

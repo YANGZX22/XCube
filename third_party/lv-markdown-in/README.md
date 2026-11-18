@@ -6,6 +6,8 @@
 
 ---
 
+![Segment](https://agc-storage-drcn.platform.dbankcloud.cn/v0/segment-xm2dk/%E5%AE%A3%E4%BC%A0%E5%9B%BE%2F%E6%A8%AA%E5%B9%85%E5%AE%A3%E4%BC%A0.png?token=6a808f20-a77a-425f-b989-6fa5a08dc6c4)
+
 ![宣传图](https://agc-storage-drcn.platform.dbankcloud.cn/v0/shangshu-data-rfayj/markdown_banner.png?token=207bf00f-9060-4ec6-9c67-5de906c4da42)
 
 ## 简介
@@ -183,7 +185,7 @@ const plugins: MarkdownPlugin[] = [
     inlineLayout: (_node: PluginNode) => {
       return { width: 20, height: 10 }
     },
-    render: RefPluginBuilder
+    render: wrapBuilder<[PluginNode]>(RefPluginBuilder)
   },
   // <trend_chart>
   {
@@ -191,7 +193,7 @@ const plugins: MarkdownPlugin[] = [
     display: 'block',
     pattern: String.raw`^<trend_chart>$`,
     matchMode: 'full-line',
-    render: TrendChartPluginBuilder
+    render: wrapBuilder<[PluginNode]>(TrendChartPluginBuilder)
   }
 ]
 
@@ -1035,6 +1037,28 @@ setCodeBlockIdxState(codeBlockIdxState: boolean)
 this.controller.setCodeBlockIdxState(false)
 ```
 
+### setCodeBlockActionAreaVisible `new 3.4.6+`
+
+setCodeBlockActionAreaVisible(visible: boolean)
+
+设置普通代码块整个顶部操作区是否展示。操作区包含语言名称、复制按钮和放大按钮；隐藏后不会保留空白高度。
+语言为 `html`、`htm` 或 `mermaid` 的代码块始终保留顶部操作区，不受该接口影响。
+
+**参数**
+
+| 参数名     | 类型      | 必填 | 说明                              |
+|---------|---------|----|---------------------------------|
+| visible | boolean | 是  | 是否展示普通代码块顶部操作区，默认：true。 |
+
+**使用示例**
+
+``` javascript
+this.controller.setCodeBlockActionAreaVisible(false)
+
+// 恢复展示
+this.controller.setCodeBlockActionAreaVisible(true)
+```
+
 ### setMermaidEnable `new 3.4.3+`
 
 setMermaidEnable(enable: boolean)
@@ -1580,6 +1604,125 @@ setTableInterleaveBackgroundColor(tableInterleaveBackgroundColor: ResourceColor)
 
 ``` javascript
 this.controller.setTableInterleaveBackgroundColor("#80f5f7fa")
+```
+
+### setTableCopyClickListener `new 3.4.6+`
+
+setTableCopyClickListener(listener?: (rawTableMarkdown: string) => void)
+
+设置表格复制按钮点击监听，设置后即展示复制图标，点击只返回当前表格的原始 Markdown。组件不直接执行剪贴板写入，具体操作由业务自行实现。
+
+**参数**
+
+| 参数名      | 类型                                                        | 必填 | 说明                                      |
+|----------|-----------------------------------------------------------|----|-----------------------------------------|
+| listener | ((rawTableMarkdown: string) => void) \| undefined         | 否  | 返回当前表格的原始 Markdown；默认 `undefined`，按钮不显示。 |
+
+**使用示例**
+
+``` javascript
+this.controller.setTableCopyClickListener((rawTableMarkdown: string) => {
+  console.info("复制表格：" + rawTableMarkdown)
+})
+```
+
+### setTableDownloadClickListener `new 3.4.6+`
+
+setTableDownloadClickListener(listener?: (rawTableMarkdown: string) => void)
+
+设置表格下载按钮点击监听，设置后即展示下载图标，点击只返回当前表格的原始 Markdown。组件不直接执行文件下载，具体操作由业务自行实现。
+
+**参数**
+
+| 参数名      | 类型                                                        | 必填 | 说明                                      |
+|----------|-----------------------------------------------------------|----|-----------------------------------------|
+| listener | ((rawTableMarkdown: string) => void) \| undefined         | 否  | 返回当前表格的原始 Markdown；默认 `undefined`，按钮不显示。 |
+
+**使用示例**
+
+``` javascript
+this.controller.setTableDownloadClickListener((rawTableMarkdown: string) => {
+  console.info("下载表格：" + rawTableMarkdown)
+})
+```
+
+### setTableExpandClickListener `new 3.4.6+`
+
+setTableExpandClickListener(listener?: (rawTableMarkdown: string) => void)
+
+设置表格放大按钮点击监听，设置后即展示放大图标，点击只返回当前表格的原始 Markdown。组件不直接展示放大弹窗，具体操作由业务自行实现。
+
+**参数**
+
+| 参数名      | 类型                                                        | 必填 | 说明                                      |
+|----------|-----------------------------------------------------------|----|-----------------------------------------|
+| listener | ((rawTableMarkdown: string) => void) \| undefined         | 否  | 返回当前表格的原始 Markdown；默认 `undefined`，按钮不显示。 |
+
+**使用示例**
+
+``` javascript
+this.controller.setTableExpandClickListener((rawTableMarkdown: string) => {
+  console.info("放大表格：" + rawTableMarkdown)
+})
+```
+
+### setTableActionBackgroundColor `new 3.4.6+`
+
+setTableActionBackgroundColor(tableActionBackgroundColor: ResourceColor)
+
+设置表格操作区背景色。未调用本接口时，操作区背景色动态跟随表格错行背景色；调用后使用指定颜色。
+
+**参数**
+
+| 参数名                         | 类型            | 必填 | 说明          |
+|-----------------------------|---------------|----|-------------|
+| tableActionBackgroundColor  | ResourceColor | 是  | 设置表格操作区背景色。 |
+
+**使用示例**
+
+``` javascript
+this.controller.setTableActionBackgroundColor("#80f5f7fa")
+```
+
+### setTableActionIconColor `new 3.4.6+`
+
+setTableActionIconColor(iconColor: string)
+
+统一设置表格复制、下载和放大图标的滤镜颜色。仅支持 `#RRGGBB`、`RRGGBB` 或空字符串；未调用本接口或传入空字符串时保留图标原始颜色。
+
+**参数**
+
+| 参数名       | 类型     | 必填 | 说明                                      |
+|-----------|--------|----|-----------------------------------------|
+| iconColor | string | 是  | 设置三个操作图标的滤镜颜色；传入空字符串时恢复图标原始颜色。 |
+
+**使用示例**
+
+``` javascript
+this.controller.setTableActionIconColor("#1A1A33")
+
+// 恢复图标原始颜色
+this.controller.setTableActionIconColor("")
+```
+
+**完整示例**
+
+``` javascript
+this.controller
+  .setTableCopyClickListener((rawTableMarkdown: string) => {
+    console.info("复制表格：" + rawTableMarkdown)
+  })
+  .setTableDownloadClickListener((rawTableMarkdown: string) => {
+    console.info("下载表格：" + rawTableMarkdown)
+  })
+  .setTableExpandClickListener((rawTableMarkdown: string) => {
+    console.info("放大表格：" + rawTableMarkdown)
+  })
+  .setTableActionBackgroundColor("#80f5f7fa")
+  .setTableActionIconColor("#1A1A33")
+
+// 取消复制监听并隐藏复制按钮
+this.controller.setTableCopyClickListener(undefined)
 ```
 
 ### setTodoSelectedColor

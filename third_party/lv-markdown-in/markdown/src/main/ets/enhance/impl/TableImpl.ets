@@ -1,9 +1,20 @@
 import { MDBaseController } from '../controller/BaseController';
+import { TableNode } from '../model/TreeNode';
+import { drawing } from '@kit.ArkGraphics2D';
+
+const tableWidthsCache: WeakMap<TableNode, number[]> = new WeakMap()
 
 export namespace TableImpl {
-  export let tableWidthsList: number[][] = []
+  export function getTableWidths(table: TableNode | undefined): number[] | undefined {
+    const widths = table ? tableWidthsCache.get(table) : undefined
+    return widths ? [...widths] : undefined
+  }
 
-  export let tableWidthsUnionList: string[] = []
+  export function setTableWidths(table: TableNode | undefined, widths: number[]): void {
+    if (table) {
+      tableWidthsCache.set(table, [...widths])
+    }
+  }
 
   export function handleTableBackgroundColor(markdownUnion: string): ResourceColor {
     return MDBaseController.getMarkdownController(markdownUnion).getTableBackgroundColor()
@@ -27,6 +38,16 @@ export namespace TableImpl {
 
   export function handleTableInterleaveBackgroundColor(markdownUnion: string): ResourceColor {
     return MDBaseController.getMarkdownController(markdownUnion).getTableInterleaveBackgroundColor()
+  }
+
+  export function handleTableActionBackgroundColor(markdownUnion: string): ResourceColor {
+    return MDBaseController.getMarkdownController(markdownUnion).getTableActionBackgroundColor()
+  }
+
+  export function handleTableActionIconColorFilter(markdownUnion: string): drawing.ColorFilter {
+    const controller = MDBaseController.getMarkdownController(markdownUnion)
+    controller.getTableActionIconColor()
+    return controller.getTableActionIconColorFilter()
   }
 
   export function handleTableBorderRadius(markdownUnion: string): ResourceStr | number {

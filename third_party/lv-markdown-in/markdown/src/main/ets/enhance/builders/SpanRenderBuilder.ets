@@ -9,6 +9,26 @@ import {
 } from './LatexBuilder'
 import { hasPluginInlineOverlay, PluginInlinePlaceholderSpan } from '../components/PluginRenderHost'
 
+function getSpanNodeKey(item: TreeNode, index: number): string {
+  if (!item) {
+    return `empty_${index}`
+  }
+  if (item.type == 'plugin') {
+    const pluginNode = item as PluginNode
+    return `plugin_${index}_${pluginNode.pluginKey}_${pluginNode.raw}`
+  }
+  if (item.type == 'text') {
+    return `text_${index}_${(item as TextNode).text || ''}`
+  }
+  if (item.type == 'inlineCode' || item.type == 'inlineHtmlFont') {
+    return `${item.type}_${index}_${(item as ESObject).text || ''}`
+  }
+  if (item.type == 'latex') {
+    return `latex_${index}_${getLatexText(item as ESObject)}`
+  }
+  return `${item.type}_${index}_${JSON.stringify(item)}`
+}
+
 /**
  * ParagraphRender need use
  * @param data
@@ -77,10 +97,10 @@ export function SpanRenderBuilder(markdownUnion: string, pluginUnion: string, da
                 url: item.type == "link" ? item.url : undefined
               }, (rootBase || data) as TreeNode)
             }
-          })
+          }, (item2: TreeNode, index: number) => getSpanNodeKey(item2, index))
         }
       }
-    })
+    }, (item: TreeNode, index: number) => getSpanNodeKey(item, index))
   }
 }
 
