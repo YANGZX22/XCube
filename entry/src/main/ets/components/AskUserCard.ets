@@ -1,4 +1,4 @@
-import { getBlurBottomShadow } from '../utils/BlurShadowUtils'
+import { ImmersiveFieldSurface } from './ImmersiveFieldSurface'
 import { ToolCall } from '../models/ChatModels'
 import { getAppUiState } from '../state/AppUiState'
 import { withColorAlpha } from '../utils/ColorAlphaUtils'
@@ -524,55 +524,55 @@ export struct AskUserCard {
       }
 
       if (question.selectionType === 'text') {
-        TextInput({
-          text: this.getDisplayedTextAnswer(question, resultContent),
-          placeholder: this.compactMode
-            ? pickLocalizedText('未回答', 'Not answered')
-            : pickLocalizedText('输入你的回答', 'Enter your answer')
-        })
-          .width('100%')
-          .height(36)
-          .fontSize(13)
-          .fontColor($r('app.color.text_primary'))
-          .placeholderColor($r('app.color.text_tertiary'))
-          .backgroundColor(Color.Transparent)
-          .borderRadius(this.isManuscriptMode ? 0 : 8)
-          .clip(true)
-          .border({
-            width: this.isManuscriptMode ? { bottom: 1 } : 0,
-            color: this.isManuscriptMode ? getAppUiState().themeDivider : Color.Transparent
+        ImmersiveFieldSurface({ cornerRadius: this.isManuscriptMode ? 0 : 8 }) {
+          TextInput({
+            text: this.getDisplayedTextAnswer(question, resultContent),
+            placeholder: this.compactMode
+              ? pickLocalizedText('未回答', 'Not answered')
+              : pickLocalizedText('输入你的回答', 'Enter your answer')
           })
-          .backdropBlur(this.isManuscriptMode || this.surfaceProvided ? undefined : 24)
-          .shadow(getBlurBottomShadow(!this.isManuscriptMode && !this.surfaceProvided))
-          .enabled(!this.isAnswered && !this.compactMode)
-          .onChange((value: string) => {
-            this.setTextAnswer(question.id, value)
-          })
+            .width('100%')
+            .backgroundColor(Color.Transparent)
+            .height(36)
+            .fontSize(13)
+            .fontColor($r('app.color.text_primary'))
+            .placeholderColor($r('app.color.text_tertiary'))
+            .borderRadius(this.isManuscriptMode ? 0 : 8)
+            .clip(true)
+            .border({
+              width: this.isManuscriptMode ? { bottom: 1 } : 0,
+              color: this.isManuscriptMode ? getAppUiState().themeDivider : Color.Transparent
+            })
+            .enabled(!this.isAnswered && !this.compactMode)
+            .onChange((value: string) => {
+              this.setTextAnswer(question.id, value)
+            })
+        }
       } else {
-        TextInput({
-          text: this.getDisplayedCustomAnswer(question, resultContent),
-          placeholder: this.compactMode
-            ? pickLocalizedText('无自定义答案', 'No custom answer')
-            : pickLocalizedText('自定义答案，可留空', 'Custom answer (optional)')
-        })
-          .width('100%')
-          .height(34)
-          .fontSize(12)
-          .fontColor($r('app.color.text_primary'))
-          .placeholderColor($r('app.color.text_tertiary'))
-          .backgroundColor(Color.Transparent)
-          .borderRadius(this.isManuscriptMode ? 0 : 8)
-          .clip(true)
-          .border({
-            width: this.isManuscriptMode ? { bottom: 1 } : 0,
-            color: this.isManuscriptMode ? getAppUiState().themeDivider : Color.Transparent
+        ImmersiveFieldSurface({ cornerRadius: this.isManuscriptMode ? 0 : 8 }) {
+          TextInput({
+            text: this.getDisplayedCustomAnswer(question, resultContent),
+            placeholder: this.compactMode
+              ? pickLocalizedText('无自定义答案', 'No custom answer')
+              : pickLocalizedText('自定义答案，可留空', 'Custom answer (optional)')
           })
-          .backdropBlur(this.isManuscriptMode || this.surfaceProvided ? undefined : 24)
-          .shadow(getBlurBottomShadow(!this.isManuscriptMode && !this.surfaceProvided))
-          .enabled(!this.isAnswered && !this.compactMode)
-          .onChange((value: string) => {
-            this.setCustomAnswer(question.id, value)
-          })
+            .width('100%')
+            .backgroundColor(Color.Transparent)
+            .height(34)
+            .fontSize(12)
+            .fontColor($r('app.color.text_primary'))
+            .placeholderColor($r('app.color.text_tertiary'))
+            .borderRadius(this.isManuscriptMode ? 0 : 8)
+            .clip(true)
+            .border({
+              width: this.isManuscriptMode ? { bottom: 1 } : 0,
+              color: this.isManuscriptMode ? getAppUiState().themeDivider : Color.Transparent
+            })
+            .enabled(!this.isAnswered && !this.compactMode)
+            .onChange((value: string) => {
+              this.setCustomAnswer(question.id, value)
+            })
+        }
       }
     }
     .width('100%')

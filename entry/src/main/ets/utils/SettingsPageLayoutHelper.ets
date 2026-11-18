@@ -29,6 +29,10 @@ export function getSettingsPageContentMaxWidth(layoutSizeClass: string, windowWi
   return getCenteredPageMaxWidth(windowWidthVp)
 }
 
+export function getSettingsSheetContentMaxHeight(windowHeightVp: number): number {
+  return windowHeightVp > 0 ? Math.max(120, windowHeightVp * 0.8 - 80) : 520
+}
+
 export function getCompactTabsBarHeightForIndex(bottomAvoidHeightVp: number): number {
   // Keep the top-level tabs host stable. Inner settings drill-down belongs to Navigation, not HdsTabs layout.
   return INDEX_COMPACT_TABS_BAR_BASE_HEIGHT + bottomAvoidHeightVp

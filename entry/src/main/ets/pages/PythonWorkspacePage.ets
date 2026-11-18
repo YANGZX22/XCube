@@ -1,3 +1,4 @@
+import { ImmersiveFieldSurface } from '../components/ImmersiveFieldSurface'
 /**
  * Python 工作区页面。
  *
@@ -599,6 +600,7 @@ struct PythonWorkspacePageContent {
         ? pickLocalizedText('新建文件夹', 'New folder')
         : pickLocalizedText('新建文件', 'New file'))
         .width('100%')
+        .textAlign(TextAlign.Center)
         .fontSize(18)
         .fontWeight(FontWeight.Bold)
         .fontColor($r('app.color.text_primary'))
@@ -611,19 +613,23 @@ struct PythonWorkspacePageContent {
         .fontColor($r('app.color.text_tertiary'))
         .maxLines(2)
 
-      TextInput({
-        text: this.createItemName,
-        placeholder: this.createItemKind === 'directory'
-          ? pickLocalizedText('文件夹名称', 'Folder name')
-          : pickLocalizedText('文件名，例如 main.py', 'File name, e.g. main.py')
-      })
-        .width('100%')
-        .height(44)
-        .fontSize(14)
-        .caretColor(this.themePrimary)
-        .onChange((value: string): void => {
-          this.createItemName = value
+      ImmersiveFieldSurface({ cornerRadius: 16 }) {
+        TextInput({
+          text: this.createItemName,
+          placeholder: this.createItemKind === 'directory'
+            ? pickLocalizedText('文件夹名称', 'Folder name')
+            : pickLocalizedText('文件名，例如 main.py', 'File name, e.g. main.py')
         })
+          .width('100%')
+          .backgroundColor(Color.Transparent)
+          .borderRadius(16)
+          .height(44)
+          .fontSize(14)
+          .caretColor(this.themePrimary)
+          .onChange((value: string): void => {
+            this.createItemName = value
+          })
+      }
 
       Row({ space: 12 }) {
         Button($r('app.string.cancel'))

@@ -1,3 +1,5 @@
+import { getSettingsTypography } from '../components/settings/SettingsTypography'
+import { ImmersiveFieldSurface } from '../components/ImmersiveFieldSurface'
 import { getAppPromptLanguage } from '../utils/LocalizedTextUtils'
 import { ImmersiveButtonSurface } from '../components/ImmersiveButtonSurface'
 import { ImmersiveListSurface, LIST_MATERIAL_CARD_RADIUS } from '../components/ImmersiveListSurface'
@@ -5110,20 +5112,20 @@ struct Index {
         .width('100%')
 
       Row({ space: 12 }) {
-        TextInput({ text: this.assistantFormName, placeholder: $r('app.string.assistant_name_placeholder') })
-          .layoutWeight(1)
-          .height(52)
-          .fontSize(15)
-          .fontColor($r('app.color.text_primary'))
-          .placeholderColor($r('app.color.text_tertiary'))
-          .backgroundColor(Color.Transparent)
-          .borderRadius(16)
-          .backdropBlur(16)
-          .shadow(getBlurBottomShadow())
-          .padding({ left: 14, right: 14 })
-          .onChange((text: string) => {
-            this.assistantFormName = text
-          })
+        ImmersiveFieldSurface({ cornerRadius: 16, layoutWeightValue: 1 }) {
+          TextInput({ text: this.assistantFormName, placeholder: $r('app.string.assistant_name_placeholder') })
+            .width('100%')
+            .backgroundColor(Color.Transparent)
+            .height(52)
+            .fontSize(15)
+            .fontColor($r('app.color.text_primary'))
+            .placeholderColor($r('app.color.text_tertiary'))
+            .borderRadius(16)
+            .padding({ left: 14, right: 14 })
+            .onChange((text: string) => {
+              this.assistantFormName = text
+            })
+        }
 
         Stack({ alignContent: Alignment.TopStart }) {
           ImmersiveButtonSurface({
@@ -5191,20 +5193,20 @@ struct Index {
         .fontColor($r('app.color.text_primary'))
         .width('100%')
 
-      TextArea({ text: this.assistantFormSystemPrompt, placeholder: $r('app.string.assistant_prompt_placeholder') })
-        .width('100%')
-        .height(150)
-        .fontSize(14)
-        .fontColor($r('app.color.text_primary'))
-        .placeholderColor($r('app.color.text_tertiary'))
-        .backgroundColor(Color.Transparent)
-        .borderRadius(16)
-        .backdropBlur(16)
-        .shadow(getBlurBottomShadow())
-        .padding(14)
-        .onChange((value: string) => {
-          this.assistantFormSystemPrompt = value
-        })
+      ImmersiveFieldSurface({ cornerRadius: 16 }) {
+        TextArea({ text: this.assistantFormSystemPrompt, placeholder: $r('app.string.assistant_prompt_placeholder') })
+          .width('100%')
+          .backgroundColor(Color.Transparent)
+          .height(150)
+          .fontSize(14)
+          .fontColor($r('app.color.text_primary'))
+          .placeholderColor($r('app.color.text_tertiary'))
+          .borderRadius(16)
+          .padding(14)
+          .onChange((value: string) => {
+            this.assistantFormSystemPrompt = value
+          })
+      }
     }
     .width('100%')
     .padding({ top: 16, bottom: 16 })
@@ -6440,17 +6442,20 @@ struct Index {
         .padding({ left: 16, right: 16, bottom: 12 })
         .width('100%')
 
-      TextArea({ text: this.customSystemPrompt, placeholder: $r('app.string.system_prompt_placeholder') })
-        .layoutWeight(1)
-        .width('100%')
-        .padding({ left: 16, right: 16 })
-        .fontSize(14)
-        .fontColor($r('app.color.text_primary'))
-        .placeholderColor($r('app.color.text_tertiary'))
-        .backgroundColor(Color.Transparent)
-        .onChange((value: string) => {
-          this.customSystemPrompt = value
-        })
+      ImmersiveFieldSurface({ cornerRadius: 16, fillHeight: true, layoutWeightValue: 1 }) {
+        TextArea({ text: this.customSystemPrompt, placeholder: $r('app.string.system_prompt_placeholder') })
+          .width('100%')
+          .height('100%')
+          .backgroundColor(Color.Transparent)
+          .borderRadius(16)
+          .padding({ left: 16, right: 16 })
+          .fontSize(14)
+          .fontColor($r('app.color.text_primary'))
+          .placeholderColor($r('app.color.text_tertiary'))
+          .onChange((value: string) => {
+            this.customSystemPrompt = value
+          })
+      }
 
       Row() {
         Button($r('app.string.system_prompt_clear'))

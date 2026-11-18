@@ -4,12 +4,13 @@ import { uiMaterial } from '@kit.ArkUI'
 /**
  * bindSheet 统一标题栏。
  *
- * 左右操作位始终等宽，确保标题不受按钮数量影响并严格居中。
+ * 左右操作区等宽，标题始终对准弹窗中线。
  * 标题栏中的操作统一使用 36vp 原生圆形沉浸光感 Button。
  */
 @ComponentV2
 export struct ImmersiveSheetHeader {
   @Param title: string | Resource = ''
+  @Param titleFont: Font = { size: 17, weight: FontWeight.Bold }
   @Param leadingSymbol: Resource = $r('sys.symbol.xmark')
   @Param trailingSymbol: Resource = $r('sys.symbol.checkmark')
   @Param showLeading: boolean = true
@@ -18,6 +19,7 @@ export struct ImmersiveSheetHeader {
   @Param leadingButtonEnabled: boolean = true
   @Param trailingButtonEnabled: boolean = true
   @Param trailingLoading: boolean = false
+  @Param materialFeedback: boolean = true
   @Param secondaryTrailingSymbol: Resource = $r('sys.symbol.clean')
   @Param secondaryTrailingColor: ResourceColor = $r('app.color.status_error')
   @Param leadingColor: ResourceColor = $r('app.color.text_primary')
@@ -27,14 +29,20 @@ export struct ImmersiveSheetHeader {
   @Event onTrailingClick: () => void = (): void => {}
   @Event onSecondaryTrailingClick: () => void = (): void => {}
 
+  private get actionSlotWidth(): number {
+    if (this.showTrailing && this.showSecondaryTrailing) {
+      return 80
+    }
+    return this.showLeading || this.showTrailing || this.showSecondaryTrailing ? 36 : 0
+  }
 
   private getActionMaterial(interactive: boolean): uiMaterial.Material {
     return new uiMaterial.ImmersiveMaterial({
       style: uiMaterial.ImmersiveStyle.REGULAR,
       materialColor: Color.Transparent,
       applyShadow: false,
-      interactive: interactive,
-      lightEffect: { color: undefined }
+      interactive: this.materialFeedback && interactive,
+      lightEffect: this.materialFeedback ? { color: undefined } : null
     })
   }
 
@@ -71,13 +79,12 @@ export struct ImmersiveSheetHeader {
           .clip(false)
         }
       }
-      .width(this.showSecondaryTrailing ? 80 : 36)
+      .width(this.actionSlotWidth)
       .height(36)
       .justifyContent(FlexAlign.Start)
 
       Text(this.title)
-        .fontSize(17)
-        .fontWeight(FontWeight.Bold)
+        .font(this.titleFont)
         .fontColor(this.titleColor)
         .layoutWeight(1)
         .textAlign(TextAlign.Center)
@@ -149,13 +156,14 @@ export struct ImmersiveSheetHeader {
           .clip(false)
         }
       }
-      .width(this.showSecondaryTrailing ? 80 : 36)
+      .width(this.actionSlotWidth)
       .height(36)
       .justifyContent(FlexAlign.End)
     }
     .width('100%')
     .height(56)
     .padding({ left: 16, right: 16 })
+    .margin({ bottom: 4 })
     .alignItems(VerticalAlign.Center)
   }
 }

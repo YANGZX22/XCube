@@ -1,4 +1,5 @@
-import { getBlurBottomShadow } from '../../utils/BlurShadowUtils'
+import { ImmersiveListSurface, LIST_MATERIAL_CARD_RADIUS } from '../ImmersiveListSurface'
+import { ImmersiveFieldSurface } from '../ImmersiveFieldSurface'
 import { uiMaterial } from '@kit.ArkUI'
 import { ToolPreviewEntry } from '../../utils/ToolPayloadSummaryUtils'
 import { getAppUiState } from '../../state/AppUiState'
@@ -127,80 +128,80 @@ export struct ChatToolExecutionApprovalSheetContent {
       }
 
       if (this.showReadScheduleRangeUi) {
-        Column({ space: 12 }) {
-          Column({ space: 4 }) {
-            Text(pickLocalizedText('读取范围', 'Read Range'))
-              .fontSize(13)
-              .fontWeight(FontWeight.Medium)
-              .fontColor($r('app.color.text_primary'))
+        ImmersiveListSurface({ isImmersive: true, cornerRadius: LIST_MATERIAL_CARD_RADIUS }) {
+          Column({ space: 12 }) {
+            Column({ space: 4 }) {
+              Text(pickLocalizedText('读取范围', 'Read Range'))
+                .fontSize(13)
+                .fontWeight(FontWeight.Medium)
+                .fontColor($r('app.color.text_primary'))
 
-            Text(pickLocalizedText(
-              '只会把这个范围内的日程提供给模型。',
-              'Only events in this range will be provided to the model.'
-            ))
-              .fontSize(12)
-              .lineHeight(18)
-              .fontColor($r('app.color.text_secondary'))
-              .width('100%')
+              Text(pickLocalizedText(
+                '只会把这个范围内的日程提供给模型。',
+                'Only events in this range will be provided to the model.'
+              ))
+                .fontSize(12)
+                .lineHeight(18)
+                .fontColor($r('app.color.text_secondary'))
+                .width('100%')
+            }
+            .width('100%')
+            .alignItems(HorizontalAlign.Start)
+
+            Row({ space: 8 }) {
+              this.ReadScheduleNumberField(
+                pickLocalizedText('向前天数', 'Days Back'),
+                this.readScheduleDaysBeforeText,
+                pickLocalizedText('0', '0'),
+                (value: string): void => {
+                  this.onReadScheduleDaysBeforeChange(value)
+                }
+              )
+
+              this.ReadScheduleNumberField(
+                pickLocalizedText('向后天数', 'Days Ahead'),
+                this.readScheduleDaysAfterText,
+                pickLocalizedText('7', '7'),
+                (value: string): void => {
+                  this.onReadScheduleDaysAfterChange(value)
+                }
+              )
+
+              this.ReadScheduleNumberField(
+                pickLocalizedText('数量上限', 'Limit'),
+                this.readScheduleLimitText,
+                pickLocalizedText('80', '80'),
+                (value: string): void => {
+                  this.onReadScheduleLimitChange(value)
+                }
+              )
+            }
+            .width('100%')
+
+            Column({ space: 8 }) {
+              this.ReadScheduleToggleRow(
+                pickLocalizedText('包含地点', 'Include Location'),
+                this.readScheduleIncludeLocation,
+                (value: boolean): void => {
+                  this.onReadScheduleIncludeLocationChange(value)
+                }
+              )
+
+              this.ReadScheduleToggleRow(
+                pickLocalizedText('包含备注', 'Include Notes'),
+                this.readScheduleIncludeDescription,
+                (value: boolean): void => {
+                  this.onReadScheduleIncludeDescriptionChange(value)
+                }
+              )
+            }
+            .width('100%')
           }
           .width('100%')
-          .alignItems(HorizontalAlign.Start)
-
-          Row({ space: 8 }) {
-            this.ReadScheduleNumberField(
-              pickLocalizedText('向前天数', 'Days Back'),
-              this.readScheduleDaysBeforeText,
-              pickLocalizedText('0', '0'),
-              (value: string): void => {
-                this.onReadScheduleDaysBeforeChange(value)
-              }
-            )
-
-            this.ReadScheduleNumberField(
-              pickLocalizedText('向后天数', 'Days Ahead'),
-              this.readScheduleDaysAfterText,
-              pickLocalizedText('7', '7'),
-              (value: string): void => {
-                this.onReadScheduleDaysAfterChange(value)
-              }
-            )
-
-            this.ReadScheduleNumberField(
-              pickLocalizedText('数量上限', 'Limit'),
-              this.readScheduleLimitText,
-              pickLocalizedText('80', '80'),
-              (value: string): void => {
-                this.onReadScheduleLimitChange(value)
-              }
-            )
-          }
-          .width('100%')
-
-          Column({ space: 8 }) {
-            this.ReadScheduleToggleRow(
-              pickLocalizedText('包含地点', 'Include Location'),
-              this.readScheduleIncludeLocation,
-              (value: boolean): void => {
-                this.onReadScheduleIncludeLocationChange(value)
-              }
-            )
-
-            this.ReadScheduleToggleRow(
-              pickLocalizedText('包含备注', 'Include Notes'),
-              this.readScheduleIncludeDescription,
-              (value: boolean): void => {
-                this.onReadScheduleIncludeDescriptionChange(value)
-              }
-            )
-          }
-          .width('100%')
+          .padding(14)
+          .borderRadius(LIST_MATERIAL_CARD_RADIUS)
+          .backgroundColor(Color.Transparent)
         }
-        .width('100%')
-        .padding(14)
-        .borderRadius(16)
-        .backgroundColor(Color.Transparent)
-        .backdropBlur(16)
-        .shadow(getBlurBottomShadow())
       }
 
       Column({ space: 8 }) {
@@ -346,20 +347,20 @@ export struct ChatToolExecutionApprovalSheetContent {
         .maxLines(1)
         .textOverflow({ overflow: TextOverflow.Ellipsis })
 
-      TextInput({ text: value, placeholder: placeholder })
-        .width('100%')
-        .height(38)
-        .fontSize(14)
-        .fontColor($r('app.color.text_primary'))
-        .placeholderColor($r('app.color.text_tertiary'))
-        .backgroundColor(Color.Transparent)
-        .borderRadius(10)
-        .backdropBlur(16)
-        .shadow(getBlurBottomShadow())
-        .textAlign(TextAlign.Center)
-        .onChange((input: string) => {
-          onChange(input)
-        })
+      ImmersiveFieldSurface({ cornerRadius: 10 }) {
+        TextInput({ text: value, placeholder: placeholder })
+          .width('100%')
+          .backgroundColor(Color.Transparent)
+          .height(38)
+          .fontSize(14)
+          .fontColor($r('app.color.text_primary'))
+          .placeholderColor($r('app.color.text_tertiary'))
+          .borderRadius(10)
+          .textAlign(TextAlign.Center)
+          .onChange((input: string) => {
+            onChange(input)
+          })
+      }
     }
     .layoutWeight(1)
     .constraintSize({ minWidth: 0 })
@@ -368,32 +369,32 @@ export struct ChatToolExecutionApprovalSheetContent {
 
   @Builder
   private ReadScheduleToggleRow(label: string, checked: boolean, onChange: (value: boolean) => void) {
-    Row() {
-      Text(label)
-        .fontSize(13)
-        .fontColor($r('app.color.text_primary'))
-        .layoutWeight(1)
-        .maxLines(1)
-        .textOverflow({ overflow: TextOverflow.Ellipsis })
+    ImmersiveListSurface({ isImmersive: true, cornerRadius: LIST_MATERIAL_CARD_RADIUS }) {
+      Row() {
+        Text(label)
+          .fontSize(13)
+          .fontColor($r('app.color.text_primary'))
+          .layoutWeight(1)
+          .maxLines(1)
+          .textOverflow({ overflow: TextOverflow.Ellipsis })
 
-      Toggle({ type: ToggleType.Switch, isOn: checked })
-        .width(56)
-        .height(30)
-        .selectedColor(this.themePrimary)
-        .systemMaterial(new uiMaterial.Material())
-        .switchPointColor(Color.White)
-        .onChange((isOn: boolean) => {
-          onChange(isOn)
-        })
+        Toggle({ type: ToggleType.Switch, isOn: checked })
+          .width(56)
+          .height(30)
+          .selectedColor(this.themePrimary)
+          .systemMaterial(new uiMaterial.Material())
+          .switchPointColor(Color.White)
+          .onChange((isOn: boolean) => {
+            onChange(isOn)
+          })
+      }
+      .width('100%')
+      .height(44)
+      .padding({ left: 12, right: 10 })
+      .borderRadius(LIST_MATERIAL_CARD_RADIUS)
+      .backgroundColor(Color.Transparent)
+      .alignItems(VerticalAlign.Center)
     }
-    .width('100%')
-    .height(44)
-    .padding({ left: 12, right: 10 })
-    .borderRadius(12)
-    .backgroundColor(Color.Transparent)
-    .backdropBlur(16)
-    .shadow(getBlurBottomShadow())
-    .alignItems(VerticalAlign.Center)
   }
 
   private resolveArgumentDisplayLabel(label: string): string {

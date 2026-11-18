@@ -1,6 +1,6 @@
+import { ImmersiveListSurface, LIST_MATERIAL_CARD_RADIUS } from './ImmersiveListSurface'
 import { ImmersiveButtonSurface } from './ImmersiveButtonSurface'
 import { uiMaterial } from '@kit.ArkUI'
-import { getBlurBottomShadow } from '../utils/BlurShadowUtils'
 import {
   getSubAgentService,
   SubAgentLiveState,
@@ -174,127 +174,126 @@ export struct SubAgentPreviewSheetContent {
 
   @Builder
   AgentCard(agent: SubAgentLiveState, index: number) {
-    Column({ space: 8 }) {
-      // 标题行：状态 + 名称 + 轮次统计
-      Row() {
-        if (agent.status === SUB_AGENT_STATUS_RUNNING) {
-          LoadingProgress()
-            .width(14)
-            .height(14)
-            .color(this.themePrimary)
-        } else {
-          SymbolGlyph(this.getAgentStatusSymbol(agent.status))
-            .fontSize(14)
-            .fontColor([this.getAgentStatusColor(agent.status)])
-        }
+    ImmersiveListSurface({ isImmersive: true, cornerRadius: LIST_MATERIAL_CARD_RADIUS }) {
+      Column({ space: 8 }) {
+        // 标题行：状态 + 名称 + 轮次统计
+        Row() {
+          if (agent.status === SUB_AGENT_STATUS_RUNNING) {
+            LoadingProgress()
+              .width(14)
+              .height(14)
+              .color(this.themePrimary)
+          } else {
+            SymbolGlyph(this.getAgentStatusSymbol(agent.status))
+              .fontSize(14)
+              .fontColor([this.getAgentStatusColor(agent.status)])
+          }
 
-        Column({ space: 2 }) {
-          Text(agent.name)
-            .fontSize(13)
-            .fontWeight(FontWeight.Medium)
-            .fontColor($r('app.color.text_primary'))
-            .maxLines(1)
-            .textOverflow({ overflow: TextOverflow.Ellipsis })
-            .width('100%')
+          Column({ space: 2 }) {
+            Text(agent.name)
+              .fontSize(13)
+              .fontWeight(FontWeight.Medium)
+              .fontColor($r('app.color.text_primary'))
+              .maxLines(1)
+              .textOverflow({ overflow: TextOverflow.Ellipsis })
+              .width('100%')
 
-          Text(this.getAgentStatsText(agent))
-            .fontSize(10)
-            .fontColor($r('app.color.text_tertiary'))
-            .maxLines(1)
-            .textOverflow({ overflow: TextOverflow.Ellipsis })
-            .width('100%')
-        }
-          .margin({ left: 6 })
-          .layoutWeight(1)
-          .alignItems(HorizontalAlign.Start)
+            Text(this.getAgentStatsText(agent))
+              .fontSize(10)
+              .fontColor($r('app.color.text_tertiary'))
+              .maxLines(1)
+              .textOverflow({ overflow: TextOverflow.Ellipsis })
+              .width('100%')
+          }
+            .margin({ left: 6 })
+            .layoutWeight(1)
+            .alignItems(HorizontalAlign.Start)
 
-        Stack({ alignContent: Alignment.TopStart }) {
-          ImmersiveButtonSurface({
-            materialFactory: () => (this.getCollapseButtonMaterial()),
-            cornerRadius: 15
-          }) {
-            Button({ type: ButtonType.Circle, stateEffect: false }) {
-              SymbolGlyph(this.isAgentCollapsed(agent, index)
-                ? $r('sys.symbol.chevron_down')
-                : $r('sys.symbol.chevron_up'))
-                .fontSize(13)
-                .fontColor([$r('app.color.text_secondary')])
+          Stack({ alignContent: Alignment.TopStart }) {
+            ImmersiveButtonSurface({
+              materialFactory: () => (this.getCollapseButtonMaterial()),
+              cornerRadius: 15
+            }) {
+              Button({ type: ButtonType.Circle, stateEffect: false }) {
+                SymbolGlyph(this.isAgentCollapsed(agent, index)
+                  ? $r('sys.symbol.chevron_down')
+                  : $r('sys.symbol.chevron_up'))
+                  .fontSize(13)
+                  .fontColor([$r('app.color.text_secondary')])
+              }
+              .width(30)
+              .height(30)
+              .padding(0)
+              .backgroundColor(Color.Transparent)
+              .borderRadius(15)
+              .onClick(() => {
+                this.toggleAgentCollapsed(agent, index)
+              })
             }
-            .width(30)
-            .height(30)
-            .padding(0)
+          }
+          .width(30)
+          .height(30)
+          .margin({ left: 8 })
+          .clip(false)
+        }
+        .width('100%')
+        .alignItems(VerticalAlign.Center)
+
+        if (!this.isAgentCollapsed(agent, index)) {
+          // 任务提示词预览
+          if (agent.promptPreview !== '') {
+            Text(agent.promptPreview)
+              .fontSize(11)
+              .lineHeight(15)
+              .fontColor($r('app.color.text_tertiary'))
+              .maxLines(2)
+              .textOverflow({ overflow: TextOverflow.Ellipsis })
+              .width('100%')
+          }
+
+          // 工具调用时间线
+          if (agent.toolEvents.length > 0) {
+            Column({ space: 6 }) {
+              ForEach(agent.toolEvents, (event: SubAgentToolEventState, eventIndex: number) => {
+                this.ToolEventRow(event)
+              }, (event: SubAgentToolEventState, eventIndex: number) => eventIndex.toString())
+            }
+            .width('100%')
+            .padding(8)
+            .borderRadius(10)
+            .border({ width: 0.5, color: this.getInnerBorderColor() })
             .backgroundColor(Color.Transparent)
-            .borderRadius(15)
-            .onClick(() => {
-              this.toggleAgentCollapsed(agent, index)
-            })
+          }
+
+          // 实时生成内容
+          if (agent.liveContent !== '') {
+            Scroll() {
+              Text(agent.liveContent)
+                .width('100%')
+                .fontSize(11)
+                .lineHeight(16)
+                .fontColor($r('app.color.text_secondary'))
+            }
+            .width('100%')
+            .constraintSize({ maxHeight: 220 })
+            .padding(10)
+            .borderRadius(10)
+            .border({ width: 0.5, color: this.getInnerBorderColor() })
+            .backgroundColor(Color.Transparent)
+            .scrollBar(BarState.Auto)
+            .align(Alignment.TopStart)
+          } else if (agent.status === SUB_AGENT_STATUS_RUNNING) {
+            Text(pickLocalizedText('等待模型输出...', 'Waiting for model output...'))
+              .fontSize(11)
+              .fontColor($r('app.color.text_tertiary'))
           }
         }
-        .width(30)
-        .height(30)
-        .margin({ left: 8 })
-        .clip(false)
       }
       .width('100%')
-      .alignItems(VerticalAlign.Center)
-
-      if (!this.isAgentCollapsed(agent, index)) {
-        // 任务提示词预览
-        if (agent.promptPreview !== '') {
-          Text(agent.promptPreview)
-            .fontSize(11)
-            .lineHeight(15)
-            .fontColor($r('app.color.text_tertiary'))
-            .maxLines(2)
-            .textOverflow({ overflow: TextOverflow.Ellipsis })
-            .width('100%')
-        }
-
-        // 工具调用时间线
-        if (agent.toolEvents.length > 0) {
-          Column({ space: 6 }) {
-            ForEach(agent.toolEvents, (event: SubAgentToolEventState, eventIndex: number) => {
-              this.ToolEventRow(event)
-            }, (event: SubAgentToolEventState, eventIndex: number) => eventIndex.toString())
-          }
-          .width('100%')
-          .padding(8)
-          .borderRadius(10)
-          .border({ width: 0.5, color: this.getInnerBorderColor() })
-          .backgroundColor(Color.Transparent)
-        }
-
-        // 实时生成内容
-        if (agent.liveContent !== '') {
-          Scroll() {
-            Text(agent.liveContent)
-              .width('100%')
-              .fontSize(11)
-              .lineHeight(16)
-              .fontColor($r('app.color.text_secondary'))
-          }
-          .width('100%')
-          .constraintSize({ maxHeight: 220 })
-          .padding(10)
-          .borderRadius(10)
-          .border({ width: 0.5, color: this.getInnerBorderColor() })
-          .backgroundColor(Color.Transparent)
-          .scrollBar(BarState.Auto)
-          .align(Alignment.TopStart)
-        } else if (agent.status === SUB_AGENT_STATUS_RUNNING) {
-          Text(pickLocalizedText('等待模型输出...', 'Waiting for model output...'))
-            .fontSize(11)
-            .fontColor($r('app.color.text_tertiary'))
-        }
-      }
+      .padding(12)
+      .backgroundColor(Color.Transparent)
+      .borderRadius(LIST_MATERIAL_CARD_RADIUS)
     }
-    .width('100%')
-    .padding(12)
-    .backgroundColor(Color.Transparent)
-    .borderRadius(16)
-    .border({ width: 0.5, color: this.getCardBorderColor() })
-    .backdropBlur(16)
-    .shadow(getBlurBottomShadow())
   }
 
   @Builder

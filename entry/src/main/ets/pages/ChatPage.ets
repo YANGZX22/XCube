@@ -1,3 +1,4 @@
+import { ImmersiveFieldSurface } from '../components/ImmersiveFieldSurface'
 import { BuiltinBrowserState, getBuiltinBrowserService } from '../services/BuiltinBrowserService'
 import { shouldUseDrawnNavigation } from '../utils/DrawnNavigationSupport'
 import { ImmersiveButtonSurface } from '../components/ImmersiveButtonSurface'
@@ -1220,6 +1221,8 @@ export struct ChatPage {
   private ContextUsageDialogBuilder() {
     Column({ space: 16 }) {
       Text(pickLocalizedText('有效上下文预算', 'Effective context budget'))
+        .width('100%')
+        .textAlign(TextAlign.Center)
         .fontSize(18)
         .fontWeight(FontWeight.Bold)
         .fontColor($r('app.color.text_primary'))
@@ -1587,24 +1590,24 @@ export struct ChatPage {
         color: this.isManuscriptMode ? getAppUiState().themeDivider : Color.Transparent
       })
 
-      TextInput({ text: this.canvasDocumentTitle, placeholder: pickLocalizedText('文档标题', 'Document title') })
-        .height(36)
-        .width('100%')
-        .fontSize(14)
-        .fontColor($r('app.color.text_primary'))
-        .placeholderColor($r('app.color.text_tertiary'))
-        .backgroundColor(Color.Transparent)
-        .borderRadius(this.isManuscriptMode ? 0 : 16)
-        .border({
-          width: this.isManuscriptMode ? { bottom: 1 } : 0,
-          color: this.isManuscriptMode ? getAppUiState().themeDivider : this.themePrimary
-        })
-        .backdropBlur(this.isManuscriptMode ? 0 : 16)
-        .shadow(getBlurBottomShadow(!(this.isManuscriptMode)))
-        .padding({ left: 12, right: 12 })
-        .onChange((value: string) => {
-          this.handleCanvasTitleChanged(value)
-        })
+      ImmersiveFieldSurface({ cornerRadius: this.isManuscriptMode ? 0 : 16 }) {
+        TextInput({ text: this.canvasDocumentTitle, placeholder: pickLocalizedText('文档标题', 'Document title') })
+          .width('100%')
+          .backgroundColor(Color.Transparent)
+          .height(36)
+          .fontSize(14)
+          .fontColor($r('app.color.text_primary'))
+          .placeholderColor($r('app.color.text_tertiary'))
+          .borderRadius(this.isManuscriptMode ? 0 : 16)
+          .border({
+            width: this.isManuscriptMode ? { bottom: 1 } : 0,
+            color: this.isManuscriptMode ? getAppUiState().themeDivider : this.themePrimary
+          })
+          .padding({ left: 12, right: 12 })
+          .onChange((value: string) => {
+            this.handleCanvasTitleChanged(value)
+          })
+      }
 
       if (this.isCanvasMarkdownPreview) {
         Scroll() {
@@ -1639,28 +1642,32 @@ export struct ChatPage {
         .backdropBlur(this.isManuscriptMode ? 0 : 16)
         .shadow(getBlurBottomShadow(!(this.isManuscriptMode)))
       } else {
-        TextArea({
-          text: this.canvasDocumentContent,
-          placeholder: pickLocalizedText('在这里写文档，AI 也可以通过 Canvas 工具修改它。', 'Write here; AI can edit this document through the Canvas tool.')
-        })
-          .layoutWeight(1)
-          .width('100%')
-          .fontSize(14)
-          .fontColor($r('app.color.text_primary'))
-          .placeholderColor($r('app.color.text_tertiary'))
-          .backgroundColor(Color.Transparent)
-          .borderRadius(this.isManuscriptMode ? 0 : 14)
-          .border({
-            width: 0,
-            color: Color.Transparent
+        ImmersiveFieldSurface({
+          cornerRadius: this.isManuscriptMode ? 0 : 14,
+          fillHeight: true,
+          layoutWeightValue: 1,
+          layoutMargin: this.isManuscriptMode ? { left: 10, right: 10, bottom: 10 } : 0
+        }) {
+          TextArea({
+            text: this.canvasDocumentContent,
+            placeholder: pickLocalizedText('在这里写文档，AI 也可以通过 Canvas 工具修改它。', 'Write here; AI can edit this document through the Canvas tool.')
           })
-          .backdropBlur(this.isManuscriptMode ? 0 : 16)
-          .shadow(getBlurBottomShadow(!(this.isManuscriptMode)))
-          .padding(this.isManuscriptMode ? { left: 18, right: 18, top: 16, bottom: 16 } : 12)
-          .margin(this.isManuscriptMode ? { left: 10, right: 10, bottom: 10 } : 0)
-          .onChange((value: string) => {
-            this.handleCanvasContentChanged(value)
-          })
+            .width('100%')
+            .height('100%')
+            .backgroundColor(Color.Transparent)
+            .fontSize(14)
+            .fontColor($r('app.color.text_primary'))
+            .placeholderColor($r('app.color.text_tertiary'))
+            .borderRadius(this.isManuscriptMode ? 0 : 14)
+            .border({
+              width: 0,
+              color: Color.Transparent
+            })
+            .padding(this.isManuscriptMode ? { left: 18, right: 18, top: 16, bottom: 16 } : 12)
+            .onChange((value: string) => {
+              this.handleCanvasContentChanged(value)
+            })
+        }
       }
     }
     .width('100%')

@@ -1,6 +1,6 @@
 import { uiMaterial } from '@kit.ArkUI'
 import { IMMERSIVE_MATERIAL_SHADOW_OUTSET } from './ImmersiveMaterialBackdrop'
-import { shouldUseWrappedMaterial, WrappedMaterialModifier } from '../utils/WrappedMaterialSupport'
+import { shouldUseWrappedMaterial, WrappedMaterialModifier, WRAPPED_MATERIAL_THIN } from '../utils/WrappedMaterialSupport'
 
 // 输入内容与材质共用一个原生容器，仅开启光照；内部按钮仍有自己的材质交互。
 @ComponentV2
@@ -8,6 +8,9 @@ export struct ImmersiveInputSurface {
   @Param minSurfaceHeight: number = 52
   @Param maxSurfaceHeight: number = 132
   @Param cornerRadius: number = 24
+  @Param materialStyle: uiMaterial.ImmersiveStyle = WRAPPED_MATERIAL_THIN
+  @Param applyShadow: boolean = true
+  @Param layoutWeightValue: number = 0
   @BuilderParam content: () => void
   @Local surfaceWidth: number = 0
   @Local measuredHeight: number = 52
@@ -36,9 +39,9 @@ export struct ImmersiveInputSurface {
       .backgroundColor(Color.Transparent)
       .borderRadius(this.cornerRadius)
       .attributeModifier(new WrappedMaterialModifier(() => new uiMaterial.ImmersiveMaterial({
-        style: uiMaterial.ImmersiveStyle.THIN,
+        style: this.materialStyle,
         materialColor: Color.Transparent,
-        applyShadow: true,
+        applyShadow: this.applyShadow,
         interactive: false,
         lightEffect: {}
       }), shouldUseWrappedMaterial(), true))
@@ -101,6 +104,7 @@ export struct ImmersiveInputSurface {
     }
     .width('100%')
     .height(this.surfaceHeight)
+    .layoutWeight(this.layoutWeightValue)
     .clip(false)
     .hitTestBehavior(HitTestMode.Transparent)
     .onTouchIntercept((event: TouchEvent): HitTestMode => this.interceptSurfaceTouch(event))

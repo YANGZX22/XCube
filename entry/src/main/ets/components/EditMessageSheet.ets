@@ -1,3 +1,4 @@
+import { ImmersiveFieldSurface } from './ImmersiveFieldSurface'
 /**
  * 编辑消息半模态面板组件（重构版）
  * 支持完整输入功能：联网查询状态展示、推理开关、附件管理
@@ -63,15 +64,18 @@ export struct EditMessageSheet {
       this.Toolbar()
 
       // 编辑区域
-      TextArea({ text: this.editText, placeholder: $r('app.string.edit_message_placeholder') })
-        .width('100%')
-        .layoutWeight(1)
-        .padding(12)
-        .backgroundColor(Color.Transparent)
-        .fontSize(16)
-        .onChange((value: string) => {
-          this.$editText(value)
-        })
+      ImmersiveFieldSurface({ cornerRadius: 16, fillHeight: true, layoutWeightValue: 1 }) {
+        TextArea({ text: this.editText, placeholder: $r('app.string.edit_message_placeholder') })
+          .width('100%')
+          .height('100%')
+          .backgroundColor(Color.Transparent)
+          .borderRadius(16)
+          .padding(12)
+          .fontSize(16)
+          .onChange((value: string) => {
+            this.$editText(value)
+          })
+      }
 
       // 附件预览区域
       if (this.attachments.length > 0) {

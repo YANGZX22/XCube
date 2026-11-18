@@ -1,3 +1,4 @@
+import { ImmersiveFieldSurface } from './ImmersiveFieldSurface'
 import { ImmersiveButtonSurface } from './ImmersiveButtonSurface'
 import { FileIcon } from './FileIcon'
 import { ImmersiveListSurface, LIST_MATERIAL_CARD_RADIUS } from './ImmersiveListSurface'
@@ -494,18 +495,18 @@ export struct EmailKnowledgeCategory {
       .padding({ left: 4, right: 4 })
 
       Row({ space: 6 }) {
-        Search({
-          value: this.searchQuery,
-          placeholder: pickLocalizedText('主题、正文或发件人', 'Subject, body, or sender')
-        })
-          .layoutWeight(1)
-          .height(40)
-          .borderRadius(20)
-          .backgroundColor(Color.Transparent)
-          .backdropBlur(24)
-          .shadow(getBlurBottomShadow())
-          .onChange((value: string): void => { this.searchQuery = value })
-          .onSubmit((): void => { this.refreshInbox() })
+        ImmersiveFieldSurface({ cornerRadius: 20, layoutWeightValue: 1 }) {
+          Search({
+            value: this.searchQuery,
+            placeholder: pickLocalizedText('主题、正文或发件人', 'Subject, body, or sender')
+          })
+            .width('100%')
+            .backgroundColor(Color.Transparent)
+            .height(40)
+            .borderRadius(20)
+            .onChange((value: string): void => { this.searchQuery = value })
+            .onSubmit((): void => { this.refreshInbox() })
+        }
 
         Stack({ alignContent: Alignment.TopStart }) {
           ImmersiveButtonSurface({
@@ -966,79 +967,77 @@ export struct EmailKnowledgeCategory {
       } else {
         Scroll() {
           Column({ space: 8 }) {
-            Column() {
-              Column({ space: 5 }) {
-                Row({ space: 8 }) {
-                  SymbolGlyph($r('sys.symbol.envelope')).fontSize(16).fontColor([this.themePrimary])
-                  Text(this.previewMessage.from).fontSize(13).fontWeight(FontWeight.Medium)
-                    .fontColor($r('app.color.text_primary')).width('100%').layoutWeight(1)
-                }.width('100%')
-                Text(this.previewMessage.date).fontSize(11).fontColor($r('app.color.text_tertiary')).width('100%')
-                if (this.previewMessage.to !== '') {
-                  Text(pickLocalizedText(`收件人：${this.previewMessage.to}`, `To: ${this.previewMessage.to}`))
-                    .fontSize(11).fontColor($r('app.color.text_secondary')).width('100%')
+            ImmersiveListSurface({ isImmersive: true, cornerRadius: LIST_MATERIAL_CARD_RADIUS }) {
+              Column() {
+                Column({ space: 5 }) {
+                  Row({ space: 8 }) {
+                    SymbolGlyph($r('sys.symbol.envelope')).fontSize(16).fontColor([this.themePrimary])
+                    Text(this.previewMessage.from).fontSize(13).fontWeight(FontWeight.Medium)
+                      .fontColor($r('app.color.text_primary')).width('100%').layoutWeight(1)
+                  }.width('100%')
+                  Text(this.previewMessage.date).fontSize(11).fontColor($r('app.color.text_tertiary')).width('100%')
+                  if (this.previewMessage.to !== '') {
+                    Text(pickLocalizedText(`收件人：${this.previewMessage.to}`, `To: ${this.previewMessage.to}`))
+                      .fontSize(11).fontColor($r('app.color.text_secondary')).width('100%')
+                  }
                 }
+                .width('100%')
+                .padding({ left: 12, right: 12, top: 11, bottom: 10 })
+
+                Divider().color(getAppUiState().themePrimaryLight).margin({ left: 12, right: 12 })
+
+                Column({ space: 6 }) {
+                  Text(pickLocalizedText('邮件正文', 'Message'))
+                    .fontSize(12)
+                    .fontWeight(FontWeight.Bold)
+                    .fontColor($r('app.color.text_secondary'))
+                    .width('100%')
+                  Text(this.previewMessage.bodyText || pickLocalizedText('(无可解析正文)', '(No readable body)'))
+                    .fontSize(14).lineHeight(21).fontColor($r('app.color.text_primary')).width('100%')
+                }
+                .width('100%')
+                .padding({ left: 12, right: 12, top: 10, bottom: 12 })
               }
               .width('100%')
-              .padding({ left: 12, right: 12, top: 11, bottom: 10 })
-
-              Divider().color(getAppUiState().themePrimaryLight).margin({ left: 12, right: 12 })
-
-              Column({ space: 6 }) {
-                Text(pickLocalizedText('邮件正文', 'Message'))
-                  .fontSize(12)
-                  .fontWeight(FontWeight.Bold)
-                  .fontColor($r('app.color.text_secondary'))
-                  .width('100%')
-                Text(this.previewMessage.bodyText || pickLocalizedText('(无可解析正文)', '(No readable body)'))
-                  .fontSize(14).lineHeight(21).fontColor($r('app.color.text_primary')).width('100%')
-              }
-              .width('100%')
-              .padding({ left: 12, right: 12, top: 10, bottom: 12 })
+              .borderRadius(LIST_MATERIAL_CARD_RADIUS)
+              .backgroundColor(Color.Transparent)
             }
-            .width('100%')
-            .borderRadius(16)
-            .border({ width: 1, color: getAppUiState().themePrimaryLight })
-            .backdropBlur(24)
-            .shadow(getBlurBottomShadow())
-            .backgroundColor(Color.Transparent)
 
             if (this.previewMessage.attachments.length > 0) {
-              Column() {
-                Text(pickLocalizedText('附件与内嵌图片', 'Attachments and Inline Images'))
-                  .fontSize(12).fontWeight(FontWeight.Bold).fontColor($r('app.color.text_secondary'))
-                  .width('100%').padding({ left: 12, right: 12, top: 11, bottom: 7 })
-                ForEach(this.previewMessage.attachments, (item: EmailAttachmentPart, index: number) => {
-                  Column() {
-                    Row({ space: 10 }) {
-                      FileIcon({
-                        fileName: item.name,
-                        mimeType: item.mimeType,
-                        iconSize: 18,
-                        tintColor: this.getCategoryColor()
-                      })
-                      Column({ space: 2 }) {
-                        Text(item.name).fontSize(13).fontColor($r('app.color.text_primary')).maxLines(1)
-                          .textOverflow({ overflow: TextOverflow.Ellipsis }).width('100%')
-                        Text(`${item.mimeType} · ${this.formatSize(item.bytes.byteLength)}`)
-                          .fontSize(10).fontColor($r('app.color.text_tertiary')).width('100%')
-                      }.layoutWeight(1).alignItems(HorizontalAlign.Start)
+              ImmersiveListSurface({ isImmersive: true, cornerRadius: LIST_MATERIAL_CARD_RADIUS }) {
+                Column() {
+                  Text(pickLocalizedText('附件与内嵌图片', 'Attachments and Inline Images'))
+                    .fontSize(12).fontWeight(FontWeight.Bold).fontColor($r('app.color.text_secondary'))
+                    .width('100%').padding({ left: 12, right: 12, top: 11, bottom: 7 })
+                  ForEach(this.previewMessage.attachments, (item: EmailAttachmentPart, index: number) => {
+                    Column() {
+                      Row({ space: 10 }) {
+                        FileIcon({
+                          fileName: item.name,
+                          mimeType: item.mimeType,
+                          iconSize: 18,
+                          tintColor: this.getCategoryColor()
+                        })
+                        Column({ space: 2 }) {
+                          Text(item.name).fontSize(13).fontColor($r('app.color.text_primary')).maxLines(1)
+                            .textOverflow({ overflow: TextOverflow.Ellipsis }).width('100%')
+                          Text(`${item.mimeType} · ${this.formatSize(item.bytes.byteLength)}`)
+                            .fontSize(10).fontColor($r('app.color.text_tertiary')).width('100%')
+                        }.layoutWeight(1).alignItems(HorizontalAlign.Start)
+                      }
+                      .width('100%')
+                      .padding({ left: 12, right: 12, top: 9, bottom: 9 })
+                      if (index < this.previewMessage.attachments.length - 1) {
+                        Divider().color(getAppUiState().themePrimaryLight).margin({ left: 40, right: 12 })
+                      }
                     }
                     .width('100%')
-                    .padding({ left: 12, right: 12, top: 9, bottom: 9 })
-                    if (index < this.previewMessage.attachments.length - 1) {
-                      Divider().color(getAppUiState().themePrimaryLight).margin({ left: 40, right: 12 })
-                    }
-                  }
-                  .width('100%')
-                }, (item: EmailAttachmentPart, index: number): string => `${item.name}_${index}`)
+                  }, (item: EmailAttachmentPart, index: number): string => `${item.name}_${index}`)
+                }
+                .width('100%')
+                .borderRadius(LIST_MATERIAL_CARD_RADIUS)
+                .backgroundColor(Color.Transparent)
               }
-              .width('100%')
-              .borderRadius(16)
-              .border({ width: 1, color: getAppUiState().themePrimaryLight })
-              .backdropBlur(24)
-              .shadow(getBlurBottomShadow())
-              .backgroundColor(Color.Transparent)
             }
           }
           .width('100%')

@@ -1,3 +1,4 @@
+import { getSettingsTypography } from './SettingsTypography'
 import { getAppUiState } from '../../state/AppUiState'
 import { getHdsTopNavigationMaskExtraHeight } from '../../utils/HdsVisualEffectUtil'
 import { withColorAlpha } from '../../utils/ColorAlphaUtils'
@@ -14,9 +15,9 @@ export struct SettingsCompactTitleBarContent {
     Stack({ alignContent: Alignment.TopStart }) {
       Row() {
         Text(this.title)
-          .fontSize(18)
-          .fontWeight(FontWeight.Bold)
-          .fontColor($r('app.color.text_primary'))
+          .font(getSettingsTypography().pageTitle)
+          .textAlign(TextAlign.Start)
+          .fontColor(getAppUiState().themeTextPrimary)
           .layoutWeight(1)
       }
       .width('100%')

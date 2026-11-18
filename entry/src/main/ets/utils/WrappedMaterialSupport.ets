@@ -22,6 +22,19 @@ export function shouldUseWrappedMaterial(): boolean {
   return !getAppUiState().forceWrappedMaterialBlur && isWrappedMaterialApiAvailable()
 }
 
+export function createStaticRegularMaterial(materialColor: ResourceColor = Color.Transparent): uiMaterial.Material {
+  return new uiMaterial.ImmersiveMaterial({
+    style: uiMaterial.ImmersiveStyle.REGULAR,
+    materialColor: materialColor,
+    interactive: false,
+    lightEffect: null
+  })
+}
+
+export function getStaticSheetMaterial(): uiMaterial.Material | undefined {
+  return shouldUseWrappedMaterial() ? createStaticRegularMaterial() : undefined
+}
+
 // 支持材质的设备在降级时显式清除旧材质；低版本不访问 systemMaterial 或 Material.empty。
 export class WrappedMaterialModifier implements AttributeModifier<CommonAttribute> {
   private factory: WrappedMaterialFactory
