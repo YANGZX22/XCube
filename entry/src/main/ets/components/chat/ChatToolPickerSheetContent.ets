@@ -1,14 +1,14 @@
+import { ImmersiveListSurface, LIST_MATERIAL_CARD_RADIUS } from '../ImmersiveListSurface'
 import { ImmersiveButtonSurface } from '../ImmersiveButtonSurface'
-import { getBlurBottomShadow } from '../../utils/BlurShadowUtils'
 import { uiMaterial } from '@kit.ArkUI'
 import { ToolConfig, ToolPermissionLevel, ToolSourceType } from '../../models/ChatModels'
-import { BUILTIN_BROWSER_TOOL_ID } from '../../services/BuiltinBrowserPolicy'
 import { getAppUiState } from '../../state/AppUiState'
 import { withColorAlpha } from '../../utils/ColorAlphaUtils'
 import { pickLocalizedText } from '../../utils/LocalizedTextUtils'
 import { getLocalizedBuiltinToolDescription, getLocalizedBuiltinToolName } from '../../utils/ToolDisplayTextUtils'
 import { ImmersiveSheetHeader } from '../ImmersiveSheetHeader'
 import { resolveToolSymbolResource } from '../../utils/ToolIconUtils'
+import { BuiltinToolDisplayGroup, getBuiltinToolDisplayGroups } from '../../utils/ToolDisplayOrderUtils'
 
 class McpToolGroup {
   sourceId: string = ''
@@ -19,17 +19,6 @@ class McpToolGroup {
   constructor(sourceId: string, displayName: string) {
     this.sourceId = sourceId
     this.displayName = displayName
-  }
-}
-
-class BuiltinToolCategory {
-  key: string = ''
-  title: string = ''
-  tools: ToolConfig[] = []
-
-  constructor(key: string, title: string) {
-    this.key = key
-    this.title = title
   }
 }
 
@@ -73,47 +62,8 @@ export struct ChatToolPickerSheetContent {
     return builtinTools
   }
 
-  private resolveBuiltinCategoryKey(toolId: string): string {
-    if (toolId === 'web_search' || toolId === 'saved_places' || toolId === 'map_search_route' ||
-      toolId === 'open_map_route') {
-      return 'search_map'
-    }
-    if (toolId === 'read_schedule' || toolId === 'write_schedule' || toolId === 'canvas_document' ||
-      toolId === 'math_chart') {
-      return 'schedule_content'
-    }
-    if (toolId === 'pdf_toolkit' || toolId === 'image_toolkit' || toolId === 'vision_read_image' ||
-      toolId === 'docx_toolkit' || toolId === 'xlsx_toolkit') {
-      return 'file_recognition'
-    }
-    return 'intelligence_development'
-  }
-
-  private getBuiltinToolCategories(): BuiltinToolCategory[] {
-    const categories: BuiltinToolCategory[] = [
-      new BuiltinToolCategory('search_map', pickLocalizedText('搜索与地图', 'Search & Maps')),
-      new BuiltinToolCategory('schedule_content', pickLocalizedText('日程与内容', 'Calendar & Content')),
-      new BuiltinToolCategory('file_recognition', pickLocalizedText('文件与识别', 'Files & Recognition')),
-      new BuiltinToolCategory('intelligence_development',
-        pickLocalizedText('智能与开发', 'Intelligence & Development'))
-    ]
-    const tools = this.getBuiltinChatTools()
-    for (let i = 0; i < tools.length; i++) {
-      const categoryKey = this.resolveBuiltinCategoryKey(tools[i].id)
-      for (let j = 0; j < categories.length; j++) {
-        if (categories[j].key === categoryKey) {
-          categories[j].tools.push(tools[i])
-          break
-        }
-      }
-    }
-    const visibleCategories: BuiltinToolCategory[] = []
-    for (let i = 0; i < categories.length; i++) {
-      if (categories[i].tools.length > 0) {
-        visibleCategories.push(categories[i])
-      }
-    }
-    return visibleCategories
+  private getBuiltinToolCategories(): BuiltinToolDisplayGroup[] {
+    return getBuiltinToolDisplayGroups(this.getBuiltinChatTools())
   }
 
   private getAllVisibleToolIds(): string[] {
@@ -257,7 +207,7 @@ export struct ChatToolPickerSheetContent {
             .maxLines(1)
             .textOverflow({ overflow: TextOverflow.Ellipsis })
 
-          if (tool.id !== BUILTIN_BROWSER_TOOL_ID && tool.permissionLevel === ToolPermissionLevel.WRITE) {
+          if (tool.permissionLevel === ToolPermissionLevel.WRITE) {
             Text(pickLocalizedText('需确认', 'Approval'))
               .fontSize(10)
               .fontColor(this.isDarkMode ? '#FFD6A6' : '#8A4B08')
@@ -352,94 +302,94 @@ export struct ChatToolPickerSheetContent {
             .shadow({ radius: 12, color: 'rgba(15, 23, 42, 0.04)', offsetX: 0, offsetY: 4 })
             .alignItems(HorizontalAlign.Center)
           } else {
-            Row({ space: 10 }) {
-              Column({ space: 2 }) {
-                Text(pickLocalizedText('全部工具', 'All Tools'))
-                  .fontSize(14)
-                  .fontWeight(FontWeight.Medium)
-                  .fontColor($r('app.color.text_primary'))
+            ImmersiveListSurface({ isImmersive: true, cornerRadius: LIST_MATERIAL_CARD_RADIUS }) {
+              Row({ space: 10 }) {
+                Column({ space: 2 }) {
+                  Text(pickLocalizedText('全部工具', 'All Tools'))
+                    .fontSize(14)
+                    .fontWeight(FontWeight.Medium)
+                    .fontColor($r('app.color.text_primary'))
 
-                Text(pickLocalizedText(
-                  `已开启 ${this.getSelectedVisibleToolCount()} / ${this.getAllVisibleToolIds().length}`,
-                  `${this.getSelectedVisibleToolCount()} / ${this.getAllVisibleToolIds().length} enabled`
-                ))
-                  .fontSize(11)
-                  .fontColor($r('app.color.text_secondary'))
-              }
-              .layoutWeight(1)
-              .alignItems(HorizontalAlign.Start)
-
-              Stack({ alignContent: Alignment.TopStart }) {
-                ImmersiveButtonSurface({
-                  materialFactory: () => (new uiMaterial.ImmersiveMaterial({
-                      style: uiMaterial.ImmersiveStyle.ULTRA_THIN,
-                      materialColor: Color.Transparent,
-                      applyShadow: false,
-                      interactive: true,
-                      lightEffect: { color: undefined }
-                    })),
-                  fallbackShadow: false,
-                  cornerRadius: undefined
-                }) {
-                  Button(pickLocalizedText('全部关闭', 'Disable All'))
-                    .height(34)
-                    .padding({ left: 12, right: 12 })
-                    .type(ButtonType.Capsule)
+                  Text(pickLocalizedText(
+                    `已开启 ${this.getSelectedVisibleToolCount()} / ${this.getAllVisibleToolIds().length}`,
+                    `${this.getSelectedVisibleToolCount()} / ${this.getAllVisibleToolIds().length} enabled`
+                  ))
                     .fontSize(11)
                     .fontColor($r('app.color.text_secondary'))
-                    .backgroundColor(Color.Transparent)
-                    .enabled(this.getSelectedVisibleToolCount() > 0)
-                    .onClick(() => {
-                      this.onToggleAll(this.getAllVisibleToolIds(), false)
-                    })
                 }
-              }
-              .height(34)
-              .enabled(this.getSelectedVisibleToolCount() > 0)
-              .opacity(this.getSelectedVisibleToolCount() > 0 ? 1 : 0.45)
-              .clip(false)
+                .layoutWeight(1)
+                .alignItems(HorizontalAlign.Start)
 
-              Stack({ alignContent: Alignment.TopStart }) {
-                ImmersiveButtonSurface({
-                  materialFactory: () => (new uiMaterial.ImmersiveMaterial({
-                      style: uiMaterial.ImmersiveStyle.ULTRA_THIN,
-                      materialColor: Color.Transparent,
-                      applyShadow: false,
-                      interactive: true,
-                      lightEffect: { color: undefined }
-                    })),
-                  fallbackShadow: false,
-                  cornerRadius: undefined
-                }) {
-                  Button(pickLocalizedText('全部开启', 'Enable All'))
-                    .height(34)
-                    .padding({ left: 12, right: 12 })
-                    .type(ButtonType.Capsule)
-                    .fontSize(11)
-                    .fontColor(this.themePrimary)
-                    .backgroundColor(Color.Transparent)
-                    .enabled(!this.areAllVisibleToolsSelected())
-                    .onClick(() => {
-                      this.onToggleAll(this.getAllVisibleToolIds(), true)
-                    })
+                Stack({ alignContent: Alignment.TopStart }) {
+                  ImmersiveButtonSurface({
+                    materialFactory: () => (new uiMaterial.ImmersiveMaterial({
+                        style: uiMaterial.ImmersiveStyle.ULTRA_THIN,
+                        materialColor: Color.Transparent,
+                        applyShadow: false,
+                        interactive: true,
+                        lightEffect: { color: undefined }
+                      })),
+                    fallbackShadow: false,
+                    cornerRadius: undefined
+                  }) {
+                    Button(pickLocalizedText('全部关闭', 'Disable All'))
+                      .height(34)
+                      .padding({ left: 12, right: 12 })
+                      .type(ButtonType.Capsule)
+                      .fontSize(11)
+                      .fontColor($r('app.color.text_secondary'))
+                      .backgroundColor(Color.Transparent)
+                      .enabled(this.getSelectedVisibleToolCount() > 0)
+                      .onClick(() => {
+                        this.onToggleAll(this.getAllVisibleToolIds(), false)
+                      })
+                  }
                 }
+                .height(34)
+                .enabled(this.getSelectedVisibleToolCount() > 0)
+                .opacity(this.getSelectedVisibleToolCount() > 0 ? 1 : 0.45)
+                .clip(false)
+
+                Stack({ alignContent: Alignment.TopStart }) {
+                  ImmersiveButtonSurface({
+                    materialFactory: () => (new uiMaterial.ImmersiveMaterial({
+                        style: uiMaterial.ImmersiveStyle.ULTRA_THIN,
+                        materialColor: Color.Transparent,
+                        applyShadow: false,
+                        interactive: true,
+                        lightEffect: { color: undefined }
+                      })),
+                    fallbackShadow: false,
+                    cornerRadius: undefined
+                  }) {
+                    Button(pickLocalizedText('全部开启', 'Enable All'))
+                      .height(34)
+                      .padding({ left: 12, right: 12 })
+                      .type(ButtonType.Capsule)
+                      .fontSize(11)
+                      .fontColor(this.themePrimary)
+                      .backgroundColor(Color.Transparent)
+                      .enabled(!this.areAllVisibleToolsSelected())
+                      .onClick(() => {
+                        this.onToggleAll(this.getAllVisibleToolIds(), true)
+                      })
+                  }
+                }
+                .height(34)
+                .enabled(!this.areAllVisibleToolsSelected())
+                .opacity(!this.areAllVisibleToolsSelected() ? 1 : 0.45)
+                .clip(false)
               }
-              .height(34)
-              .enabled(!this.areAllVisibleToolsSelected())
-              .opacity(!this.areAllVisibleToolsSelected() ? 1 : 0.45)
-              .clip(false)
+              .width('100%')
+              .padding(12)
+              .borderRadius(LIST_MATERIAL_CARD_RADIUS)
+              .backgroundColor(Color.Transparent)
+              .alignItems(VerticalAlign.Center)
             }
-            .width('100%')
-            .padding(12)
-            .borderRadius(18)
-            .backgroundColor(Color.Transparent)
-            .backdropBlur(24)
-            .shadow(getBlurBottomShadow())
-            .alignItems(VerticalAlign.Center)
 
             if (this.getBuiltinChatTools().length > 0) {
               Column({ space: 16 }) {
-                ForEach(this.getBuiltinToolCategories(), (category: BuiltinToolCategory) => {
+                ForEach(this.getBuiltinToolCategories(), (category: BuiltinToolDisplayGroup) => {
                   Column({ space: 8 }) {
                     Row({ space: 6 }) {
                       Text(category.title)
@@ -455,26 +405,25 @@ export struct ChatToolPickerSheetContent {
                     .width('100%')
                     .padding({ left: 4, right: 4 })
 
-                    Column() {
-                      ForEach(category.tools, (tool: ToolConfig, index: number) => {
-                        this.BuiltinToolListRow(tool)
-                        if (index < category.tools.length - 1) {
-                          Divider()
-                            .strokeWidth(0.5)
-                            .color(getAppUiState().themePrimaryLight)
-                            .margin({ left: 64, right: 12 })
-                        }
-                      }, (tool: ToolConfig) => tool.id)
+                    ImmersiveListSurface({ isImmersive: true, cornerRadius: LIST_MATERIAL_CARD_RADIUS }) {
+                      Column() {
+                        ForEach(category.tools, (tool: ToolConfig, index: number) => {
+                          this.BuiltinToolListRow(tool)
+                          if (index < category.tools.length - 1) {
+                            Divider()
+                              .strokeWidth(0.5)
+                              .color(getAppUiState().themePrimaryLight)
+                              .margin({ left: 64, right: 12 })
+                          }
+                        }, (tool: ToolConfig) => tool.id)
+                      }
+                      .width('100%')
+                      .borderRadius(LIST_MATERIAL_CARD_RADIUS)
+                      .backgroundColor(Color.Transparent)
                     }
-                    .width('100%')
-                    .borderRadius(18)
-                    .backgroundColor(Color.Transparent)
-                    .border({ width: 0.8, color: this.getCardBorderColor() })
-                    .backdropBlur(24)
-                    .shadow(getBlurBottomShadow())
                   }
                   .width('100%')
-                }, (category: BuiltinToolCategory) => category.key)
+                }, (category: BuiltinToolDisplayGroup) => category.key)
               }
               .width('100%')
             }
@@ -488,80 +437,76 @@ export struct ChatToolPickerSheetContent {
                   .width('100%')
 
                 ForEach(this.getMcpToolGroups(), (group: McpToolGroup) => {
-                  Row({ space: 12 }) {
-                    Stack({ alignContent: Alignment.TopStart }) {
-                      ImmersiveButtonSurface({
-                        materialFactory: () => (new uiMaterial.ImmersiveMaterial({
-                          style: uiMaterial.ImmersiveStyle.ULTRA_THIN,
-                          materialColor: Color.Transparent,
-                          applyShadow: false,
-                          interactive: true,
-                          lightEffect: { color: undefined }
-                        })),
-                        fallbackShadow: false,
-                        cornerRadius: undefined
-                      }) {
-                        Button({ type: ButtonType.Circle, stateEffect: false }) {
-                          SymbolGlyph($r('sys.symbol.link'))
-                            .fontSize(19)
-                            .fontColor([this.themePrimary])
+                  ImmersiveListSurface({ isImmersive: true, cornerRadius: LIST_MATERIAL_CARD_RADIUS }) {
+                    Row({ space: 12 }) {
+                      Stack({ alignContent: Alignment.TopStart }) {
+                        ImmersiveButtonSurface({
+                          materialFactory: () => (new uiMaterial.ImmersiveMaterial({
+                            style: uiMaterial.ImmersiveStyle.ULTRA_THIN,
+                            materialColor: Color.Transparent,
+                            applyShadow: false,
+                            interactive: true,
+                            lightEffect: { color: undefined }
+                          })),
+                          fallbackShadow: false,
+                          cornerRadius: undefined
+                        }) {
+                          Button({ type: ButtonType.Circle, stateEffect: false }) {
+                            SymbolGlyph($r('sys.symbol.link'))
+                              .fontSize(19)
+                              .fontColor([this.themePrimary])
+                          }
+                          .width(40)
+                          .height(40)
+                          .padding(0)
+                          .backgroundColor(Color.Transparent)
+                          .onClick(() => {
+                            this.onToggleMcpGroup(group.toolIds, !this.isMcpToolGroupSelected(group))
+                          })
                         }
-                        .width(40)
-                        .height(40)
-                        .padding(0)
-                        .backgroundColor(Color.Transparent)
-                        .onClick(() => {
-                          this.onToggleMcpGroup(group.toolIds, !this.isMcpToolGroupSelected(group))
+                      }
+                      .width(40)
+                      .height(40)
+                      .clip(false)
+
+                      Column({ space: 8 }) {
+                        Row({ space: 8 }) {
+                          Text(group.displayName)
+                            .fontSize(15)
+                            .fontWeight(FontWeight.Medium)
+                            .fontColor($r('app.color.text_primary'))
+                            .layoutWeight(1)
+                            .maxLines(1)
+                            .textOverflow({ overflow: TextOverflow.Ellipsis })
+
+                          if (group.hasWriteTool) {
+                            Text(pickLocalizedText('需确认', 'Approval'))
+                              .fontSize(10)
+                              .fontColor(this.isDarkMode ? '#FFD6A6' : '#8A4B08')
+                              .padding({ left: 8, right: 8, top: 4, bottom: 4 })
+                              .borderRadius(999)
+                              .backgroundColor(this.isDarkMode ? '#3B2413' : '#FFF3E8')
+                          }
+                        }
+                        .width('100%')
+                        .alignItems(VerticalAlign.Center)
+                      }
+                      .layoutWeight(1)
+                      .alignItems(HorizontalAlign.Start)
+
+                      Toggle({ type: ToggleType.Switch, isOn: this.isMcpToolGroupSelected(group) })
+                        .selectedColor(this.themePrimary)
+                        .systemMaterial(new uiMaterial.Material())
+                        .switchPointColor(Color.White)
+                        .onChange((value: boolean) => {
+                          this.onToggleMcpGroup(group.toolIds, value)
                         })
-                      }
                     }
-                    .width(40)
-                    .height(40)
-                    .clip(false)
-
-                    Column({ space: 8 }) {
-                      Row({ space: 8 }) {
-                        Text(group.displayName)
-                          .fontSize(15)
-                          .fontWeight(FontWeight.Medium)
-                          .fontColor($r('app.color.text_primary'))
-                          .layoutWeight(1)
-                          .maxLines(1)
-                          .textOverflow({ overflow: TextOverflow.Ellipsis })
-
-                        if (group.hasWriteTool) {
-                          Text(pickLocalizedText('需确认', 'Approval'))
-                            .fontSize(10)
-                            .fontColor(this.isDarkMode ? '#FFD6A6' : '#8A4B08')
-                            .padding({ left: 8, right: 8, top: 4, bottom: 4 })
-                            .borderRadius(999)
-                            .backgroundColor(this.isDarkMode ? '#3B2413' : '#FFF3E8')
-                        }
-                      }
-                      .width('100%')
-                      .alignItems(VerticalAlign.Center)
-                    }
-                    .layoutWeight(1)
-                    .alignItems(HorizontalAlign.Start)
-
-                    Toggle({ type: ToggleType.Switch, isOn: this.isMcpToolGroupSelected(group) })
-                      .selectedColor(this.themePrimary)
-                      .systemMaterial(new uiMaterial.Material())
-                      .switchPointColor(Color.White)
-                      .onChange((value: boolean) => {
-                        this.onToggleMcpGroup(group.toolIds, value)
-                      })
+                    .width('100%')
+                    .padding(14)
+                    .borderRadius(LIST_MATERIAL_CARD_RADIUS)
+                    .backgroundColor(Color.Transparent)
                   }
-                  .width('100%')
-                  .padding(14)
-                  .borderRadius(18)
-                  .backgroundColor(Color.Transparent)
-                  .border({
-                    width: 0.8,
-                    color: this.getCardBorderColor()
-                  })
-                  .backdropBlur(24)
-                  .shadow(getBlurBottomShadow())
                 }, (group: McpToolGroup) => group.sourceId)
               }
               .width('100%')

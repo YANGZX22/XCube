@@ -1,3 +1,6 @@
+import { getSettingsTypography, SETTINGS_SUBTITLE_LINE_HEIGHT } from './settings/SettingsTypography'
+import { ImmersiveListSurface, LIST_MATERIAL_CARD_RADIUS } from './ImmersiveListSurface'
+import { ImmersiveFieldSurface } from './ImmersiveFieldSurface'
 import { ImmersiveButtonSurface } from './ImmersiveButtonSurface'
 import { getBlurBottomShadow } from '../utils/BlurShadowUtils'
 import { uiMaterial } from '@kit.ArkUI'
@@ -478,6 +481,8 @@ struct SavedPlaceEditorSheetContent {
   build() {
     Column() {
       ImmersiveSheetHeader({
+        titleFont: getSettingsTypography().pageTitle,
+        titleColor: getAppUiState().themeTextPrimary,
         title: this.originalPlace.id !== ''
           ? pickLocalizedText('编辑常用地点', 'Edit Saved Place')
           : pickLocalizedText('添加常用地点', 'Add Saved Place'),
@@ -490,37 +495,38 @@ struct SavedPlaceEditorSheetContent {
       })
 
       Column({ space: 12 }) {
-        TextInput({
-          text: this.label,
-          placeholder: pickLocalizedText('标签，例如：家、公司', 'Label, such as Home or Work')
-        })
-          .height(44)
-          .fontSize(14)
-          .backgroundColor(Color.Transparent)
-          .borderRadius(14)
-          .backdropBlur(16)
-          .shadow(getBlurBottomShadow())
-          .onChange((value: string): void => {
-            this.label = value
-            this.errorMessage = ''
+        ImmersiveFieldSurface({ cornerRadius: 14 }) {
+          TextInput({
+            text: this.label,
+            placeholder: pickLocalizedText('标签，例如：家、公司', 'Label, such as Home or Work')
           })
-
-        Row({ space: 8 }) {
-          Search({
-            value: this.searchQuery,
-            placeholder: pickLocalizedText('搜索地址或地点', 'Search address or place')
-          })
-            .layoutWeight(1)
-            .height(44)
+            .width('100%')
             .backgroundColor(Color.Transparent)
-            .borderRadius(22)
-            .backdropBlur(16)
-            .shadow(getBlurBottomShadow())
+            .height(44)
+            .fontSize(14)
+            .borderRadius(14)
             .onChange((value: string): void => {
-              this.searchQuery = value
+              this.label = value
               this.errorMessage = ''
             })
-            .onSubmit((_value: string): void => this.handleSearch())
+        }
+
+        Row({ space: 8 }) {
+          ImmersiveFieldSurface({ cornerRadius: 22, layoutWeightValue: 1 }) {
+            Search({
+              value: this.searchQuery,
+              placeholder: pickLocalizedText('搜索地址或地点', 'Search address or place')
+            })
+              .width('100%')
+              .backgroundColor(Color.Transparent)
+              .height(44)
+              .borderRadius(22)
+              .onChange((value: string): void => {
+                this.searchQuery = value
+                this.errorMessage = ''
+              })
+              .onSubmit((_value: string): void => this.handleSearch())
+          }
 
           Stack({ alignContent: Alignment.TopStart }) {
             ImmersiveButtonSurface({
@@ -578,30 +584,30 @@ struct SavedPlaceEditorSheetContent {
           Scroll() {
             Row({ space: 8 }) {
               ForEach(this.searchResults, (place: MapPlaceResult) => {
-                Column({ space: 4 }) {
-                  Text(place.name)
-                    .fontSize(13)
-                    .fontWeight(FontWeight.Medium)
-                    .fontColor($r('app.color.text_primary'))
-                    .maxLines(1)
-                    .textOverflow({ overflow: TextOverflow.Ellipsis })
-                    .width('100%')
-                  Text(place.address)
-                    .fontSize(11)
-                    .fontColor($r('app.color.text_secondary'))
-                    .maxLines(2)
-                    .textOverflow({ overflow: TextOverflow.Ellipsis })
-                    .width('100%')
+                ImmersiveListSurface({ isImmersive: true, layoutWidth: 220, cornerRadius: LIST_MATERIAL_CARD_RADIUS }) {
+                  Column({ space: 4 }) {
+                    Text(place.name)
+                      .font(getSettingsTypography().itemTitle)
+                      .fontColor(getAppUiState().themeTextPrimary)
+                      .maxLines(1)
+                      .textOverflow({ overflow: TextOverflow.Ellipsis })
+                      .width('100%')
+                    Text(place.address)
+                      .font(getSettingsTypography().subtitle)
+                      .lineHeight(SETTINGS_SUBTITLE_LINE_HEIGHT)
+                      .fontColor(getAppUiState().themeTextSecondary)
+                      .maxLines(2)
+                      .textOverflow({ overflow: TextOverflow.Ellipsis })
+                      .width('100%')
+                  }
+                  .width(220)
+                  .height(72)
+                  .padding(10)
+                  .borderRadius(LIST_MATERIAL_CARD_RADIUS)
+                  .backgroundColor(Color.Transparent)
+                  .alignItems(HorizontalAlign.Start)
+                  .onClick((): void => this.selectSearchResult(place))
                 }
-                .width(220)
-                .height(72)
-                .padding(10)
-                .borderRadius(14)
-                .backgroundColor(Color.Transparent)
-                .backdropBlur(16)
-                .shadow(getBlurBottomShadow())
-                .alignItems(HorizontalAlign.Start)
-                .onClick((): void => this.selectSearchResult(place))
               }, (place: MapPlaceResult) => `${place.siteId}_${place.latitude}_${place.longitude}`)
             }
             .height(88)
@@ -640,41 +646,42 @@ struct SavedPlaceEditorSheetContent {
         .constraintSize({ minHeight: 220 })
 
         if (this.isValidCoordinate(this.selectedLatitude, this.selectedLongitude)) {
-          Row({ space: 10 }) {
-            SymbolGlyph($r('sys.symbol.map'))
-              .fontSize(18)
-              .fontColor([this.themePrimary])
-            Column({ space: 3 }) {
-              Text(this.selectedName !== '' ? this.selectedName : pickLocalizedText('已选择地点', 'Selected place'))
-                .fontSize(13)
-                .fontWeight(FontWeight.Medium)
-                .fontColor($r('app.color.text_primary'))
-                .maxLines(1)
-                .textOverflow({ overflow: TextOverflow.Ellipsis })
-                .width('100%')
-              Text(this.isResolving ? pickLocalizedText('正在解析地址…', 'Looking up address…') :
-                (this.selectedAddress !== '' ? this.selectedAddress :
-                  `${this.selectedLatitude.toFixed(6)}, ${this.selectedLongitude.toFixed(6)}`))
-                .fontSize(11)
-                .fontColor($r('app.color.text_secondary'))
-                .maxLines(2)
-                .textOverflow({ overflow: TextOverflow.Ellipsis })
-                .width('100%')
+          ImmersiveListSurface({ isImmersive: true, cornerRadius: LIST_MATERIAL_CARD_RADIUS }) {
+            Row({ space: 10 }) {
+              SymbolGlyph($r('sys.symbol.map'))
+                .fontSize(18)
+                .fontColor([this.themePrimary])
+              Column({ space: 3 }) {
+                Text(this.selectedName !== '' ? this.selectedName : pickLocalizedText('已选择地点', 'Selected place'))
+                  .font(getSettingsTypography().itemTitle)
+                  .fontColor(getAppUiState().themeTextPrimary)
+                  .maxLines(1)
+                  .textOverflow({ overflow: TextOverflow.Ellipsis })
+                  .width('100%')
+                Text(this.isResolving ? pickLocalizedText('正在解析地址…', 'Looking up address…') :
+                  (this.selectedAddress !== '' ? this.selectedAddress :
+                    `${this.selectedLatitude.toFixed(6)}, ${this.selectedLongitude.toFixed(6)}`))
+                  .font(getSettingsTypography().subtitle)
+                  .lineHeight(SETTINGS_SUBTITLE_LINE_HEIGHT)
+                  .fontColor(getAppUiState().themeTextSecondary)
+                  .maxLines(2)
+                  .textOverflow({ overflow: TextOverflow.Ellipsis })
+                  .width('100%')
+              }
+              .layoutWeight(1)
+              .alignItems(HorizontalAlign.Start)
             }
-            .layoutWeight(1)
-            .alignItems(HorizontalAlign.Start)
+            .width('100%')
+            .padding(10)
+            .borderRadius(LIST_MATERIAL_CARD_RADIUS)
+            .backgroundColor(Color.Transparent)
           }
-          .width('100%')
-          .padding(10)
-          .borderRadius(14)
-          .backgroundColor(Color.Transparent)
-          .backdropBlur(16)
-          .shadow(getBlurBottomShadow())
         }
 
         if (this.errorMessage !== '') {
           Text(this.errorMessage)
-            .fontSize(11)
+            .font(getSettingsTypography().subtitle)
+            .lineHeight(SETTINGS_SUBTITLE_LINE_HEIGHT)
             .fontColor($r('app.color.status_error'))
             .width('100%')
         }
@@ -691,6 +698,7 @@ struct SavedPlaceEditorSheetContent {
 
 @ComponentV2
 export struct SavedPlacesCard {
+  @Param embedded: boolean = false
   @Param toolEnabled: boolean = false
   @Event onToggle: (enabled: boolean) => void = (_enabled: boolean): void => {}
   @Local places: SavedPlace[] = []
@@ -788,166 +796,157 @@ export struct SavedPlacesCard {
 
   build() {
     Stack() {
-      Column({ space: 12 }) {
-        Row({ space: 12 }) {
-          ChatFloatingImmersiveButton({
-            barWidth: 44,
-            barHeight: 44,
-            iconResource: $r('sys.symbol.map'),
-            iconSize: 20,
-            iconColor: [this.themePrimary],
-            responsePadding: 0,
-            onButtonClick: (): void => this.openAdd()
-          }) {
-            SymbolGlyph($r('sys.symbol.map'))
-              .fontSize(20)
-              .fontColor([this.themePrimary])
-          }
+      ImmersiveListSurface({ isImmersive: !this.embedded, cornerRadius: LIST_MATERIAL_CARD_RADIUS }) {
+        Column({ space: 12 }) {
+          Row({ space: 12 }) {
+            ChatFloatingImmersiveButton({
+              barWidth: 44,
+              barHeight: 44,
+              iconResource: $r('sys.symbol.map'),
+              iconSize: 20,
+              iconColor: [this.themePrimary],
+              responsePadding: 0,
+              onButtonClick: (): void => this.openAdd()
+            }) {
+              SymbolGlyph($r('sys.symbol.map'))
+                .fontSize(20)
+                .fontColor([this.themePrimary])
+            }
 
-          Column({ space: 5 }) {
-            Text(pickLocalizedText('常用地点', 'Saved Places'))
-              .fontSize(17)
-              .fontWeight(FontWeight.Bold)
-              .fontColor($r('app.color.text_primary'))
-              .width('100%')
-            Text(pickLocalizedText(
-              this.places.length > 0 ? `已保存 ${this.places.length} 个地点，标签对模型开放` : '保存“家”“公司”等地点标签',
-              this.places.length > 0 ? `${this.places.length} places available to the model by label` :
-                'Save labels such as Home and Work'
-            ))
-              .fontSize(12)
-              .fontColor($r('app.color.text_secondary'))
-              .width('100%')
-          }
-          .layoutWeight(1)
-          .alignItems(HorizontalAlign.Start)
+            Column({ space: 5 }) {
+              Text(pickLocalizedText('常用地点', 'Saved Places'))
+                .font(getSettingsTypography().itemTitle)
+                .fontColor(getAppUiState().themeTextPrimary)
+                .width('100%')
+              Text(pickLocalizedText(
+                this.places.length > 0 ? `已保存 ${this.places.length} 个地点` : '保存家、公司等常用地点。',
+                this.places.length > 0 ? `${this.places.length} saved places` :
+                  'Save familiar places such as home and work.'
+              ))
+                .font(getSettingsTypography().subtitle)
+                .lineHeight(SETTINGS_SUBTITLE_LINE_HEIGHT)
+                .fontColor(getAppUiState().themeTextSecondary)
+                .width('100%')
+            }
+            .layoutWeight(1)
+            .alignItems(HorizontalAlign.Start)
 
-          Toggle({ type: ToggleType.Switch, isOn: this.toolEnabled })
-            .selectedColor(this.themePrimary)
-            .systemMaterial(new uiMaterial.Material())
-            .switchPointColor(Color.White)
-            .onChange((value: boolean): void => this.onToggle(value))
-        }
-        .width('100%')
-        .alignItems(VerticalAlign.Center)
-
-        Text(pickLocalizedText(
-          '地点仅保存在本机。所有标签对模型开放；模型读取某个标签对应的地址和坐标前必须获得同意，且不会修改或删除地点。',
-          'Places stay on this device. All labels are available to the model; reading an address and coordinates behind a label requires approval and cannot modify or delete places.'
-        ))
-          .fontSize(12)
-          .lineHeight(18)
-          .fontColor($r('app.color.text_secondary'))
-          .width('100%')
-
-        if (this.places.length > 0) {
-          Column() {
-            ForEach(this.places, (place: SavedPlace, index: number) => {
-              Row({ space: 10 }) {
-                Text(place.label)
-                  .fontSize(12)
-                  .fontWeight(FontWeight.Medium)
-                  .fontColor(this.themePrimary)
-                  .padding({ left: 9, right: 9, top: 5, bottom: 5 })
-                  .borderRadius(12)
-                  .backgroundColor(getAppUiState().themePrimaryLight)
-
-                Text(this.getPlaceSummary(place))
-                  .fontSize(12)
-                  .fontColor($r('app.color.text_secondary'))
-                  .layoutWeight(1)
-                  .maxLines(2)
-                  .textOverflow({ overflow: TextOverflow.Ellipsis })
-
-                Stack({ alignContent: Alignment.TopStart }) {
-                  ImmersiveButtonSurface({
-                    materialFactory: () => (createSavedPlaceMaterial(true)),
-                    cornerRadius: undefined
-                  }) {
-                    Button({ type: ButtonType.Circle, stateEffect: false }) {
-                      SymbolGlyph($r('sys.symbol.square_and_pencil'))
-                        .fontSize(15)
-                        .fontColor([this.themePrimary])
-                    }
-                    .width(34)
-                    .height(34)
-                    .padding(0)
-                    .backgroundColor(Color.Transparent)
-                    .onClick((): void => this.openEdit(place))
-                  }
-                }
-                .width(34)
-                .height(34)
-                .clip(false)
-
-                Stack({ alignContent: Alignment.TopStart }) {
-                  ImmersiveButtonSurface({
-                    materialFactory: () => (createSavedPlaceMaterial(true)),
-                    cornerRadius: undefined
-                  }) {
-                    Button({ type: ButtonType.Circle, stateEffect: false }) {
-                      SymbolGlyph($r('sys.symbol.trash'))
-                        .fontSize(15)
-                        .fontColor([$r('app.color.status_error')])
-                    }
-                    .width(34)
-                    .height(34)
-                    .padding(0)
-                    .backgroundColor(Color.Transparent)
-                    .onClick((): void => this.confirmDelete(place))
-                  }
-                }
-                .width(34)
-                .height(34)
-                .clip(false)
-              }
-              .width('100%')
-              .padding({ top: 9, bottom: 9 })
-              .alignItems(VerticalAlign.Center)
-
-              if (index < this.places.length - 1) {
-                Divider()
-                  .strokeWidth(0.5)
-                  .color(getAppUiState().themePrimaryLight)
-              }
-            }, (place: SavedPlace) => place.id)
+            Toggle({ type: ToggleType.Switch, isOn: this.toolEnabled })
+              .selectedColor(this.themePrimary)
+              .systemMaterial(new uiMaterial.Material())
+              .switchPointColor(Color.White)
+              .onChange((value: boolean): void => this.onToggle(value))
           }
           .width('100%')
-        }
+          .alignItems(VerticalAlign.Center)
 
-        Stack({ alignContent: Alignment.TopStart }) {
-          ImmersiveButtonSurface({
-            materialFactory: () => (createSavedPlaceMaterial(true)),
-            cornerRadius: undefined
-          }) {
-            Button({ type: ButtonType.Capsule, stateEffect: false }) {
-              Row({ space: 6 }) {
-                SymbolGlyph($r('sys.symbol.plus'))
-                  .fontSize(14)
-                  .fontColor([this.themePrimary])
-                Text(pickLocalizedText('添加地点', 'Add Place'))
-                  .fontSize(12)
-                  .fontWeight(FontWeight.Medium)
-                  .fontColor(this.themePrimary)
-              }
+          if (this.places.length > 0) {
+            Column() {
+              ForEach(this.places, (place: SavedPlace, index: number) => {
+                Row({ space: 10 }) {
+                  Text(place.label)
+                    .fontSize(12)
+                    .fontWeight(FontWeight.Medium)
+                    .fontColor(this.themePrimary)
+                    .padding({ left: 9, right: 9, top: 5, bottom: 5 })
+                    .borderRadius(12)
+                    .backgroundColor(getAppUiState().themePrimaryLight)
+
+                  Text(this.getPlaceSummary(place))
+                    .font(getSettingsTypography().subtitle)
+                    .lineHeight(SETTINGS_SUBTITLE_LINE_HEIGHT)
+                    .fontColor(getAppUiState().themeTextSecondary)
+                    .layoutWeight(1)
+                    .maxLines(2)
+                    .textOverflow({ overflow: TextOverflow.Ellipsis })
+
+                  Stack({ alignContent: Alignment.TopStart }) {
+                    ImmersiveButtonSurface({
+                      materialFactory: () => (createSavedPlaceMaterial(true)),
+                      cornerRadius: undefined
+                    }) {
+                      Button({ type: ButtonType.Circle, stateEffect: false }) {
+                        SymbolGlyph($r('sys.symbol.square_and_pencil'))
+                          .fontSize(15)
+                          .fontColor([this.themePrimary])
+                      }
+                      .width(34)
+                      .height(34)
+                      .padding(0)
+                      .backgroundColor(Color.Transparent)
+                      .onClick((): void => this.openEdit(place))
+                    }
+                  }
+                  .width(34)
+                  .height(34)
+                  .clip(false)
+
+                  Stack({ alignContent: Alignment.TopStart }) {
+                    ImmersiveButtonSurface({
+                      materialFactory: () => (createSavedPlaceMaterial(true)),
+                      cornerRadius: undefined
+                    }) {
+                      Button({ type: ButtonType.Circle, stateEffect: false }) {
+                        SymbolGlyph($r('sys.symbol.trash'))
+                          .fontSize(15)
+                          .fontColor([$r('app.color.status_error')])
+                      }
+                      .width(34)
+                      .height(34)
+                      .padding(0)
+                      .backgroundColor(Color.Transparent)
+                      .onClick((): void => this.confirmDelete(place))
+                    }
+                  }
+                  .width(34)
+                  .height(34)
+                  .clip(false)
+                }
+                .width('100%')
+                .padding({ top: 9, bottom: 9 })
+                .alignItems(VerticalAlign.Center)
+
+                if (index < this.places.length - 1) {
+                  Divider()
+                    .strokeWidth(0.5)
+                    .color(getAppUiState().themePrimaryLight)
+                }
+              }, (place: SavedPlace) => place.id)
             }
             .width('100%')
-            .height(38)
-            .backgroundColor(Color.Transparent)
-            .onClick((): void => this.openAdd())
           }
+
+          Stack({ alignContent: Alignment.TopStart }) {
+            ImmersiveButtonSurface({
+              materialFactory: () => (createSavedPlaceMaterial(true)),
+              cornerRadius: undefined
+            }) {
+              Button({ type: ButtonType.Capsule, stateEffect: false }) {
+                Row({ space: 6 }) {
+                  SymbolGlyph($r('sys.symbol.plus'))
+                    .fontSize(14)
+                    .fontColor([this.themePrimary])
+                  Text(pickLocalizedText('添加地点', 'Add Place'))
+                    .fontSize(12)
+                    .fontWeight(FontWeight.Medium)
+                    .fontColor(this.themePrimary)
+                }
+              }
+              .width('100%')
+              .height(38)
+              .backgroundColor(Color.Transparent)
+              .onClick((): void => this.openAdd())
+            }
+          }
+          .width('100%')
+          .height(38)
+          .clip(false)
         }
         .width('100%')
-        .height(38)
-        .clip(false)
+        .padding(16)
+        .borderRadius(LIST_MATERIAL_CARD_RADIUS)
+        .backgroundColor(Color.Transparent)
       }
-      .width('100%')
-      .padding(16)
-      .borderRadius(16)
-      .backgroundColor(Color.Transparent)
-      .border({ width: 0.5, color: getAppUiState().themePrimaryLight })
-      .backdropBlur(16)
-      .shadow(getBlurBottomShadow())
 
       Column()
         .width(0)

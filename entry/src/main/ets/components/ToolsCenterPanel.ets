@@ -1,16 +1,19 @@
-import { getBlurBottomShadow } from '../utils/BlurShadowUtils'
+import { SettingsSectionHeading } from './settings/SettingsSectionHeading'
+import { getSettingsTypography, SETTINGS_HEADING_CONTENT_GAP, SETTINGS_SUBTITLE_LINE_HEIGHT } from './settings/SettingsTypography'
+import { ImmersiveListSurface, LIST_MATERIAL_CARD_RADIUS } from './ImmersiveListSurface'
+import { ImmersiveFieldSurface } from './ImmersiveFieldSurface'
 import { uiMaterial } from '@kit.ArkUI'
 import { ToolConfig, SearchEngine, ToolSourceType } from '../models/ChatModels'
 import { McpAuthType, McpServerConfig } from '../models/McpModels'
 import { ToolRegistry } from '../services/ToolRegistry'
 import { BUILTIN_BROWSER_TOOL_ID } from '../services/BuiltinBrowserPolicy'
+import { getBuiltinBrowserManager } from '../services/BuiltinBrowserManager'
+import { BrowserSettingsSheet } from './BrowserSettingsSheet'
 import { McpService } from '../services/McpService'
 import { SkillConfig, SkillService } from '../services/SkillService'
 import { ServiceRegistry } from '../services/ServiceRegistry'
 import {
   COMPACT_TOOL_ID,
-  EMAIL_READ_TOOL_ID,
-  EMAIL_SEND_TOOL_ID,
   KNOWLEDGE_SEARCH_TOOL_ID,
   MODLENS_READ_IMAGE_TOOL_ID,
   registerBuiltinTools,
@@ -19,8 +22,6 @@ import {
   SUB_AGENT_RESULT_TOOL_ID,
   USE_SKILL_TOOL_ID
 } from '../config/BuiltinTools'
-import { getBuiltinBrowserManager } from '../services/BuiltinBrowserManager'
-import { BrowserSettingsSheet } from './BrowserSettingsSheet'
 import { MODLENS_DEFAULT_GATEWAY_URL } from '../services/ModLensVisionService'
 import { ContextCompactionService } from '../services/ContextCompactionService'
 import {
@@ -43,9 +44,12 @@ import {
 import { showSnackBar, SnackBarDisplayOptions, SnackBarTone } from '../utils/ToastUtil'
 import { getAppUiState } from '../state/AppUiState'
 import { formatLocalizedCount, pickLocalizedText } from '../utils/LocalizedTextUtils'
+import { getSettingsSheetContentMaxHeight } from '../utils/SettingsPageLayoutHelper'
+import { shouldUseWrappedMaterial } from '../utils/WrappedMaterialSupport'
 import { withColorAlpha } from '../utils/ColorAlphaUtils'
 import { ChatFloatingImmersiveButton } from './ChatFloatingImmersiveButton'
 import { ImmersiveSheetHeader } from './ImmersiveSheetHeader'
+import { SETTINGS_FORM_VALUE_FONT_SIZE, SettingsFormSelect } from './settings/SettingsFormSelect'
 import { SavedPlacesCard } from './SavedPlacesCard'
 import { EmailAccountSettingsCard } from './EmailAccountSettingsCard'
 import { getLocalizedBuiltinToolDescription, getLocalizedBuiltinToolName } from '../utils/ToolDisplayTextUtils'
@@ -58,6 +62,12 @@ import {
 } from '../utils/CustomHeaderUtils'
 import { DEEPSEEK_WEB_SEARCH_DEFAULT_BASE_URL } from '../utils/DeepSeekWebSearchUtils'
 import { resolveToolSymbolResource } from '../utils/ToolIconUtils'
+import {
+  BuiltinToolCategory,
+  getBuiltinToolCategory,
+  getBuiltinToolCategoryTitle,
+  sortToolsForDisplay
+} from '../utils/ToolDisplayOrderUtils'
 
 @ObservedV2
 class McpHeaderEntry {
@@ -76,6 +86,7 @@ class McpHeaderEntry {
 @ComponentV2
 export struct ToolsCenterPanel {
   @Param showHeader: boolean = true
+  @Param contentMaxWidth: number = 99999
   @Param contentBottomPadding: number = 24
   @Param contentTopPadding: number = 0
   @Param contentScroller: Scroller = new Scroller()
@@ -99,9 +110,9 @@ export struct ToolsCenterPanel {
   @Local knowledgeSearchCallLimit: number = UNLIMITED_RETRIEVAL_CALL_LIMIT
   @Local isLoading: boolean = false
   @Local isRefreshingMcpServers: boolean = false
-  @Local showBrowserConfigSheet: boolean = false
   @Local showSearchConfigSheet: boolean = false
   @Local showModLensConfigSheet: boolean = false
+  @Local showBrowserConfigSheet: boolean = false
   @Local modLensGatewayUrl: string = ''
   @Local modLensGatewayToken: string = ''
   @Local modLensConnectionMessage: string = ''
@@ -197,23 +208,22 @@ export struct ToolsCenterPanel {
 
   private syncBuiltinToolsFromRegistry(): void {
     const allTools = this.toolRegistry.getAllToolConfigs()
-    const emailTools: ToolConfig[] = []
     const builtin: ToolConfig[] = []
     for (let i = 0; i < allTools.length; i++) {
-      // 联网搜索、Skill、上下文压缩各有独立卡片；知识库只在知识库页管理；
+      // 联网搜索、Skill、上下文压缩和常用地点使用专用设置项；知识库只在知识库页管理；
       // sub_agent_result/sub_agent_message 随 sub_agent 一起曝光，不单独开关
       if (allTools[i].sourceType === ToolSourceType.BUILTIN && allTools[i].id !== this.searchToolId &&
         allTools[i].id !== USE_SKILL_TOOL_ID && allTools[i].id !== KNOWLEDGE_SEARCH_TOOL_ID &&
         allTools[i].id !== COMPACT_TOOL_ID && allTools[i].id !== SUB_AGENT_RESULT_TOOL_ID &&
         allTools[i].id !== SUB_AGENT_MESSAGE_TOOL_ID && allTools[i].id !== SAVED_PLACES_TOOL_ID) {
-        if (allTools[i].id === EMAIL_READ_TOOL_ID || allTools[i].id === EMAIL_SEND_TOOL_ID) {
-          emailTools.push(allTools[i])
-        } else {
-          builtin.push(allTools[i])
-        }
+        builtin.push(allTools[i])
       }
     }
-    this.builtinTools = emailTools.concat(builtin)
+    this.builtinTools = sortToolsForDisplay(builtin)
+  }
+
+  private getBuiltinToolsByCategory(category: BuiltinToolCategory): ToolConfig[] {
+    return this.builtinTools.filter((tool: ToolConfig): boolean => getBuiltinToolCategory(tool.id) === category)
   }
 
   private async loadSelectedToolIds(): Promise<void> {
@@ -1587,6 +1597,8 @@ export struct ToolsCenterPanel {
   ModLensConfigSheetBuilder() {
     Column() {
       ImmersiveSheetHeader({
+        titleFont: getSettingsTypography().pageTitle,
+        titleColor: getAppUiState().themeTextPrimary,
         title: pickLocalizedText('视觉理解', 'Vision'),
         showTrailing: true,
         trailingColor: this.themePrimary,
@@ -1602,89 +1614,91 @@ export struct ToolsCenterPanel {
       Scroll() {
         Column({ space: 16 }) {
           Text(pickLocalizedText(
-            'ModLens 为未开启视觉能力的模型生成 OCR、布局、语义与视觉线索。需先在电脑或服务器运行项目内 tools/modlens-gateway。',
-            'ModLens produces OCR, layout, semantic, and visual evidence for models without native vision. Run tools/modlens-gateway on a computer or server first.'
+            '连接图片识别服务，读取图片内容。',
+            'Connect an image recognition service to read image content.'
           ))
-            .fontSize(12)
-            .lineHeight(18)
-            .fontColor($r('app.color.text_secondary'))
+            .font(getSettingsTypography().subtitle)
+            .lineHeight(SETTINGS_SUBTITLE_LINE_HEIGHT)
+            .fontColor(getAppUiState().themeTextSecondary)
             .width('100%')
 
-          Column({ space: 8 }) {
-            Text(pickLocalizedText('网关地址', 'Gateway URL'))
-              .fontSize(12)
-              .fontColor($r('app.color.text_secondary'))
-              .width('100%')
+          ImmersiveListSurface({ isImmersive: true, cornerRadius: LIST_MATERIAL_CARD_RADIUS }) {
+            Column({ space: SETTINGS_HEADING_CONTENT_GAP }) {
+              Text(pickLocalizedText('网关地址', 'Gateway URL'))
+                .font(getSettingsTypography().fieldLabel)
+                .fontColor(getAppUiState().themeTextSecondary)
+                .width('100%')
 
-            TextInput({
-              text: this.modLensGatewayUrl,
-              placeholder: MODLENS_DEFAULT_GATEWAY_URL
-            })
-              .onChange((value: string) => {
-                this.modLensGatewayUrl = value
-                this.modLensConnectionMessage = ''
-              })
-              .fontSize(13)
-              .width('100%')
-              .height(42)
-              .borderRadius(10)
-              .backgroundColor(getAppUiState().themeBackground)
-              .padding({ left: 12, right: 12 })
+              ImmersiveFieldSurface({ cornerRadius: 10 }) {
+                TextInput({
+                  text: this.modLensGatewayUrl,
+                  placeholder: MODLENS_DEFAULT_GATEWAY_URL
+                })
+                  .width('100%')
+                  .backgroundColor(Color.Transparent)
+                  .onChange((value: string) => {
+                    this.modLensGatewayUrl = value
+                    this.modLensConnectionMessage = ''
+                  })
+                  .fontSize(13)
+                  .height(42)
+                  .borderRadius(10)
+                  .padding({ left: 12, right: 12 })
+              }
 
-            Text(pickLocalizedText(
-              '真机请填写运行网关的电脑局域网地址，例如 http://192.168.1.10:8787。',
-              'For a physical device, use the LAN address of the computer running the gateway, for example http://192.168.1.10:8787.'
-            ))
-              .fontSize(11)
-              .lineHeight(16)
-              .fontColor($r('app.color.text_tertiary'))
-              .width('100%')
+              Text(pickLocalizedText(
+                '输入识别服务的地址，例如 http://192.168.1.10:8787。',
+                'Enter the service address, such as http://192.168.1.10:8787.'
+              ))
+                .font(getSettingsTypography().subtitle)
+                .lineHeight(SETTINGS_SUBTITLE_LINE_HEIGHT)
+                .fontColor(getAppUiState().themeTextSecondary)
+                .width('100%')
+            }
+            .width('100%')
+            .padding(14)
+            .borderRadius(LIST_MATERIAL_CARD_RADIUS)
+            .backgroundColor(Color.Transparent)
           }
-          .width('100%')
-          .padding(14)
-          .borderRadius(16)
-          .border({ width: 0.5, color: getAppUiState().themePrimaryLight })
-          .backgroundColor(Color.Transparent)
-          .backdropBlur(16)
-          .shadow(getBlurBottomShadow())
 
-          Column({ space: 8 }) {
-            Text(pickLocalizedText('Bearer 令牌（推荐）', 'Bearer token (recommended)'))
-              .fontSize(12)
-              .fontColor($r('app.color.text_secondary'))
-              .width('100%')
+          ImmersiveListSurface({ isImmersive: true, cornerRadius: LIST_MATERIAL_CARD_RADIUS }) {
+            Column({ space: SETTINGS_HEADING_CONTENT_GAP }) {
+              Text(pickLocalizedText('Bearer 令牌（推荐）', 'Bearer token (recommended)'))
+                .font(getSettingsTypography().fieldLabel)
+                .fontColor(getAppUiState().themeTextSecondary)
+                .width('100%')
 
-            TextInput({
-              text: this.modLensGatewayToken,
-              placeholder: pickLocalizedText('与网关环境变量中的令牌一致', 'Same value as the gateway environment token')
-            })
-              .onChange((value: string) => {
-                this.modLensGatewayToken = value
-                this.modLensConnectionMessage = ''
-              })
-              .type(InputType.Password)
-              .enableAutoFill(false)
-              .fontSize(13)
-              .width('100%')
-              .height(42)
-              .borderRadius(10)
-              .backgroundColor(getAppUiState().themeBackground)
-              .padding({ left: 12, right: 12 })
+              ImmersiveFieldSurface({ cornerRadius: 10 }) {
+                TextInput({
+                  text: this.modLensGatewayToken,
+                  placeholder: pickLocalizedText('输入网关访问令牌', 'Enter the gateway access token')
+                })
+                  .width('100%')
+                  .backgroundColor(Color.Transparent)
+                  .onChange((value: string) => {
+                    this.modLensGatewayToken = value
+                    this.modLensConnectionMessage = ''
+                  })
+                  .type(InputType.Password)
+                  .enableAutoFill(false)
+                  .fontSize(13)
+                  .height(42)
+                  .borderRadius(10)
+                  .padding({ left: 12, right: 12 })
+              }
+            }
+            .width('100%')
+            .padding(14)
+            .borderRadius(LIST_MATERIAL_CARD_RADIUS)
+            .backgroundColor(Color.Transparent)
           }
-          .width('100%')
-          .padding(14)
-          .borderRadius(16)
-          .border({ width: 0.5, color: getAppUiState().themePrimaryLight })
-          .backgroundColor(Color.Transparent)
-          .backdropBlur(16)
-          .shadow(getBlurBottomShadow())
 
           Text(pickLocalizedText(
-            '隐私提示：启用后，当前会话中由模型选择读取的图片会发送到该网关，并继续发送给 ModLens 配置的视觉 provider。原有“图片工具包”仍只在设备本地执行 OCR。',
-            'Privacy: once enabled, images the model chooses to read are sent to this gateway and then to the vision provider configured in ModLens. The existing Image Toolkit continues to run OCR only on device.'
+            '使用识别服务时，图片会发送至网关及其配置的服务商。',
+            'Images sent for recognition go to the gateway and its configured provider.'
           ))
-            .fontSize(11)
-            .lineHeight(17)
+            .font(getSettingsTypography().subtitle)
+            .lineHeight(SETTINGS_SUBTITLE_LINE_HEIGHT)
             .fontColor('#D98400')
             .width('100%')
             .padding(12)
@@ -1707,11 +1721,11 @@ export struct ToolsCenterPanel {
 
           if (this.modLensConnectionMessage !== '') {
             Text(this.modLensConnectionMessage)
-              .fontSize(12)
-              .lineHeight(18)
+              .font(getSettingsTypography().subtitle)
+              .lineHeight(SETTINGS_SUBTITLE_LINE_HEIGHT)
               .fontColor(this.modLensConnectionOk ? this.themePrimary : '#D9485F')
               .width('100%')
-              .textAlign(TextAlign.Center)
+              .textAlign(TextAlign.Start)
           }
         }
         .width('100%')
@@ -1730,6 +1744,8 @@ export struct ToolsCenterPanel {
   SearchConfigSheetBuilder() {
     Column() {
       ImmersiveSheetHeader({
+        titleFont: getSettingsTypography().pageTitle,
+        titleColor: getAppUiState().themeTextPrimary,
         title: $r('app.string.search_service_config'),
         showTrailing: true,
         trailingColor: this.themePrimary,
@@ -1744,269 +1760,264 @@ export struct ToolsCenterPanel {
       Scroll() {
         Column() {
           Text($r('app.string.search_service_config_desc'))
-            .fontSize(11)
-            .fontColor($r('app.color.text_tertiary'))
+            .font(getSettingsTypography().subtitle)
+            .lineHeight(SETTINGS_SUBTITLE_LINE_HEIGHT)
+            .fontColor(getAppUiState().themeTextSecondary)
             .width('100%')
             .margin({ bottom: 10 })
 
-          Column() {
-            Text($r('app.string.search_engine'))
-              .fontSize(12)
-              .fontColor($r('app.color.text_secondary'))
-              .width('100%')
-              .margin({ bottom: 6 })
+          SettingsFormSelect({
+            label: $r('app.string.search_engine'),
+            options: this.searchEngineOptions,
+            selectedIndex: this.searchEngineSelectedIndex,
+            displayValue: this.searchEngineDisplayValue,
+            onSelect: (index: number, value: string): void => this.handleSearchEngineSelect(index, value)
+          })
 
-            Select(this.searchEngineOptions)
-              .selected(this.searchEngineSelectedIndex)
-              .value(this.searchEngineDisplayValue)
-              .onSelect((index: number, value: string) => {
-                this.handleSearchEngineSelect(index, value)
-              })
-              .fontColor($r('app.color.text_primary'))
-              .width('100%')
-              .height(40)
-              .backgroundColor(getAppUiState().themeBackground)
-              .borderRadius(10)
-              .padding({ left: 8, right: 8 })
-
-            if (this.searchEngine === SearchEngine.BRAVE) {
+          if (this.searchEngine === SearchEngine.BRAVE) {
+            ImmersiveFieldSurface({ cornerRadius: 10, layoutMargin: { top: 8 } }) {
               TextInput({ text: this.searchBraveApiKey, placeholder: 'Brave Search API Key' })
+                .width('100%')
+                .backgroundColor(Color.Transparent)
                 .onChange((value: string) => {
                   this.searchBraveApiKey = value
                 })
                 .type(InputType.Password)
                 .enableAutoFill(false)
-                .fontSize(13)
-                .width('100%')
+                .fontSize(SETTINGS_FORM_VALUE_FONT_SIZE)
+                .placeholderFont({ size: SETTINGS_FORM_VALUE_FONT_SIZE })
                 .height(40)
                 .borderRadius(10)
-                .backgroundColor(getAppUiState().themeBackground)
                 .padding({ left: 12, right: 12 })
-                .margin({ top: 8 })
             }
+          }
 
-            if (this.searchEngine === SearchEngine.TAVILY) {
+          if (this.searchEngine === SearchEngine.TAVILY) {
+            ImmersiveFieldSurface({ cornerRadius: 10, layoutMargin: { top: 8 } }) {
               TextInput({ text: this.searchTavilyApiKey, placeholder: 'Tavily API Key' })
+                .width('100%')
+                .backgroundColor(Color.Transparent)
                 .onChange((value: string) => {
                   this.searchTavilyApiKey = value
                 })
                 .type(InputType.Password)
                 .enableAutoFill(false)
-                .fontSize(13)
-                .width('100%')
+                .fontSize(SETTINGS_FORM_VALUE_FONT_SIZE)
+                .placeholderFont({ size: SETTINGS_FORM_VALUE_FONT_SIZE })
                 .height(40)
                 .borderRadius(10)
-                .backgroundColor(getAppUiState().themeBackground)
                 .padding({ left: 12, right: 12 })
-                .margin({ top: 8 })
+            }
 
+            ImmersiveFieldSurface({ cornerRadius: 10, layoutMargin: { top: 8 } }) {
               TextInput({ text: this.searchTavilyBaseUrl, placeholder: $r('app.string.search_tavily_base_url') })
+                .width('100%')
+                .backgroundColor(Color.Transparent)
                 .onChange((value: string) => {
                   this.searchTavilyBaseUrl = value
                 })
-                .fontSize(13)
-                .width('100%')
+                .fontSize(SETTINGS_FORM_VALUE_FONT_SIZE)
+                .placeholderFont({ size: SETTINGS_FORM_VALUE_FONT_SIZE })
                 .height(40)
                 .borderRadius(10)
-                .backgroundColor(getAppUiState().themeBackground)
                 .padding({ left: 12, right: 12 })
-                .margin({ top: 8 })
-
-              Text($r('app.string.search_tavily_base_url_hint'))
-                .fontSize(11)
-                .lineHeight(16)
-                .fontColor($r('app.color.text_tertiary'))
-                .width('100%')
-                .margin({ top: 6 })
             }
 
-            if (this.searchEngine === SearchEngine.EXA) {
+            Text($r('app.string.search_tavily_base_url_hint'))
+              .font(getSettingsTypography().subtitle)
+              .lineHeight(SETTINGS_SUBTITLE_LINE_HEIGHT)
+              .fontColor(getAppUiState().themeTextSecondary)
+              .width('100%')
+              .margin({ top: 6 })
+          }
+
+          if (this.searchEngine === SearchEngine.EXA) {
+            ImmersiveFieldSurface({ cornerRadius: 10, layoutMargin: { top: 8 } }) {
               TextInput({ text: this.searchExaApiKey, placeholder: $r('app.string.search_exa_api_key') })
+                .width('100%')
+                .backgroundColor(Color.Transparent)
                 .onChange((value: string) => {
                   this.searchExaApiKey = value
                 })
                 .type(InputType.Password)
                 .enableAutoFill(false)
-                .fontSize(13)
-                .width('100%')
+                .fontSize(SETTINGS_FORM_VALUE_FONT_SIZE)
+                .placeholderFont({ size: SETTINGS_FORM_VALUE_FONT_SIZE })
                 .height(40)
                 .borderRadius(10)
-                .backgroundColor(getAppUiState().themeBackground)
                 .padding({ left: 12, right: 12 })
-                .margin({ top: 8 })
+            }
 
+            ImmersiveFieldSurface({ cornerRadius: 10, layoutMargin: { top: 8 } }) {
               TextInput({ text: this.searchExaBaseUrl, placeholder: $r('app.string.search_exa_base_url') })
+                .width('100%')
+                .backgroundColor(Color.Transparent)
                 .onChange((value: string) => {
                   this.searchExaBaseUrl = value
                 })
-                .fontSize(13)
-                .width('100%')
+                .fontSize(SETTINGS_FORM_VALUE_FONT_SIZE)
+                .placeholderFont({ size: SETTINGS_FORM_VALUE_FONT_SIZE })
                 .height(40)
                 .borderRadius(10)
-                .backgroundColor(getAppUiState().themeBackground)
                 .padding({ left: 12, right: 12 })
-                .margin({ top: 8 })
             }
+          }
 
-            if (this.searchEngine === SearchEngine.BOCHA) {
+          if (this.searchEngine === SearchEngine.BOCHA) {
+            ImmersiveFieldSurface({ cornerRadius: 10, layoutMargin: { top: 8 } }) {
               TextInput({ text: this.searchBochaApiKey, placeholder: '博查(Bocha) API Key' })
+                .width('100%')
+                .backgroundColor(Color.Transparent)
                 .onChange((value: string) => {
                   this.searchBochaApiKey = value
                 })
                 .type(InputType.Password)
                 .enableAutoFill(false)
-                .fontSize(13)
-                .width('100%')
+                .fontSize(SETTINGS_FORM_VALUE_FONT_SIZE)
+                .placeholderFont({ size: SETTINGS_FORM_VALUE_FONT_SIZE })
                 .height(40)
                 .borderRadius(10)
-                .backgroundColor(getAppUiState().themeBackground)
                 .padding({ left: 12, right: 12 })
-                .margin({ top: 8 })
+            }
 
+            ImmersiveFieldSurface({ cornerRadius: 10, layoutMargin: { top: 8 } }) {
               TextInput({ text: this.searchBochaBaseUrl, placeholder: 'https://api.bochaai.com' })
+                .width('100%')
+                .backgroundColor(Color.Transparent)
                 .onChange((value: string) => {
                   this.searchBochaBaseUrl = value
                 })
-                .fontSize(13)
-                .width('100%')
+                .fontSize(SETTINGS_FORM_VALUE_FONT_SIZE)
+                .placeholderFont({ size: SETTINGS_FORM_VALUE_FONT_SIZE })
                 .height(40)
                 .borderRadius(10)
-                .backgroundColor(getAppUiState().themeBackground)
                 .padding({ left: 12, right: 12 })
-                .margin({ top: 8 })
             }
+          }
 
-            if (this.searchEngine === SearchEngine.DEEPSEEK) {
-              Row() {
-                Column() {
-                  Text(pickLocalizedText('自动匹配 DeepSeek 服务商', 'Auto-match DeepSeek provider'))
-                    .fontSize(12)
-                    .fontColor($r('app.color.text_secondary'))
-                    .width('100%')
-                }
+          if (this.searchEngine === SearchEngine.DEEPSEEK) {
+            Row() {
+              Text(pickLocalizedText('自动匹配 DeepSeek 服务商', 'Auto-match DeepSeek provider'))
+                .font(getSettingsTypography().itemTitle)
+                .fontColor(getAppUiState().themeTextPrimary)
                 .layoutWeight(1)
 
-                Toggle({ type: ToggleType.Switch, isOn: this.searchDeepSeekUseCurrentProvider })
-                  .selectedColor(this.themePrimary)
-                  .systemMaterial(new uiMaterial.Material())
-                  .switchPointColor(Color.White)
-                  .onChange((value: boolean) => {
-                    this.searchDeepSeekUseCurrentProvider = value
-                  })
-              }
-              .width('100%')
-              .margin({ top: 10 })
+              Toggle({ type: ToggleType.Switch, isOn: this.searchDeepSeekUseCurrentProvider })
+                .selectedColor(this.themePrimary)
+                .systemMaterial(new uiMaterial.Material())
+                .switchPointColor(Color.White)
+                .onChange((value: boolean) => {
+                  this.searchDeepSeekUseCurrentProvider = value
+                })
+            }
+            .width('100%')
+            .margin({ top: 10 })
 
-              if (this.searchDeepSeekUseCurrentProvider) {
-                Text(pickLocalizedText(
-                  '请求保存在服务商管理 DeepSeek 官方 Anthropic 端点',
-                  'Auto mode calls the official DeepSeek Anthropic endpoint.'
-                ))
-                  .fontSize(11)
-                  .lineHeight(16)
-                  .fontColor($r('app.color.text_tertiary'))
-                  .width('100%')
-                  .margin({ top: 8 })
-              } else {
+            if (this.searchDeepSeekUseCurrentProvider) {
+              Text(pickLocalizedText(
+                '请求保存在服务商管理 DeepSeek 官方 Anthropic 端点',
+                'Auto mode calls the official DeepSeek Anthropic endpoint.'
+              ))
+                .font(getSettingsTypography().subtitle)
+                .lineHeight(SETTINGS_SUBTITLE_LINE_HEIGHT)
+                .fontColor(getAppUiState().themeTextSecondary)
+                .width('100%')
+                .margin({ top: 8 })
+            } else {
+              ImmersiveFieldSurface({ cornerRadius: 10, layoutMargin: { top: 8 } }) {
                 TextInput({ text: this.searchDeepSeekApiKey, placeholder: 'DeepSeek Web Search API Key' })
+                  .width('100%')
+                  .backgroundColor(Color.Transparent)
                   .onChange((value: string) => {
                     this.searchDeepSeekApiKey = value
                   })
                   .type(InputType.Password)
                   .enableAutoFill(false)
-                  .fontSize(13)
-                  .width('100%')
+                  .fontSize(SETTINGS_FORM_VALUE_FONT_SIZE)
+                  .placeholderFont({ size: SETTINGS_FORM_VALUE_FONT_SIZE })
                   .height(40)
                   .borderRadius(10)
-                  .backgroundColor(getAppUiState().themeBackground)
                   .padding({ left: 12, right: 12 })
-                  .margin({ top: 8 })
+              }
 
+              ImmersiveFieldSurface({ cornerRadius: 10, layoutMargin: { top: 8 } }) {
                 TextInput({
                   text: this.searchDeepSeekBaseUrl,
                   placeholder: DEEPSEEK_WEB_SEARCH_DEFAULT_BASE_URL
                 })
+                  .width('100%')
+                  .backgroundColor(Color.Transparent)
                   .onChange((value: string) => {
                     this.searchDeepSeekBaseUrl = value
                   })
-                  .fontSize(13)
-                  .width('100%')
+                  .fontSize(SETTINGS_FORM_VALUE_FONT_SIZE)
+                  .placeholderFont({ size: SETTINGS_FORM_VALUE_FONT_SIZE })
                   .height(40)
                   .borderRadius(10)
-                  .backgroundColor(getAppUiState().themeBackground)
                   .padding({ left: 12, right: 12 })
-                  .margin({ top: 8 })
-
-                Text(pickLocalizedText(
-                  '填写 Anthropic 兼容接口前缀，默认请求 /anthropic/v1/messages。',
-                  'Enter an Anthropic-compatible API prefix; the default calls /anthropic/v1/messages.'
-                ))
-                  .fontSize(11)
-                  .lineHeight(16)
-                  .fontColor($r('app.color.text_tertiary'))
-                  .width('100%')
-                  .margin({ top: 6 })
               }
-            }
 
-            Text($r('app.string.search_engine_runtime_hint'))
-              .fontSize(11)
-              .fontColor($r('app.color.text_tertiary'))
-              .width('100%')
-              .margin({ top: 8 })
-
-            if (this.searchEngine === SearchEngine.BING) {
-              Row() {
-                Column() {
-                  Text($r('app.string.search_query_optimization'))
-                    .fontSize(12)
-                    .fontColor($r('app.color.text_secondary'))
-                    .width('100%')
-
-                  Text($r('app.string.search_query_optimization_hint'))
-                    .fontSize(11)
-                    .fontColor($r('app.color.text_tertiary'))
-                    .width('100%')
-                    .margin({ top: 2, right: 8 })
-                }
-                .layoutWeight(1)
-
-                Toggle({ type: ToggleType.Switch, isOn: this.searchQueryOptimizationEnabled })
-                  .selectedColor(this.themePrimary)
-                  .systemMaterial(new uiMaterial.Material())
-                  .switchPointColor(Color.White)
-                  .onChange((value: boolean) => {
-                    this.searchQueryOptimizationEnabled = value
-                  })
-              }
-              .width('100%')
-              .margin({ top: 10 })
+              Text(pickLocalizedText(
+                '填写 Anthropic 兼容接口前缀，默认请求 /anthropic/v1/messages。',
+                'Enter an Anthropic-compatible API prefix; the default calls /anthropic/v1/messages.'
+              ))
+                .font(getSettingsTypography().subtitle)
+                .lineHeight(SETTINGS_SUBTITLE_LINE_HEIGHT)
+                .fontColor(getAppUiState().themeTextSecondary)
+                .width('100%')
+                .margin({ top: 6 })
             }
           }
-          .width('100%')
-          .padding(12)
-          .borderRadius(16)
-          .backgroundColor(Color.Transparent)
-          .border({ width: 0.5, color: getAppUiState().themePrimaryLight })
-          .backdropBlur(16)
-          .shadow(getBlurBottomShadow())
+
+          if (this.searchEngine === SearchEngine.BING) {
+            Row() {
+              Column() {
+                Text($r('app.string.search_query_optimization'))
+                  .font(getSettingsTypography().itemTitle)
+                  .fontColor(getAppUiState().themeTextPrimary)
+                  .width('100%')
+
+                Text($r('app.string.search_query_optimization_hint'))
+                  .font(getSettingsTypography().subtitle)
+                  .lineHeight(SETTINGS_SUBTITLE_LINE_HEIGHT)
+                  .fontColor(getAppUiState().themeTextSecondary)
+                  .width('100%')
+                  .margin({ top: 2, right: 8 })
+              }
+              .alignItems(HorizontalAlign.Start)
+              .layoutWeight(1)
+
+              Toggle({ type: ToggleType.Switch, isOn: this.searchQueryOptimizationEnabled })
+                .selectedColor(this.themePrimary)
+                .systemMaterial(new uiMaterial.Material())
+                .switchPointColor(Color.White)
+                .onChange((value: boolean) => {
+                  this.searchQueryOptimizationEnabled = value
+                })
+            }
+            .width('100%')
+            .margin({ top: 10 })
+          }
         }
         .width('100%')
+        .alignItems(HorizontalAlign.Start)
         .padding({ left: 16, right: 16, bottom: 24 })
       }
       .width('100%')
-      .layoutWeight(1)
+      .constraintSize({ maxHeight: getSettingsSheetContentMaxHeight(getAppUiState().windowHeightVp) })
+      .flexShrink(1)
       .scrollBar(BarState.Off)
     }
     .width('100%')
-    .height('100%')
-    .backgroundColor(getAppUiState().themeBackground)
+    .backgroundColor(Color.Transparent)
   }
 
   @Builder
   McpServerSheetBuilder() {
     Column() {
       ImmersiveSheetHeader({
+        titleFont: getSettingsTypography().pageTitle,
+        titleColor: getAppUiState().themeTextPrimary,
         title: this.getMcpFormTitle(),
         showTrailing: true,
         trailingButtonEnabled: !this.isSavingMcpServer,
@@ -2022,478 +2033,475 @@ export struct ToolsCenterPanel {
 
       Scroll() {
         Column({ space: 14 }) {
-          Column({ space: 12 }) {
-            Row({ space: 12 }) {
-              Column() {
-                SymbolGlyph($r('sys.symbol.cloud'))
-                  .renderingStrategy(SymbolRenderingStrategy.SINGLE)
-                  .fontSize(22)
-                  .fontColor([this.themePrimary])
-              }
-              .width(46)
-              .height(46)
-              .borderRadius(16)
-              .backgroundColor(withColorAlpha(this.themePrimary, this.isDarkMode ? '26' : '12'))
-              .justifyContent(FlexAlign.Center)
-
-              Column({ space: 4 }) {
-                Row({ space: 8 }) {
-                  Text(this.getMcpFormHeroTitle())
-                    .fontSize(18)
-                    .fontWeight(FontWeight.Bold)
-                    .fontColor($r('app.color.text_primary'))
-                    .maxLines(1)
-                    .textOverflow({ overflow: TextOverflow.Ellipsis })
-
-                  Text(this.getMcpFormModeTag())
-                    .fontSize(10)
-                    .fontWeight(FontWeight.Medium)
-                    .fontColor(this.themePrimary)
-                    .padding({ left: 8, right: 8, top: 4, bottom: 4 })
-                    .borderRadius(999)
-                    .backgroundColor(withColorAlpha(this.themePrimary, this.isDarkMode ? '20' : '10'))
-                }
-                .width('100%')
-
-                Text(this.getMcpFormHeroDescription())
-                  .fontSize(12)
-                  .lineHeight(18)
-                  .fontColor($r('app.color.text_secondary'))
-                  .width('100%')
-
-                if (this.getMcpFormTargetHint() !== '') {
-                  Text(this.getMcpFormTargetHint())
-                    .fontSize(11)
-                    .fontColor($r('app.color.text_tertiary'))
-                    .width('100%')
-                    .maxLines(2)
-                    .textOverflow({ overflow: TextOverflow.Ellipsis })
-                }
-              }
-              .layoutWeight(1)
-              .alignItems(HorizontalAlign.Start)
-            }
-            .width('100%')
-
-            Row({ space: 8 }) {
-              Text(this.getMcpFormAuthLabel())
-                .fontSize(11)
-                .fontWeight(FontWeight.Medium)
-                .fontColor(this.themePrimary)
-                .padding({ left: 10, right: 10, top: 6, bottom: 6 })
-                .borderRadius(999)
-                .backgroundColor(withColorAlpha(this.themePrimary, this.isDarkMode ? '20' : '10'))
-
-              Text(this.getMcpFormEnableLabel())
-                .fontSize(11)
-                .fontWeight(FontWeight.Medium)
-                .fontColor($r('app.color.text_secondary'))
-                .padding({ left: 10, right: 10, top: 6, bottom: 6 })
-                .borderRadius(999)
-                .backgroundColor(getAppUiState().themeBackground)
-            }
-            .width('100%')
-          }
-          .width('100%')
-          .padding(16)
-          .borderRadius(16)
-          .backgroundColor(Color.Transparent)
-          .border({ width: 0.5, color: getAppUiState().themePrimaryLight })
-          .backdropBlur(16)
-          .shadow(getBlurBottomShadow())
-
-          Column({ space: 12 }) {
-            Column({ space: 4 }) {
-              Text(pickLocalizedText('连接信息', 'Connection'))
-                .fontSize(15)
-                .fontWeight(FontWeight.Bold)
-                .fontColor($r('app.color.text_primary'))
-
-              Text(pickLocalizedText('填写名称和服务地址。', 'Set the display name and service URL.'))
-                .fontSize(12)
-                .lineHeight(18)
-                .fontColor($r('app.color.text_secondary'))
-                .width('100%')
-            }
-            .width('100%')
-            .alignItems(HorizontalAlign.Start)
-
-            Column({ space: 6 }) {
-              Text(pickLocalizedText('显示名称', 'Display Name'))
-                .fontSize(12)
-                .fontWeight(FontWeight.Medium)
-                .fontColor($r('app.color.text_secondary'))
-                .width('100%')
-
-              TextInput({ text: this.mcpFormName, placeholder: pickLocalizedText(
-                '例如 GitHub MCP / Timebook MCP',
-                'e.g. GitHub MCP / Timebook MCP'
-              ) })
-                .onChange((value: string) => {
-                  this.mcpFormName = value
-                })
-                .fontSize(14)
-                .width('100%')
-                .height(46)
-                .borderRadius(14)
-                .backgroundColor(getAppUiState().themeBackground)
-                .border({ width: 1, color: getAppUiState().themePrimaryLight })
-                .padding({ left: 14, right: 14 })
-            }
-            .width('100%')
-
-            Column({ space: 6 }) {
-              Text(pickLocalizedText('服务地址', 'Service URL'))
-                .fontSize(12)
-                .fontWeight(FontWeight.Medium)
-                .fontColor($r('app.color.text_secondary'))
-                .width('100%')
-
-              TextInput({ text: this.mcpFormBaseUrl, placeholder: 'https://your-mcp.example.com/mcp' })
-                .onChange((value: string) => {
-                  this.mcpFormBaseUrl = value
-                })
-                .fontSize(14)
-                .width('100%')
-                .height(46)
-                .borderRadius(14)
-                .backgroundColor(getAppUiState().themeBackground)
-                .border({ width: 1, color: getAppUiState().themePrimaryLight })
-                .padding({ left: 14, right: 14 })
-
-              Text(pickLocalizedText('请输入完整的 HTTP/HTTPS 地址。', 'Enter the full HTTP or HTTPS URL.'))
-                .fontSize(11)
-                .lineHeight(16)
-                .fontColor($r('app.color.text_tertiary'))
-                .width('100%')
-            }
-            .width('100%')
-          }
-          .width('100%')
-          .padding(16)
-          .borderRadius(16)
-          .backgroundColor(Color.Transparent)
-          .border({ width: 0.5, color: getAppUiState().themePrimaryLight })
-          .backdropBlur(16)
-          .shadow(getBlurBottomShadow())
-
-          Column({ space: 12 }) {
-            Column({ space: 4 }) {
-              Text(pickLocalizedText('认证策略', 'Authentication'))
-                .fontSize(15)
-                .fontWeight(FontWeight.Bold)
-                .fontColor($r('app.color.text_primary'))
-
-              Text(pickLocalizedText('按服务要求选择认证方式。', 'Choose the auth method required by the server.'))
-                .fontSize(12)
-                .lineHeight(18)
-                .fontColor($r('app.color.text_secondary'))
-                .width('100%')
-            }
-            .width('100%')
-            .alignItems(HorizontalAlign.Start)
-
-            Column({ space: 6 }) {
-              Text(pickLocalizedText('认证类型', 'Auth Type'))
-                .fontSize(12)
-                .fontWeight(FontWeight.Medium)
-                .fontColor($r('app.color.text_secondary'))
-                .width('100%')
-
-              Select(this.mcpAuthTypeOptions)
-                .selected(this.mcpAuthTypeSelectedIndex)
-                .value(this.mcpAuthTypeSelectedIndex === 1 ? 'Bearer' : 'None')
-                .onSelect((index: number, _value: string) => {
-                  this.handleMcpAuthTypeSelect(index)
-                })
-                .fontColor($r('app.color.text_primary'))
-                .width('100%')
-                .height(46)
-                .backgroundColor(getAppUiState().themeBackground)
-                .borderRadius(14)
-                .border({ width: 1, color: getAppUiState().themePrimaryLight })
-                .padding({ left: 10, right: 10 })
-            }
-            .width('100%')
-
-            if (this.mcpFormAuthType === McpAuthType.BEARER) {
-              Column({ space: 6 }) {
-                Text('Bearer Token')
-                  .fontSize(12)
-                  .fontWeight(FontWeight.Medium)
-                  .fontColor($r('app.color.text_secondary'))
-                  .width('100%')
-
-                TextInput({ text: this.mcpFormAuthToken, placeholder: pickLocalizedText(
-                  '输入 Bearer Token',
-                  'Enter bearer token'
-                ) })
-                  .onChange((value: string) => {
-                    this.mcpFormAuthToken = value
-                  })
-                  .type(InputType.Password)
-                  .enableAutoFill(false)
-                  .fontSize(14)
-                  .width('100%')
-                  .height(46)
-                  .borderRadius(14)
-                  .backgroundColor(getAppUiState().themeBackground)
-                  .border({ width: 1, color: getAppUiState().themePrimaryLight })
-                  .padding({ left: 14, right: 14 })
-
-                Text(pickLocalizedText(
-                  '系统会自动附加 Authorization。',
-                  'Authorization is added automatically.'
-                ))
-                  .fontSize(11)
-                  .lineHeight(16)
-                  .fontColor($r('app.color.text_tertiary'))
-                  .width('100%')
-              }
-              .width('100%')
-            } else {
-              Row({ space: 10 }) {
+          ImmersiveListSurface({ isImmersive: true, cornerRadius: LIST_MATERIAL_CARD_RADIUS }) {
+            Column({ space: 12 }) {
+              Row({ space: 12 }) {
                 Column() {
-                  SymbolGlyph($r('sys.symbol.checkmark_circle'))
+                  SymbolGlyph($r('sys.symbol.cloud'))
                     .renderingStrategy(SymbolRenderingStrategy.SINGLE)
-                    .fontSize(16)
+                    .fontSize(22)
                     .fontColor([this.themePrimary])
                 }
-                .width(28)
-                .height(28)
-                .borderRadius(14)
-                .backgroundColor(withColorAlpha(this.themePrimary, this.isDarkMode ? '20' : '10'))
+                .width(46)
+                .height(46)
+                .borderRadius(16)
+                .backgroundColor(withColorAlpha(this.themePrimary, this.isDarkMode ? '26' : '12'))
                 .justifyContent(FlexAlign.Center)
 
-                Column({ space: 3 }) {
-                  Text(pickLocalizedText('未设置额外认证', 'No extra authentication'))
-                    .fontSize(12)
-                    .fontWeight(FontWeight.Medium)
-                    .fontColor($r('app.color.text_primary'))
+                Column({ space: 4 }) {
+                  Row({ space: 8 }) {
+                    Text(this.getMcpFormHeroTitle())
+                      .font(getSettingsTypography().sectionTitle)
+                      .fontColor(getAppUiState().themeTextPrimary)
+                      .maxLines(1)
+                      .textOverflow({ overflow: TextOverflow.Ellipsis })
 
-                  Text(pickLocalizedText(
-                    '当前服务将直接使用基础连接信息。',
-                    'This server uses the base connection settings directly.'
-                  ))
-                    .fontSize(11)
-                    .lineHeight(16)
-                    .fontColor($r('app.color.text_secondary'))
+                    Text(this.getMcpFormModeTag())
+                      .fontSize(10)
+                      .fontWeight(FontWeight.Medium)
+                      .fontColor(this.themePrimary)
+                      .padding({ left: 8, right: 8, top: 4, bottom: 4 })
+                      .borderRadius(999)
+                      .backgroundColor(withColorAlpha(this.themePrimary, this.isDarkMode ? '20' : '10'))
+                  }
+                  .width('100%')
+
+                  Text(this.getMcpFormHeroDescription())
+                    .font(getSettingsTypography().subtitle)
+                    .lineHeight(SETTINGS_SUBTITLE_LINE_HEIGHT)
+                    .fontColor(getAppUiState().themeTextSecondary)
                     .width('100%')
+
+                  if (this.getMcpFormTargetHint() !== '') {
+                    Text(this.getMcpFormTargetHint())
+                      .font(getSettingsTypography().subtitle)
+                      .lineHeight(SETTINGS_SUBTITLE_LINE_HEIGHT)
+                      .fontColor(getAppUiState().themeTextSecondary)
+                      .width('100%')
+                      .maxLines(2)
+                      .textOverflow({ overflow: TextOverflow.Ellipsis })
+                  }
                 }
                 .layoutWeight(1)
                 .alignItems(HorizontalAlign.Start)
               }
               .width('100%')
-              .padding(12)
-              .borderRadius(14)
-              .backgroundColor(getAppUiState().themeBackground)
-            }
-          }
-          .width('100%')
-          .padding(16)
-          .borderRadius(16)
-          .backgroundColor(Color.Transparent)
-          .border({ width: 0.5, color: getAppUiState().themePrimaryLight })
-          .backdropBlur(16)
-          .shadow(getBlurBottomShadow())
 
-          Column({ space: 12 }) {
-            Row({ space: 8 }) {
-              Text(pickLocalizedText('自定义请求头', 'Custom Headers'))
-                .fontSize(15)
-                .fontWeight(FontWeight.Bold)
-                .fontColor($r('app.color.text_primary'))
-                .layoutWeight(1)
-                .maxLines(1)
-                .textOverflow({ overflow: TextOverflow.Ellipsis })
+              Row({ space: 8 }) {
+                Text(this.getMcpFormAuthLabel())
+                  .fontSize(11)
+                  .fontWeight(FontWeight.Medium)
+                  .fontColor(this.themePrimary)
+                  .padding({ left: 10, right: 10, top: 6, bottom: 6 })
+                  .borderRadius(999)
+                  .backgroundColor(withColorAlpha(this.themePrimary, this.isDarkMode ? '20' : '10'))
 
-              Toggle({ type: ToggleType.Switch, isOn: this.showMcpCustomHeadersEditor })
-                .selectedColor(this.themePrimary)
-                .systemMaterial(new uiMaterial.Material())
-                .switchPointColor(Color.White)
-                .onChange((isOn: boolean) => {
-                  this.showMcpCustomHeadersEditor = isOn
-                })
-            }
-            .width('100%')
-
-            if (this.showMcpCustomHeadersEditor) {
-              Row() {
-                Button() {
-                  Row({ space: 4 }) {
-                    SymbolGlyph($r('sys.symbol.plus'))
-                      .renderingStrategy(SymbolRenderingStrategy.SINGLE)
-                      .fontSize(13)
-                      .fontColor([Color.White])
-                    Text(pickLocalizedText('新增请求头', 'Add header'))
-                      .fontSize(12)
-                      .fontWeight(FontWeight.Medium)
-                      .fontColor(Color.White)
-                  }
-                }
-                .height(32)
-                .padding({ left: 14, right: 14 })
-                .type(ButtonType.Capsule)
-                .stateEffect(false)
-                .backgroundColor(this.themePrimary)
-                .onClick(() => {
-                  this.addMcpHeaderEntry()
-                })
-                Blank()
+                Text(this.getMcpFormEnableLabel())
+                  .fontSize(11)
+                  .fontWeight(FontWeight.Medium)
+                  .fontColor($r('app.color.text_secondary'))
+                  .padding({ left: 10, right: 10, top: 6, bottom: 6 })
+                  .borderRadius(999)
+                  .backgroundColor(getAppUiState().themeBackground)
               }
               .width('100%')
             }
+            .width('100%')
+            .padding(16)
+            .borderRadius(LIST_MATERIAL_CARD_RADIUS)
+            .backgroundColor(Color.Transparent)
+          }
 
-            if (this.showMcpCustomHeadersEditor) {
-              ForEach(this.mcpFormCustomHeaderEntries, (entry: McpHeaderEntry, index: number) => {
-                Column({ space: 10 }) {
-                  Row() {
-                    Text(pickLocalizedText(`请求头 ${index + 1}`, `Header ${index + 1}`))
-                      .fontSize(12)
-                      .fontWeight(FontWeight.Medium)
-                      .fontColor($r('app.color.text_primary'))
-                      .layoutWeight(1)
+          ImmersiveListSurface({ isImmersive: true, cornerRadius: LIST_MATERIAL_CARD_RADIUS }) {
+            Column({ space: 12 }) {
+              Column({ space: 4 }) {
+                Text(pickLocalizedText('连接信息', 'Connection'))
+                  .font(getSettingsTypography().sectionTitle)
+                  .fontColor(getAppUiState().themeTextPrimary)
 
-                    if (this.isSensitiveMcpHeaderName(entry.name)) {
-                      Text(pickLocalizedText('敏感', 'Sensitive'))
-                        .fontSize(10)
-                        .fontWeight(FontWeight.Medium)
-                        .fontColor('#D97757')
-                        .padding({ left: 8, right: 8, top: 4, bottom: 4 })
-                        .borderRadius(999)
-                        .backgroundColor(this.isDarkMode ? '#4A2D1A' : '#FFF1E8')
-                        .margin({ right: 8 })
-                    }
+                Text(pickLocalizedText('填写名称和服务地址。', 'Set the display name and service URL.'))
+                  .font(getSettingsTypography().subtitle)
+                  .lineHeight(SETTINGS_SUBTITLE_LINE_HEIGHT)
+                  .fontColor(getAppUiState().themeTextSecondary)
+                  .width('100%')
+              }
+              .width('100%')
+              .alignItems(HorizontalAlign.Start)
 
-                    Button($r('app.string.delete'))
-                      .height(28)
-                      .fontSize(11)
-                      .type(ButtonType.Capsule)
-                      .stateEffect(false)
-                      .backgroundColor(getAppUiState().themeSurface)
-                      .border({ width: 1, color: this.isDarkMode ? '#6A3139' : '#F2CBD2' })
-                      .fontColor('#D9485F')
-                      .onClick(() => {
-                        this.removeMcpHeaderEntry(entry.id)
-                      })
-                  }
+              Column({ space: SETTINGS_HEADING_CONTENT_GAP }) {
+                Text(pickLocalizedText('显示名称', 'Display Name'))
+                  .font(getSettingsTypography().fieldLabel)
+                  .fontColor(getAppUiState().themeTextSecondary)
                   .width('100%')
 
-                  Column({ space: 6 }) {
-                    Text(pickLocalizedText('名称', 'Name'))
-                      .fontSize(11)
-                      .fontColor($r('app.color.text_tertiary'))
-                      .width('100%')
+                ImmersiveFieldSurface({ cornerRadius: 14 }) {
+                  TextInput({ text: this.mcpFormName, placeholder: pickLocalizedText(
+                    '例如 GitHub MCP / Timebook MCP',
+                    'e.g. GitHub MCP / Timebook MCP'
+                  ) })
+                    .width('100%')
+                    .backgroundColor(Color.Transparent)
+                    .onChange((value: string) => {
+                      this.mcpFormName = value
+                    })
+                    .fontSize(14)
+                    .height(46)
+                    .borderRadius(14)
+                    .border({ width: 1, color: getAppUiState().themePrimaryLight })
+                    .padding({ left: 14, right: 14 })
+                }
+              }
+              .width('100%')
 
-                    TextInput({ text: entry.name, placeholder: pickLocalizedText(
-                      '例如 timebook-mcp-token',
-                      'e.g. timebook-mcp-token'
+              Column({ space: SETTINGS_HEADING_CONTENT_GAP }) {
+                Text(pickLocalizedText('服务地址', 'Service URL'))
+                  .font(getSettingsTypography().fieldLabel)
+                  .fontColor(getAppUiState().themeTextSecondary)
+                  .width('100%')
+
+                ImmersiveFieldSurface({ cornerRadius: 14 }) {
+                  TextInput({ text: this.mcpFormBaseUrl, placeholder: 'https://your-mcp.example.com/mcp' })
+                    .width('100%')
+                    .backgroundColor(Color.Transparent)
+                    .onChange((value: string) => {
+                      this.mcpFormBaseUrl = value
+                    })
+                    .fontSize(14)
+                    .height(46)
+                    .borderRadius(14)
+                    .border({ width: 1, color: getAppUiState().themePrimaryLight })
+                    .padding({ left: 14, right: 14 })
+                }
+
+                Text(pickLocalizedText('请输入完整的 HTTP/HTTPS 地址。', 'Enter the full HTTP or HTTPS URL.'))
+                  .font(getSettingsTypography().subtitle)
+                  .lineHeight(SETTINGS_SUBTITLE_LINE_HEIGHT)
+                  .fontColor(getAppUiState().themeTextSecondary)
+                  .width('100%')
+              }
+              .width('100%')
+            }
+            .width('100%')
+            .padding(16)
+            .borderRadius(LIST_MATERIAL_CARD_RADIUS)
+            .backgroundColor(Color.Transparent)
+          }
+
+          ImmersiveListSurface({ isImmersive: true, cornerRadius: LIST_MATERIAL_CARD_RADIUS }) {
+            Column({ space: 12 }) {
+              Column({ space: 4 }) {
+                Text(pickLocalizedText('认证策略', 'Authentication'))
+                  .font(getSettingsTypography().sectionTitle)
+                  .fontColor(getAppUiState().themeTextPrimary)
+
+                Text(pickLocalizedText('按服务要求选择认证方式。', 'Choose the auth method required by the server.'))
+                  .font(getSettingsTypography().subtitle)
+                  .lineHeight(SETTINGS_SUBTITLE_LINE_HEIGHT)
+                  .fontColor(getAppUiState().themeTextSecondary)
+                  .width('100%')
+              }
+              .width('100%')
+              .alignItems(HorizontalAlign.Start)
+
+              Column({ space: SETTINGS_HEADING_CONTENT_GAP }) {
+                Text(pickLocalizedText('认证类型', 'Auth Type'))
+                  .font(getSettingsTypography().fieldLabel)
+                  .fontColor(getAppUiState().themeTextSecondary)
+                  .width('100%')
+
+                Select(this.mcpAuthTypeOptions)
+                  .selected(this.mcpAuthTypeSelectedIndex)
+                  .value(this.mcpAuthTypeSelectedIndex === 1 ? 'Bearer' : 'None')
+                  .onSelect((index: number, _value: string) => {
+                    this.handleMcpAuthTypeSelect(index)
+                  })
+                  .fontColor($r('app.color.text_primary'))
+                  .width('100%')
+                  .height(46)
+                  .backgroundColor(getAppUiState().themeBackground)
+                  .borderRadius(14)
+                  .border({ width: 1, color: getAppUiState().themePrimaryLight })
+                  .padding({ left: 10, right: 10 })
+              }
+              .width('100%')
+
+              if (this.mcpFormAuthType === McpAuthType.BEARER) {
+                Column({ space: SETTINGS_HEADING_CONTENT_GAP }) {
+                  Text('Bearer Token')
+                    .font(getSettingsTypography().fieldLabel)
+                    .fontColor(getAppUiState().themeTextSecondary)
+                    .width('100%')
+
+                  ImmersiveFieldSurface({ cornerRadius: 14 }) {
+                    TextInput({ text: this.mcpFormAuthToken, placeholder: pickLocalizedText(
+                      '输入 Bearer Token',
+                      'Enter bearer token'
                     ) })
-                      .onChange((value: string) => {
-                        this.updateMcpHeaderEntryName(entry.id, value)
-                      })
-                      .fontSize(14)
                       .width('100%')
-                      .height(44)
+                      .backgroundColor(Color.Transparent)
+                      .onChange((value: string) => {
+                        this.mcpFormAuthToken = value
+                      })
+                      .type(InputType.Password)
+                      .enableAutoFill(false)
+                      .fontSize(14)
+                      .height(46)
                       .borderRadius(14)
-                      .backgroundColor(getAppUiState().themeBackground)
                       .border({ width: 1, color: getAppUiState().themePrimaryLight })
                       .padding({ left: 14, right: 14 })
                   }
-                  .width('100%')
 
-                  Column({ space: 6 }) {
-                    Text(pickLocalizedText('值', 'Value'))
-                      .fontSize(11)
-                      .fontColor($r('app.color.text_tertiary'))
-                      .width('100%')
-
-                    if (this.isSensitiveMcpHeaderName(entry.name)) {
-                      TextInput({ text: entry.value, placeholder: pickLocalizedText(
-                        '输入 Header Value',
-                        'Enter header value'
-                      ) })
-                        .onChange((value: string) => {
-                          this.updateMcpHeaderEntryValue(entry.id, value)
-                        })
-                        .type(InputType.Password)
-                        .enableAutoFill(false)
-                        .fontSize(14)
-                        .width('100%')
-                        .height(44)
-                        .borderRadius(14)
-                        .backgroundColor(getAppUiState().themeBackground)
-                        .border({ width: 1, color: getAppUiState().themePrimaryLight })
-                        .padding({ left: 14, right: 14 })
-                    } else {
-                      TextInput({ text: entry.value, placeholder: pickLocalizedText(
-                        '输入 Header Value',
-                        'Enter header value'
-                      ) })
-                        .onChange((value: string) => {
-                          this.updateMcpHeaderEntryValue(entry.id, value)
-                        })
-                        .fontSize(14)
-                        .width('100%')
-                        .height(44)
-                        .borderRadius(14)
-                        .backgroundColor(getAppUiState().themeBackground)
-                        .border({ width: 1, color: getAppUiState().themePrimaryLight })
-                        .padding({ left: 14, right: 14 })
-                    }
-                  }
-                  .width('100%')
+                  Text(pickLocalizedText(
+                    '系统会自动附加 Authorization。',
+                    'Authorization is added automatically.'
+                  ))
+                    .font(getSettingsTypography().subtitle)
+                    .lineHeight(SETTINGS_SUBTITLE_LINE_HEIGHT)
+                    .fontColor(getAppUiState().themeTextSecondary)
+                    .width('100%')
                 }
                 .width('100%')
-                .padding(14)
-                .borderRadius(18)
+              } else {
+                Row({ space: 10 }) {
+                  Column() {
+                    SymbolGlyph($r('sys.symbol.checkmark_circle'))
+                      .renderingStrategy(SymbolRenderingStrategy.SINGLE)
+                      .fontSize(16)
+                      .fontColor([this.themePrimary])
+                  }
+                  .width(28)
+                  .height(28)
+                  .borderRadius(14)
+                  .backgroundColor(withColorAlpha(this.themePrimary, this.isDarkMode ? '20' : '10'))
+                  .justifyContent(FlexAlign.Center)
+
+                  Column({ space: 3 }) {
+                    Text(pickLocalizedText('未设置额外认证', 'No extra authentication'))
+                      .font(getSettingsTypography().itemTitle)
+                      .fontColor(getAppUiState().themeTextPrimary)
+
+                    Text(pickLocalizedText(
+                      '当前服务将直接使用基础连接信息。',
+                      'This server uses the base connection settings directly.'
+                    ))
+                      .font(getSettingsTypography().subtitle)
+                      .lineHeight(SETTINGS_SUBTITLE_LINE_HEIGHT)
+                      .fontColor(getAppUiState().themeTextSecondary)
+                      .width('100%')
+                  }
+                  .layoutWeight(1)
+                  .alignItems(HorizontalAlign.Start)
+                }
+                .width('100%')
+                .padding(12)
+                .borderRadius(14)
                 .backgroundColor(getAppUiState().themeBackground)
-                .border({ width: 1, color: getAppUiState().themePrimaryLight })
-              }, (entry: McpHeaderEntry) => entry.id)
+              }
             }
+            .width('100%')
+            .padding(16)
+            .borderRadius(LIST_MATERIAL_CARD_RADIUS)
+            .backgroundColor(Color.Transparent)
           }
-          .width('100%')
-          .padding(16)
-          .borderRadius(16)
-          .backgroundColor(Color.Transparent)
-          .border({ width: 0.5, color: getAppUiState().themePrimaryLight })
-          .backdropBlur(16)
-          .shadow(getBlurBottomShadow())
 
-          Row({ space: 12 }) {
-            Column({ space: 4 }) {
-              Text(pickLocalizedText('启用该 Server', 'Enable This Server'))
-                .fontSize(15)
-                .fontWeight(FontWeight.Bold)
-                .fontColor($r('app.color.text_primary'))
-                .width('100%')
+          ImmersiveListSurface({ isImmersive: true, cornerRadius: LIST_MATERIAL_CARD_RADIUS }) {
+            Column({ space: 12 }) {
+              Row({ space: 8 }) {
+                Text(pickLocalizedText('自定义请求头', 'Custom Headers'))
+                  .font(getSettingsTypography().sectionTitle)
+                  .fontColor(getAppUiState().themeTextPrimary)
+                  .layoutWeight(1)
+                  .maxLines(1)
+                  .textOverflow({ overflow: TextOverflow.Ellipsis })
 
-              Text(this.mcpFormEnabled
-                ? pickLocalizedText('保存后立即连接并发现工具。', 'Connect and discover tools right after saving.')
-                : pickLocalizedText('仅保存当前配置。', 'Only save the current configuration.'))
-                .fontSize(12)
-                .lineHeight(18)
-                .fontColor($r('app.color.text_secondary'))
+                Toggle({ type: ToggleType.Switch, isOn: this.showMcpCustomHeadersEditor })
+                  .selectedColor(this.themePrimary)
+                  .systemMaterial(new uiMaterial.Material())
+                  .switchPointColor(Color.White)
+                  .onChange((isOn: boolean) => {
+                    this.showMcpCustomHeadersEditor = isOn
+                  })
+              }
+              .width('100%')
+
+              if (this.showMcpCustomHeadersEditor) {
+                Row() {
+                  Button() {
+                    Row({ space: 4 }) {
+                      SymbolGlyph($r('sys.symbol.plus'))
+                        .renderingStrategy(SymbolRenderingStrategy.SINGLE)
+                        .fontSize(13)
+                        .fontColor([Color.White])
+                      Text(pickLocalizedText('新增请求头', 'Add header'))
+                        .fontSize(12)
+                        .fontWeight(FontWeight.Medium)
+                        .fontColor(Color.White)
+                    }
+                  }
+                  .height(32)
+                  .padding({ left: 14, right: 14 })
+                  .type(ButtonType.Capsule)
+                  .stateEffect(false)
+                  .backgroundColor(this.themePrimary)
+                  .onClick(() => {
+                    this.addMcpHeaderEntry()
+                  })
+                  Blank()
+                }
                 .width('100%')
+              }
+
+              if (this.showMcpCustomHeadersEditor) {
+                ForEach(this.mcpFormCustomHeaderEntries, (entry: McpHeaderEntry, index: number) => {
+                  Column({ space: 10 }) {
+                    Row() {
+                      Text(pickLocalizedText(`请求头 ${index + 1}`, `Header ${index + 1}`))
+                        .font(getSettingsTypography().itemTitle)
+                        .fontColor(getAppUiState().themeTextPrimary)
+                        .layoutWeight(1)
+
+                      if (this.isSensitiveMcpHeaderName(entry.name)) {
+                        Text(pickLocalizedText('敏感', 'Sensitive'))
+                          .fontSize(10)
+                          .fontWeight(FontWeight.Medium)
+                          .fontColor('#D97757')
+                          .padding({ left: 8, right: 8, top: 4, bottom: 4 })
+                          .borderRadius(999)
+                          .backgroundColor(this.isDarkMode ? '#4A2D1A' : '#FFF1E8')
+                          .margin({ right: 8 })
+                      }
+
+                      Button($r('app.string.delete'))
+                        .height(28)
+                        .fontSize(11)
+                        .type(ButtonType.Capsule)
+                        .stateEffect(false)
+                        .backgroundColor(getAppUiState().themeSurface)
+                        .border({ width: 1, color: this.isDarkMode ? '#6A3139' : '#F2CBD2' })
+                        .fontColor('#D9485F')
+                        .onClick(() => {
+                          this.removeMcpHeaderEntry(entry.id)
+                        })
+                    }
+                    .width('100%')
+
+                    Column({ space: SETTINGS_HEADING_CONTENT_GAP }) {
+                      Text(pickLocalizedText('名称', 'Name'))
+                        .font(getSettingsTypography().fieldLabel)
+                        .fontColor(getAppUiState().themeTextSecondary)
+                        .width('100%')
+
+                      ImmersiveFieldSurface({ cornerRadius: 14 }) {
+                        TextInput({ text: entry.name, placeholder: pickLocalizedText(
+                          '例如 timebook-mcp-token',
+                          'e.g. timebook-mcp-token'
+                        ) })
+                          .width('100%')
+                          .backgroundColor(Color.Transparent)
+                          .onChange((value: string) => {
+                            this.updateMcpHeaderEntryName(entry.id, value)
+                          })
+                          .fontSize(14)
+                          .height(44)
+                          .borderRadius(14)
+                          .border({ width: 1, color: getAppUiState().themePrimaryLight })
+                          .padding({ left: 14, right: 14 })
+                      }
+                    }
+                    .width('100%')
+
+                    Column({ space: SETTINGS_HEADING_CONTENT_GAP }) {
+                      Text(pickLocalizedText('值', 'Value'))
+                        .font(getSettingsTypography().fieldLabel)
+                        .fontColor(getAppUiState().themeTextSecondary)
+                        .width('100%')
+
+                      if (this.isSensitiveMcpHeaderName(entry.name)) {
+                        ImmersiveFieldSurface({ cornerRadius: 14 }) {
+                          TextInput({ text: entry.value, placeholder: pickLocalizedText(
+                            '输入 Header Value',
+                            'Enter header value'
+                          ) })
+                            .width('100%')
+                            .backgroundColor(Color.Transparent)
+                            .onChange((value: string) => {
+                              this.updateMcpHeaderEntryValue(entry.id, value)
+                            })
+                            .type(InputType.Password)
+                            .enableAutoFill(false)
+                            .fontSize(14)
+                            .height(44)
+                            .borderRadius(14)
+                            .border({ width: 1, color: getAppUiState().themePrimaryLight })
+                            .padding({ left: 14, right: 14 })
+                        }
+                      } else {
+                        ImmersiveFieldSurface({ cornerRadius: 14 }) {
+                          TextInput({ text: entry.value, placeholder: pickLocalizedText(
+                            '输入 Header Value',
+                            'Enter header value'
+                          ) })
+                            .width('100%')
+                            .backgroundColor(Color.Transparent)
+                            .onChange((value: string) => {
+                              this.updateMcpHeaderEntryValue(entry.id, value)
+                            })
+                            .fontSize(14)
+                            .height(44)
+                            .borderRadius(14)
+                            .border({ width: 1, color: getAppUiState().themePrimaryLight })
+                            .padding({ left: 14, right: 14 })
+                        }
+                      }
+                    }
+                    .width('100%')
+                  }
+                  .width('100%')
+                  .padding(14)
+                  .borderRadius(18)
+                  .backgroundColor(getAppUiState().themeBackground)
+                  .border({ width: 1, color: getAppUiState().themePrimaryLight })
+                }, (entry: McpHeaderEntry) => entry.id)
+              }
             }
-            .layoutWeight(1)
-            .alignItems(HorizontalAlign.Start)
-
-            Toggle({ type: ToggleType.Switch, isOn: this.mcpFormEnabled })
-              .selectedColor(this.themePrimary)
-              .systemMaterial(new uiMaterial.Material())
-              .switchPointColor(Color.White)
-              .onChange((value: boolean) => {
-                this.mcpFormEnabled = value
-              })
+            .width('100%')
+            .padding(16)
+            .borderRadius(LIST_MATERIAL_CARD_RADIUS)
+            .backgroundColor(Color.Transparent)
           }
-          .width('100%')
-          .padding(16)
-          .borderRadius(16)
-          .backgroundColor(Color.Transparent)
-          .border({ width: 0.5, color: getAppUiState().themePrimaryLight })
-          .backdropBlur(16)
-          .shadow(getBlurBottomShadow())
+
+          ImmersiveListSurface({ isImmersive: true, cornerRadius: LIST_MATERIAL_CARD_RADIUS }) {
+            Row({ space: 12 }) {
+              Column({ space: 4 }) {
+                Text(pickLocalizedText('启用该 Server', 'Enable This Server'))
+                  .font(getSettingsTypography().itemTitle)
+                  .fontColor(getAppUiState().themeTextPrimary)
+                  .width('100%')
+
+                Text(this.mcpFormEnabled
+                  ? pickLocalizedText('保存后立即连接并发现工具。', 'Connect and discover tools right after saving.')
+                  : pickLocalizedText('仅保存当前配置。', 'Only save the current configuration.'))
+                  .font(getSettingsTypography().subtitle)
+                  .lineHeight(SETTINGS_SUBTITLE_LINE_HEIGHT)
+                  .fontColor(getAppUiState().themeTextSecondary)
+                  .width('100%')
+              }
+              .layoutWeight(1)
+              .alignItems(HorizontalAlign.Start)
+
+              Toggle({ type: ToggleType.Switch, isOn: this.mcpFormEnabled })
+                .selectedColor(this.themePrimary)
+                .systemMaterial(new uiMaterial.Material())
+                .switchPointColor(Color.White)
+                .onChange((value: boolean) => {
+                  this.mcpFormEnabled = value
+                })
+            }
+            .width('100%')
+            .padding(16)
+            .borderRadius(LIST_MATERIAL_CARD_RADIUS)
+            .backgroundColor(Color.Transparent)
+          }
         }
         .width('100%')
         .padding({ left: 16, right: 16, bottom: 24 })
@@ -2511,6 +2519,8 @@ export struct ToolsCenterPanel {
   SkillConfigSheetBuilder() {
     Column() {
       ImmersiveSheetHeader({
+        titleFont: getSettingsTypography().pageTitle,
+        titleColor: getAppUiState().themeTextPrimary,
         title: this.getSkillFormTitle(),
         showTrailing: true,
         trailingButtonEnabled: !this.isSavingSkill,
@@ -2526,149 +2536,148 @@ export struct ToolsCenterPanel {
 
       Scroll() {
         Column({ space: 14 }) {
-          Column({ space: 12 }) {
-            Row({ space: 12 }) {
-              Column() {
-                SymbolGlyph($r('sys.symbol.doc_text_badge_magnifyingglass'))
-                  .renderingStrategy(SymbolRenderingStrategy.SINGLE)
-                  .fontSize(22)
-                  .fontColor([this.themePrimary])
+          ImmersiveListSurface({ isImmersive: true, cornerRadius: LIST_MATERIAL_CARD_RADIUS }) {
+            Column({ space: 12 }) {
+              Row({ space: 12 }) {
+                Column() {
+                  SymbolGlyph($r('sys.symbol.doc_text_badge_magnifyingglass'))
+                    .renderingStrategy(SymbolRenderingStrategy.SINGLE)
+                    .fontSize(22)
+                    .fontColor([this.themePrimary])
+                }
+                .width(46)
+                .height(46)
+                .borderRadius(16)
+                .backgroundColor(withColorAlpha(this.themePrimary, this.isDarkMode ? '26' : '12'))
+                .justifyContent(FlexAlign.Center)
+
+                Column({ space: 4 }) {
+                  Text(this.getSkillFormHeroTitle())
+                    .font(getSettingsTypography().sectionTitle)
+                    .fontColor(getAppUiState().themeTextPrimary)
+                    .maxLines(1)
+                    .textOverflow({ overflow: TextOverflow.Ellipsis })
+
+                  Text(pickLocalizedText(
+                    '为常用任务编写操作说明。',
+                    'Write instructions for recurring tasks.'
+                  ))
+                    .font(getSettingsTypography().subtitle)
+                    .lineHeight(SETTINGS_SUBTITLE_LINE_HEIGHT)
+                    .fontColor(getAppUiState().themeTextSecondary)
+                    .width('100%')
+                }
+                .layoutWeight(1)
+                .alignItems(HorizontalAlign.Start)
               }
-              .width(46)
-              .height(46)
-              .borderRadius(16)
-              .backgroundColor(withColorAlpha(this.themePrimary, this.isDarkMode ? '26' : '12'))
-              .justifyContent(FlexAlign.Center)
+              .width('100%')
 
-              Column({ space: 4 }) {
-                Text(this.getSkillFormHeroTitle())
-                  .fontSize(18)
-                  .fontWeight(FontWeight.Bold)
-                  .fontColor($r('app.color.text_primary'))
-                  .maxLines(1)
-                  .textOverflow({ overflow: TextOverflow.Ellipsis })
+              Row({ space: 12 }) {
+                Blank()
 
-                Text(pickLocalizedText(
-                  '模型只会读取已启用 Skill 的 SKILL.md 正文。',
-                  'The model can only read enabled Skill content.'
-                ))
-                  .fontSize(12)
-                  .lineHeight(18)
-                  .fontColor($r('app.color.text_secondary'))
+                Toggle({ type: ToggleType.Switch, isOn: this.skillFormEnabled })
+                  .selectedColor(this.themePrimary)
+                  .systemMaterial(new uiMaterial.Material())
+                  .switchPointColor(Color.White)
+                  .onChange((value: boolean) => {
+                    this.skillFormEnabled = value
+                  })
+              }
+              .width('100%')
+            }
+            .width('100%')
+            .padding(16)
+            .borderRadius(LIST_MATERIAL_CARD_RADIUS)
+            .backgroundColor(Color.Transparent)
+          }
+
+          ImmersiveListSurface({ isImmersive: true, cornerRadius: LIST_MATERIAL_CARD_RADIUS }) {
+            Column({ space: 12 }) {
+              Column({ space: SETTINGS_HEADING_CONTENT_GAP }) {
+                Text(pickLocalizedText('名称', 'Name'))
+                  .font(getSettingsTypography().fieldLabel)
+                  .fontColor(getAppUiState().themeTextSecondary)
                   .width('100%')
+
+                ImmersiveFieldSurface({ cornerRadius: 14 }) {
+                  TextInput({ text: this.skillFormName, placeholder: 'app-help' })
+                    .width('100%')
+                    .backgroundColor(Color.Transparent)
+                    .onChange((value: string) => {
+                      this.skillFormName = value
+                    })
+                    .fontSize(14)
+                    .height(46)
+                    .borderRadius(14)
+                    .border({ width: 1, color: getAppUiState().themePrimaryLight })
+                    .padding({ left: 14, right: 14 })
+                }
               }
-              .layoutWeight(1)
-              .alignItems(HorizontalAlign.Start)
-            }
-            .width('100%')
-
-            Row({ space: 12 }) {
-              Blank()
-
-              Toggle({ type: ToggleType.Switch, isOn: this.skillFormEnabled })
-                .selectedColor(this.themePrimary)
-                .systemMaterial(new uiMaterial.Material())
-                .switchPointColor(Color.White)
-                .onChange((value: boolean) => {
-                  this.skillFormEnabled = value
-                })
-            }
-            .width('100%')
-          }
-          .width('100%')
-          .padding(16)
-          .borderRadius(16)
-          .backgroundColor(Color.Transparent)
-          .border({ width: 0.5, color: getAppUiState().themePrimaryLight })
-          .backdropBlur(16)
-          .shadow(getBlurBottomShadow())
-
-          Column({ space: 12 }) {
-            Column({ space: 6 }) {
-              Text(pickLocalizedText('名称', 'Name'))
-                .fontSize(12)
-                .fontWeight(FontWeight.Medium)
-                .fontColor($r('app.color.text_secondary'))
-                .width('100%')
-
-              TextInput({ text: this.skillFormName, placeholder: 'app-help' })
-                .onChange((value: string) => {
-                  this.skillFormName = value
-                })
-                .fontSize(14)
-                .width('100%')
-                .height(46)
-                .borderRadius(14)
-                .backgroundColor(getAppUiState().themeBackground)
-                .border({ width: 1, color: getAppUiState().themePrimaryLight })
-                .padding({ left: 14, right: 14 })
-            }
-            .width('100%')
-
-            Column({ space: 6 }) {
-              Text(pickLocalizedText('描述', 'Description'))
-                .fontSize(12)
-                .fontWeight(FontWeight.Medium)
-                .fontColor($r('app.color.text_secondary'))
-                .width('100%')
-
-              TextInput({ text: this.skillFormDescription, placeholder: pickLocalizedText(
-                '一句话说明这个 Skill 适合回答什么问题',
-                'Describe when this Skill should be used'
-              ) })
-                .onChange((value: string) => {
-                  this.skillFormDescription = value
-                })
-                .fontSize(14)
-                .width('100%')
-                .height(46)
-                .borderRadius(14)
-                .backgroundColor(getAppUiState().themeBackground)
-                .border({ width: 1, color: getAppUiState().themePrimaryLight })
-                .padding({ left: 14, right: 14 })
-            }
-            .width('100%')
-          }
-          .width('100%')
-          .padding(16)
-          .borderRadius(16)
-          .backgroundColor(Color.Transparent)
-          .border({ width: 0.5, color: getAppUiState().themePrimaryLight })
-          .backdropBlur(16)
-          .shadow(getBlurBottomShadow())
-
-          Column({ space: 8 }) {
-            Text('SKILL.md')
-              .fontSize(15)
-              .fontWeight(FontWeight.Bold)
-              .fontColor($r('app.color.text_primary'))
               .width('100%')
 
-            TextArea({ text: this.skillFormContent, placeholder: pickLocalizedText(
-              '# 使用说明\\n\\n写下模型需要遵守的能力说明、入口和限制。',
-              '# Instructions\\n\\nWrite the capability guidance, entry points, and limits.'
-            ) })
-              .fontSize(14)
-              .lineHeight(20)
-              .fontColor($r('app.color.text_primary'))
-              .placeholderColor($r('app.color.text_tertiary'))
-              .backgroundColor(getAppUiState().themeBackground)
-              .borderRadius(14)
-              .border({ width: 1, color: getAppUiState().themePrimaryLight })
-              .padding({ left: 14, right: 14, top: 12, bottom: 12 })
+              Column({ space: SETTINGS_HEADING_CONTENT_GAP }) {
+                Text(pickLocalizedText('描述', 'Description'))
+                  .font(getSettingsTypography().fieldLabel)
+                  .fontColor(getAppUiState().themeTextSecondary)
+                  .width('100%')
+
+                ImmersiveFieldSurface({ cornerRadius: 14 }) {
+                  TextInput({ text: this.skillFormDescription, placeholder: pickLocalizedText(
+                    '一句话说明这个 Skill 适合回答什么问题',
+                    'Describe when this Skill should be used'
+                  ) })
+                    .width('100%')
+                    .backgroundColor(Color.Transparent)
+                    .onChange((value: string) => {
+                      this.skillFormDescription = value
+                    })
+                    .fontSize(14)
+                    .height(46)
+                    .borderRadius(14)
+                    .border({ width: 1, color: getAppUiState().themePrimaryLight })
+                    .padding({ left: 14, right: 14 })
+                }
+              }
               .width('100%')
-              .height(260)
-              .onChange((value: string) => {
-                this.skillFormContent = value
-              })
+            }
+            .width('100%')
+            .padding(16)
+            .borderRadius(LIST_MATERIAL_CARD_RADIUS)
+            .backgroundColor(Color.Transparent)
           }
-          .width('100%')
-          .padding(16)
-          .borderRadius(16)
-          .backgroundColor(Color.Transparent)
-          .border({ width: 0.5, color: getAppUiState().themePrimaryLight })
-          .backdropBlur(16)
-          .shadow(getBlurBottomShadow())
+
+          ImmersiveListSurface({ isImmersive: true, cornerRadius: LIST_MATERIAL_CARD_RADIUS }) {
+            Column({ space: 8 }) {
+              Text('SKILL.md')
+                .font(getSettingsTypography().sectionTitle)
+                .fontColor(getAppUiState().themeTextPrimary)
+                .width('100%')
+
+              ImmersiveFieldSurface({ cornerRadius: 14 }) {
+                TextArea({ text: this.skillFormContent, placeholder: pickLocalizedText(
+                  '# 使用说明\\n\\n写下模型需要遵守的能力说明、入口和限制。',
+                  '# Instructions\\n\\nWrite the capability guidance, entry points, and limits.'
+                ) })
+                  .width('100%')
+                  .backgroundColor(Color.Transparent)
+                  .fontSize(14)
+                  .lineHeight(20)
+                  .fontColor($r('app.color.text_primary'))
+                  .placeholderColor($r('app.color.text_tertiary'))
+                  .borderRadius(14)
+                  .border({ width: 1, color: getAppUiState().themePrimaryLight })
+                  .padding({ left: 14, right: 14, top: 12, bottom: 12 })
+                  .height(260)
+                  .onChange((value: string) => {
+                    this.skillFormContent = value
+                  })
+              }
+            }
+            .width('100%')
+            .padding(16)
+            .borderRadius(LIST_MATERIAL_CARD_RADIUS)
+            .backgroundColor(Color.Transparent)
+          }
         }
         .width('100%')
         .padding({ left: 16, right: 16, bottom: 24 })
@@ -2682,15 +2691,59 @@ export struct ToolsCenterPanel {
     .backgroundColor(getAppUiState().themeBackground)
   }
 
+  @Builder
+  private CategoryDivider() {
+    Row() {
+      Divider()
+        .strokeWidth(0.5)
+        .color(getAppUiState().themePrimaryLight)
+    }
+    .width('100%')
+    .padding({ left: 16, right: 16 })
+  }
+
+  @Builder
+  private BuiltinCategoryItems(category: BuiltinToolCategory, dividerBeforeFirst: boolean) {
+    ForEach(this.getBuiltinToolsByCategory(category), (tool: ToolConfig, index: number) => {
+      if (dividerBeforeFirst || index > 0) {
+        this.CategoryDivider()
+      }
+      BuiltinToolCardItem({
+        embedded: true,
+        tool: tool,
+        selected: this.isToolSelected(tool.id),
+        configurable: tool.id === MODLENS_READ_IMAGE_TOOL_ID || tool.id === BUILTIN_BROWSER_TOOL_ID,
+        onToggle: (enabled: boolean): void => {
+          this.handleBuiltinToolSelectionChanged(tool.id, enabled)
+        },
+        onConfigure: (): void => {
+          if (tool.id === BUILTIN_BROWSER_TOOL_ID) {
+            this.showBrowserConfigSheet = true
+          } else {
+            this.openModLensConfig()
+          }
+        }
+      })
+    }, (tool: ToolConfig) => tool.id)
+  }
+
+  @Builder
+  private BuiltinCategoryCard(category: BuiltinToolCategory) {
+    if (this.getBuiltinToolsByCategory(category).length > 0) {
+      ToolCategoryCard({ title: getBuiltinToolCategoryTitle(category) }) {
+        this.BuiltinCategoryItems(category, false)
+      }
+    }
+  }
+
   build() {
     Column() {
       Column() {
         if (this.showHeader) {
           Row() {
             Text($r('app.string.tools_center_title'))
-              .fontSize(18)
-              .fontWeight(FontWeight.Bold)
-              .fontColor($r('app.color.text_primary'))
+              .font(getSettingsTypography().pageTitle)
+              .fontColor(getAppUiState().themeTextPrimary)
 
             Blank()
 
@@ -2724,221 +2777,230 @@ export struct ToolsCenterPanel {
           .padding({ top: this.contentTopPadding })
         } else {
           Scroll(this.contentScroller) {
-            Column({ space: 20 }) {
-              if (this.contentTopPadding > 0) {
-                Blank()
-                  .width('100%')
-                  .height(this.contentTopPadding)
-              }
-
-              SearchServiceCardItem({
-                searchEnabled: this.searchServiceEnabled,
-                searchEngineDisplayValue: this.searchEngineDisplayValue,
-                onToggle: (enabled: boolean) => {
-                  this.handleSearchServiceEnabledChanged(enabled)
-                },
-                onOpenConfig: () => {
-                  this.showSearchConfigSheet = true
-                }
-              })
-
-              RetrievalCallLimitCardItem({
-                webSearchCallLimit: this.webSearchCallLimit,
-                knowledgeSearchCallLimit: this.knowledgeSearchCallLimit,
-                onWebSearchLimitChange: (limit: number): void => {
-                  this.handleWebSearchCallLimitChanged(limit)
-                },
-                onKnowledgeSearchLimitChange: (limit: number): void => {
-                  this.handleKnowledgeSearchCallLimitChanged(limit)
-                }
-              })
-
-              ContextCompactCardItem({
-                compactEnabled: this.contextCompactEnabled,
-                thresholdPercent: this.contextCompactThresholdPercent,
-                maxContextTokens: this.contextCompactMaxTokens,
-                onToggle: (enabled: boolean) => {
-                  this.handleContextCompactEnabledChanged(enabled)
-                },
-                onThresholdChange: (percent: number) => {
-                  this.handleContextCompactThresholdChanged(percent)
-                },
-                onMaxContextTokensChange: (tokens: number) => {
-                  this.handleContextCompactMaxTokensChanged(tokens)
-                }
-              })
-
-              SkillServiceCardItem({
-                skillEnabled: this.skillToolEnabled,
-                totalSkillCount: this.skills.length,
-                enabledSkillCount: this.getEnabledSkillCount(),
-                skills: this.skills,
-                onToggle: (enabled: boolean) => {
-                  this.handleSkillToolEnabledChanged(enabled)
-                },
-                onCreateSkill: () => {
-                  this.openCreateSkill()
-                },
-                onToggleSkillEnabled: (skillId: string, enabled: boolean) => {
-                  this.updateSkillEnabled(skillId, enabled)
-                },
-                onEditSkill: (skill: SkillConfig) => {
-                  this.openEditSkill(skill)
-                },
-                onDeleteSkill: (skillId: string) => {
-                  this.handleDeleteSkill(skillId)
-                }
-              })
-
-              SavedPlacesCard({
-                toolEnabled: this.isToolSelected(SAVED_PLACES_TOOL_ID),
-                onToggle: (enabled: boolean): void => {
-                  this.handleBuiltinToolSelectionChanged(SAVED_PLACES_TOOL_ID, enabled)
-                }
-              })
-
-              EmailAccountSettingsCard()
-
-              if (this.builtinTools.length > 0) {
-                ForEach(this.builtinTools, (tool: ToolConfig) => {
-                  BuiltinToolCardItem({
-                    tool: tool,
-                    selected: this.isToolSelected(tool.id),
-                    configurable: tool.id === MODLENS_READ_IMAGE_TOOL_ID || tool.id === BUILTIN_BROWSER_TOOL_ID,
-                    onToggle: (enabled: boolean): void => {
-                      this.handleBuiltinToolSelectionChanged(tool.id, enabled)
+            // 与其他设置页共用单层留白；最大宽度只约束卡片，不缩窄滚动和阴影区域。
+            Column() {
+              Column({ space: 12 }) {
+                ToolCategoryCard({ title: getBuiltinToolCategoryTitle(BuiltinToolCategory.WEB) }) {
+                  SearchServiceCardItem({
+                    embedded: true,
+                    searchEnabled: this.searchServiceEnabled,
+                    searchEngineDisplayValue: this.searchEngineDisplayValue,
+                    onToggle: (enabled: boolean) => {
+                      this.handleSearchServiceEnabledChanged(enabled)
                     },
-                    onConfigure: (): void => {
-                      if (tool.id === BUILTIN_BROWSER_TOOL_ID) {
-                        this.showBrowserConfigSheet = true
-                      } else {
-                        this.openModLensConfig()
+                    onOpenConfig: () => {
+                      this.showSearchConfigSheet = true
+                    }
+                  })
+
+                  this.CategoryDivider()
+
+                  RetrievalCallLimitCardItem({
+                    embedded: true,
+                    webSearchCallLimit: this.webSearchCallLimit,
+                    knowledgeSearchCallLimit: this.knowledgeSearchCallLimit,
+                    onWebSearchLimitChange: (limit: number): void => {
+                      this.handleWebSearchCallLimitChanged(limit)
+                    },
+                    onKnowledgeSearchLimitChange: (limit: number): void => {
+                      this.handleKnowledgeSearchCallLimitChanged(limit)
+                    }
+                  })
+
+                  this.BuiltinCategoryItems(BuiltinToolCategory.WEB, true)
+                }
+
+                ToolCategoryCard({ title: getBuiltinToolCategoryTitle(BuiltinToolCategory.EMAIL) }) {
+                  EmailAccountSettingsCard({ embedded: true })
+                  this.BuiltinCategoryItems(BuiltinToolCategory.EMAIL, true)
+                }
+
+                ToolCategoryCard({ title: getBuiltinToolCategoryTitle(BuiltinToolCategory.MAPS) }) {
+                  this.BuiltinCategoryItems(BuiltinToolCategory.MAPS, false)
+                  if (this.getBuiltinToolsByCategory(BuiltinToolCategory.MAPS).length > 0) {
+                    this.CategoryDivider()
+                  }
+                  SavedPlacesCard({
+                    embedded: true,
+                    toolEnabled: this.isToolSelected(SAVED_PLACES_TOOL_ID),
+                    onToggle: (enabled: boolean): void => {
+                      this.handleBuiltinToolSelectionChanged(SAVED_PLACES_TOOL_ID, enabled)
+                    }
+                  })
+                }
+
+                this.BuiltinCategoryCard(BuiltinToolCategory.CALENDAR)
+                this.BuiltinCategoryCard(BuiltinToolCategory.DOCUMENTS)
+                this.BuiltinCategoryCard(BuiltinToolCategory.COMPUTING)
+
+                ToolCategoryCard({ title: getBuiltinToolCategoryTitle(BuiltinToolCategory.ASSISTANT) }) {
+                  ContextCompactCardItem({
+                    embedded: true,
+                    compactEnabled: this.contextCompactEnabled,
+                    thresholdPercent: this.contextCompactThresholdPercent,
+                    maxContextTokens: this.contextCompactMaxTokens,
+                    onToggle: (enabled: boolean) => {
+                      this.handleContextCompactEnabledChanged(enabled)
+                    },
+                    onThresholdChange: (percent: number) => {
+                      this.handleContextCompactThresholdChanged(percent)
+                    },
+                    onMaxContextTokensChange: (tokens: number) => {
+                      this.handleContextCompactMaxTokensChanged(tokens)
+                    }
+                  })
+                  this.BuiltinCategoryItems(BuiltinToolCategory.ASSISTANT, true)
+                }
+
+                SkillServiceCardItem({
+                  skillEnabled: this.skillToolEnabled,
+                  totalSkillCount: this.skills.length,
+                  enabledSkillCount: this.getEnabledSkillCount(),
+                  skills: this.skills,
+                  onToggle: (enabled: boolean) => {
+                    this.handleSkillToolEnabledChanged(enabled)
+                  },
+                  onCreateSkill: () => {
+                    this.openCreateSkill()
+                  },
+                  onToggleSkillEnabled: (skillId: string, enabled: boolean) => {
+                    this.updateSkillEnabled(skillId, enabled)
+                  },
+                  onEditSkill: (skill: SkillConfig) => {
+                    this.openEditSkill(skill)
+                  },
+                  onDeleteSkill: (skillId: string) => {
+                    this.handleDeleteSkill(skillId)
+                  }
+                })
+
+                this.BuiltinCategoryCard(BuiltinToolCategory.OTHER)
+
+                Column({ space: SETTINGS_HEADING_CONTENT_GAP }) {
+                  Column({ space: 4 }) {
+                    Row() {
+                      Text(pickLocalizedText('MCP 服务', 'MCP Services'))
+                        .font(getSettingsTypography().sectionTitle)
+                        .fontColor(getAppUiState().themeTextPrimary)
+                        .layoutWeight(1)
+
+                      if (this.isRefreshingMcpServers) {
+                        LoadingProgress()
+                          .width(18)
+                          .height(18)
+                          .color(this.themePrimary)
+                          .margin({ right: 8 })
                       }
+
+                      Button() {
+                        Row({ space: 4 }) {
+                          SymbolGlyph($r('sys.symbol.plus'))
+                            .renderingStrategy(SymbolRenderingStrategy.SINGLE)
+                            .fontSize(13)
+                            .fontColor([Color.White])
+                          Text(pickLocalizedText('新增', 'Add'))
+                            .fontSize(12)
+                            .fontWeight(FontWeight.Medium)
+                            .fontColor(Color.White)
+                        }
+                      }
+                      .height(32)
+                      .padding({ left: 14, right: 14 })
+                      .type(ButtonType.Capsule)
+                      .stateEffect(false)
+                      .backgroundColor(this.themePrimary)
+                      .onClick(() => {
+                        this.openCreateMcpServer()
+                      })
                     }
-                  })
-                }, (tool: ToolConfig) => tool.id)
-              }
+                    .width('100%')
 
-              Column({ space: 10 }) {
-                Row() {
-                  Text(pickLocalizedText('MCP 服务', 'MCP Services'))
-                    .fontSize(15)
-                    .fontWeight(FontWeight.Bold)
-                    .fontColor($r('app.color.text_primary'))
-                    .layoutWeight(1)
-
-                  if (this.isRefreshingMcpServers) {
-                    LoadingProgress()
-                      .width(18)
-                      .height(18)
-                      .color(this.themePrimary)
-                      .margin({ right: 8 })
-                  }
-
-                  Button() {
-                    Row({ space: 4 }) {
-                      SymbolGlyph($r('sys.symbol.plus'))
-                        .renderingStrategy(SymbolRenderingStrategy.SINGLE)
-                        .fontSize(13)
-                        .fontColor([Color.White])
-                      Text(pickLocalizedText('新增', 'Add'))
-                        .fontSize(12)
-                        .fontWeight(FontWeight.Medium)
-                        .fontColor(Color.White)
+                    if (this.mcpServers.length > 0) {
+                      Text(this.getMcpServerConnectedCountText())
+                        .font(getSettingsTypography().subtitle)
+                        .lineHeight(SETTINGS_SUBTITLE_LINE_HEIGHT)
+                        .fontColor(getAppUiState().themeTextSecondary)
+                        .width('100%')
                     }
                   }
-                  .height(32)
-                  .padding({ left: 14, right: 14 })
-                  .type(ButtonType.Capsule)
-                  .stateEffect(false)
-                  .backgroundColor(this.themePrimary)
-                  .onClick(() => {
-                    this.openCreateMcpServer()
-                  })
+                  .width('100%')
+
+                  if (this.mcpServers.length === 0) {
+                    ImmersiveListSurface({ isImmersive: true, cornerRadius: LIST_MATERIAL_CARD_RADIUS }) {
+                      Row({ space: 12 }) {
+                        ChatFloatingImmersiveButton({
+                          barWidth: 42,
+                          barHeight: 42,
+                          iconResource: $r('sys.symbol.puzzle'),
+                          iconSize: 22,
+                          iconColor: [this.themePrimary],
+                          responsePadding: 0,
+                          onButtonClick: (): void => {
+                            this.openCreateMcpServer()
+                          }
+                        }) {
+                          Stack({ alignContent: Alignment.Center }) {
+                            SymbolGlyph($r('sys.symbol.puzzle'))
+                              .renderingStrategy(SymbolRenderingStrategy.SINGLE)
+                              .fontSize(22)
+                              .fontColor([this.themePrimary])
+                          }
+                          .width(42)
+                          .height(42)
+                        }
+
+                        Column({ space: 4 }) {
+                          Text(pickLocalizedText('还没有 MCP Server', 'No MCP server yet'))
+                            .font(getSettingsTypography().itemTitle)
+                            .fontColor(getAppUiState().themeTextPrimary)
+
+                          Text(pickLocalizedText('点击右上角新增。', 'Tap Add in the top right to create one.'))
+                            .font(getSettingsTypography().subtitle)
+                            .lineHeight(SETTINGS_SUBTITLE_LINE_HEIGHT)
+                            .fontColor(getAppUiState().themeTextSecondary)
+                            .width('100%')
+                        }
+                        .layoutWeight(1)
+                        .alignItems(HorizontalAlign.Start)
+                      }
+                      .width('100%')
+                      .padding(18)
+                      .borderRadius(LIST_MATERIAL_CARD_RADIUS)
+                      .backgroundColor(Color.Transparent)
+                    }
+                  } else {
+                    ForEach(this.mcpServers, (server: McpServerConfig) => {
+                      McpServerCardItem({
+                        serverName: server.name,
+                        serverBaseUrl: server.baseUrl,
+                        serverEnabled: server.enabled,
+                        tools: this.getServerTools(server.id),
+                        authLabel: this.getMcpServerAuthLabel(server),
+                        customHeaderCount: this.getServerCustomHeaderCount(server),
+                        onToggleEnabled: (value: boolean) => {
+                          this.handleMcpServerEnabledChanged(server.id, value)
+                        },
+                        onRefresh: () => {
+                          this.refreshMcpServer(server.id)
+                        },
+                        onEdit: () => {
+                          this.openEditMcpServer(server)
+                        },
+                        onDelete: () => {
+                          this.handleDeleteMcpServer(server.id)
+                        }
+                      })
+                    }, (server: McpServerConfig) => server.id)
+                  }
                 }
                 .width('100%')
-
-                if (this.mcpServers.length > 0) {
-                  Text(this.getMcpServerConnectedCountText())
-                    .fontSize(12)
-                    .fontColor($r('app.color.text_secondary'))
-                    .width('100%')
-                }
               }
               .width('100%')
-
-              if (this.mcpServers.length === 0) {
-                Row({ space: 12 }) {
-                  ChatFloatingImmersiveButton({
-                    barWidth: 42,
-                    barHeight: 42,
-                    iconResource: $r('sys.symbol.puzzle'),
-                    iconSize: 22,
-                    iconColor: [this.themePrimary],
-                    responsePadding: 0,
-                    onButtonClick: (): void => {
-                      this.openCreateMcpServer()
-                    }
-                  }) {
-                    Stack({ alignContent: Alignment.Center }) {
-                      SymbolGlyph($r('sys.symbol.puzzle'))
-                        .renderingStrategy(SymbolRenderingStrategy.SINGLE)
-                        .fontSize(22)
-                        .fontColor([this.themePrimary])
-                    }
-                    .width(42)
-                    .height(42)
-                  }
-
-                  Column({ space: 4 }) {
-                    Text(pickLocalizedText('还没有 MCP Server', 'No MCP server yet'))
-                      .fontSize(15)
-                      .fontWeight(FontWeight.Bold)
-                      .fontColor($r('app.color.text_primary'))
-
-                    Text(pickLocalizedText('点击右上角新增。', 'Tap Add in the top right to create one.'))
-                      .fontSize(12)
-                      .lineHeight(18)
-                      .fontColor($r('app.color.text_secondary'))
-                      .width('100%')
-                  }
-                  .layoutWeight(1)
-                  .alignItems(HorizontalAlign.Start)
-                }
-                .width('100%')
-                .padding(18)
-                .borderRadius(16)
-                .backgroundColor(Color.Transparent)
-                .border({ width: 0.5, color: getAppUiState().themePrimaryLight })
-                .backdropBlur(16)
-                .shadow(getBlurBottomShadow())
-              } else {
-                ForEach(this.mcpServers, (server: McpServerConfig) => {
-                  McpServerCardItem({
-                    serverName: server.name,
-                    serverBaseUrl: server.baseUrl,
-                    serverEnabled: server.enabled,
-                    tools: this.getServerTools(server.id),
-                    authLabel: this.getMcpServerAuthLabel(server),
-                    customHeaderCount: this.getServerCustomHeaderCount(server),
-                    onToggleEnabled: (value: boolean) => {
-                      this.handleMcpServerEnabledChanged(server.id, value)
-                    },
-                    onRefresh: () => {
-                      this.refreshMcpServer(server.id)
-                    },
-                    onEdit: () => {
-                      this.openEditMcpServer(server)
-                    },
-                    onDelete: () => {
-                      this.handleDeleteMcpServer(server.id)
-                    }
-                  })
-                }, (server: McpServerConfig) => server.id)
-              }
+              .constraintSize({ maxWidth: this.contentMaxWidth })
             }
             .width('100%')
-            .padding({ left: 16, right: 16, top: 8, bottom: this.contentBottomPadding })
+            .alignItems(HorizontalAlign.Center)
+            .padding({ left: 16, right: 16, top: this.contentTopPadding + 8, bottom: this.contentBottomPadding })
           }
           .width('100%')
           .layoutWeight(1)
@@ -2969,11 +3031,16 @@ export struct ToolsCenterPanel {
         .width(0)
         .height(0)
         .bindSheet($$this.showSearchConfigSheet, this.SearchConfigSheetBuilder(), {
-          height: SheetSize.LARGE,
-          detents: [SheetSize.LARGE],
+          height: SheetSize.FIT_CONTENT,
           showClose: false,
           dragBar: true,
-          blurStyle: BlurStyle.Regular,
+          backgroundColor: Color.Transparent,
+          blurStyle: shouldUseWrappedMaterial() ? undefined : BlurStyle.Regular,
+          systemMaterial: shouldUseWrappedMaterial() ? new uiMaterial.ImmersiveMaterial({
+            style: uiMaterial.ImmersiveStyle.REGULAR
+          }) : undefined,
+          preferType: SheetType.BOTTOM,
+          keyboardAvoidMode: SheetKeyboardAvoidMode.TRANSLATE_AND_RESIZE,
           onWillAppear: () => {
             this.loadSearchSettings()
           },
@@ -3041,7 +3108,28 @@ export struct ToolsCenterPanel {
 }
 
 @ComponentV2
+struct ToolCategoryCard {
+  @Param title: string = ''
+  @BuilderParam content: () => void
+
+  build() {
+    Column() {
+      SettingsSectionHeading({ title: this.title })
+
+      ImmersiveListSurface({ isImmersive: true, cornerRadius: LIST_MATERIAL_CARD_RADIUS }) {
+        Column() {
+          this.content()
+        }
+        .width('100%')
+      }
+    }
+    .width('100%')
+  }
+}
+
+@ComponentV2
 struct SearchServiceCardItem {
+  @Param embedded: boolean = false
   @Param searchEnabled: boolean = false
   @Param searchEngineDisplayValue: string = ''
   @Event onToggle: (enabled: boolean) => void = (enabled: boolean) => {}
@@ -3060,82 +3148,81 @@ struct SearchServiceCardItem {
   }
 
   build() {
-    Column({ space: 12 }) {
-      Row({ space: 12 }) {
-        ChatFloatingImmersiveButton({
-          barWidth: 44,
-          barHeight: 44,
-          iconResource: $r('sys.symbol.worldclock_fill_2'),
-          iconSize: 20,
-          iconColor: [this.themePrimary],
-          responsePadding: 0,
-          onButtonClick: (): void => {
-            this.onOpenConfig()
+    ImmersiveListSurface({ isImmersive: !this.embedded, cornerRadius: LIST_MATERIAL_CARD_RADIUS }) {
+      Column({ space: 12 }) {
+        Row({ space: 12 }) {
+          ChatFloatingImmersiveButton({
+            barWidth: 44,
+            barHeight: 44,
+            iconResource: $r('sys.symbol.worldclock_fill_2'),
+            iconSize: 20,
+            iconColor: [this.themePrimary],
+            responsePadding: 0,
+            onButtonClick: (): void => {
+              this.onOpenConfig()
+            }
+          }) {
+            Stack({ alignContent: Alignment.Center }) {
+              SymbolGlyph($r('sys.symbol.worldclock_fill_2'))
+                .renderingStrategy(SymbolRenderingStrategy.SINGLE)
+                .fontSize(20)
+                .fontColor([this.themePrimary])
+            }
+            .width(44)
+            .height(44)
           }
-        }) {
-          Stack({ alignContent: Alignment.Center }) {
-            SymbolGlyph($r('sys.symbol.worldclock_fill_2'))
-              .renderingStrategy(SymbolRenderingStrategy.SINGLE)
-              .fontSize(20)
-              .fontColor([this.themePrimary])
+
+          Column({ space: 6 }) {
+            Text($r('app.string.search_service_card_title'))
+              .font(getSettingsTypography().itemTitle)
+              .fontColor(getAppUiState().themeTextPrimary)
+              .width('100%')
+
+            Text(this.searchEnabled ? this.searchEngineDisplayValue : this.getDisabledText())
+              .font(getSettingsTypography().subtitle)
+              .lineHeight(SETTINGS_SUBTITLE_LINE_HEIGHT)
+              .fontColor(getAppUiState().themeTextSecondary)
+              .width('100%')
           }
-          .width(44)
-          .height(44)
+          .layoutWeight(1)
+          .alignItems(HorizontalAlign.Start)
+
+          Toggle({ type: ToggleType.Switch, isOn: this.searchEnabled })
+            .selectedColor(this.themePrimary)
+            .systemMaterial(new uiMaterial.Material())
+            .switchPointColor(Color.White)
+            .onChange((value: boolean) => {
+              this.onToggle(value)
+            })
         }
+        .width('100%')
 
-        Column({ space: 6 }) {
-          Text($r('app.string.search_service_card_title'))
-            .fontSize(17)
-            .fontWeight(FontWeight.Bold)
-            .fontColor($r('app.color.text_primary'))
-            .width('100%')
+        Row({ space: 4 }) {
+          Blank()
 
-          Text(this.searchEnabled ? this.searchEngineDisplayValue : this.getDisabledText())
+          Text(this.getConfigureText())
+            .fontSize(11)
+            .fontWeight(FontWeight.Medium)
+            .fontColor(this.themePrimary)
+
+          SymbolGlyph($r('sys.symbol.chevron_right'))
+            .renderingStrategy(SymbolRenderingStrategy.SINGLE)
             .fontSize(12)
-            .fontColor($r('app.color.text_secondary'))
-            .width('100%')
+            .fontColor([this.themePrimary])
         }
-        .layoutWeight(1)
-        .alignItems(HorizontalAlign.Start)
-
-        Toggle({ type: ToggleType.Switch, isOn: this.searchEnabled })
-          .selectedColor(this.themePrimary)
-          .systemMaterial(new uiMaterial.Material())
-          .switchPointColor(Color.White)
-          .onChange((value: boolean) => {
-            this.onToggle(value)
-          })
+        .width('100%')
+        .onClick(() => {
+          this.onOpenConfig()
+        })
       }
       .width('100%')
-
-      Row({ space: 4 }) {
-        Blank()
-
-        Text(this.getConfigureText())
-          .fontSize(11)
-          .fontWeight(FontWeight.Medium)
-          .fontColor(this.themePrimary)
-
-        SymbolGlyph($r('sys.symbol.chevron_right'))
-          .renderingStrategy(SymbolRenderingStrategy.SINGLE)
-          .fontSize(12)
-          .fontColor([this.themePrimary])
-      }
-      .width('100%')
+      .padding(16)
+      .borderRadius(LIST_MATERIAL_CARD_RADIUS)
+      .backgroundColor(Color.Transparent)
       .onClick(() => {
         this.onOpenConfig()
       })
     }
-    .width('100%')
-    .padding(16)
-    .borderRadius(16)
-    .backgroundColor(Color.Transparent)
-    .border({ width: 0.5, color: getAppUiState().themePrimaryLight })
-    .backdropBlur(16)
-    .shadow(getBlurBottomShadow())
-    .onClick(() => {
-      this.onOpenConfig()
-    })
   }
 }
 
@@ -3145,7 +3232,6 @@ struct RetrievalCallLimitSlider {
   @Param callLimit: number = UNLIMITED_RETRIEVAL_CALL_LIMIT
   @Event onLimitChange: (limit: number) => void = (_limit: number): void => {}
   @Local draggingLimit: number = -1
-  private readonly scaleValues: number[] = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
 
   private get themePrimary(): string {
     return getAppUiState().themePrimary
@@ -3167,33 +3253,12 @@ struct RetrievalCallLimitSlider {
     return mode === SliderChangeMode.End || mode === SliderChangeMode.Click
   }
 
-  @Builder
-  private ScaleTicks() {
-    Row() {
-      ForEach(this.scaleValues, (_scaleValue: number, index: number) => {
-        Column()
-          .width(2)
-          .height(7)
-          .borderRadius(1)
-          .backgroundColor($r('app.color.text_tertiary'))
-
-        if (index < this.scaleValues.length - 1) {
-          Blank()
-            .layoutWeight(1)
-        }
-      }, (_scaleValue: number, index: number) => `retrieval_tick_${index}`)
-    }
-    .width('100%')
-    .padding({ left: 11, right: 11 })
-  }
-
   build() {
     Column({ space: 4 }) {
       Row() {
         Text(this.label)
-          .fontSize(12)
-          .fontWeight(FontWeight.Medium)
-          .fontColor($r('app.color.text_secondary'))
+          .font(getSettingsTypography().fieldLabel)
+          .fontColor(getAppUiState().themeTextSecondary)
           .layoutWeight(1)
 
         Text(this.getDisplayLimitText())
@@ -3208,13 +3273,17 @@ struct RetrievalCallLimitSlider {
         min: UNLIMITED_RETRIEVAL_CALL_LIMIT,
         max: MAX_RETRIEVAL_CALL_LIMIT,
         step: 1,
-        style: SliderStyle.OutSet
+        style: SliderStyle.InSet
       })
         .width('100%')
+        .systemMaterial(new uiMaterial.ImmersiveMaterial({
+          style: uiMaterial.ImmersiveStyle.ULTRA_THIN
+        }))
         .selectedColor(this.themePrimary)
-        .trackColor(getAppUiState().themeBackground)
-        .blockColor(Color.White)
-        .showSteps(false)
+        .trackThickness(20)
+        .showSteps(true)
+        .stepSize(4)
+        .stepColor('#B3B3B3')
         .onChange((value: number, mode: SliderChangeMode) => {
           this.draggingLimit = Math.round(value)
           if (this.isSliderCommitted(mode)) {
@@ -3224,26 +3293,6 @@ struct RetrievalCallLimitSlider {
           }
         })
 
-      this.ScaleTicks()
-
-      Row() {
-        ForEach(this.scaleValues, (scaleValue: number, index: number) => {
-          Text(scaleValue === 0 ? '∞' : `${scaleValue}`)
-            .fontSize(9)
-            .fontColor(scaleValue === this.getDisplayLimit()
-              ? this.themePrimary
-              : $r('app.color.text_tertiary'))
-            .fontWeight(scaleValue === this.getDisplayLimit() ? FontWeight.Bold : FontWeight.Regular)
-            .textAlign(TextAlign.Center)
-            .width(24)
-
-          if (index < this.scaleValues.length - 1) {
-            Blank()
-              .layoutWeight(1)
-          }
-        }, (scaleValue: number) => `${scaleValue}`)
-      }
-      .width('100%')
     }
     .width('100%')
   }
@@ -3252,6 +3301,7 @@ struct RetrievalCallLimitSlider {
 // Web Search 与知识库各自选择档位，主助手和每个子智能体分别独立计数。
 @ComponentV2
 struct RetrievalCallLimitCardItem {
+  @Param embedded: boolean = false
   @Param webSearchCallLimit: number = UNLIMITED_RETRIEVAL_CALL_LIMIT
   @Param knowledgeSearchCallLimit: number = UNLIMITED_RETRIEVAL_CALL_LIMIT
   @Event onWebSearchLimitChange: (limit: number) => void = (_limit: number): void => {}
@@ -3262,87 +3312,77 @@ struct RetrievalCallLimitCardItem {
   }
 
   build() {
-    Column({ space: 12 }) {
-      Row({ space: 12 }) {
-        ChatFloatingImmersiveButton({
-          barWidth: 44,
-          barHeight: 44,
-          iconResource: $r('sys.symbol.magnifyingglass'),
-          iconSize: 20,
-          iconColor: [this.themePrimary],
-          responsePadding: 0,
-          onButtonClick: (): void => {}
-        }) {
-          Stack({ alignContent: Alignment.Center }) {
-            SymbolGlyph($r('sys.symbol.magnifyingglass'))
-              .renderingStrategy(SymbolRenderingStrategy.SINGLE)
-              .fontSize(20)
-              .fontColor([this.themePrimary])
+    ImmersiveListSurface({ isImmersive: !this.embedded, cornerRadius: LIST_MATERIAL_CARD_RADIUS }) {
+      Column({ space: 12 }) {
+        Row({ space: 12 }) {
+          ChatFloatingImmersiveButton({
+            barWidth: 44,
+            barHeight: 44,
+            iconResource: $r('sys.symbol.magnifyingglass'),
+            iconSize: 20,
+            iconColor: [this.themePrimary],
+            responsePadding: 0,
+            onButtonClick: (): void => {}
+          }) {
+            Stack({ alignContent: Alignment.Center }) {
+              SymbolGlyph($r('sys.symbol.magnifyingglass'))
+                .renderingStrategy(SymbolRenderingStrategy.SINGLE)
+                .fontSize(20)
+                .fontColor([this.themePrimary])
+            }
+            .width(44)
+            .height(44)
           }
-          .width(44)
-          .height(44)
+
+          Column({ space: 4 }) {
+            Text(pickLocalizedText('每轮检索次数', 'Searches per turn'))
+              .font(getSettingsTypography().itemTitle)
+              .fontColor(getAppUiState().themeTextPrimary)
+              .width('100%')
+
+            Text(pickLocalizedText('设置每轮联网和知识库检索的次数。', 'Set search limits for each turn.'))
+              .font(getSettingsTypography().subtitle)
+              .lineHeight(SETTINGS_SUBTITLE_LINE_HEIGHT)
+              .fontColor(getAppUiState().themeTextSecondary)
+              .width('100%')
+          }
+          .layoutWeight(1)
+          .alignItems(HorizontalAlign.Start)
         }
-
-        Column({ space: 4 }) {
-          Text(pickLocalizedText('每轮检索次数', 'Searches per turn'))
-            .fontSize(17)
-            .fontWeight(FontWeight.Bold)
-            .fontColor($r('app.color.text_primary'))
-            .width('100%')
-
-          Text(pickLocalizedText('Web Search 与知识库分别设置', 'Separate limits for web and knowledge'))
-            .fontSize(12)
-            .fontColor($r('app.color.text_secondary'))
-            .width('100%')
-        }
-        .layoutWeight(1)
-        .alignItems(HorizontalAlign.Start)
-      }
-      .width('100%')
-
-      Text(pickLocalizedText(
-        '主助手与每个子智能体分别计数。不设限制时仍会要求模型在证据充分、结果重复或已无新信息时停止。',
-        'The main assistant and each sub-agent count independently. No-limit mode still tells the model to stop ' +
-          'when evidence is sufficient, results repeat, or no new information remains.'
-      ))
-        .fontSize(12)
-        .lineHeight(18)
-        .fontColor($r('app.color.text_secondary'))
         .width('100%')
 
-      RetrievalCallLimitSlider({
-        label: 'Web Search',
-        callLimit: this.webSearchCallLimit,
-        onLimitChange: (limit: number): void => {
-          this.onWebSearchLimitChange(limit)
-        }
-      })
+        RetrievalCallLimitSlider({
+          label: pickLocalizedText('联网搜索', 'Web Search'),
+          callLimit: this.webSearchCallLimit,
+          onLimitChange: (limit: number): void => {
+            this.onWebSearchLimitChange(limit)
+          }
+        })
 
-      Divider()
-        .strokeWidth(0.5)
-        .color(getAppUiState().themePrimaryLight)
+        Divider()
+          .strokeWidth(0.5)
+          .color(getAppUiState().themePrimaryLight)
 
-      RetrievalCallLimitSlider({
-        label: pickLocalizedText('知识库检索', 'Knowledge search'),
-        callLimit: this.knowledgeSearchCallLimit,
-        onLimitChange: (limit: number): void => {
-          this.onKnowledgeSearchLimitChange(limit)
-        }
-      })
+        RetrievalCallLimitSlider({
+          label: pickLocalizedText('知识库检索', 'Knowledge search'),
+          callLimit: this.knowledgeSearchCallLimit,
+          onLimitChange: (limit: number): void => {
+            this.onKnowledgeSearchLimitChange(limit)
+          }
+        })
+      }
+      .width('100%')
+      .padding(16)
+      .borderRadius(LIST_MATERIAL_CARD_RADIUS)
+      .backgroundColor(Color.Transparent)
     }
-    .width('100%')
-    .padding(16)
-    .borderRadius(16)
-    .backgroundColor(Color.Transparent)
-    .border({ width: 0.5, color: getAppUiState().themePrimaryLight })
-    .backdropBlur(16)
-    .shadow(getBlurBottomShadow())
   }
 }
 
 // 上下文压缩设置卡片：超过阈值后由应用直接压缩，并在同一气泡中继续当前回答。
 @ComponentV2
 struct ContextCompactCardItem {
+  @Param embedded: boolean = false
   @Param compactEnabled: boolean = true
   @Param thresholdPercent: number = DEFAULT_COMPACT_THRESHOLD_PERCENT
   @Param maxContextTokens: number = DEFAULT_CONTEXT_LIMIT_TOKENS
@@ -3382,167 +3422,155 @@ struct ContextCompactCardItem {
   }
 
   build() {
-    Column({ space: 12 }) {
-      Row({ space: 12 }) {
-        ChatFloatingImmersiveButton({
-          barWidth: 44,
-          barHeight: 44,
-          iconResource: $r('sys.symbol.doc_zipper'),
-          iconSize: 20,
-          iconColor: [this.themePrimary],
-          responsePadding: 0,
-          onButtonClick: (): void => {}
-        }) {
-          Stack({ alignContent: Alignment.Center }) {
-            SymbolGlyph($r('sys.symbol.doc_zipper'))
-              .renderingStrategy(SymbolRenderingStrategy.SINGLE)
-              .fontSize(20)
-              .fontColor([this.themePrimary])
+    ImmersiveListSurface({ isImmersive: !this.embedded, cornerRadius: LIST_MATERIAL_CARD_RADIUS }) {
+      Column({ space: 12 }) {
+        Row({ space: 12 }) {
+          ChatFloatingImmersiveButton({
+            barWidth: 44,
+            barHeight: 44,
+            iconResource: $r('sys.symbol.doc_zipper'),
+            iconSize: 20,
+            iconColor: [this.themePrimary],
+            responsePadding: 0,
+            onButtonClick: (): void => {}
+          }) {
+            Stack({ alignContent: Alignment.Center }) {
+              SymbolGlyph($r('sys.symbol.doc_zipper'))
+                .renderingStrategy(SymbolRenderingStrategy.SINGLE)
+                .fontSize(20)
+                .fontColor([this.themePrimary])
+            }
+            .width(44)
+            .height(44)
           }
-          .width(44)
-          .height(44)
-        }
 
-        Column({ space: 6 }) {
-          Text(pickLocalizedText('上下文压缩', 'Context Compaction'))
-            .fontSize(17)
-            .fontWeight(FontWeight.Bold)
-            .fontColor($r('app.color.text_primary'))
+          Column({ space: 6 }) {
+            Text(pickLocalizedText('上下文压缩', 'Context Compaction'))
+              .font(getSettingsTypography().itemTitle)
+              .fontColor(getAppUiState().themeTextPrimary)
+              .width('100%')
+
+            Text(this.getStatusText())
+              .font(getSettingsTypography().subtitle)
+              .lineHeight(SETTINGS_SUBTITLE_LINE_HEIGHT)
+              .fontColor(getAppUiState().themeTextSecondary)
+              .width('100%')
+          }
+          .layoutWeight(1)
+          .alignItems(HorizontalAlign.Start)
+
+          Toggle({ type: ToggleType.Switch, isOn: this.compactEnabled })
+            .selectedColor(this.themePrimary)
+            .systemMaterial(new uiMaterial.Material())
+            .switchPointColor(Color.White)
+            .onChange((value: boolean) => {
+              this.onToggle(value)
+            })
+        }
+        .width('100%')
+
+        Text(getLocalizedBuiltinToolDescription(COMPACT_TOOL_ID))
+          .font(getSettingsTypography().subtitle)
+          .lineHeight(SETTINGS_SUBTITLE_LINE_HEIGHT)
+          .fontColor(getAppUiState().themeTextSecondary)
+          .width('100%')
+
+        if (this.compactEnabled) {
+          Column({ space: 4 }) {
+            Row() {
+              Text(pickLocalizedText('上下文长度上限', 'Context length cap'))
+                .font(getSettingsTypography().fieldLabel)
+                .fontColor(getAppUiState().themeTextSecondary)
+                .layoutWeight(1)
+
+              Text(formatTokenCount(this.getDisplayMaxContextTokens()))
+                .fontSize(12)
+                .fontWeight(FontWeight.Medium)
+                .fontColor(this.themePrimary)
+            }
             .width('100%')
 
-          Text(this.getStatusText())
-            .fontSize(12)
-            .fontColor($r('app.color.text_secondary'))
-            .width('100%')
-        }
-        .layoutWeight(1)
-        .alignItems(HorizontalAlign.Start)
+            Slider({
+              value: this.getDisplayMaxContextTokens(),
+              min: MIN_CONTEXT_LIMIT_TOKENS,
+              max: MAX_CONTEXT_LIMIT_TOKENS,
+              step: CONTEXT_LIMIT_TOKENS_STEP,
+              style: SliderStyle.InSet
+            })
+              .width('100%')
+              .systemMaterial(new uiMaterial.ImmersiveMaterial({
+                style: uiMaterial.ImmersiveStyle.ULTRA_THIN
+              }))
+              .selectedColor(this.themePrimary)
+              .trackThickness(20)
+              .showSteps(true)
+              .stepSize(4)
+              .stepColor('#B3B3B3')
+              .onChange((value: number, mode: SliderChangeMode) => {
+                this.draggingMaxContextTokens = value
+                if (this.isSliderCommitted(mode)) {
+                  this.draggingMaxContextTokens = -1
+                  this.onMaxContextTokensChange(value)
+                }
+              })
 
-        Toggle({ type: ToggleType.Switch, isOn: this.compactEnabled })
-          .selectedColor(this.themePrimary)
-          .systemMaterial(new uiMaterial.Material())
-          .switchPointColor(Color.White)
-          .onChange((value: boolean) => {
-            this.onToggle(value)
-          })
+          }
+          .width('100%')
+
+          Divider()
+            .strokeWidth(0.5)
+            .color(getAppUiState().themePrimaryLight)
+
+          Column({ space: 4 }) {
+            Row() {
+              Text(pickLocalizedText('触发阈值', 'Trigger threshold'))
+                .font(getSettingsTypography().fieldLabel)
+                .fontColor(getAppUiState().themeTextSecondary)
+                .layoutWeight(1)
+            }
+            .width('100%')
+
+            Slider({
+              value: this.getDisplayThresholdPercent(),
+              min: MIN_COMPACT_THRESHOLD_PERCENT,
+              max: MAX_COMPACT_THRESHOLD_PERCENT,
+              step: COMPACT_THRESHOLD_PERCENT_STEP,
+              style: SliderStyle.InSet
+            })
+              .width('100%')
+              .systemMaterial(new uiMaterial.ImmersiveMaterial({
+                style: uiMaterial.ImmersiveStyle.ULTRA_THIN
+              }))
+              .selectedColor(this.themePrimary)
+              .trackThickness(20)
+              .showSteps(true)
+              .stepSize(4)
+              .stepColor('#B3B3B3')
+              .onChange((value: number, mode: SliderChangeMode) => {
+                this.draggingThresholdPercent = value
+                if (this.isSliderCommitted(mode)) {
+                  this.draggingThresholdPercent = -1
+                  this.onThresholdChange(value)
+                }
+              })
+
+            Text(pickLocalizedText(
+              `可选 ${MIN_COMPACT_THRESHOLD_PERCENT}% ~ ${MAX_COMPACT_THRESHOLD_PERCENT}%，默认 ${DEFAULT_COMPACT_THRESHOLD_PERCENT}%。`,
+              `Range ${MIN_COMPACT_THRESHOLD_PERCENT}%–${MAX_COMPACT_THRESHOLD_PERCENT}%, default ${DEFAULT_COMPACT_THRESHOLD_PERCENT}%.`
+            ))
+              .font(getSettingsTypography().subtitle)
+              .lineHeight(SETTINGS_SUBTITLE_LINE_HEIGHT)
+              .fontColor(getAppUiState().themeTextSecondary)
+              .width('100%')
+          }
+          .width('100%')
+        }
       }
       .width('100%')
-
-      Text(pickLocalizedText(
-        '对话上下文超过所选比例时，应用会直接把更早的历史压缩成摘要，不再要求模型调用 compact 工具。' +
-          '若模型正在回答，应用会中断当前流并在压缩后从断点续答，仍显示在同一个气泡中。' +
-          '只影响发送给模型的内容，不会删除聊天记录，也不要求模型支持工具调用。',
-        'When the conversation exceeds the selected share of the context window, the app compacts older history ' +
-          'directly instead of asking the model to call a tool. If a reply is streaming, it is interrupted and ' +
-          'resumed from the breakpoint in the same bubble. Chat history is kept and tool support is not required.'
-      ))
-        .fontSize(12)
-        .lineHeight(18)
-        .fontColor($r('app.color.text_secondary'))
-        .width('100%')
-
-      if (this.compactEnabled) {
-        Column({ space: 4 }) {
-          Row() {
-            Text(pickLocalizedText('上下文长度上限', 'Context length cap'))
-              .fontSize(12)
-              .fontWeight(FontWeight.Medium)
-              .fontColor($r('app.color.text_secondary'))
-              .layoutWeight(1)
-
-            Text(formatTokenCount(this.getDisplayMaxContextTokens()))
-              .fontSize(12)
-              .fontWeight(FontWeight.Medium)
-              .fontColor(this.themePrimary)
-          }
-          .width('100%')
-
-          Slider({
-            value: this.getDisplayMaxContextTokens(),
-            min: MIN_CONTEXT_LIMIT_TOKENS,
-            max: MAX_CONTEXT_LIMIT_TOKENS,
-            step: CONTEXT_LIMIT_TOKENS_STEP,
-            style: SliderStyle.OutSet
-          })
-            .width('100%')
-            .selectedColor(this.themePrimary)
-            .trackColor(getAppUiState().themeBackground)
-            .blockColor(Color.White)
-            .onChange((value: number, mode: SliderChangeMode) => {
-              this.draggingMaxContextTokens = value
-              if (this.isSliderCommitted(mode)) {
-                this.draggingMaxContextTokens = -1
-                this.onMaxContextTokensChange(value)
-              }
-            })
-
-          Text(pickLocalizedText(
-            `模型窗口大于该值时按该值计算用量，可选 ${formatTokenCount(MIN_CONTEXT_LIMIT_TOKENS)} ~ ` +
-              `${formatTokenCount(MAX_CONTEXT_LIMIT_TOKENS)}；窗口较小的模型不受影响。`,
-            `Models with a larger window are measured against this cap ` +
-              `(${formatTokenCount(MIN_CONTEXT_LIMIT_TOKENS)}–${formatTokenCount(MAX_CONTEXT_LIMIT_TOKENS)}). ` +
-              `Smaller models are unaffected.`
-          ))
-            .fontSize(11)
-            .lineHeight(16)
-            .fontColor($r('app.color.text_tertiary'))
-            .width('100%')
-        }
-        .width('100%')
-
-        Column({ space: 4 }) {
-          Row() {
-            Text(pickLocalizedText('触发阈值', 'Trigger threshold'))
-              .fontSize(12)
-              .fontWeight(FontWeight.Medium)
-              .fontColor($r('app.color.text_secondary'))
-              .layoutWeight(1)
-
-            Text(`${this.getDisplayThresholdPercent()}%`)
-              .fontSize(12)
-              .fontWeight(FontWeight.Medium)
-              .fontColor(this.themePrimary)
-          }
-          .width('100%')
-
-          Slider({
-            value: this.getDisplayThresholdPercent(),
-            min: MIN_COMPACT_THRESHOLD_PERCENT,
-            max: MAX_COMPACT_THRESHOLD_PERCENT,
-            step: COMPACT_THRESHOLD_PERCENT_STEP,
-            style: SliderStyle.OutSet
-          })
-            .width('100%')
-            .selectedColor(this.themePrimary)
-            .trackColor(getAppUiState().themeBackground)
-            .blockColor(Color.White)
-            .onChange((value: number, mode: SliderChangeMode) => {
-              this.draggingThresholdPercent = value
-              if (this.isSliderCommitted(mode)) {
-                this.draggingThresholdPercent = -1
-                this.onThresholdChange(value)
-              }
-            })
-
-          Text(pickLocalizedText(
-            `可选 ${MIN_COMPACT_THRESHOLD_PERCENT}% ~ ${MAX_COMPACT_THRESHOLD_PERCENT}%，默认 ${DEFAULT_COMPACT_THRESHOLD_PERCENT}%。`,
-            `Range ${MIN_COMPACT_THRESHOLD_PERCENT}%–${MAX_COMPACT_THRESHOLD_PERCENT}%, default ${DEFAULT_COMPACT_THRESHOLD_PERCENT}%.`
-          ))
-            .fontSize(11)
-            .lineHeight(16)
-            .fontColor($r('app.color.text_tertiary'))
-            .width('100%')
-        }
-        .width('100%')
-      }
+      .padding(16)
+      .borderRadius(LIST_MATERIAL_CARD_RADIUS)
+      .backgroundColor(Color.Transparent)
     }
-    .width('100%')
-    .padding(16)
-    .borderRadius(16)
-    .backgroundColor(Color.Transparent)
-    .border({ width: 0.5, color: getAppUiState().themePrimaryLight })
-    .backdropBlur(16)
-    .shadow(getBlurBottomShadow())
   }
 }
 
@@ -3580,168 +3608,167 @@ struct SkillServiceCardItem {
   }
 
   build() {
-    Column({ space: 12 }) {
-      Row({ space: 12 }) {
-        ChatFloatingImmersiveButton({
-          barWidth: 44,
-          barHeight: 44,
-          iconResource: $r('sys.symbol.more'),
-          iconSize: 20,
-          iconColor: [this.themePrimary],
-          responsePadding: 0,
-          onButtonClick: (): void => {
-            this.isSkillsExpanded = !this.isSkillsExpanded
-          }
-        }) {
-          Stack({ alignContent: Alignment.Center }) {
-            SymbolGlyph($r('sys.symbol.more'))
-              .renderingStrategy(SymbolRenderingStrategy.SINGLE)
-              .fontSize(20)
-              .fontColor([this.themePrimary])
-          }
-          .width(44)
-          .height(44)
-        }
-
-        Column({ space: 6 }) {
-          Text('Skill')
-            .fontSize(17)
-            .fontWeight(FontWeight.Bold)
-            .fontColor($r('app.color.text_primary'))
-            .width('100%')
-
-          Text(this.totalSkillCount > 0
-            ? this.getStatusText()
-            : pickLocalizedText('添加可被模型读取的技能说明', 'Add instructions the model can read'))
-            .fontSize(12)
-            .fontColor($r('app.color.text_secondary'))
-            .width('100%')
-        }
-        .layoutWeight(1)
-        .alignItems(HorizontalAlign.Start)
-
-        Toggle({ type: ToggleType.Switch, isOn: this.skillEnabled })
-          .selectedColor(this.themePrimary)
-          .systemMaterial(new uiMaterial.Material())
-          .switchPointColor(Color.White)
-          .onChange((value: boolean) => {
-            this.onToggle(value)
-          })
-      }
-      .width('100%')
-
-      Row({ space: 10 }) {
-        Button() {
-          Row({ space: 4 }) {
-            SymbolGlyph($r('sys.symbol.plus'))
-              .renderingStrategy(SymbolRenderingStrategy.SINGLE)
-              .fontSize(13)
-              .fontColor([Color.White])
-            Text(pickLocalizedText('新增 Skill', 'Add Skill'))
-              .fontSize(12)
-              .fontWeight(FontWeight.Medium)
-              .fontColor(Color.White)
-          }
-        }
-        .height(32)
-        .padding({ left: 14, right: 14 })
-        .type(ButtonType.Capsule)
-        .stateEffect(false)
-        .backgroundColor(this.themePrimary)
-        .onClick(() => {
-          this.onCreateSkill()
-        })
-
-        Blank()
-
-        Row({ space: 4 }) {
-          Text(this.getManageText())
-            .fontSize(11)
-            .fontWeight(FontWeight.Medium)
-            .fontColor(this.themePrimary)
-
-          SymbolGlyph($r('sys.symbol.chevron_down'))
-            .renderingStrategy(SymbolRenderingStrategy.SINGLE)
-            .fontSize(12)
-            .fontColor([this.themePrimary])
-            .rotate({ angle: this.isSkillsExpanded ? 180 : 0 })
-            .animation({ duration: 180, curve: Curve.EaseOut })
-        }
-        .padding({ left: 10, right: 10, top: 6, bottom: 6 })
-        .borderRadius(999)
-        .backgroundColor(getAppUiState().themeBackground)
-        .onClick(() => {
-          this.isSkillsExpanded = !this.isSkillsExpanded
-        })
-      }
-      .width('100%')
-
-      if (this.isSkillsExpanded) {
-        if (this.skills.length === 0) {
-          Row({ space: 10 }) {
-            Column() {
-              SymbolGlyph($r('sys.symbol.doc_text_badge_magnifyingglass'))
+    ImmersiveListSurface({ isImmersive: true, cornerRadius: LIST_MATERIAL_CARD_RADIUS }) {
+      Column({ space: 12 }) {
+        Row({ space: 12 }) {
+          ChatFloatingImmersiveButton({
+            barWidth: 44,
+            barHeight: 44,
+            iconResource: $r('sys.symbol.more'),
+            iconSize: 20,
+            iconColor: [this.themePrimary],
+            responsePadding: 0,
+            onButtonClick: (): void => {
+              this.isSkillsExpanded = !this.isSkillsExpanded
+            }
+          }) {
+            Stack({ alignContent: Alignment.Center }) {
+              SymbolGlyph($r('sys.symbol.more'))
                 .renderingStrategy(SymbolRenderingStrategy.SINGLE)
-                .fontSize(16)
+                .fontSize(20)
                 .fontColor([this.themePrimary])
             }
-            .width(32)
-            .height(32)
-            .borderRadius(12)
-            .backgroundColor(withColorAlpha(this.themePrimary, this.isDarkMode ? '24' : '12'))
-            .justifyContent(FlexAlign.Center)
+            .width(44)
+            .height(44)
+          }
 
-            Text(pickLocalizedText('还没有 Skill，点击新增创建。', 'No Skill yet. Tap Add to create one.'))
+          Column({ space: 6 }) {
+            Text('Skill')
+              .font(getSettingsTypography().sectionTitle)
+              .fontColor(getAppUiState().themeTextPrimary)
+              .width('100%')
+
+            Text(this.totalSkillCount > 0
+              ? this.getStatusText()
+              : getLocalizedBuiltinToolDescription(USE_SKILL_TOOL_ID))
+              .font(getSettingsTypography().subtitle)
+              .lineHeight(SETTINGS_SUBTITLE_LINE_HEIGHT)
+              .fontColor(getAppUiState().themeTextSecondary)
+              .width('100%')
+          }
+          .layoutWeight(1)
+          .alignItems(HorizontalAlign.Start)
+
+          Toggle({ type: ToggleType.Switch, isOn: this.skillEnabled })
+            .selectedColor(this.themePrimary)
+            .systemMaterial(new uiMaterial.Material())
+            .switchPointColor(Color.White)
+            .onChange((value: boolean) => {
+              this.onToggle(value)
+            })
+        }
+        .width('100%')
+
+        Row({ space: 10 }) {
+          Button() {
+            Row({ space: 4 }) {
+              SymbolGlyph($r('sys.symbol.plus'))
+                .renderingStrategy(SymbolRenderingStrategy.SINGLE)
+                .fontSize(13)
+                .fontColor([Color.White])
+              Text(pickLocalizedText('新增 Skill', 'Add Skill'))
+                .fontSize(12)
+                .fontWeight(FontWeight.Medium)
+                .fontColor(Color.White)
+            }
+          }
+          .height(32)
+          .padding({ left: 14, right: 14 })
+          .type(ButtonType.Capsule)
+          .stateEffect(false)
+          .backgroundColor(this.themePrimary)
+          .onClick(() => {
+            this.onCreateSkill()
+          })
+
+          Blank()
+
+          Row({ space: 4 }) {
+            Text(this.getManageText())
+              .fontSize(11)
+              .fontWeight(FontWeight.Medium)
+              .fontColor(this.themePrimary)
+
+            SymbolGlyph($r('sys.symbol.chevron_down'))
+              .renderingStrategy(SymbolRenderingStrategy.SINGLE)
               .fontSize(12)
-              .lineHeight(18)
-              .fontColor($r('app.color.text_secondary'))
-              .layoutWeight(1)
+              .fontColor([this.themePrimary])
+              .rotate({ angle: this.isSkillsExpanded ? 180 : 0 })
+              .animation({ duration: 180, curve: Curve.EaseOut })
           }
-          .width('100%')
-          .padding(12)
-          .borderRadius(16)
+          .padding({ left: 10, right: 10, top: 6, bottom: 6 })
+          .borderRadius(999)
           .backgroundColor(getAppUiState().themeBackground)
-          .transition(TransitionEffect.asymmetric(
-            TransitionEffect.OPACITY.combine(TransitionEffect.translate({ y: -8 }))
-              .animation({ duration: 180, curve: Curve.EaseOut }),
-            TransitionEffect.OPACITY.combine(TransitionEffect.translate({ y: -6 }))
-              .animation({ duration: 120, curve: Curve.EaseIn })
-          ))
-        } else {
-          Column({ space: 10 }) {
-            ForEach(this.skills, (skill: SkillConfig) => {
-              SkillListCardItem({
-                skill: skill,
-                onToggleEnabled: (enabled: boolean) => {
-                  this.onToggleSkillEnabled(skill.id, enabled)
-                },
-                onEdit: () => {
-                  this.onEditSkill(skill)
-                },
-                onDelete: () => {
-                  this.onDeleteSkill(skill.id)
-                }
-              })
-            }, (skill: SkillConfig) => `${skill.id}_${skill.name}_${skill.description}_${skill.enabled ? '1' : '0'}_${skill.updatedAt}`)
+          .onClick(() => {
+            this.isSkillsExpanded = !this.isSkillsExpanded
+          })
+        }
+        .width('100%')
+
+        if (this.isSkillsExpanded) {
+          if (this.skills.length === 0) {
+            Row({ space: 10 }) {
+              Column() {
+                SymbolGlyph($r('sys.symbol.doc_text_badge_magnifyingglass'))
+                  .renderingStrategy(SymbolRenderingStrategy.SINGLE)
+                  .fontSize(16)
+                  .fontColor([this.themePrimary])
+              }
+              .width(32)
+              .height(32)
+              .borderRadius(12)
+              .backgroundColor(withColorAlpha(this.themePrimary, this.isDarkMode ? '24' : '12'))
+              .justifyContent(FlexAlign.Center)
+
+              Text(pickLocalizedText('还没有 Skill，点击新增创建。', 'No Skill yet. Tap Add to create one.'))
+                .font(getSettingsTypography().subtitle)
+                .lineHeight(SETTINGS_SUBTITLE_LINE_HEIGHT)
+                .fontColor(getAppUiState().themeTextSecondary)
+                .layoutWeight(1)
+            }
+            .width('100%')
+            .padding(12)
+            .borderRadius(16)
+            .backgroundColor(getAppUiState().themeBackground)
+            .transition(TransitionEffect.asymmetric(
+              TransitionEffect.OPACITY.combine(TransitionEffect.translate({ y: -8 }))
+                .animation({ duration: 180, curve: Curve.EaseOut }),
+              TransitionEffect.OPACITY.combine(TransitionEffect.translate({ y: -6 }))
+                .animation({ duration: 120, curve: Curve.EaseIn })
+            ))
+          } else {
+            Column({ space: 10 }) {
+              ForEach(this.skills, (skill: SkillConfig) => {
+                SkillListCardItem({
+                  skill: skill,
+                  onToggleEnabled: (enabled: boolean) => {
+                    this.onToggleSkillEnabled(skill.id, enabled)
+                  },
+                  onEdit: () => {
+                    this.onEditSkill(skill)
+                  },
+                  onDelete: () => {
+                    this.onDeleteSkill(skill.id)
+                  }
+                })
+              }, (skill: SkillConfig) => `${skill.id}_${skill.name}_${skill.description}_${skill.enabled ? '1' : '0'}_${skill.updatedAt}`)
+            }
+            .width('100%')
+            .transition(TransitionEffect.asymmetric(
+              TransitionEffect.OPACITY.combine(TransitionEffect.translate({ y: -8 }))
+                .animation({ duration: 180, curve: Curve.EaseOut }),
+              TransitionEffect.OPACITY.combine(TransitionEffect.translate({ y: -6 }))
+                .animation({ duration: 120, curve: Curve.EaseIn })
+            ))
           }
-          .width('100%')
-          .transition(TransitionEffect.asymmetric(
-            TransitionEffect.OPACITY.combine(TransitionEffect.translate({ y: -8 }))
-              .animation({ duration: 180, curve: Curve.EaseOut }),
-            TransitionEffect.OPACITY.combine(TransitionEffect.translate({ y: -6 }))
-              .animation({ duration: 120, curve: Curve.EaseIn })
-          ))
         }
       }
+      .width('100%')
+      .padding(16)
+      .borderRadius(LIST_MATERIAL_CARD_RADIUS)
+      .backgroundColor(Color.Transparent)
+      .animation({ duration: 220, curve: Curve.EaseInOut })
     }
-    .width('100%')
-    .padding(16)
-    .borderRadius(16)
-    .backgroundColor(Color.Transparent)
-    .border({ width: 0.5, color: getAppUiState().themePrimaryLight })
-    .backdropBlur(16)
-    .shadow(getBlurBottomShadow())
-    .animation({ duration: 220, curve: Curve.EaseInOut })
   }
 }
 
@@ -3769,89 +3796,88 @@ struct SkillListCardItem {
   }
 
   build() {
-    Column({ space: 12 }) {
-      Row({ space: 12 }) {
-        Column() {
-          SymbolGlyph($r('sys.symbol.doc_text_badge_magnifyingglass'))
-            .renderingStrategy(SymbolRenderingStrategy.SINGLE)
-            .fontSize(18)
-            .fontColor([this.themePrimary])
+    ImmersiveListSurface({ isImmersive: true, cornerRadius: LIST_MATERIAL_CARD_RADIUS }) {
+      Column({ space: 12 }) {
+        Row({ space: 12 }) {
+          Column() {
+            SymbolGlyph($r('sys.symbol.doc_text_badge_magnifyingglass'))
+              .renderingStrategy(SymbolRenderingStrategy.SINGLE)
+              .fontSize(18)
+              .fontColor([this.themePrimary])
+          }
+          .width(38)
+          .height(38)
+          .borderRadius(14)
+          .backgroundColor(withColorAlpha(this.themePrimary, this.isDarkMode ? '24' : '12'))
+          .justifyContent(FlexAlign.Center)
+
+          Column({ space: 5 }) {
+            Text(this.skill.name)
+              .font(getSettingsTypography().itemTitle)
+              .fontColor(getAppUiState().themeTextPrimary)
+              .width('100%')
+              .maxLines(1)
+              .textOverflow({ overflow: TextOverflow.Ellipsis })
+
+            Text(this.getDescription())
+              .font(getSettingsTypography().subtitle)
+              .lineHeight(SETTINGS_SUBTITLE_LINE_HEIGHT)
+              .fontColor(getAppUiState().themeTextSecondary)
+              .width('100%')
+              .maxLines(2)
+              .textOverflow({ overflow: TextOverflow.Ellipsis })
+          }
+          .layoutWeight(1)
+          .alignItems(HorizontalAlign.Start)
+
+          Toggle({ type: ToggleType.Switch, isOn: this.skill.enabled })
+            .selectedColor(this.themePrimary)
+            .systemMaterial(new uiMaterial.Material())
+            .switchPointColor(Color.White)
+            .onChange((value: boolean) => {
+              this.onToggleEnabled(value)
+            })
         }
-        .width(38)
-        .height(38)
-        .borderRadius(14)
-        .backgroundColor(withColorAlpha(this.themePrimary, this.isDarkMode ? '24' : '12'))
-        .justifyContent(FlexAlign.Center)
+        .width('100%')
 
-        Column({ space: 5 }) {
-          Text(this.skill.name)
-            .fontSize(15)
-            .fontWeight(FontWeight.Bold)
-            .fontColor($r('app.color.text_primary'))
-            .width('100%')
-            .maxLines(1)
-            .textOverflow({ overflow: TextOverflow.Ellipsis })
+        Row({ space: 8 }) {
+          Blank()
 
-          Text(this.getDescription())
-            .fontSize(12)
-            .lineHeight(18)
-            .fontColor($r('app.color.text_secondary'))
-            .width('100%')
-            .maxLines(2)
-            .textOverflow({ overflow: TextOverflow.Ellipsis })
+          Button(pickLocalizedText('编辑', 'Edit'))
+            .height(30)
+            .fontSize(11)
+            .type(ButtonType.Capsule)
+            .stateEffect(false)
+            .fontColor(this.themePrimary)
+            .backgroundColor(getAppUiState().themeBackground)
+            .onClick(() => {
+              this.onEdit()
+            })
+
+          Button($r('app.string.delete'))
+            .height(30)
+            .fontSize(11)
+            .type(ButtonType.Capsule)
+            .stateEffect(false)
+            .fontColor('#D9485F')
+            .backgroundColor(getAppUiState().themeBackground)
+            .onClick(() => {
+              this.onDelete()
+            })
         }
-        .layoutWeight(1)
-        .alignItems(HorizontalAlign.Start)
-
-        Toggle({ type: ToggleType.Switch, isOn: this.skill.enabled })
-          .selectedColor(this.themePrimary)
-          .systemMaterial(new uiMaterial.Material())
-          .switchPointColor(Color.White)
-          .onChange((value: boolean) => {
-            this.onToggleEnabled(value)
-          })
+        .width('100%')
       }
       .width('100%')
-
-      Row({ space: 8 }) {
-        Blank()
-
-        Button(pickLocalizedText('编辑', 'Edit'))
-          .height(30)
-          .fontSize(11)
-          .type(ButtonType.Capsule)
-          .stateEffect(false)
-          .fontColor(this.themePrimary)
-          .backgroundColor(getAppUiState().themeBackground)
-          .onClick(() => {
-            this.onEdit()
-          })
-
-        Button($r('app.string.delete'))
-          .height(30)
-          .fontSize(11)
-          .type(ButtonType.Capsule)
-          .stateEffect(false)
-          .fontColor('#D9485F')
-          .backgroundColor(getAppUiState().themeBackground)
-          .onClick(() => {
-            this.onDelete()
-          })
-      }
-      .width('100%')
+      .padding(14)
+      .borderRadius(LIST_MATERIAL_CARD_RADIUS)
+      .backgroundColor(Color.Transparent)
     }
-    .width('100%')
-    .padding(14)
-    .borderRadius(16)
-    .backgroundColor(Color.Transparent)
-    .border({ width: 0.5, color: getAppUiState().themePrimaryLight })
-    .backdropBlur(16)
-    .shadow(getBlurBottomShadow())
   }
 }
 
 @ComponentV2
 struct BuiltinToolCardItem {
+  @Param embedded: boolean = false
   @Param tool: ToolConfig = new ToolConfig()
   @Param selected: boolean = false
   @Param configurable: boolean = false
@@ -3875,13 +3901,10 @@ struct BuiltinToolCardItem {
   }
 
   private needsApproval(): boolean {
-    return this.tool.id !== BUILTIN_BROWSER_TOOL_ID && this.tool.permissionLevel === 'write'
+    return this.tool.permissionLevel === 'write'
   }
 
   private getPermissionText(): string {
-    if (this.tool.id === BUILTIN_BROWSER_TOOL_ID) {
-      return pickLocalizedText('免审批', 'No approval')
-    }
     return this.needsApproval() ? pickLocalizedText('需确认', 'Approval') : pickLocalizedText('只读', 'Read only')
   }
 
@@ -3921,100 +3944,99 @@ struct BuiltinToolCardItem {
   }
 
   build() {
-    Column({ space: 12 }) {
-      Row({ space: 12 }) {
-        ChatFloatingImmersiveButton({
-          barWidth: 44,
-          barHeight: 44,
-          iconResource: this.getToolSymbolResource(this.tool.id),
-          iconSize: 20,
-          iconColor: [this.themePrimary],
-          responsePadding: 0
-        }) {
-          Stack({ alignContent: Alignment.Center }) {
-            this.ToolIcon(this.tool.id, 20)
+    ImmersiveListSurface({ isImmersive: !this.embedded, cornerRadius: LIST_MATERIAL_CARD_RADIUS }) {
+      Column({ space: 12 }) {
+        Row({ space: 12 }) {
+          ChatFloatingImmersiveButton({
+            barWidth: 44,
+            barHeight: 44,
+            iconResource: this.getToolSymbolResource(this.tool.id),
+            iconSize: 20,
+            iconColor: [this.themePrimary],
+            responsePadding: 0
+          }) {
+            Stack({ alignContent: Alignment.Center }) {
+              this.ToolIcon(this.tool.id, 20)
+            }
+            .width(44)
+            .height(44)
           }
-          .width(44)
-          .height(44)
-        }
 
-        Column({ space: 6 }) {
-          Text(getLocalizedBuiltinToolName(this.tool.id, this.tool.name))
-            .fontSize(17)
-            .fontWeight(FontWeight.Bold)
-            .fontColor($r('app.color.text_primary'))
-            .width('100%')
-            .maxLines(1)
-            .textOverflow({ overflow: TextOverflow.Ellipsis })
+          Column({ space: 6 }) {
+            Text(getLocalizedBuiltinToolName(this.tool.id, this.tool.name))
+              .font(getSettingsTypography().itemTitle)
+              .fontColor(getAppUiState().themeTextPrimary)
+              .width('100%')
+              .maxLines(1)
+              .textOverflow({ overflow: TextOverflow.Ellipsis })
 
-          Text(getLocalizedBuiltinToolDescription(this.tool.id, this.tool.description))
-            .fontSize(12)
-            .lineHeight(18)
-            .fontColor($r('app.color.text_secondary'))
-            .width('100%')
-            .maxLines(2)
-            .textOverflow({ overflow: TextOverflow.Ellipsis })
-        }
-        .layoutWeight(1)
-        .alignItems(HorizontalAlign.Start)
-
-        Toggle({ type: ToggleType.Switch, isOn: this.selected })
-          .selectedColor(this.themePrimary)
-          .systemMaterial(new uiMaterial.Material())
-          .switchPointColor(Color.White)
-          .onChange((value: boolean) => {
-            this.onToggle(value)
-          })
-      }
-      .width('100%')
-      .alignItems(VerticalAlign.Center)
-
-      Row({ space: 8 }) {
-        Text(this.tool.id)
-          .fontSize(11)
-          .fontWeight(FontWeight.Medium)
-          .fontColor($r('app.color.text_secondary'))
-          .padding({ left: 10, right: 10, top: 6, bottom: 6 })
-          .borderRadius(999)
-          .backgroundColor(this.themePrimaryLight)
-
-        Text(this.getPermissionText())
-          .fontSize(11)
-          .fontWeight(FontWeight.Medium)
-          .fontColor(this.getPermissionTextColor())
-          .padding({ left: 10, right: 10, top: 6, bottom: 6 })
-          .borderRadius(999)
-          .backgroundColor(this.getPermissionBackgroundColor())
-          .border({ width: this.needsApproval() ? 0 : 1, color: this.themePrimary })
-
-        Blank()
-
-        if (this.configurable) {
-          Row({ space: 4 }) {
-            Text(pickLocalizedText('配置', 'Configure'))
-              .fontSize(11)
-              .fontWeight(FontWeight.Medium)
-              .fontColor(this.themePrimary)
-
-            SymbolGlyph($r('sys.symbol.chevron_right'))
-              .renderingStrategy(SymbolRenderingStrategy.SINGLE)
-              .fontSize(12)
-              .fontColor([this.themePrimary])
+            Text(getLocalizedBuiltinToolDescription(this.tool.id, this.tool.description))
+              .font(getSettingsTypography().subtitle)
+              .lineHeight(SETTINGS_SUBTITLE_LINE_HEIGHT)
+              .fontColor(getAppUiState().themeTextSecondary)
+              .width('100%')
+              .maxLines(2)
+              .textOverflow({ overflow: TextOverflow.Ellipsis })
           }
-            .onClick(() => {
-              this.onConfigure()
+          .layoutWeight(1)
+          .alignItems(HorizontalAlign.Start)
+
+          Toggle({ type: ToggleType.Switch, isOn: this.selected })
+            .selectedColor(this.themePrimary)
+            .systemMaterial(new uiMaterial.Material())
+            .switchPointColor(Color.White)
+            .onChange((value: boolean) => {
+              this.onToggle(value)
             })
         }
+        .width('100%')
+        .alignItems(VerticalAlign.Center)
+
+        Row({ space: 8 }) {
+          Text(this.tool.id)
+            .fontSize(11)
+            .fontWeight(FontWeight.Medium)
+            .fontColor($r('app.color.text_secondary'))
+            .padding({ left: 10, right: 10, top: 6, bottom: 6 })
+            .borderRadius(999)
+            .backgroundColor(this.themePrimaryLight)
+
+          Text(this.getPermissionText())
+            .fontSize(11)
+            .fontWeight(FontWeight.Medium)
+            .fontColor(this.getPermissionTextColor())
+            .padding({ left: 10, right: 10, top: 6, bottom: 6 })
+            .borderRadius(999)
+            .backgroundColor(this.getPermissionBackgroundColor())
+            .border({ width: this.needsApproval() ? 0 : 1, color: this.themePrimary })
+
+          Blank()
+
+          if (this.configurable) {
+            Row({ space: 4 }) {
+              Text(pickLocalizedText('配置', 'Configure'))
+                .fontSize(11)
+                .fontWeight(FontWeight.Medium)
+                .fontColor(this.themePrimary)
+
+              SymbolGlyph($r('sys.symbol.chevron_right'))
+                .renderingStrategy(SymbolRenderingStrategy.SINGLE)
+                .fontSize(12)
+                .fontColor([this.themePrimary])
+            }
+              .onClick(() => {
+                this.onConfigure()
+              })
+          }
+        }
+        .width('100%')
+
       }
       .width('100%')
+      .padding(16)
+      .borderRadius(LIST_MATERIAL_CARD_RADIUS)
+      .backgroundColor(Color.Transparent)
     }
-    .width('100%')
-    .padding(16)
-    .borderRadius(16)
-    .backgroundColor(Color.Transparent)
-    .border({ width: 0.5, color: getAppUiState().themePrimaryLight })
-    .backdropBlur(16)
-    .shadow(getBlurBottomShadow())
   }
 }
 
@@ -4092,229 +4114,226 @@ struct McpServerCardItem {
   }
 
   build() {
-    Column({ space: 14 }) {
-      Row({ space: 12 }) {
-        ChatFloatingImmersiveButton({
-          barWidth: 46,
-          barHeight: 46,
-          iconResource: $r('sys.symbol.cloud'),
-          iconSize: 22,
-          iconColor: [this.themePrimary],
-          responsePadding: 0,
-          onButtonClick: (): void => {
-            this.onEdit()
+    ImmersiveListSurface({ isImmersive: true, cornerRadius: LIST_MATERIAL_CARD_RADIUS }) {
+      Column({ space: 14 }) {
+        Row({ space: 12 }) {
+          ChatFloatingImmersiveButton({
+            barWidth: 46,
+            barHeight: 46,
+            iconResource: $r('sys.symbol.cloud'),
+            iconSize: 22,
+            iconColor: [this.themePrimary],
+            responsePadding: 0,
+            onButtonClick: (): void => {
+              this.onEdit()
+            }
+          }) {
+            Stack({ alignContent: Alignment.Center }) {
+              SymbolGlyph($r('sys.symbol.cloud'))
+                .renderingStrategy(SymbolRenderingStrategy.SINGLE)
+                .fontSize(22)
+                .fontColor([this.themePrimary])
+            }
+            .width(46)
+            .height(46)
           }
-        }) {
-          Stack({ alignContent: Alignment.Center }) {
-            SymbolGlyph($r('sys.symbol.cloud'))
-              .renderingStrategy(SymbolRenderingStrategy.SINGLE)
-              .fontSize(22)
-              .fontColor([this.themePrimary])
+
+          Column({ space: 6 }) {
+            Text(this.serverName)
+              .font(getSettingsTypography().itemTitle)
+              .fontColor(getAppUiState().themeTextPrimary)
+              .width('100%')
+              .maxLines(1)
+              .textOverflow({ overflow: TextOverflow.Ellipsis })
+
+            Text(this.serverBaseUrl)
+              .font(getSettingsTypography().subtitle)
+              .lineHeight(SETTINGS_SUBTITLE_LINE_HEIGHT)
+              .fontColor(getAppUiState().themeTextSecondary)
+              .maxLines(2)
+              .textOverflow({ overflow: TextOverflow.Ellipsis })
+              .width('100%')
           }
-          .width(46)
-          .height(46)
+          .layoutWeight(1)
+          .alignItems(HorizontalAlign.Start)
+
+          Toggle({ type: ToggleType.Switch, isOn: this.serverEnabled })
+            .selectedColor(this.themePrimary)
+            .systemMaterial(new uiMaterial.Material())
+            .switchPointColor(Color.White)
+            .onChange((value: boolean) => {
+              this.onToggleEnabled(value)
+            })
         }
+        .width('100%')
 
-        Column({ space: 6 }) {
-          Text(this.serverName)
-            .fontSize(17)
-            .fontWeight(FontWeight.Bold)
-            .fontColor($r('app.color.text_primary'))
-            .width('100%')
-            .maxLines(1)
-            .textOverflow({ overflow: TextOverflow.Ellipsis })
-
-          Text(this.serverBaseUrl)
-            .fontSize(11)
-            .lineHeight(16)
-            .fontColor($r('app.color.text_secondary'))
-            .maxLines(2)
-            .textOverflow({ overflow: TextOverflow.Ellipsis })
-            .width('100%')
-        }
-        .layoutWeight(1)
-        .alignItems(HorizontalAlign.Start)
-
-        Toggle({ type: ToggleType.Switch, isOn: this.serverEnabled })
-          .selectedColor(this.themePrimary)
-          .systemMaterial(new uiMaterial.Material())
-          .switchPointColor(Color.White)
-          .onChange((value: boolean) => {
-            this.onToggleEnabled(value)
-          })
-      }
-      .width('100%')
-
-      Row({ space: 8 }) {
-        Text(this.getToolCountText())
-          .fontSize(11)
-          .fontWeight(FontWeight.Medium)
-          .fontColor($r('app.color.text_secondary'))
-          .padding({ left: 10, right: 10, top: 6, bottom: 6 })
-          .borderRadius(999)
-          .backgroundColor(getAppUiState().themeBackground)
-
-        if (this.authLabel !== 'None') {
-          Text(this.authLabel)
-            .fontSize(11)
-            .fontWeight(FontWeight.Medium)
-            .fontColor(this.themePrimary)
-            .padding({ left: 10, right: 10, top: 6, bottom: 6 })
-            .borderRadius(999)
-            .backgroundColor(this.backgroundHex)
-            .border({ width: 1, color: this.themePrimary })
-        }
-
-        if (this.customHeaderCount > 0) {
-          Text(this.getCustomHeaderCountText())
+        Row({ space: 8 }) {
+          Text(this.getToolCountText())
             .fontSize(11)
             .fontWeight(FontWeight.Medium)
             .fontColor($r('app.color.text_secondary'))
             .padding({ left: 10, right: 10, top: 6, bottom: 6 })
             .borderRadius(999)
             .backgroundColor(getAppUiState().themeBackground)
-        }
 
-        if (this.getWriteToolCount() > 0) {
-          Text(this.getWriteToolCountText())
-            .fontSize(11)
-            .fontWeight(FontWeight.Medium)
-            .fontColor('#D9485F')
-            .padding({ left: 10, right: 10, top: 6, bottom: 6 })
-            .borderRadius(999)
-            .backgroundColor(this.isDarkMode ? '#4B1D24' : '#FDECEF')
-        }
-      }
-      .width('100%')
+          if (this.authLabel !== 'None') {
+            Text(this.authLabel)
+              .fontSize(11)
+              .fontWeight(FontWeight.Medium)
+              .fontColor(this.themePrimary)
+              .padding({ left: 10, right: 10, top: 6, bottom: 6 })
+              .borderRadius(999)
+              .backgroundColor(this.backgroundHex)
+              .border({ width: 1, color: this.themePrimary })
+          }
 
-      Column({ space: 10 }) {
-        Row() {
-          Text(this.tools.length > 0 ? this.getToolPreviewText() : pickLocalizedText('暂未发现工具', 'No tools discovered'))
-            .fontSize(12)
-            .lineHeight(18)
-            .fontColor($r('app.color.text_secondary'))
-            .layoutWeight(1)
-            .maxLines(this.isToolsExpanded ? 10 : 3)
-            .textOverflow({ overflow: TextOverflow.Ellipsis })
+          if (this.customHeaderCount > 0) {
+            Text(this.getCustomHeaderCountText())
+              .fontSize(11)
+              .fontWeight(FontWeight.Medium)
+              .fontColor($r('app.color.text_secondary'))
+              .padding({ left: 10, right: 10, top: 6, bottom: 6 })
+              .borderRadius(999)
+              .backgroundColor(getAppUiState().themeBackground)
+          }
 
-          if (this.tools.length > 0) {
-            Row({ space: 4 }) {
-              Text(this.getToolToggleText())
-                .fontSize(11)
-                .fontWeight(FontWeight.Medium)
-                .fontColor(this.themePrimary)
-
-              SymbolGlyph($r('sys.symbol.chevron_down'))
-                .renderingStrategy(SymbolRenderingStrategy.SINGLE)
-                .fontSize(12)
-                .fontColor([this.themePrimary])
-                .rotate({ angle: this.isToolsExpanded ? 180 : 0 })
-                .animation({ duration: 180, curve: Curve.EaseOut })
-            }
-            .padding({ left: 10, right: 10, top: 6, bottom: 6 })
-            .borderRadius(999)
-            .backgroundColor(this.backgroundHex)
-            .border({ width: 1, color: this.themePrimary })
-            .onClick(() => {
-              this.isToolsExpanded = !this.isToolsExpanded
-            })
+          if (this.getWriteToolCount() > 0) {
+            Text(this.getWriteToolCountText())
+              .fontSize(11)
+              .fontWeight(FontWeight.Medium)
+              .fontColor('#D9485F')
+              .padding({ left: 10, right: 10, top: 6, bottom: 6 })
+              .borderRadius(999)
+              .backgroundColor(this.isDarkMode ? '#4B1D24' : '#FDECEF')
           }
         }
         .width('100%')
 
-        if (this.isToolsExpanded && this.tools.length > 0) {
-          Column({ space: 8 }) {
-            ForEach(this.tools, (tool: ToolConfig) => {
-              Row({ space: 8 }) {
-                Column({ space: 3 }) {
-                  Text(tool.name)
-                    .fontSize(12)
-                    .fontWeight(FontWeight.Medium)
-                    .fontColor($r('app.color.text_primary'))
+        Column({ space: 10 }) {
+          Row() {
+            Text(this.tools.length > 0 ? this.getToolPreviewText() : pickLocalizedText('暂未发现工具', 'No tools discovered'))
+              .font(getSettingsTypography().subtitle)
+              .lineHeight(SETTINGS_SUBTITLE_LINE_HEIGHT)
+              .fontColor(getAppUiState().themeTextSecondary)
+              .layoutWeight(1)
+              .maxLines(this.isToolsExpanded ? 10 : 3)
+              .textOverflow({ overflow: TextOverflow.Ellipsis })
 
-                  Text(tool.description.length > 0 ? tool.description : tool.id)
-                    .fontSize(11)
-                    .lineHeight(16)
-                    .fontColor($r('app.color.text_secondary'))
-                    .maxLines(2)
-                    .textOverflow({ overflow: TextOverflow.Ellipsis })
-                }
-                .layoutWeight(1)
-                .alignItems(HorizontalAlign.Start)
+            if (this.tools.length > 0) {
+              Row({ space: 4 }) {
+                Text(this.getToolToggleText())
+                  .fontSize(11)
+                  .fontWeight(FontWeight.Medium)
+                  .fontColor(this.themePrimary)
 
-                if (tool.permissionLevel === 'write') {
-                  Text(pickLocalizedText('需确认', 'Approval'))
-                    .fontSize(10)
-                    .fontWeight(FontWeight.Medium)
-                    .fontColor('#D9485F')
-                    .padding({ left: 8, right: 8, top: 4, bottom: 4 })
-                    .borderRadius(999)
-                    .backgroundColor(this.isDarkMode ? '#4B1D24' : '#FDECEF')
-                }
+                SymbolGlyph($r('sys.symbol.chevron_down'))
+                  .renderingStrategy(SymbolRenderingStrategy.SINGLE)
+                  .fontSize(12)
+                  .fontColor([this.themePrimary])
+                  .rotate({ angle: this.isToolsExpanded ? 180 : 0 })
+                  .animation({ duration: 180, curve: Curve.EaseOut })
               }
-              .width('100%')
-              .padding(12)
-              .borderRadius(14)
-              .backgroundColor(this.isDarkMode ? '#23262D' : Color.White)
-              .border({ width: 1, color: this.isDarkMode ? '#2E323A' : '#EEF2F6' })
-            }, (tool: ToolConfig) => tool.id)
+              .padding({ left: 10, right: 10, top: 6, bottom: 6 })
+              .borderRadius(999)
+              .backgroundColor(this.backgroundHex)
+              .border({ width: 1, color: this.themePrimary })
+              .onClick(() => {
+                this.isToolsExpanded = !this.isToolsExpanded
+              })
+            }
           }
           .width('100%')
+
+          if (this.isToolsExpanded && this.tools.length > 0) {
+            Column({ space: 8 }) {
+              ForEach(this.tools, (tool: ToolConfig) => {
+                Row({ space: 8 }) {
+                  Column({ space: 3 }) {
+                    Text(tool.name)
+                      .font(getSettingsTypography().itemTitle)
+                      .fontColor(getAppUiState().themeTextPrimary)
+
+                    Text(tool.description.length > 0 ? tool.description : tool.id)
+                      .font(getSettingsTypography().subtitle)
+                      .lineHeight(SETTINGS_SUBTITLE_LINE_HEIGHT)
+                      .fontColor(getAppUiState().themeTextSecondary)
+                      .maxLines(2)
+                      .textOverflow({ overflow: TextOverflow.Ellipsis })
+                  }
+                  .layoutWeight(1)
+                  .alignItems(HorizontalAlign.Start)
+
+                  if (tool.permissionLevel === 'write') {
+                    Text(pickLocalizedText('需确认', 'Approval'))
+                      .fontSize(10)
+                      .fontWeight(FontWeight.Medium)
+                      .fontColor('#D9485F')
+                      .padding({ left: 8, right: 8, top: 4, bottom: 4 })
+                      .borderRadius(999)
+                      .backgroundColor(this.isDarkMode ? '#4B1D24' : '#FDECEF')
+                  }
+                }
+                .width('100%')
+                .padding(12)
+                .borderRadius(14)
+                .backgroundColor(this.isDarkMode ? '#23262D' : Color.White)
+                .border({ width: 1, color: this.isDarkMode ? '#2E323A' : '#EEF2F6' })
+              }, (tool: ToolConfig) => tool.id)
+            }
+            .width('100%')
+          }
         }
+        .width('100%')
+        .padding(14)
+        .borderRadius(18)
+        .backgroundColor(this.backgroundHex)
+        .border({ width: 1, color: this.dividerHex })
+
+        Row({ space: 8 }) {
+          Button(pickLocalizedText('刷新', 'Refresh'))
+            .height(32)
+            .fontSize(12)
+            .type(ButtonType.Capsule)
+            .stateEffect(false)
+            .backgroundColor(this.backgroundHex)
+            .border({ width: 1, color: this.themePrimary })
+            .fontColor(this.themePrimary)
+            .onClick(() => {
+              this.onRefresh()
+            })
+
+          Button(pickLocalizedText('编辑', 'Edit'))
+            .height(32)
+            .fontSize(12)
+            .type(ButtonType.Capsule)
+            .stateEffect(false)
+            .backgroundColor(this.backgroundHex)
+            .border({ width: 1, color: this.dividerHex })
+            .fontColor($r('app.color.text_primary'))
+            .onClick(() => {
+              this.onEdit()
+            })
+
+          Blank()
+
+          Button($r('app.string.delete'))
+            .height(32)
+            .fontSize(12)
+            .type(ButtonType.Capsule)
+            .stateEffect(false)
+            .backgroundColor(this.backgroundHex)
+            .border({ width: 1, color: this.isDarkMode ? '#6A3139' : '#F2CBD2' })
+            .fontColor('#D9485F')
+            .onClick(() => {
+              this.onDelete()
+            })
+        }
+        .width('100%')
       }
       .width('100%')
-      .padding(14)
-      .borderRadius(18)
-      .backgroundColor(this.backgroundHex)
-      .border({ width: 1, color: this.dividerHex })
-
-      Row({ space: 8 }) {
-        Button(pickLocalizedText('刷新', 'Refresh'))
-          .height(32)
-          .fontSize(12)
-          .type(ButtonType.Capsule)
-          .stateEffect(false)
-          .backgroundColor(this.backgroundHex)
-          .border({ width: 1, color: this.themePrimary })
-          .fontColor(this.themePrimary)
-          .onClick(() => {
-            this.onRefresh()
-          })
-
-        Button(pickLocalizedText('编辑', 'Edit'))
-          .height(32)
-          .fontSize(12)
-          .type(ButtonType.Capsule)
-          .stateEffect(false)
-          .backgroundColor(this.backgroundHex)
-          .border({ width: 1, color: this.dividerHex })
-          .fontColor($r('app.color.text_primary'))
-          .onClick(() => {
-            this.onEdit()
-          })
-
-        Blank()
-
-        Button($r('app.string.delete'))
-          .height(32)
-          .fontSize(12)
-          .type(ButtonType.Capsule)
-          .stateEffect(false)
-          .backgroundColor(this.backgroundHex)
-          .border({ width: 1, color: this.isDarkMode ? '#6A3139' : '#F2CBD2' })
-          .fontColor('#D9485F')
-          .onClick(() => {
-            this.onDelete()
-          })
-      }
-      .width('100%')
+      .padding(16)
+      .borderRadius(LIST_MATERIAL_CARD_RADIUS)
+      .backgroundColor(Color.Transparent)
     }
-    .width('100%')
-    .padding(16)
-    .borderRadius(16)
-    .backgroundColor(Color.Transparent)
-    .border({ width: 0.5, color: getAppUiState().themePrimaryLight })
-    .backdropBlur(16)
-    .shadow(getBlurBottomShadow())
   }
 }

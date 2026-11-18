@@ -1,4 +1,7 @@
-import { getBlurBottomShadow } from '../utils/BlurShadowUtils'
+import { getSettingsTypography, SETTINGS_HEADING_CONTENT_GAP, SETTINGS_SUBTITLE_LINE_HEIGHT } from './settings/SettingsTypography'
+import { ImmersiveListSurface, LIST_MATERIAL_CARD_RADIUS } from './ImmersiveListSurface'
+import { ImmersiveFieldSurface } from './ImmersiveFieldSurface'
+import { InteractiveMaterialButton } from './InteractiveMaterialButton'
 import { uiMaterial } from '@kit.ArkUI'
 import { common, Want } from '@kit.AbilityKit'
 import {
@@ -12,19 +15,84 @@ import {
 import { EmailService } from '../services/EmailService'
 import { ServiceRegistry } from '../services/ServiceRegistry'
 import { getAppUiState } from '../state/AppUiState'
+import { withColorAlpha } from '../utils/ColorAlphaUtils'
 import { pickLocalizedText } from '../utils/LocalizedTextUtils'
+import { getSettingsSheetContentMaxHeight } from '../utils/SettingsPageLayoutHelper'
+import { shouldUseWrappedMaterial, WRAPPED_MATERIAL_REGULAR } from '../utils/WrappedMaterialSupport'
 import { showSnackBar, SnackBarDisplayOptions, SnackBarTone } from '../utils/ToastUtil'
 import { ChatFloatingImmersiveButton } from './ChatFloatingImmersiveButton'
 import { ImmersiveSheetHeader } from './ImmersiveSheetHeader'
+import { SETTINGS_FORM_VALUE_FONT_SIZE, SettingsFormSelect } from './settings/SettingsFormSelect'
 
 interface EmailConfigurationError {
   code?: number
   message?: string
 }
 
+@ComponentV2
+struct MailboxActionButton {
+  @Require @Param label: string
+  @Require @Param foreground: ResourceColor
+  @Param accessibilityLabel: string = ''
+  @Param compact: boolean = false
+  @Param buttonHeight: number = 42
+  @Param maxWidth: Length = '100%'
+  @Param tint: ResourceColor = Color.Transparent
+  @Param isEnabled: boolean = true
+  @Event onActivate: () => void = (): void => {}
+  @Local private measuredWidth: number = 0
+
+  private get layoutWidth(): Length {
+    if (!this.compact) {
+      return '100%'
+    }
+    const context = this.getUIContext()
+    const size = context.getMeasureUtils().measureTextSize({
+      textContent: this.label, fontSize: 12, fontWeight: FontWeight.Medium
+    })
+    return Math.ceil(context.px2vp(Number(size.width))) + 20
+  }
+
+  build() {
+    Stack() {
+      InteractiveMaterialButton({
+        surfaceWidth: this.measuredWidth,
+        surfaceHeight: this.buttonHeight,
+        buttonType: ButtonType.Capsule,
+        materialStyle: WRAPPED_MATERIAL_REGULAR,
+        materialColor: this.tint,
+        applyShadow: true,
+        isEnabled: this.isEnabled,
+        interactive: this.isEnabled,
+        accessibilityLabel: this.accessibilityLabel || this.label,
+        onActivate: (): void => this.onActivate()
+      }) {
+        Text(this.label)
+          .fontSize(this.compact ? 12 : 14)
+          .fontWeight(FontWeight.Medium)
+          .fontColor(this.foreground)
+          .maxLines(1)
+          .textOverflow({ overflow: TextOverflow.Ellipsis })
+      }
+    }
+    .width(this.layoutWidth)
+    .constraintSize({ maxWidth: this.maxWidth })
+    .height(this.buttonHeight)
+    .clip(false)
+    .hitTestBehavior(HitTestMode.Transparent)
+    .onSizeChange((_previous: SizeOptions, size: SizeOptions): void => {
+      const width = Number(size.width)
+      if (Number.isFinite(width) && width >= 0 && this.measuredWidth !== width) {
+        this.measuredWidth = width
+      }
+    })
+  }
+}
+
 /** Account authorization belongs to Settings; knowledge only consumes the authorized mailbox. */
 @ComponentV2
 export struct EmailAccountSettingsCard {
+  @Param embedded: boolean = false
   @Local account: EmailAccountConfig = new EmailAccountConfig()
   @Local isLoading: boolean = true
   @Local isWorking: boolean = false
@@ -47,6 +115,7 @@ export struct EmailAccountSettingsCard {
   @Local connectionOk: boolean = false
 
   private service: EmailService = ServiceRegistry.email()
+  private readonly transportSecurityOptions: SelectOption[] = [{ value: 'SSL/TLS' }, { value: 'STARTTLS' }]
 
   private get themePrimary(): string {
     return getAppUiState().themePrimary
@@ -298,55 +367,107 @@ export struct EmailAccountSettingsCard {
 
   @Builder
   private EmailAddressInput() {
-    Column({ space: 6 }) {
+    Column({ space: SETTINGS_HEADING_CONTENT_GAP }) {
       Text(pickLocalizedText('邮箱地址', 'Email address'))
-        .fontSize(12).fontColor($r('app.color.text_secondary')).width('100%')
-      TextInput({ text: this.formEmail, placeholder: 'name@example.com' })
-        .height(44)
-        .fontSize(14)
-        .backgroundColor(getAppUiState().themeBackground)
-        .borderRadius(12)
-        .onChange((value: string): void => {
-          this.formEmail = value
-          this.connectionMessage = ''
-        })
+        .font(getSettingsTypography().fieldLabel)
+        .fontColor(getAppUiState().themeTextSecondary)
+        .width('100%')
+      ImmersiveFieldSurface({ cornerRadius: 10 }) {
+        Row() {
+          TextInput({ text: this.formEmail, placeholder: 'name@example.com' })
+            .layoutWeight(1)
+            .backgroundColor(Color.Transparent)
+            .height(40)
+            .fontSize(SETTINGS_FORM_VALUE_FONT_SIZE)
+            .placeholderFont({ size: SETTINGS_FORM_VALUE_FONT_SIZE })
+            .borderRadius(10)
+            .padding({ left: 12, right: 4 })
+            .onChange((value: string): void => {
+              this.formEmail = value
+              this.connectionMessage = ''
+            })
+          MailboxActionButton({
+            label: pickLocalizedText('自动填充', 'Autofill'),
+            accessibilityLabel: pickLocalizedText('自动填充常用服务器', 'Autofill common mail servers'),
+            compact: true,
+            buttonHeight: 30,
+            maxWidth: '45%',
+            foreground: this.themePrimary,
+            onActivate: (): void => this.applySuggestedServers()
+          })
+        }
+        .width('100%')
+        .height(40)
+        .alignItems(VerticalAlign.Center)
+        .padding({ right: 5 })
+      }
     }
     .width('100%').alignItems(HorizontalAlign.Start)
   }
 
   @Builder
   private DisplayNameInput() {
-    Column({ space: 6 }) {
+    Column({ space: SETTINGS_HEADING_CONTENT_GAP }) {
       Text(pickLocalizedText('显示名称', 'Display name'))
-        .fontSize(12).fontColor($r('app.color.text_secondary')).width('100%')
-      TextInput({ text: this.formDisplayName, placeholder: pickLocalizedText('可选', 'Optional') })
-        .height(44).fontSize(14).backgroundColor(getAppUiState().themeBackground).borderRadius(12)
-        .onChange((value: string): void => { this.formDisplayName = value })
+        .font(getSettingsTypography().fieldLabel)
+        .fontColor(getAppUiState().themeTextSecondary)
+        .width('100%')
+      ImmersiveFieldSurface({ cornerRadius: 10 }) {
+        TextInput({ text: this.formDisplayName, placeholder: pickLocalizedText('可选', 'Optional') })
+          .width('100%')
+          .backgroundColor(Color.Transparent)
+          .height(40)
+          .fontSize(SETTINGS_FORM_VALUE_FONT_SIZE)
+          .placeholderFont({ size: SETTINGS_FORM_VALUE_FONT_SIZE })
+          .borderRadius(10)
+          .padding({ left: 12, right: 12 })
+          .onChange((value: string): void => { this.formDisplayName = value })
+      }
     }.width('100%').alignItems(HorizontalAlign.Start)
   }
 
   @Builder
   private UsernameInput() {
-    Column({ space: 6 }) {
+    Column({ space: SETTINGS_HEADING_CONTENT_GAP }) {
       Text(pickLocalizedText('登录用户名', 'Username'))
-        .fontSize(12).fontColor($r('app.color.text_secondary')).width('100%')
-      TextInput({ text: this.formUsername,
-        placeholder: pickLocalizedText('通常与邮箱地址相同', 'Usually the email address') })
-        .height(44).fontSize(14).backgroundColor(getAppUiState().themeBackground).borderRadius(12)
-        .onChange((value: string): void => { this.formUsername = value })
+        .font(getSettingsTypography().fieldLabel)
+        .fontColor(getAppUiState().themeTextSecondary)
+        .width('100%')
+      ImmersiveFieldSurface({ cornerRadius: 10 }) {
+        TextInput({ text: this.formUsername,
+          placeholder: pickLocalizedText('通常与邮箱地址相同', 'Usually the email address') })
+          .width('100%')
+          .backgroundColor(Color.Transparent)
+          .height(40)
+          .fontSize(SETTINGS_FORM_VALUE_FONT_SIZE)
+          .placeholderFont({ size: SETTINGS_FORM_VALUE_FONT_SIZE })
+          .borderRadius(10)
+          .padding({ left: 12, right: 12 })
+          .onChange((value: string): void => { this.formUsername = value })
+      }
     }.width('100%').alignItems(HorizontalAlign.Start)
   }
 
   @Builder
   private PasswordInput() {
-    Column({ space: 6 }) {
+    Column({ space: SETTINGS_HEADING_CONTENT_GAP }) {
       Text(pickLocalizedText('授权码 / 应用专用密码', 'Authorization code / app password'))
-        .fontSize(12).fontColor($r('app.color.text_secondary')).width('100%')
-      TextInput({ text: this.formPassword,
-        placeholder: pickLocalizedText('不会提供给模型', 'Never shared with the model') })
-        .type(InputType.Password).height(44).fontSize(14)
-        .backgroundColor(getAppUiState().themeBackground).borderRadius(12)
-        .onChange((value: string): void => { this.formPassword = value })
+        .font(getSettingsTypography().fieldLabel)
+        .fontColor(getAppUiState().themeTextSecondary)
+        .width('100%')
+      ImmersiveFieldSurface({ cornerRadius: 10 }) {
+        TextInput({ text: this.formPassword,
+          placeholder: pickLocalizedText('不会提供给模型', 'Never shared with the model') })
+          .width('100%')
+          .backgroundColor(Color.Transparent)
+          .type(InputType.Password)
+          .height(40)
+          .fontSize(SETTINGS_FORM_VALUE_FONT_SIZE)
+          .placeholderFont({ size: SETTINGS_FORM_VALUE_FONT_SIZE })
+          .borderRadius(10)
+          .padding({ left: 12, right: 12 })
+          .onChange((value: string): void => { this.formPassword = value })
+      }
     }.width('100%').alignItems(HorizontalAlign.Start)
   }
 
@@ -365,92 +486,127 @@ export struct EmailAccountSettingsCard {
 
   @Builder
   private AuthenticationSelector() {
-    Column({ space: 6 }) {
-      Text(pickLocalizedText('认证方式', 'Authentication'))
-        .fontSize(12).fontColor($r('app.color.text_secondary')).width('100%')
-      Row({ space: 8 }) {
-        Button(pickLocalizedText('授权码 / 密码', 'App password'))
-          .type(ButtonType.Capsule).height(34).fontSize(12)
-          .backgroundColor(this.formAuthenticationMethod === EmailAuthenticationMethod.PASSWORD
-            ? this.themePrimary : Color.Transparent)
-          .fontColor(this.formAuthenticationMethod === EmailAuthenticationMethod.PASSWORD
-            ? Color.White : $r('app.color.text_secondary'))
-          .border({ width: 1,
-            color: this.formAuthenticationMethod === EmailAuthenticationMethod.PASSWORD
-              ? this.themePrimary : getAppUiState().themePrimaryLight })
-          .onClick(() => this.selectAuthenticationMethod(EmailAuthenticationMethod.PASSWORD))
-        Button('Microsoft OAuth2')
-          .type(ButtonType.Capsule).height(34).fontSize(12)
-          .backgroundColor(this.formAuthenticationMethod === EmailAuthenticationMethod.MICROSOFT_OAUTH2
-            ? this.themePrimary : Color.Transparent)
-          .fontColor(this.formAuthenticationMethod === EmailAuthenticationMethod.MICROSOFT_OAUTH2
-            ? Color.White : $r('app.color.text_secondary'))
-          .border({ width: 1,
-            color: this.formAuthenticationMethod === EmailAuthenticationMethod.MICROSOFT_OAUTH2
-              ? this.themePrimary : getAppUiState().themePrimaryLight })
-          .onClick(() => this.selectAuthenticationMethod(EmailAuthenticationMethod.MICROSOFT_OAUTH2))
-      }.width('100%')
-    }.width('100%').alignItems(HorizontalAlign.Start)
+    SettingsFormSelect({
+      label: pickLocalizedText('认证方式', 'Authentication'),
+      options: [{ value: pickLocalizedText('授权码 / 密码', 'App password') }, { value: 'Microsoft OAuth2' }],
+      selectedIndex: this.formAuthenticationMethod === EmailAuthenticationMethod.MICROSOFT_OAUTH2 ? 1 : 0,
+      onSelect: (index: number): void => this.selectAuthenticationMethod(index === 1
+        ? EmailAuthenticationMethod.MICROSOFT_OAUTH2 : EmailAuthenticationMethod.PASSWORD)
+    })
   }
 
   @Builder
   private OAuthClientIdInput() {
-    Column({ space: 6 }) {
+    Column({ space: SETTINGS_HEADING_CONTENT_GAP }) {
       Text('Microsoft Entra Client ID')
-        .fontSize(12).fontColor($r('app.color.text_secondary')).width('100%')
-      TextInput({ text: this.formOauthClientId, placeholder: '00000000-0000-0000-0000-000000000000' })
-        .height(44).fontSize(14).backgroundColor(getAppUiState().themeBackground).borderRadius(12)
-        .onChange((value: string): void => { this.formOauthClientId = value.trim() })
+        .font(getSettingsTypography().fieldLabel)
+        .fontColor(getAppUiState().themeTextSecondary)
+        .width('100%')
+      ImmersiveFieldSurface({ cornerRadius: 10 }) {
+        TextInput({ text: this.formOauthClientId, placeholder: '00000000-0000-0000-0000-000000000000' })
+          .width('100%')
+          .backgroundColor(Color.Transparent)
+          .height(40)
+          .fontSize(SETTINGS_FORM_VALUE_FONT_SIZE)
+          .placeholderFont({ size: SETTINGS_FORM_VALUE_FONT_SIZE })
+          .borderRadius(10)
+          .padding({ left: 12, right: 12 })
+          .onChange((value: string): void => { this.formOauthClientId = value.trim() })
+      }
       Text(pickLocalizedText(
         '需在 Microsoft Entra 将应用设为公共客户端并启用设备代码流；Client ID 不是密码。',
         'Register a public client in Microsoft Entra and enable device code flow. A Client ID is not a secret.'
-      )).fontSize(11).lineHeight(17).fontColor($r('app.color.text_tertiary')).width('100%')
+      ))
+        .font(getSettingsTypography().subtitle)
+        .lineHeight(SETTINGS_SUBTITLE_LINE_HEIGHT)
+        .fontColor(getAppUiState().themeTextSecondary)
+        .width('100%')
     }.width('100%').alignItems(HorizontalAlign.Start)
   }
 
   @Builder
   private SmtpHostInput() {
-    Column({ space: 6 }) {
+    Column({ space: SETTINGS_HEADING_CONTENT_GAP }) {
       Text(pickLocalizedText('服务器', 'Server'))
-        .fontSize(12).fontColor($r('app.color.text_secondary')).width('100%')
-      TextInput({ text: this.formSmtpHost, placeholder: 'smtp.example.com' })
-        .height(44).fontSize(14).backgroundColor(getAppUiState().themeBackground).borderRadius(12)
-        .onChange((value: string): void => { this.formSmtpHost = value })
+        .font(getSettingsTypography().fieldLabel)
+        .fontColor(getAppUiState().themeTextSecondary)
+        .width('100%')
+      ImmersiveFieldSurface({ cornerRadius: 10 }) {
+        TextInput({ text: this.formSmtpHost, placeholder: 'smtp.example.com' })
+          .width('100%')
+          .backgroundColor(Color.Transparent)
+          .height(40)
+          .fontSize(SETTINGS_FORM_VALUE_FONT_SIZE)
+          .placeholderFont({ size: SETTINGS_FORM_VALUE_FONT_SIZE })
+          .borderRadius(10)
+          .padding({ left: 12, right: 12 })
+          .onChange((value: string): void => { this.formSmtpHost = value })
+      }
     }.width('100%').alignItems(HorizontalAlign.Start)
   }
 
   @Builder
   private SmtpPortInput() {
-    Column({ space: 6 }) {
+    Column({ space: SETTINGS_HEADING_CONTENT_GAP }) {
       Text(pickLocalizedText('端口', 'Port'))
-        .fontSize(12).fontColor($r('app.color.text_secondary')).width('100%')
-      TextInput({ text: this.formSmtpPort, placeholder: '465' })
-        .type(InputType.Number).height(44).fontSize(14)
-        .backgroundColor(getAppUiState().themeBackground).borderRadius(12)
-        .onChange((value: string): void => { this.formSmtpPort = value })
+        .font(getSettingsTypography().fieldLabel)
+        .fontColor(getAppUiState().themeTextSecondary)
+        .width('100%')
+      ImmersiveFieldSurface({ cornerRadius: 10 }) {
+        TextInput({ text: this.formSmtpPort, placeholder: '465' })
+          .width('100%')
+          .backgroundColor(Color.Transparent)
+          .type(InputType.Number)
+          .height(40)
+          .fontSize(SETTINGS_FORM_VALUE_FONT_SIZE)
+          .placeholderFont({ size: SETTINGS_FORM_VALUE_FONT_SIZE })
+          .borderRadius(10)
+          .padding({ left: 12, right: 12 })
+          .onChange((value: string): void => { this.formSmtpPort = value })
+      }
     }.width('100%').alignItems(HorizontalAlign.Start)
   }
 
   @Builder
   private ImapHostInput() {
-    Column({ space: 6 }) {
+    Column({ space: SETTINGS_HEADING_CONTENT_GAP }) {
       Text(pickLocalizedText('服务器', 'Server'))
-        .fontSize(12).fontColor($r('app.color.text_secondary')).width('100%')
-      TextInput({ text: this.formImapHost, placeholder: 'imap.example.com' })
-        .height(44).fontSize(14).backgroundColor(getAppUiState().themeBackground).borderRadius(12)
-        .onChange((value: string): void => { this.formImapHost = value })
+        .font(getSettingsTypography().fieldLabel)
+        .fontColor(getAppUiState().themeTextSecondary)
+        .width('100%')
+      ImmersiveFieldSurface({ cornerRadius: 10 }) {
+        TextInput({ text: this.formImapHost, placeholder: 'imap.example.com' })
+          .width('100%')
+          .backgroundColor(Color.Transparent)
+          .height(40)
+          .fontSize(SETTINGS_FORM_VALUE_FONT_SIZE)
+          .placeholderFont({ size: SETTINGS_FORM_VALUE_FONT_SIZE })
+          .borderRadius(10)
+          .padding({ left: 12, right: 12 })
+          .onChange((value: string): void => { this.formImapHost = value })
+      }
     }.width('100%').alignItems(HorizontalAlign.Start)
   }
 
   @Builder
   private ImapPortInput() {
-    Column({ space: 6 }) {
+    Column({ space: SETTINGS_HEADING_CONTENT_GAP }) {
       Text(pickLocalizedText('端口', 'Port'))
-        .fontSize(12).fontColor($r('app.color.text_secondary')).width('100%')
-      TextInput({ text: this.formImapPort, placeholder: '993' })
-        .type(InputType.Number).height(44).fontSize(14)
-        .backgroundColor(getAppUiState().themeBackground).borderRadius(12)
-        .onChange((value: string): void => { this.formImapPort = value })
+        .font(getSettingsTypography().fieldLabel)
+        .fontColor(getAppUiState().themeTextSecondary)
+        .width('100%')
+      ImmersiveFieldSurface({ cornerRadius: 10 }) {
+        TextInput({ text: this.formImapPort, placeholder: '993' })
+          .width('100%')
+          .backgroundColor(Color.Transparent)
+          .type(InputType.Number)
+          .height(40)
+          .fontSize(SETTINGS_FORM_VALUE_FONT_SIZE)
+          .placeholderFont({ size: SETTINGS_FORM_VALUE_FONT_SIZE })
+          .borderRadius(10)
+          .padding({ left: 12, right: 12 })
+          .onChange((value: string): void => { this.formImapPort = value })
+      }
     }.width('100%').alignItems(HorizontalAlign.Start)
   }
 
@@ -474,59 +630,34 @@ export struct EmailAccountSettingsCard {
 
   @Builder
   private SmtpSecuritySelector() {
-    Row({ space: 8 }) {
-      Button('SSL/TLS')
-        .type(ButtonType.Capsule).height(34).fontSize(12)
-        .backgroundColor(this.formSmtpSecurity === EmailTransportSecurity.SSL_TLS
-          ? this.themePrimary : Color.Transparent)
-        .fontColor(this.formSmtpSecurity === EmailTransportSecurity.SSL_TLS
-          ? Color.White : $r('app.color.text_secondary'))
-        .border({ width: 1, color: this.formSmtpSecurity === EmailTransportSecurity.SSL_TLS ? this.themePrimary :
-          getAppUiState().themePrimaryLight })
-        .onClick(() => this.selectSmtpSecurity(EmailTransportSecurity.SSL_TLS))
-      Button('STARTTLS')
-        .type(ButtonType.Capsule).height(34).fontSize(12)
-        .backgroundColor(this.formSmtpSecurity === EmailTransportSecurity.STARTTLS
-          ? this.themePrimary : Color.Transparent)
-        .fontColor(this.formSmtpSecurity === EmailTransportSecurity.STARTTLS
-          ? Color.White : $r('app.color.text_secondary'))
-        .border({ width: 1, color: this.formSmtpSecurity === EmailTransportSecurity.STARTTLS ? this.themePrimary :
-          getAppUiState().themePrimaryLight })
-        .onClick(() => this.selectSmtpSecurity(EmailTransportSecurity.STARTTLS))
-    }
-    .width('100%')
+    SettingsFormSelect({
+      label: pickLocalizedText('连接加密方式', 'Connection security'),
+      options: this.transportSecurityOptions,
+      selectedIndex: this.formSmtpSecurity === EmailTransportSecurity.STARTTLS ? 1 : 0,
+      onSelect: (index: number): void => this.selectSmtpSecurity(index === 1
+        ? EmailTransportSecurity.STARTTLS : EmailTransportSecurity.SSL_TLS)
+    })
   }
 
   @Builder
   private ImapSecuritySelector() {
-    Row({ space: 8 }) {
-      Button('SSL/TLS')
-        .type(ButtonType.Capsule).height(34).fontSize(12)
-        .backgroundColor(this.formImapSecurity === EmailTransportSecurity.SSL_TLS
-          ? this.themePrimary : Color.Transparent)
-        .fontColor(this.formImapSecurity === EmailTransportSecurity.SSL_TLS
-          ? Color.White : $r('app.color.text_secondary'))
-        .border({ width: 1, color: this.formImapSecurity === EmailTransportSecurity.SSL_TLS ? this.themePrimary :
-          getAppUiState().themePrimaryLight })
-        .onClick(() => this.selectImapSecurity(EmailTransportSecurity.SSL_TLS))
-      Button('STARTTLS')
-        .type(ButtonType.Capsule).height(34).fontSize(12)
-        .backgroundColor(this.formImapSecurity === EmailTransportSecurity.STARTTLS
-          ? this.themePrimary : Color.Transparent)
-        .fontColor(this.formImapSecurity === EmailTransportSecurity.STARTTLS
-          ? Color.White : $r('app.color.text_secondary'))
-        .border({ width: 1, color: this.formImapSecurity === EmailTransportSecurity.STARTTLS ? this.themePrimary :
-          getAppUiState().themePrimaryLight })
-        .onClick(() => this.selectImapSecurity(EmailTransportSecurity.STARTTLS))
-    }
-    .width('100%')
+    SettingsFormSelect({
+      label: pickLocalizedText('连接加密方式', 'Connection security'),
+      options: this.transportSecurityOptions,
+      selectedIndex: this.formImapSecurity === EmailTransportSecurity.STARTTLS ? 1 : 0,
+      onSelect: (index: number): void => this.selectImapSecurity(index === 1
+        ? EmailTransportSecurity.STARTTLS : EmailTransportSecurity.SSL_TLS)
+    })
   }
 
   @Builder
   private ConfigSheetContent() {
     Column() {
       ImmersiveSheetHeader({
+        titleFont: getSettingsTypography().pageTitle,
+        titleColor: getAppUiState().themeTextPrimary,
         title: pickLocalizedText('邮箱授权', 'Mailbox Authorization'),
+        leadingButtonEnabled: !this.isWorking,
         onLeadingClick: (): void => {
           if (!this.isWorking) {
             this.showConfigSheet = false
@@ -534,143 +665,171 @@ export struct EmailAccountSettingsCard {
         }
       })
       Scroll() {
-        Column({ space: 16 }) {
-          Column({ space: 12 }) {
-            this.EmailAddressInput()
-            Row() {
-              Blank()
-              Button(pickLocalizedText('自动填充常用服务器', 'Suggest common servers'))
-                .height(32)
-                .fontSize(12)
-                .type(ButtonType.Capsule)
-                .backgroundColor(Color.Transparent)
-                .fontColor(this.themePrimary)
-                .border({ width: 1, color: this.themePrimary })
-                .onClick(() => this.applySuggestedServers())
-            }.width('100%')
-            this.DisplayNameInput()
-            this.UsernameInput()
-            this.AuthenticationSelector()
-            if (this.formAuthenticationMethod === EmailAuthenticationMethod.MICROSOFT_OAUTH2) {
-              this.OAuthClientIdInput()
-              if (this.oauthUserCode !== '') {
-                Column({ space: 8 }) {
-                  Text(pickLocalizedText('Microsoft 设备授权代码', 'Microsoft device authorization code'))
-                    .fontSize(11).fontColor($r('app.color.text_secondary')).width('100%')
-                  Text(this.oauthUserCode).fontSize(24).fontWeight(FontWeight.Bold)
-                    .fontColor(this.themePrimary).letterSpacing(2).width('100%')
-                  Button(pickLocalizedText('重新打开 Microsoft 授权页', 'Reopen Microsoft authorization page'))
-                    .height(34).fontSize(12).type(ButtonType.Capsule)
-                    .backgroundColor(Color.Transparent).fontColor(this.themePrimary)
-                    .border({ width: 1, color: this.themePrimary })
-                    .onClick((): void => {
-                      this.openMicrosoftAuthorizationPage(this.oauthVerificationUri)
-                        .catch((_error: Object): void => {})
-                    })
-                }.width('100%').alignItems(HorizontalAlign.Start)
-              }
-            } else {
-              this.PasswordInput()
+        Column({ space: 12 }) {
+          this.EmailAddressInput()
+          this.DisplayNameInput()
+          this.UsernameInput()
+          this.AuthenticationSelector()
+          if (this.formAuthenticationMethod === EmailAuthenticationMethod.MICROSOFT_OAUTH2) {
+            this.OAuthClientIdInput()
+            if (this.oauthUserCode !== '') {
+              Column({ space: SETTINGS_HEADING_CONTENT_GAP }) {
+                Text(pickLocalizedText('Microsoft 设备授权代码', 'Microsoft device authorization code'))
+                  .font(getSettingsTypography().fieldLabel)
+                  .fontColor(getAppUiState().themeTextSecondary)
+                  .width('100%')
+                Text(this.oauthUserCode).fontSize(24).fontWeight(FontWeight.Bold)
+                  .fontColor(this.themePrimary).letterSpacing(2).width('100%')
+                MailboxActionButton({
+                  label: pickLocalizedText('重新打开 Microsoft 授权页', 'Reopen Microsoft authorization page'),
+                  compact: true,
+                  buttonHeight: 34,
+                  foreground: this.themePrimary,
+                  onActivate: (): void => {
+                    this.openMicrosoftAuthorizationPage(this.oauthVerificationUri)
+                      .catch((_error: Object): void => {})
+                  }
+                })
+              }.width('100%').alignItems(HorizontalAlign.Start)
             }
+          } else {
+            this.PasswordInput()
           }
-          .width('100%').padding(16).borderRadius(18).backgroundColor($r('app.color.surface'))
 
-          Column({ space: 12 }) {
-            Text('SMTP · ' + pickLocalizedText('发送', 'Send'))
-              .fontSize(15).fontWeight(FontWeight.Bold).fontColor($r('app.color.text_primary')).width('100%')
-            this.SmtpHostInput()
-            this.SmtpPortInput()
-            this.SmtpSecuritySelector()
-          }
-          .width('100%').padding(16).borderRadius(18).backgroundColor($r('app.color.surface'))
+          Text('SMTP · ' + pickLocalizedText('发送', 'Send'))
+            .font(getSettingsTypography().sectionTitle)
+            .fontColor(getAppUiState().themeTextPrimary)
+            .margin({ top: 4 })
+          this.SmtpHostInput()
+          this.SmtpPortInput()
+          this.SmtpSecuritySelector()
 
-          Column({ space: 12 }) {
-            Text('IMAP · ' + pickLocalizedText('查看', 'Read'))
-              .fontSize(15).fontWeight(FontWeight.Bold).fontColor($r('app.color.text_primary')).width('100%')
-            this.ImapHostInput()
-            this.ImapPortInput()
-            this.ImapSecuritySelector()
-          }
-          .width('100%').padding(16).borderRadius(18).backgroundColor($r('app.color.surface'))
+          Text('IMAP · ' + pickLocalizedText('查看', 'Read'))
+            .font(getSettingsTypography().sectionTitle)
+            .fontColor(getAppUiState().themeTextPrimary)
+            .margin({ top: 4 })
+          this.ImapHostInput()
+          this.ImapPortInput()
+          this.ImapSecuritySelector()
 
           Text(pickLocalizedText(
-            '仅支持加密连接并校验服务器证书。授权码保存在系统沙箱存储',
-            'Encrypted connections and certificate validation are required. The app password is protected by the system secure asset store.'
-          )).fontSize(12).lineHeight(18).fontColor($r('app.color.text_secondary')).width('100%')
+            '通过加密连接收发邮件，授权信息仅保存在本机。',
+            'Email uses encrypted connections, with credentials stored only on this device.'
+          ))
+            .font(getSettingsTypography().subtitle)
+            .lineHeight(SETTINGS_SUBTITLE_LINE_HEIGHT)
+            .fontColor(getAppUiState().themeTextSecondary)
+            .width('100%')
 
           if (this.connectionMessage !== '') {
-            Text(this.connectionMessage).fontSize(12).lineHeight(18)
-              .fontColor(this.connectionOk ? this.themePrimary : $r('app.color.status_error')).width('100%')
+            Text(this.connectionMessage)
+              .font(getSettingsTypography().subtitle)
+              .lineHeight(SETTINGS_SUBTITLE_LINE_HEIGHT)
+              .fontColor(this.connectionOk ? this.themePrimary : $r('app.color.status_error'))
+              .width('100%')
           }
 
-          Button(this.isWorking
-            ? (this.formAuthenticationMethod === EmailAuthenticationMethod.MICROSOFT_OAUTH2
-              ? pickLocalizedText('等待 Microsoft 授权...', 'Waiting for Microsoft authorization...')
-              : pickLocalizedText('正在验证...', 'Testing...'))
-            : (this.formAuthenticationMethod === EmailAuthenticationMethod.MICROSOFT_OAUTH2
-              ? pickLocalizedText('Microsoft OAuth2 授权并保存', 'Authorize Microsoft OAuth2')
-              : pickLocalizedText('验证并保存授权', 'Test and Save Authorization')))
-            .width('100%').height(46).type(ButtonType.Capsule).enabled(!this.isWorking)
-            .backgroundColor(this.themePrimary).fontColor(Color.White).onClick(() => this.testAndSaveAccount())
+          MailboxActionButton({
+            label: this.isWorking
+              ? (this.formAuthenticationMethod === EmailAuthenticationMethod.MICROSOFT_OAUTH2
+                ? pickLocalizedText('等待 Microsoft 授权...', 'Waiting for Microsoft authorization...')
+                : pickLocalizedText('正在验证...', 'Testing...'))
+              : (this.formAuthenticationMethod === EmailAuthenticationMethod.MICROSOFT_OAUTH2
+                ? pickLocalizedText('Microsoft OAuth2 授权并保存', 'Authorize Microsoft OAuth2')
+                : pickLocalizedText('验证并保存授权', 'Test and Save Authorization')),
+            buttonHeight: 46,
+            foreground: this.themePrimary,
+            tint: withColorAlpha(this.themePrimary, '40'),
+            isEnabled: !this.isWorking,
+            onActivate: (): void => this.testAndSaveAccount()
+          })
 
           if (this.account.configured) {
-            Button(pickLocalizedText('撤销当前邮箱授权', 'Revoke Current Mailbox Authorization'))
-              .width('100%').height(42).type(ButtonType.Capsule).enabled(!this.isWorking)
-              .backgroundColor(Color.Transparent).fontColor($r('app.color.status_error'))
-              .border({ width: 1, color: $r('app.color.status_error') })
-              .onClick(() => this.requestClearAuthorization())
+            MailboxActionButton({
+              label: pickLocalizedText('撤销当前邮箱授权', 'Revoke Current Mailbox Authorization'),
+              foreground: $r('app.color.status_error'),
+              isEnabled: !this.isWorking,
+              onActivate: (): void => this.requestClearAuthorization()
+            })
           }
         }
-        .width('100%').padding({ left: 16, right: 16, bottom: 28 })
+        .width('100%')
+        .alignItems(HorizontalAlign.Start)
+        .padding({ left: 16, right: 16, bottom: 24 })
       }
-      .width('100%').layoutWeight(1).scrollBar(BarState.Off)
+      .width('100%')
+      .constraintSize({ maxHeight: getSettingsSheetContentMaxHeight(getAppUiState().windowHeightVp) })
+      .flexShrink(1)
+      .scrollBar(BarState.Off)
     }
-    .width('100%').height('100%').backgroundColor(getAppUiState().themeBackground)
+    .width('100%')
+    .backgroundColor(Color.Transparent)
   }
 
   build() {
-    Column({ space: 12 }) {
-      Row({ space: 12 }) {
-        ChatFloatingImmersiveButton({
-          barWidth: 44,
-          barHeight: 44,
-          iconResource: $r('sys.symbol.envelope'),
-          iconSize: 20,
-          iconColor: [this.themePrimary],
-          responsePadding: 0
-        }) {
-          Stack({ alignContent: Alignment.Center }) {
-            SymbolGlyph($r('sys.symbol.envelope')).fontSize(20).fontColor([this.themePrimary])
-          }.width(44).height(44)
-        }
-        Column({ space: 5 }) {
-          Text(pickLocalizedText('邮件', 'Email')).fontSize(17).fontWeight(FontWeight.Bold)
-            .fontColor($r('app.color.text_primary')).width('100%')
-          Text(this.isLoading ? pickLocalizedText('正在读取配置...', 'Loading configuration...') :
-            this.account.configured
-              ? pickLocalizedText(`已授权 ${this.account.emailAddress}`, `Authorized ${this.account.emailAddress}`)
-              : pickLocalizedText('未配置 SMTP / IMAP 授权', 'SMTP / IMAP authorization not configured'))
-            .fontSize(12).lineHeight(18).fontColor($r('app.color.text_secondary')).width('100%')
-            .maxLines(2).textOverflow({ overflow: TextOverflow.Ellipsis })
-        }.layoutWeight(1).alignItems(HorizontalAlign.Start)
-        Button(pickLocalizedText('配置', 'Configure'))
-          .height(32).fontSize(12).type(ButtonType.Capsule).stateEffect(false)
-          .backgroundColor(this.themePrimary).fontColor(Color.White).onClick(() => this.openConfig())
-      }.width('100%').alignItems(VerticalAlign.Center)
+    ImmersiveListSurface({ isImmersive: !this.embedded, cornerRadius: LIST_MATERIAL_CARD_RADIUS }) {
+      Column({ space: 12 }) {
+        Row({ space: 12 }) {
+          ChatFloatingImmersiveButton({
+            barWidth: 44,
+            barHeight: 44,
+            iconResource: $r('sys.symbol.envelope'),
+            iconSize: 20,
+            iconColor: [this.themePrimary],
+            responsePadding: 0
+          }) {
+            Stack({ alignContent: Alignment.Center }) {
+              SymbolGlyph($r('sys.symbol.envelope')).fontSize(20).fontColor([this.themePrimary])
+            }.width(44).height(44)
+          }
+          Column({ space: 5 }) {
+            Text(pickLocalizedText('邮件', 'Email'))
+              .font(getSettingsTypography().itemTitle)
+              .fontColor(getAppUiState().themeTextPrimary)
+              .width('100%')
+            Text(this.isLoading ? pickLocalizedText('正在加载…', 'Loading…') :
+              this.account.configured
+                ? pickLocalizedText(`已连接 ${this.account.emailAddress}`, `Connected to ${this.account.emailAddress}`)
+                : pickLocalizedText('连接邮箱，收发邮件。', 'Connect your mailbox to send and receive email.'))
+              .font(getSettingsTypography().subtitle)
+              .lineHeight(SETTINGS_SUBTITLE_LINE_HEIGHT)
+              .fontColor(getAppUiState().themeTextSecondary)
+              .width('100%')
+              .maxLines(2)
+              .textOverflow({ overflow: TextOverflow.Ellipsis })
+          }.layoutWeight(1).alignItems(HorizontalAlign.Start)
+        }.width('100%').alignItems(VerticalAlign.Center)
 
+        Row({ space: 4 }) {
+          Blank()
+          Text(pickLocalizedText('配置', 'Configure'))
+            .fontSize(11)
+            .fontWeight(FontWeight.Medium)
+            .fontColor(this.themePrimary)
+          SymbolGlyph($r('sys.symbol.chevron_right'))
+            .renderingStrategy(SymbolRenderingStrategy.SINGLE)
+            .fontSize(12)
+            .fontColor([this.themePrimary])
+        }
+        .width('100%')
+        .onClick(() => this.openConfig())
+      }
+      .width('100%')
+      .padding(16)
+      .borderRadius(LIST_MATERIAL_CARD_RADIUS)
+      .backgroundColor(Color.Transparent)
+      .bindSheet($$this.showConfigSheet, this.ConfigSheetContent(), {
+        height: SheetSize.FIT_CONTENT,
+        dragBar: true,
+        showClose: false,
+        backgroundColor: Color.Transparent,
+        blurStyle: shouldUseWrappedMaterial() ? undefined : BlurStyle.Regular,
+        systemMaterial: shouldUseWrappedMaterial() ? new uiMaterial.ImmersiveMaterial({
+          style: uiMaterial.ImmersiveStyle.REGULAR
+        }) : undefined,
+        preferType: SheetType.BOTTOM,
+        keyboardAvoidMode: SheetKeyboardAvoidMode.TRANSLATE_AND_RESIZE
+      })
     }
-    .width('100%')
-    .padding(14)
-    .borderRadius(16)
-    .backgroundColor(Color.Transparent)
-    .border({ width: 0.5, color: getAppUiState().themePrimaryLight })
-    .backdropBlur(16)
-    .shadow(getBlurBottomShadow())
-    .bindSheet($$this.showConfigSheet, this.ConfigSheetContent(), {
-      height: SheetSize.LARGE,
-      detents: [SheetSize.LARGE],
-      dragBar: true,
-      showClose: false
-    })
   }
 }

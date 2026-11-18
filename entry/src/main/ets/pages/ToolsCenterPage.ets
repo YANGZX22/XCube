@@ -1,9 +1,9 @@
+import { getSettingsTypography } from '../components/settings/SettingsTypography'
 import { shouldUseDrawnNavigation } from '../utils/DrawnNavigationSupport'
 import { ToolsCenterPanel } from '../components/ToolsCenterPanel'
 import { HdsNavigation, HdsNavigationTitleBarOptions, HdsNavigationTitleMode } from '@kit.UIDesignKit'
 import { SettingsCompactTitleBarContent } from '../components/settings/SettingsCompactPageHeader'
 import { AppStorageKeys } from '../config/AppStorageKeys'
-import { LayoutSizeClass } from '../config/LayoutProfile'
 import { SettingsPagePresentationMode } from '../config/SettingsDetailPresentation'
 import { getSettingsPageContentMaxWidth, getSettingsPageCompactTabsTotalInset } from '../utils/SettingsPageLayoutHelper'
 import { getAppUiState } from '../state/AppUiState'
@@ -79,24 +79,15 @@ struct ToolsCenterPage {
 
   @Builder
   private PageContent() {
-    Row() {
-      Column() {
-        ToolsCenterPanel({
-          showHeader: false,
-          contentBottomPadding: this.getContentBottomPadding(),
-          contentTopPadding: this.getCompactContentTopPadding(),
-          contentScroller: this.toolsCenterScroller
-        })
-      }
-      .width('100%')
-      .layoutWeight(1)
-      .constraintSize({ maxWidth: this.getContentMaxWidth() })
-    }
+    ToolsCenterPanel({
+      showHeader: false,
+      contentMaxWidth: this.getContentMaxWidth(),
+      contentBottomPadding: this.getContentBottomPadding(),
+      contentTopPadding: this.getCompactContentTopPadding(),
+      contentScroller: this.toolsCenterScroller
+    })
     .width('100%')
     .layoutWeight(1)
-    .justifyContent(FlexAlign.Center)
-    .alignItems(VerticalAlign.Top)
-    .padding({ left: 16, right: 16 })
   }
 
   @Builder
@@ -104,9 +95,8 @@ struct ToolsCenterPage {
     Column() {
       Row() {
         Text($r('app.string.tools_center_title'))
-          .fontSize(18)
-          .fontWeight(FontWeight.Bold)
-          .fontColor($r('app.color.text_primary'))
+          .font(getSettingsTypography().pageTitle)
+          .fontColor(getAppUiState().themeTextPrimary)
           .layoutWeight(1)
       }
       .width('100%')

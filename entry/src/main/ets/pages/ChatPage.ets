@@ -2,6 +2,7 @@ import { ImmersiveFieldSurface } from '../components/ImmersiveFieldSurface'
 import { BuiltinBrowserState } from '../services/BuiltinBrowserService'
 import { getBuiltinBrowserManager } from '../services/BuiltinBrowserManager'
 import { BUILTIN_BROWSER_TOOL_ID } from '../services/BuiltinBrowserPolicy'
+import { sortToolsForDisplay } from '../utils/ToolDisplayOrderUtils'
 import { shouldUseDrawnNavigation } from '../utils/DrawnNavigationSupport'
 import { ImmersiveButtonSurface } from '../components/ImmersiveButtonSurface'
 import { getBlurBottomShadow } from '../utils/BlurShadowUtils'
@@ -3032,35 +3033,11 @@ export struct ChatPage {
         tools.push(configs[i])
       }
     }
-    this.availableChatTools = this.sortAvailableChatToolsForSettingsOrder(tools)
+    this.availableChatTools = sortToolsForDisplay(tools)
   }
 
   private isSettingsControlledBuiltinTool(toolId: string): boolean {
     return toolId === 'web_search' || toolId === USE_SKILL_TOOL_ID || toolId === COMPACT_TOOL_ID
-  }
-
-  private sortAvailableChatToolsForSettingsOrder(tools: ToolConfig[]): ToolConfig[] {
-    const searchTools: ToolConfig[] = []
-    const skillTools: ToolConfig[] = []
-    const builtinTools: ToolConfig[] = []
-    const mcpTools: ToolConfig[] = []
-    for (let i = 0; i < tools.length; i++) {
-      const tool = tools[i]
-      if (this.isMcpChatTool(tool)) {
-        mcpTools.push(tool)
-        continue
-      }
-      if (tool.id === 'web_search') {
-        searchTools.push(tool)
-        continue
-      }
-      if (tool.id === USE_SKILL_TOOL_ID) {
-        skillTools.push(tool)
-        continue
-      }
-      builtinTools.push(tool)
-    }
-    return [...searchTools, ...skillTools, ...builtinTools, ...mcpTools]
   }
 
   private async loadEnabledMcpServerIds(): Promise<Set<string>> {

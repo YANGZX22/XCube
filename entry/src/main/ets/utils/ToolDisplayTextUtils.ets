@@ -112,87 +112,87 @@ export function getLocalizedBuiltinToolName(toolId: string, fallback: string = '
 export function getLocalizedBuiltinToolDescription(toolId: string, fallback: string = ''): string {
   switch (normalizeToolId(toolId)) {
     case 'builtin_browser':
-      return pickLocalizedText('应用内置浏览器，可供模型直接操控（可能消耗更多 tokens）',
-        'Built-in browser, which allows the model to be controlled directly (may consume more tokens)')
+      return pickLocalizedText('浏览网页并完成页面操作。',
+        'Browse and interact with web pages.')
     case 'web_search':
-      return pickLocalizedText('模型可搜索互联网获取最新信息',
-        'Search the web for current information.')
+      return pickLocalizedText('搜索网页，查找所需信息。',
+        'Search the web for information.')
     case 'ask_user':
-      return pickLocalizedText('需要澄清时向用户提问，再根据答复继续',
-        'Ask clarifying questions and continue with the answers.')
+      return pickLocalizedText('询问任务中需要补充的信息。',
+        'Ask for missing task details.')
     case 'sub_agent':
-      return pickLocalizedText('派出并行子智能体处理独立子任务',
-        'Dispatch parallel sub-agents for independent tasks.')
+      return pickLocalizedText('将任务分给多个助手同时处理。',
+        'Split work among multiple assistants.')
     case 'sub_agent_result':
-      return pickLocalizedText('取回子智能体当前轮回复，会话可继续',
-        'Collect the current replies from sub-agents.')
+      return pickLocalizedText('查看子智能体的处理结果。',
+        'View results from sub-agents.')
     case 'sub_agent_message':
-      return pickLocalizedText('向已有子智能体续发指令并保留上下文',
-        'Continue an existing sub-agent conversation.')
+      return pickLocalizedText('向子智能体补充任务要求。',
+        'Send follow-up instructions to sub-agents.')
     case 'canvas_document':
-      return pickLocalizedText('读取或修改与用户共享的 Canvas 文档',
-        'Read or edit the Canvas document shared with the user.')
+      return pickLocalizedText('查看和编辑 Canvas 文档。',
+        'View and edit Canvas documents.')
     case 'plan_mode':
     case 'plan':
-      return pickLocalizedText('列出多步任务的计划，并在完成时逐条勾选',
-        'Lay out a multi-step plan and tick each step off on completion.')
+      return pickLocalizedText('制定任务计划并记录进度。',
+        'Plan tasks and track progress.')
     case 'pdf_toolkit':
-      return pickLocalizedText('模型可原生读文档时直接给出原始 PDF，否则读取文本并按需 OCR',
-        'Hand the model the original PDF when it reads documents natively, else extract text with OCR fallback.')
+      return pickLocalizedText('读取 PDF 文档内容。',
+        'Read PDF documents.')
     case 'image_toolkit':
-      return pickLocalizedText('模型可原生看图时直接给出原图，否则用本地 OCR 读取文字',
-        'Hand the model the original image when it has vision, else extract text with local OCR.')
+      return pickLocalizedText('识别图片中的文字。',
+        'Read text in images.')
     case 'vision_read_image':
-      return pickLocalizedText('模型可原生看图时直接给出原图，否则通过 ModLens 获取 OCR、布局与语义证据',
-        'Hand the model the original image when it has vision, else get OCR, layout, and semantics via ModLens.')
+      return pickLocalizedText('识别图片中的内容。',
+        'Understand image content.')
     case 'docx_toolkit':
-      return pickLocalizedText('模型可原生读文档时直接给出原始 DOCX，否则在本地读取标题、段落、列表和表格',
-        'Hand the model the original DOCX when it reads documents natively, else extract its text locally.')
+      return pickLocalizedText('读取 Word 文档中的文字和表格。',
+        'Read text and tables in Word documents.')
     case 'xlsx_toolkit':
-      return pickLocalizedText('模型可原生读文档时直接给出原始 XLSX，否则在本地读取工作表和单元格内容',
-        'Hand the model the original XLSX when it reads documents natively, else extract its cells locally.')
+      return pickLocalizedText('读取 Excel 表格中的数据。',
+        'Read data from Excel spreadsheets.')
     case 'use_skill':
-      return pickLocalizedText('读取用户已启用的技能说明',
-        'Read instructions from enabled user skills.')
+      return pickLocalizedText('使用你添加的技能处理任务。',
+        'Handle tasks with your custom skills.')
     case 'python_sandbox':
-      return pickLocalizedText('在本地沙箱中运行 Pyodide/CPython',
-        'Run Pyodide/CPython in a local sandbox.')
+      return pickLocalizedText('运行 Python 代码，处理数据和文件。',
+        'Run Python code to work with data and files.')
     case 'math_chart':
-      return pickLocalizedText('在本地分析数据并生成多种图表',
-        'Analyze data locally and generate charts.')
+      return pickLocalizedText('分析数据并绘制图表。',
+        'Analyze data and create charts.')
     case 'read_schedule':
-      return pickLocalizedText('经用户确认后读取系统日历事件',
-        'Read calendar events after user approval.')
+      return pickLocalizedText('查看日历中的日程。',
+        'View events in your calendar.')
     case 'write_schedule':
-      return pickLocalizedText('经用户确认后写入系统日历事件',
-        'Create calendar events after user approval.')
+      return pickLocalizedText('添加日程和提醒。',
+        'Add calendar events and reminders.')
     case 'email_read':
-      return pickLocalizedText('经逐次确认后查看已授权邮箱中的邮件',
-        'Read messages from the authorized mailbox after per-call approval.')
+      return pickLocalizedText('查看邮箱中的邮件。',
+        'Read messages in your mailbox.')
     case 'email_send':
-      return pickLocalizedText('经逐次确认后向指定邮箱发送邮件',
-        'Send email to specified recipients after per-call approval.')
+      return pickLocalizedText('撰写并发送邮件。',
+        'Compose and send emails.')
     case 'map_search_route':
-      return pickLocalizedText('推荐地点并规划驾车、步行或骑行路线',
-        'Find places and plan driving, walking, or cycling routes.')
+      return pickLocalizedText('查找地点并规划路线。',
+        'Find places and plan routes.')
     case 'saved_places':
-      return pickLocalizedText('标签对模型开放；读取对应地址和坐标前需用户确认',
-        'Labels are available to the model; reading their addresses and coordinates requires approval.')
+      return pickLocalizedText('按名称查找已保存的地点。',
+        'Look up saved places by name.')
     case 'open_map_route':
-      return pickLocalizedText('经用户确认后在花瓣地图中查看路线或发起导航',
-        'Open a route or start navigation in Petal Maps after approval.')
+      return pickLocalizedText('用花瓣地图查看路线并开始导航。',
+        'View routes and start navigation in Petal Maps.')
     case 'knowledge_search':
-      return pickLocalizedText('按需检索知识库中已上传的文件',
-        'Search files uploaded to the knowledge base.')
+      return pickLocalizedText('从知识库文件中查找相关内容。',
+        'Find information in your knowledge base files.')
     case 'compact_context':
     case 'context_compaction':
     case 'compact':
-      return pickLocalizedText('将较早对话压缩为摘要以节省上下文',
-        'Summarize earlier turns to save context space.')
+      return pickLocalizedText('压缩较早的对话，保留重要信息。',
+        'Summarize earlier messages to retain key information.')
     default:
       return fallback.trim() !== '' ? fallback : pickLocalizedText(
-        '应用内原生能力，可在当前聊天中按需调用。',
-        'Built-in app capability available to the current chat.')
+        '暂无说明。',
+        'No description available.')
   }
 }
 

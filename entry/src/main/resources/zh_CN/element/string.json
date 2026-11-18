@@ -874,7 +874,7 @@
     },
     {
       "name": "search_query_optimization_hint",
-      "value": "仅对 Bing（本地）生效。用于把口语输入改写为更可检索的关键词。"
+      "value": "将提问改写为搜索关键词，仅适用于 Bing（本地）。"
     },
     {
       "name": "search_tavily_base_url",
@@ -1634,7 +1634,7 @@
     },
     {
       "name": "search_service_config_desc",
-      "value": "配置聊天里的联网查询能力，并选择它实际使用的搜索 provider。"
+      "value": "选择用于联网搜索的服务。"
     },
     {
       "name": "search_service_card_title",

@@ -874,7 +874,7 @@
     },
     {
       "name": "search_query_optimization_hint",
-      "value": "Only applies to Bing (Local). Rewrites conversational input into searchable keywords."
+      "value": "Turn questions into search keywords for Bing (Local)."
     },
     {
       "name": "search_tavily_base_url",
@@ -1634,7 +1634,7 @@
     },
     {
       "name": "search_service_config_desc",
-      "value": "Configure the chat web search capability and choose which search provider it runs on."
+      "value": "Choose a service for web searches."
     },
     {
       "name": "search_service_card_title",
