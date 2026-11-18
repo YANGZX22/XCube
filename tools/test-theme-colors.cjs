@@ -83,7 +83,9 @@ test('material banner and usage cards resolve defaults at render time, retaining
   assert.match(metric, /@Param primaryLightColor: string \| undefined = undefined/);
   const bannerColor = banner.match(/color: (this\.cardStrokeColor \?\? getAppUiState\(\)\.themePrimaryLight)/)[1];
   const metricColor = metric.match(/\.backgroundColor\((this\.primaryLightColor \?\? getAppUiState\(\)\.themePrimaryLight)\)/)[1];
-  assert.ok(metric.includes(`color: ${metricColor}`));
+  const metricCard = metric.slice(metric.indexOf('struct UsageMetricCard'), metric.indexOf('struct UsageStatsPage'));
+  assert.match(metricCard, /ImmersiveListSurface\(/);
+  assert.doesNotMatch(metricCard, /\.border\(/);
   const evaluateBanner = new Function('getAppUiState', `return ${bannerColor};`);
   const evaluateMetric = new Function('getAppUiState', `return ${metricColor};`);
   const bannerInstance = { cardStrokeColor: undefined };

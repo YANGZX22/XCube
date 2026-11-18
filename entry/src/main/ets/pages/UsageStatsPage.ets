@@ -1,3 +1,6 @@
+import { SettingsSectionHeading } from '../components/settings/SettingsSectionHeading'
+import { getSettingsTypography, SETTINGS_SUBTITLE_LINE_HEIGHT } from '../components/settings/SettingsTypography'
+import { ImmersiveListSurface, LIST_MATERIAL_CARD_RADIUS } from '../components/ImmersiveListSurface'
 import { DrawnFloatingTabBar } from '../components/DrawnFloatingTabBar'
 import { UsageActivityCard } from '../components/UsageActivityCard'
 import { DailyUsageActivity, getUsageActivityPeriod } from '../utils/UsageActivityUtils'
@@ -17,7 +20,6 @@ import { getAppUiState } from '../state/AppUiState'
 import {
   buildHdsTopNavigationTitleBarOptionsForPage,
   getHdsTopNavigationContentTopPadding,
-  buildPointLightBorderEffect,
   getHdsStatusBarContentColor
 } from '../utils/HdsVisualEffectUtil'
 import {
@@ -59,53 +61,52 @@ struct UsageMetricCard {
   @Param unit: ResourceStr = ''
   @Param primaryColor: string = '#7A68F0'
   @Param primaryLightColor: string | undefined = undefined
-  @Param surfaceColor: string = '#FDFCFF'
 
   build() {
-    Column() {
-      Row({ space: 8 }) {
-        Column() {
-          SymbolGlyph(this.icon)
-            .fontSize(16)
-            .fontColor([this.primaryColor])
+    ImmersiveListSurface({ isImmersive: true, cornerRadius: LIST_MATERIAL_CARD_RADIUS }) {
+      Column() {
+        Row({ space: 8 }) {
+          Column() {
+            SymbolGlyph(this.icon)
+              .fontSize(16)
+              .fontColor([this.primaryColor])
+          }
+          .width(28)
+          .height(28)
+          .borderRadius(9)
+          .backgroundColor(this.primaryLightColor ?? getAppUiState().themePrimaryLight)
+          .justifyContent(FlexAlign.Center)
+          .alignItems(HorizontalAlign.Center)
+
+          Text(this.title)
+            .font(getSettingsTypography().fieldLabel)
+            .fontColor(getAppUiState().themeTextSecondary)
+            .layoutWeight(1)
+            .maxLines(1)
+            .textOverflow({ overflow: TextOverflow.Ellipsis })
         }
-        .width(28)
-        .height(28)
-        .borderRadius(9)
-        .backgroundColor(this.primaryLightColor ?? getAppUiState().themePrimaryLight)
-        .justifyContent(FlexAlign.Center)
-        .alignItems(HorizontalAlign.Center)
+        .width('100%')
+        .alignItems(VerticalAlign.Center)
 
-        Text(this.title)
-          .fontSize(12)
-          .fontColor($r('app.color.text_secondary'))
-          .layoutWeight(1)
-          .maxLines(1)
-          .textOverflow({ overflow: TextOverflow.Ellipsis })
+        Row({ space: 4 }) {
+          Text(this.value.toString())
+            .fontSize(26)
+            .fontWeight(FontWeight.Bold)
+            .fontColor($r('app.color.text_primary'))
+          Text(this.unit)
+            .fontSize(12)
+            .fontColor($r('app.color.text_tertiary'))
+            .margin({ bottom: 4 })
+        }
+        .width('100%')
+        .margin({ top: 10 })
+        .alignItems(VerticalAlign.Bottom)
       }
       .width('100%')
-      .alignItems(VerticalAlign.Center)
-
-      Row({ space: 4 }) {
-        Text(this.value.toString())
-          .fontSize(26)
-          .fontWeight(FontWeight.Bold)
-          .fontColor($r('app.color.text_primary'))
-        Text(this.unit)
-          .fontSize(12)
-          .fontColor($r('app.color.text_tertiary'))
-          .margin({ bottom: 4 })
-      }
-      .width('100%')
-      .margin({ top: 10 })
-      .alignItems(VerticalAlign.Bottom)
+      .padding(14)
+      .backgroundColor(Color.Transparent)
+      .borderRadius(LIST_MATERIAL_CARD_RADIUS)
     }
-    .width('100%')
-    .padding(14)
-    .backgroundColor(this.surfaceColor)
-    .borderRadius(16)
-    .border({ width: 1, color: this.primaryLightColor ?? getAppUiState().themePrimaryLight })
-    .visualEffect(buildPointLightBorderEffect())
   }
 }
 
@@ -471,9 +472,8 @@ struct UsageStatsPage {
     Column() {
       Row() {
         Text($r('app.string.settings_usage_stats'))
-          .fontSize(18)
-          .fontWeight(FontWeight.Bold)
-          .fontColor($r('app.color.text_primary'))
+          .font(getSettingsTypography().pageTitle)
+          .fontColor(getAppUiState().themeTextPrimary)
           .layoutWeight(1)
       }
       .width('100%')
@@ -503,24 +503,6 @@ struct UsageStatsPage {
   }
 
   @Builder
-  private SectionTitle(title: ResourceStr, subtitle: ResourceStr | null) {
-    Column({ space: 2 }) {
-      Text(title)
-        .fontSize(12)
-        .fontWeight(FontWeight.Medium)
-        .fontColor($r('app.color.text_secondary'))
-      if (subtitle !== null) {
-        Text(subtitle)
-          .fontSize(11)
-          .fontColor($r('app.color.text_tertiary'))
-      }
-    }
-    .width('100%')
-    .alignItems(HorizontalAlign.Start)
-    .padding({ left: 4, bottom: 6 })
-  }
-
-  @Builder
   private MetricsGrid() {
     Column({ space: 10 }) {
       Row({ space: 10 }) {
@@ -531,8 +513,7 @@ struct UsageStatsPage {
             value: this.sessionCount,
             unit: $r('app.string.usage_stats_unit_count'),
             primaryColor: this.themePrimary,
-            primaryLightColor: this.themePrimaryLight,
-            surfaceColor: this.themeSurface
+            primaryLightColor: this.themePrimaryLight
           })
         }.layoutWeight(1)
         Column() {
@@ -542,8 +523,7 @@ struct UsageStatsPage {
             value: this.messageCount,
             unit: $r('app.string.usage_stats_unit_count'),
             primaryColor: this.themePrimary,
-            primaryLightColor: this.themePrimaryLight,
-            surfaceColor: this.themeSurface
+            primaryLightColor: this.themePrimaryLight
           })
         }.layoutWeight(1)
       }
@@ -557,8 +537,7 @@ struct UsageStatsPage {
             value: this.distinctModelCount,
             unit: $r('app.string.usage_stats_unit_count'),
             primaryColor: this.themePrimary,
-            primaryLightColor: this.themePrimaryLight,
-            surfaceColor: this.themeSurface
+            primaryLightColor: this.themePrimaryLight
           })
         }.layoutWeight(1)
         Column() {
@@ -568,8 +547,7 @@ struct UsageStatsPage {
             value: this.activeDayCount,
             unit: $r('app.string.usage_stats_unit_day'),
             primaryColor: this.themePrimary,
-            primaryLightColor: this.themePrimaryLight,
-            surfaceColor: this.themeSurface
+            primaryLightColor: this.themePrimaryLight
           })
         }.layoutWeight(1)
       }
@@ -589,9 +567,8 @@ struct UsageStatsPage {
           .width(22)
 
         Text(this.getRankingDisplayName(item))
-          .fontSize(14)
-          .fontWeight(FontWeight.Medium)
-          .fontColor($r('app.color.text_primary'))
+          .font(getSettingsTypography().itemTitle)
+          .fontColor(getAppUiState().themeTextPrimary)
           .layoutWeight(1)
           .maxLines(1)
           .textOverflow({ overflow: TextOverflow.Ellipsis })
@@ -628,24 +605,24 @@ struct UsageStatsPage {
 
   @Builder
   private RankingCard() {
-    Column() {
-      ForEach(this.ranking, (item: ModelUsageRankingItem, index: number) => {
-        Column() {
-          this.RankingRow(item, index + 1)
-          if (index < this.ranking.length - 1) {
-            Divider()
-              .color(this.themePrimaryLight)
-              .margin({ left: 50, right: 14 })
+    ImmersiveListSurface({ isImmersive: true, cornerRadius: LIST_MATERIAL_CARD_RADIUS }) {
+      Column() {
+        ForEach(this.ranking, (item: ModelUsageRankingItem, index: number) => {
+          Column() {
+            this.RankingRow(item, index + 1)
+            if (index < this.ranking.length - 1) {
+              Divider()
+                .color(this.themePrimaryLight)
+                .margin({ left: 50, right: 14 })
+            }
           }
-        }
-      }, (item: ModelUsageRankingItem, index: number) => `${index}_${item.modelName}_${item.modelId}`)
+        }, (item: ModelUsageRankingItem, index: number) => `${index}_${item.modelName}_${item.modelId}`)
+      }
+      .width('100%')
+      .backgroundColor(Color.Transparent)
+      .borderRadius(LIST_MATERIAL_CARD_RADIUS)
+      .clip(true)
     }
-    .width('100%')
-    .backgroundColor(this.themeSurface)
-    .borderRadius(18)
-    .clip(true)
-    .border({ width: 1, color: this.themePrimaryLight })
-    .visualEffect(buildPointLightBorderEffect())
   }
 
   @Builder
@@ -674,8 +651,9 @@ struct UsageStatsPage {
             `${item.currency} · ${item.messageCount} 条计费消息`,
             `${item.currency} · ${item.messageCount} billed messages`
           ))
-            .fontSize(11)
-            .fontColor($r('app.color.text_tertiary'))
+            .font(getSettingsTypography().subtitle)
+            .lineHeight(SETTINGS_SUBTITLE_LINE_HEIGHT)
+            .fontColor(getAppUiState().themeTextSecondary)
         }
         .layoutWeight(1)
         .alignItems(HorizontalAlign.Start)
@@ -718,39 +696,40 @@ struct UsageStatsPage {
 
   @Builder
   private BillingSummaryCard() {
-    Column() {
-      if (this.billingSummaries.length === 0) {
-        Row({ space: 8 }) {
-          SymbolGlyph($r('sys.symbol.info_circle'))
-            .fontSize(15)
-            .fontColor([$r('app.color.text_tertiary')])
-          Text($r('app.string.usage_stats_billing_empty'))
-            .fontSize(12)
-            .fontColor($r('app.color.text_secondary'))
-            .layoutWeight(1)
-        }
-        .width('100%')
-        .padding(14)
-        .alignItems(VerticalAlign.Center)
-      } else {
-        ForEach(this.billingSummaries, (item: UsageBillingSummary, index: number) => {
-          Column() {
-            this.BillingSummaryRow(item)
-            if (index < this.billingSummaries.length - 1) {
-              Divider()
-                .color(this.themePrimaryLight)
-                .margin({ left: 14, right: 14 })
-            }
+    ImmersiveListSurface({ isImmersive: true, cornerRadius: LIST_MATERIAL_CARD_RADIUS }) {
+      Column() {
+        if (this.billingSummaries.length === 0) {
+          Row({ space: 8 }) {
+            SymbolGlyph($r('sys.symbol.info_circle'))
+              .fontSize(15)
+              .fontColor([$r('app.color.text_tertiary')])
+            Text($r('app.string.usage_stats_billing_empty'))
+              .font(getSettingsTypography().subtitle)
+              .lineHeight(SETTINGS_SUBTITLE_LINE_HEIGHT)
+              .fontColor(getAppUiState().themeTextSecondary)
+              .layoutWeight(1)
           }
-        }, (item: UsageBillingSummary) => item.currency)
+          .width('100%')
+          .padding(14)
+          .alignItems(VerticalAlign.Center)
+        } else {
+          ForEach(this.billingSummaries, (item: UsageBillingSummary, index: number) => {
+            Column() {
+              this.BillingSummaryRow(item)
+              if (index < this.billingSummaries.length - 1) {
+                Divider()
+                  .color(this.themePrimaryLight)
+                  .margin({ left: 14, right: 14 })
+              }
+            }
+          }, (item: UsageBillingSummary) => item.currency)
+        }
       }
+      .width('100%')
+      .backgroundColor(Color.Transparent)
+      .borderRadius(LIST_MATERIAL_CARD_RADIUS)
+      .clip(true)
     }
-    .width('100%')
-    .backgroundColor(this.themeSurface)
-    .borderRadius(18)
-    .clip(true)
-    .border({ width: 1, color: this.themePrimaryLight })
-    .visualEffect(buildPointLightBorderEffect())
   }
 
   @Builder
@@ -761,14 +740,16 @@ struct UsageStatsPage {
         .fontColor([$r('app.color.text_tertiary')])
         .margin({ bottom: 4 })
       Text($r('app.string.usage_stats_empty_title'))
-        .fontSize(16)
-        .fontWeight(FontWeight.Medium)
-        .fontColor($r('app.color.text_secondary'))
+        .font(getSettingsTypography().itemTitle)
+        .width('100%')
+        .textAlign(TextAlign.Start)
+        .fontColor(getAppUiState().themeTextPrimary)
       Text($r('app.string.usage_stats_empty_desc'))
-        .fontSize(13)
-        .fontColor($r('app.color.text_tertiary'))
-        .textAlign(TextAlign.Center)
-        .padding({ left: 24, right: 24 })
+        .font(getSettingsTypography().subtitle)
+        .width('100%')
+        .lineHeight(SETTINGS_SUBTITLE_LINE_HEIGHT)
+        .fontColor(getAppUiState().themeTextSecondary)
+        .textAlign(TextAlign.Start)
     }
     .width('100%')
     .padding({ top: 64, bottom: 64 })
@@ -801,7 +782,7 @@ struct UsageStatsPage {
           } else {
             // 总览
             Column() {
-              this.SectionTitle($r('app.string.usage_stats_overview_title'), null)
+              SettingsSectionHeading({ title: $r('app.string.usage_stats_overview_title') })
               this.MetricsGrid()
             }
             .width('100%')
@@ -809,10 +790,10 @@ struct UsageStatsPage {
 
             // 计费统计
             Column() {
-              this.SectionTitle(
-                $r('app.string.usage_stats_billing_title'),
-                $r('app.string.usage_stats_billing_subtitle')
-              )
+              SettingsSectionHeading({
+                title: $r('app.string.usage_stats_billing_title'),
+                subtitle: $r('app.string.usage_stats_billing_subtitle')
+              })
               this.BillingSummaryCard()
             }
             .width('100%')
@@ -821,8 +802,10 @@ struct UsageStatsPage {
             // 模型排行
             if (this.ranking.length > 0) {
               Column() {
-                this.SectionTitle($r('app.string.usage_stats_ranking_title'),
-                  $r('app.string.usage_stats_ranking_subtitle'))
+                SettingsSectionHeading({
+                  title: $r('app.string.usage_stats_ranking_title'),
+                  subtitle: $r('app.string.usage_stats_ranking_subtitle')
+                })
                 this.RankingCard()
               }
               .width('100%')

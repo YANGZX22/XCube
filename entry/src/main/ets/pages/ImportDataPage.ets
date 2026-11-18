@@ -1,3 +1,6 @@
+import { SettingsSectionHeading } from '../components/settings/SettingsSectionHeading'
+import { getSettingsTypography } from '../components/settings/SettingsTypography'
+import { ImmersiveListSurface, LIST_MATERIAL_CARD_RADIUS } from '../components/ImmersiveListSurface'
 import { shouldUseDrawnNavigation } from '../utils/DrawnNavigationSupport'
 import { withColorAlpha } from '../utils/ColorAlphaUtils'
 import { ImmersiveButtonSurface } from '../components/ImmersiveButtonSurface'
@@ -245,10 +248,7 @@ struct ImportDataPage {
       if (this.isImporting) {
         Row() {
           Column() {
-            Text($r('app.string.import_progress'))
-              .fontSize(20)
-              .fontWeight(FontWeight.Medium)
-              .margin({ bottom: 24 })
+            SettingsSectionHeading({ title: $r('app.string.import_progress') })
 
             Progress({ value: this.importProgress, total: 100, type: ProgressType.Ring })
               .width(120)
@@ -334,43 +334,50 @@ struct ImportDataPage {
                 .width('100%')
                 .height(this.getCompactContentTopPadding())
 
-              this.SectionTitle($r('app.string.import_preview'))
+              SettingsSectionHeading({ title: $r('app.string.import_preview'), topGap: 24 })
 
-              Column() {
-                this.InfoRow('会话', `${this.preview?.sessionsCount || 0} 个`)
-                Divider().color(getAppUiState().themePrimaryLight)
-                this.InfoRow('消息', `${this.preview?.messagesCount || 0} 条`)
-                Divider().color(getAppUiState().themePrimaryLight)
-                this.InfoRow('附件', `${this.preview?.attachmentsCount || 0} 个`)
-                Divider().color(getAppUiState().themePrimaryLight)
-                this.InfoRow('供应商', `${this.preview?.providersCount || 0} 个`)
+              Stack() {
+                ImmersiveListSurface({ isImmersive: true, cornerRadius: LIST_MATERIAL_CARD_RADIUS }) {
+                  Column() {
+                    this.InfoRow('会话', `${this.preview?.sessionsCount || 0} 个`)
+                    Divider().color(getAppUiState().themePrimaryLight)
+                    this.InfoRow('消息', `${this.preview?.messagesCount || 0} 条`)
+                    Divider().color(getAppUiState().themePrimaryLight)
+                    this.InfoRow('附件', `${this.preview?.attachmentsCount || 0} 个`)
+                    Divider().color(getAppUiState().themePrimaryLight)
+                    this.InfoRow('供应商', `${this.preview?.providersCount || 0} 个`)
 
-                if (this.preview && this.preview.preferencesCount > 0) {
-                  Divider().color(getAppUiState().themePrimaryLight)
-                  this.InfoRow('偏好设置', `${this.preview.preferencesCount} 项`)
-                }
+                    if (this.preview && this.preview.preferencesCount > 0) {
+                      Divider().color(getAppUiState().themePrimaryLight)
+                      this.InfoRow('偏好设置', `${this.preview.preferencesCount} 项`)
+                    }
 
-                if (this.preview && this.preview.conflicts.length > 0) {
-                  Divider().color(getAppUiState().themePrimaryLight)
-                  Row() {
-                    Text('⚠️ 冲突')
-                      .fontSize(16)
-                      .fontColor($r('app.color.status_error'))
-                      .layoutWeight(1)
+                    if (this.preview && this.preview.conflicts.length > 0) {
+                      Divider().color(getAppUiState().themePrimaryLight)
+                      Row() {
+                        Text('⚠️ 冲突')
+                          .font(getSettingsTypography().itemTitle)
+                          .fontColor($r('app.color.status_error'))
+                          .layoutWeight(1)
 
-                    Text(`${this.preview.conflicts.length} 个`)
-                      .fontSize(16)
-                      .fontColor($r('app.color.status_error'))
-                      .fontWeight(FontWeight.Medium)
+                        Text(`${this.preview.conflicts.length} 个`)
+                          .fontSize(16)
+                          .fontColor($r('app.color.status_error'))
+                          .fontWeight(FontWeight.Medium)
+                      }
+                      .width('100%')
+                      .padding(16)
+                    }
                   }
                   .width('100%')
-                  .padding(16)
+                  .backgroundColor(Color.Transparent)
+                  .borderRadius(LIST_MATERIAL_CARD_RADIUS)
                 }
               }
               .width('100%')
-              .backgroundColor(getAppUiState().themeSurface)
-              .borderRadius(16)
               .margin({ bottom: 24 })
+              .clip(false)
+              .hitTestBehavior(HitTestMode.Transparent)
 
               ImportOptionsPanel({
                 importProviders: this.importProviders,
@@ -446,9 +453,8 @@ struct ImportDataPage {
     Column() {
       Row() {
         Text($r('app.string.import_title'))
-          .fontSize(18)
-          .fontWeight(FontWeight.Bold)
-          .fontColor($r('app.color.text_primary'))
+          .font(getSettingsTypography().pageTitle)
+          .fontColor(getAppUiState().themeTextPrimary)
           .layoutWeight(1)
       }
       .width('100%')
@@ -515,20 +521,11 @@ struct ImportDataPage {
   }
 
   @Builder
-  SectionTitle(title: Resource) {
-    Text(title)
-      .fontSize(14)
-      .fontColor($r('app.color.text_secondary'))
-      .fontWeight(FontWeight.Medium)
-      .margin({ top: 24, bottom: 12, left: 4 })
-  }
-
-  @Builder
   InfoRow(label: string, value: string) {
     Row() {
       Text(label)
-        .fontSize(16)
-        .fontColor($r('app.color.text_primary'))
+        .font(getSettingsTypography().itemTitle)
+        .fontColor(getAppUiState().themeTextPrimary)
         .layoutWeight(1)
 
       Text(value)

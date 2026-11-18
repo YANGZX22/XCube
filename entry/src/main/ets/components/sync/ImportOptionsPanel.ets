@@ -1,3 +1,6 @@
+import { SettingsSectionHeading } from '../settings/SettingsSectionHeading'
+import { getSettingsTypography } from '../settings/SettingsTypography'
+import { ImmersiveListSurface, LIST_MATERIAL_CARD_RADIUS } from '../ImmersiveListSurface'
 /**
  * 共享导入选项面板
  * 在 ImportDataPage / WebDAVSyncPage 之间复用,
@@ -25,63 +28,63 @@ export struct ImportOptionsPanel {
   build() {
     Column() {
       if (this.hasConflicts) {
-        this.SectionTitle($r('app.string.import_conflict_strategy'))
+        SettingsSectionHeading({ title: $r('app.string.import_conflict_strategy'), topGap: 24 })
+        Stack() {
+          ImmersiveListSurface({ isImmersive: true, cornerRadius: LIST_MATERIAL_CARD_RADIUS }) {
+            Column() {
+              this.RadioRow(
+                $r('app.string.import_strategy_skip'),
+                'skip',
+                this.conflictStrategy === 'skip',
+                () => { this.onConflictStrategyChange('skip') }
+              )
+              Divider().color(getAppUiState().themePrimaryLight)
+              this.RadioRow(
+                $r('app.string.import_strategy_overwrite'),
+                'overwrite',
+                this.conflictStrategy === 'overwrite',
+                () => { this.onConflictStrategyChange('overwrite') }
+              )
+              Divider().color(getAppUiState().themePrimaryLight)
+              this.RadioRow(
+                $r('app.string.import_strategy_ask'),
+                'ask',
+                this.conflictStrategy === 'ask',
+                () => { this.onConflictStrategyChange('ask') }
+              )
+            }
+            .width('100%')
+            .backgroundColor(Color.Transparent)
+            .borderRadius(LIST_MATERIAL_CARD_RADIUS)
+          }
+        }
+        .width('100%')
+        .margin({ bottom: 24 })
+        .clip(false)
+        .hitTestBehavior(HitTestMode.Transparent)
+      }
+
+      SettingsSectionHeading({ title: $r('app.string.import_options'), topGap: 24 })
+      ImmersiveListSurface({ isImmersive: true, cornerRadius: LIST_MATERIAL_CARD_RADIUS }) {
         Column() {
-          this.RadioRow(
-            $r('app.string.import_strategy_skip'),
-            'skip',
-            this.conflictStrategy === 'skip',
-            () => { this.onConflictStrategyChange('skip') }
+          this.OptionRow(
+            $r('app.string.import_providers'),
+            this.importProviders,
+            (value: boolean) => { this.onImportProvidersChange(value) }
           )
           Divider().color(getAppUiState().themePrimaryLight)
-          this.RadioRow(
-            $r('app.string.import_strategy_overwrite'),
-            'overwrite',
-            this.conflictStrategy === 'overwrite',
-            () => { this.onConflictStrategyChange('overwrite') }
-          )
-          Divider().color(getAppUiState().themePrimaryLight)
-          this.RadioRow(
-            $r('app.string.import_strategy_ask'),
-            'ask',
-            this.conflictStrategy === 'ask',
-            () => { this.onConflictStrategyChange('ask') }
+          this.OptionRow(
+            $r('app.string.import_preferences'),
+            this.importPreferences,
+            (value: boolean) => { this.onImportPreferencesChange(value) }
           )
         }
         .width('100%')
-        .backgroundColor(getAppUiState().themeSurface)
-        .borderRadius(16)
-        .margin({ bottom: 24 })
+        .backgroundColor(Color.Transparent)
+        .borderRadius(LIST_MATERIAL_CARD_RADIUS)
       }
-
-      this.SectionTitle($r('app.string.import_options'))
-      Column() {
-        this.OptionRow(
-          $r('app.string.import_providers'),
-          this.importProviders,
-          (value: boolean) => { this.onImportProvidersChange(value) }
-        )
-        Divider().color(getAppUiState().themePrimaryLight)
-        this.OptionRow(
-          $r('app.string.import_preferences'),
-          this.importPreferences,
-          (value: boolean) => { this.onImportPreferencesChange(value) }
-        )
-      }
-      .width('100%')
-      .backgroundColor(getAppUiState().themeSurface)
-      .borderRadius(16)
     }
     .width('100%')
-  }
-
-  @Builder
-  SectionTitle(title: Resource) {
-    Text(title)
-      .fontSize(14)
-      .fontColor($r('app.color.text_secondary'))
-      .fontWeight(FontWeight.Medium)
-      .margin({ top: 24, bottom: 12, left: 4 })
   }
 
   @Builder
@@ -92,8 +95,8 @@ export struct ImportOptionsPanel {
   ) {
     Row() {
       Text(title)
-        .fontSize(16)
-        .fontColor($r('app.color.text_primary'))
+        .font(getSettingsTypography().itemTitle)
+        .fontColor(getAppUiState().themeTextPrimary)
         .layoutWeight(1)
 
       Toggle({ type: ToggleType.Switch, isOn: checked })
@@ -115,8 +118,8 @@ export struct ImportOptionsPanel {
   ) {
     Row() {
       Text(title)
-        .fontSize(16)
-        .fontColor($r('app.color.text_primary'))
+        .font(getSettingsTypography().itemTitle)
+        .fontColor(getAppUiState().themeTextPrimary)
         .layoutWeight(1)
 
       Radio({ value: value, group: this.radioGroup })

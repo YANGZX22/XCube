@@ -1,3 +1,7 @@
+import { SettingsSectionHeading } from '../components/settings/SettingsSectionHeading'
+import { getSettingsTypography, SETTINGS_HEADING_CONTENT_GAP, SETTINGS_SUBTITLE_LINE_HEIGHT } from '../components/settings/SettingsTypography'
+import { ImmersiveListSurface, LIST_MATERIAL_CARD_RADIUS } from '../components/ImmersiveListSurface'
+import { ImmersiveFieldSurface } from '../components/ImmersiveFieldSurface'
 import { shouldUseDrawnNavigation } from '../utils/DrawnNavigationSupport'
 import { withColorAlpha } from '../utils/ColorAlphaUtils'
 import { ImmersiveButtonSurface } from '../components/ImmersiveButtonSurface'
@@ -390,31 +394,25 @@ struct WebDAVSyncPage {
   }
 
   @Builder
-  private SectionTitle(title: Resource) {
-    Text(title)
-      .fontSize(14)
-      .fontColor($r('app.color.text_secondary'))
-      .fontWeight(FontWeight.Medium)
-      .margin({ top: 24, bottom: 12, left: 4 })
-  }
-
-  @Builder
   private InputRow(label: Resource, value: string, placeholder: Resource | string, isPassword: boolean,
     onChange: (text: string) => void) {
     Column() {
       Text(label)
-        .fontSize(13)
-        .fontColor($r('app.color.text_secondary'))
-        .margin({ bottom: 6, left: 4 })
-      TextInput({ text: value, placeholder: placeholder })
-        .type(isPassword ? InputType.Password : InputType.Normal)
-        .fontSize(15)
-        .height(46)
-        .backgroundColor(this.themePrimaryLight)
-        .borderRadius(10)
-        .border({ width: 1, color: this.themePrimaryLight })
-        .padding({ left: 12, right: 12 })
-        .onChange(onChange)
+        .font(getSettingsTypography().fieldLabel)
+        .fontColor(getAppUiState().themeTextSecondary)
+        .margin({ bottom: SETTINGS_HEADING_CONTENT_GAP })
+      ImmersiveFieldSurface({ cornerRadius: 10 }) {
+        TextInput({ text: value, placeholder: placeholder })
+          .width('100%')
+          .backgroundColor(Color.Transparent)
+          .type(isPassword ? InputType.Password : InputType.Normal)
+          .fontSize(15)
+          .height(46)
+          .borderRadius(10)
+          .border({ width: 1, color: this.themePrimaryLight })
+          .padding({ left: 12, right: 12 })
+          .onChange(onChange)
+      }
     }
     .alignItems(HorizontalAlign.Start)
     .width('100%')
@@ -423,178 +421,186 @@ struct WebDAVSyncPage {
 
   @Builder
   private ConfigSection() {
-    this.SectionTitle($r('app.string.webdav_section_config'))
+    SettingsSectionHeading({ title: $r('app.string.webdav_section_config'), topGap: 24 })
 
-    Column() {
-      this.InputRow($r('app.string.webdav_server_url'), this.serverUrl,
-        $r('app.string.webdav_server_url_placeholder'), false,
-        (text: string) => { this.serverUrl = text })
-      this.InputRow($r('app.string.webdav_username'), this.username, '', false,
-        (text: string) => { this.username = text })
-      this.InputRow($r('app.string.webdav_password'), this.password, '', true,
-        (text: string) => { this.password = text })
-      this.InputRow($r('app.string.webdav_remote_dir'), this.remoteDir,
-        $r('app.string.webdav_remote_dir_placeholder'), false,
-        (text: string) => { this.remoteDir = text })
-      this.InputRow($r('app.string.webdav_remote_file_name'), this.remoteFileName, DEFAULT_WEBDAV_FILE_NAME, false,
-        (text: string) => { this.remoteFileName = text })
+    ImmersiveListSurface({ isImmersive: true, cornerRadius: LIST_MATERIAL_CARD_RADIUS }) {
+      Column() {
+        this.InputRow($r('app.string.webdav_server_url'), this.serverUrl,
+          $r('app.string.webdav_server_url_placeholder'), false,
+          (text: string) => { this.serverUrl = text })
+        this.InputRow($r('app.string.webdav_username'), this.username, '', false,
+          (text: string) => { this.username = text })
+        this.InputRow($r('app.string.webdav_password'), this.password, '', true,
+          (text: string) => { this.password = text })
+        this.InputRow($r('app.string.webdav_remote_dir'), this.remoteDir,
+          $r('app.string.webdav_remote_dir_placeholder'), false,
+          (text: string) => { this.remoteDir = text })
+        this.InputRow($r('app.string.webdav_remote_file_name'), this.remoteFileName, DEFAULT_WEBDAV_FILE_NAME, false,
+          (text: string) => { this.remoteFileName = text })
 
-      Row({ space: 12 }) {
-        Stack({ alignContent: Alignment.TopStart }) {
-          ImmersiveButtonSurface({
-            materialFactory: () => (new uiMaterial.ImmersiveMaterial({
-                style: uiMaterial.ImmersiveStyle.THIN,
-                materialColor: withColorAlpha(this.themePrimary, '26'),
-                interactive: true,
-                lightEffect: { color: undefined }
-              })),
-            cornerRadius: 12
-          }) {
-            Button($r('app.string.webdav_test_connection'))
-              .height(42)
-              .fontSize(14)
-              .backgroundColor(Color.Transparent)
-              .fontColor(this.themePrimary)
-              .borderRadius(12)
-              .enabled(!this.isTesting && !this.isSyncing)
-              .onClick(() => { this.testConnection() })
-            .width('100%')
+        Row({ space: 12 }) {
+          Stack({ alignContent: Alignment.TopStart }) {
+            ImmersiveButtonSurface({
+              materialFactory: () => (new uiMaterial.ImmersiveMaterial({
+                  style: uiMaterial.ImmersiveStyle.THIN,
+                  materialColor: withColorAlpha(this.themePrimary, '26'),
+                  interactive: true,
+                  lightEffect: { color: undefined }
+                })),
+              cornerRadius: 12
+            }) {
+              Button($r('app.string.webdav_test_connection'))
+                .height(42)
+                .fontSize(14)
+                .backgroundColor(Color.Transparent)
+                .fontColor(this.themePrimary)
+                .borderRadius(12)
+                .enabled(!this.isTesting && !this.isSyncing)
+                .onClick(() => { this.testConnection() })
+              .width('100%')
+            }
           }
-        }
-        .layoutWeight(1)
-        .height(42)
-        .enabled(!this.isTesting && !this.isSyncing)
-        .clip(false)
-        Stack({ alignContent: Alignment.TopStart }) {
-          ImmersiveButtonSurface({
-            materialFactory: () => (new uiMaterial.ImmersiveMaterial({
-                style: uiMaterial.ImmersiveStyle.THIN,
-                materialColor: withColorAlpha(this.themePrimary, '26'),
-                interactive: true,
-                lightEffect: { color: undefined }
-              })),
-            cornerRadius: 12
-          }) {
-            Button($r('app.string.webdav_save_config'))
-              .height(42)
-              .fontSize(14)
-              .backgroundColor(Color.Transparent)
-              .fontColor(this.themePrimary)
-              .borderRadius(12)
-              .enabled(!this.isSyncing)
-              .onClick(() => { this.saveConfig() })
-            .width('100%')
+          .layoutWeight(1)
+          .height(42)
+          .enabled(!this.isTesting && !this.isSyncing)
+          .clip(false)
+          Stack({ alignContent: Alignment.TopStart }) {
+            ImmersiveButtonSurface({
+              materialFactory: () => (new uiMaterial.ImmersiveMaterial({
+                  style: uiMaterial.ImmersiveStyle.THIN,
+                  materialColor: withColorAlpha(this.themePrimary, '26'),
+                  interactive: true,
+                  lightEffect: { color: undefined }
+                })),
+              cornerRadius: 12
+            }) {
+              Button($r('app.string.webdav_save_config'))
+                .height(42)
+                .fontSize(14)
+                .backgroundColor(Color.Transparent)
+                .fontColor(this.themePrimary)
+                .borderRadius(12)
+                .enabled(!this.isSyncing)
+                .onClick(() => { this.saveConfig() })
+              .width('100%')
+            }
           }
+          .layoutWeight(1)
+          .height(42)
+          .enabled(!this.isSyncing)
+          .clip(false)
         }
-        .layoutWeight(1)
-        .height(42)
-        .enabled(!this.isSyncing)
-        .clip(false)
+        .width('100%')
+        .margin({ top: 4 })
+
+        Text($r('app.string.webdav_directory_must_exist_note'))
+          .font(getSettingsTypography().subtitle)
+          .width('100%')
+          .textAlign(TextAlign.Start)
+          .lineHeight(SETTINGS_SUBTITLE_LINE_HEIGHT)
+          .fontColor(getAppUiState().themeTextSecondary)
+          .margin({ top: 12 })
+
+        Text($r('app.string.webdav_security_note'))
+          .font(getSettingsTypography().subtitle)
+          .width('100%')
+          .textAlign(TextAlign.Start)
+          .lineHeight(SETTINGS_SUBTITLE_LINE_HEIGHT)
+          .fontColor(getAppUiState().themeTextSecondary)
+          .margin({ top: 8 })
       }
       .width('100%')
-      .margin({ top: 4 })
-
-      Text($r('app.string.webdav_directory_must_exist_note'))
-        .fontSize(12)
-        .fontColor($r('app.color.text_secondary'))
-        .lineHeight(18)
-        .margin({ top: 12, left: 4, right: 4 })
-
-      Text($r('app.string.webdav_security_note'))
-        .fontSize(12)
-        .fontColor($r('app.color.text_secondary'))
-        .lineHeight(18)
-        .margin({ top: 8, left: 4, right: 4 })
+      .padding(14)
+      .backgroundColor(Color.Transparent)
+      .borderRadius(LIST_MATERIAL_CARD_RADIUS)
     }
-    .width('100%')
-    .padding(14)
-    .backgroundColor(getAppUiState().themeSurface)
-    .borderRadius(16)
   }
 
   @Builder
   private RemoteStatusSection() {
-    this.SectionTitle($r('app.string.webdav_section_remote_status'))
+    SettingsSectionHeading({ title: $r('app.string.webdav_section_remote_status'), topGap: 24 })
 
-    Column() {
-      Row() {
-        Text($r('app.string.webdav_last_sync_time'))
-          .fontSize(15)
-          .fontColor($r('app.color.text_primary'))
-          .layoutWeight(1)
-        if (this.lastSyncTime > 0) {
-          Text(this.formatDateTime(this.lastSyncTime))
-            .fontSize(14)
-            .fontColor($r('app.color.text_secondary'))
-        } else {
-          Text($r('app.string.webdav_last_sync_never'))
-            .fontSize(14)
-            .fontColor($r('app.color.text_secondary'))
+    ImmersiveListSurface({ isImmersive: true, cornerRadius: LIST_MATERIAL_CARD_RADIUS }) {
+      Column() {
+        Row() {
+          Text($r('app.string.webdav_last_sync_time'))
+            .font(getSettingsTypography().itemTitle)
+            .fontColor(getAppUiState().themeTextPrimary)
+            .layoutWeight(1)
+          if (this.lastSyncTime > 0) {
+            Text(this.formatDateTime(this.lastSyncTime))
+              .fontSize(14)
+              .fontColor($r('app.color.text_secondary'))
+          } else {
+            Text($r('app.string.webdav_last_sync_never'))
+              .fontSize(14)
+              .fontColor($r('app.color.text_secondary'))
+          }
         }
+        .width('100%')
+        .padding(14)
+
+        Divider().color(getAppUiState().themePrimaryLight)
+
+        Row() {
+          Text($r('app.string.webdav_remote_file_size'))
+            .font(getSettingsTypography().itemTitle)
+            .fontColor(getAppUiState().themeTextPrimary)
+            .layoutWeight(1)
+          if (!this.hasRemoteStatus) {
+            Text('—')
+              .fontSize(14)
+              .fontColor($r('app.color.text_secondary'))
+          } else if (this.remoteExists) {
+            Text($r('app.string.webdav_remote_backup_present'))
+              .fontSize(14)
+              .fontColor($r('app.color.text_secondary'))
+          } else {
+            Text($r('app.string.webdav_no_remote_backup'))
+              .fontSize(14)
+              .fontColor($r('app.color.text_secondary'))
+          }
+        }
+        .width('100%')
+        .padding(14)
+
+        Divider().color(getAppUiState().themePrimaryLight)
+
+        Stack({ alignContent: Alignment.TopStart }) {
+          ImmersiveButtonSurface({
+            materialFactory: () => (new uiMaterial.ImmersiveMaterial({
+                style: uiMaterial.ImmersiveStyle.REGULAR,
+                materialColor: Color.Transparent,
+                interactive: true,
+                lightEffect: { color: undefined }
+              })),
+            cornerRadius: 12
+          }) {
+            Button($r('app.string.webdav_refresh_remote_status'))
+              .width('100%')
+              .height(42)
+              .fontSize(14)
+              .backgroundColor(Color.Transparent)
+              .fontColor(this.themePrimary)
+              .borderRadius(12)
+              .enabled(!this.refreshingStatus && !this.isSyncing)
+              .onClick(() => { this.refreshRemoteStatus() })
+          }
+        }
+        .width('100%')
+        .height(42)
+        .enabled(!this.refreshingStatus && !this.isSyncing)
+        .clip(false)
       }
       .width('100%')
-      .padding(14)
-
-      Divider().color(getAppUiState().themePrimaryLight)
-
-      Row() {
-        Text($r('app.string.webdav_remote_file_size'))
-          .fontSize(15)
-          .fontColor($r('app.color.text_primary'))
-          .layoutWeight(1)
-        if (!this.hasRemoteStatus) {
-          Text('—')
-            .fontSize(14)
-            .fontColor($r('app.color.text_secondary'))
-        } else if (this.remoteExists) {
-          Text($r('app.string.webdav_remote_backup_present'))
-            .fontSize(14)
-            .fontColor($r('app.color.text_secondary'))
-        } else {
-          Text($r('app.string.webdav_no_remote_backup'))
-            .fontSize(14)
-            .fontColor($r('app.color.text_secondary'))
-        }
-      }
-      .width('100%')
-      .padding(14)
-
-      Divider().color(getAppUiState().themePrimaryLight)
-
-      Stack({ alignContent: Alignment.TopStart }) {
-        ImmersiveButtonSurface({
-          materialFactory: () => (new uiMaterial.ImmersiveMaterial({
-              style: uiMaterial.ImmersiveStyle.REGULAR,
-              materialColor: Color.Transparent,
-              interactive: true,
-              lightEffect: { color: undefined }
-            })),
-          cornerRadius: 12
-        }) {
-          Button($r('app.string.webdav_refresh_remote_status'))
-            .width('100%')
-            .height(42)
-            .fontSize(14)
-            .backgroundColor(Color.Transparent)
-            .fontColor(this.themePrimary)
-            .borderRadius(12)
-            .enabled(!this.refreshingStatus && !this.isSyncing)
-            .onClick(() => { this.refreshRemoteStatus() })
-        }
-      }
-      .width('100%')
-      .height(42)
-      .enabled(!this.refreshingStatus && !this.isSyncing)
-      .clip(false)
+      .backgroundColor(Color.Transparent)
+      .borderRadius(LIST_MATERIAL_CARD_RADIUS)
     }
-    .width('100%')
-    .backgroundColor(getAppUiState().themeSurface)
-    .borderRadius(16)
   }
 
   @Builder
   private UploadSection() {
-    this.SectionTitle($r('app.string.webdav_section_upload'))
+    SettingsSectionHeading({ title: $r('app.string.webdav_section_upload'), topGap: 24 })
 
     ExportOptionsPanel({
       includeAttachments: this.includeAttachments,
@@ -636,7 +642,7 @@ struct WebDAVSyncPage {
 
   @Builder
   private DownloadSection() {
-    this.SectionTitle($r('app.string.webdav_section_download'))
+    SettingsSectionHeading({ title: $r('app.string.webdav_section_download'), topGap: 24 })
 
     ImportOptionsPanel({
       importProviders: this.importProviders,
@@ -681,10 +687,7 @@ struct WebDAVSyncPage {
   @Builder
   private SyncProgress() {
     Column() {
-      Text(this.getStageMessage())
-        .fontSize(18)
-        .fontWeight(FontWeight.Medium)
-        .margin({ bottom: 24 })
+      SettingsSectionHeading({ title: this.getStageMessage() })
 
       Progress({ value: this.progress, total: 100, type: ProgressType.Ring })
         .width(120)
@@ -705,110 +708,116 @@ struct WebDAVSyncPage {
 
   @Builder
   private PreviewDialog() {
-    Column() {
-      Text($r('app.string.webdav_preview_title'))
-        .fontSize(18)
-        .fontWeight(FontWeight.Bold)
-        .margin({ bottom: 16 })
+    ImmersiveListSurface({ isImmersive: true, cornerRadius: LIST_MATERIAL_CARD_RADIUS }) {
+      Column() {
+        Text($r('app.string.webdav_preview_title'))
+          .font(getSettingsTypography().pageTitle)
+          .width('100%')
+          .textAlign(TextAlign.Center)
+          .fontColor(getAppUiState().themeTextPrimary)
+          .margin({ bottom: SETTINGS_HEADING_CONTENT_GAP })
 
-      if (this.preview !== null) {
-        Column() {
-          this.PreviewInfoRow('会话', `${this.preview!.sessionsCount} 个`)
-          Divider().color(getAppUiState().themePrimaryLight)
-          this.PreviewInfoRow('消息', `${this.preview!.messagesCount} 条`)
-          Divider().color(getAppUiState().themePrimaryLight)
-          this.PreviewInfoRow('附件', `${this.preview!.attachmentsCount} 个`)
-          Divider().color(getAppUiState().themePrimaryLight)
-          this.PreviewInfoRow('供应商', `${this.preview!.providersCount} 个`)
-          if (this.preview!.preferencesCount > 0) {
-            Divider().color(getAppUiState().themePrimaryLight)
-            this.PreviewInfoRow('偏好设置', `${this.preview!.preferencesCount} 项`)
-          }
-          if (this.preview!.conflicts.length > 0) {
-            Divider().color(getAppUiState().themePrimaryLight)
-            Row() {
-              Text('⚠️ 冲突')
-                .fontSize(15)
-                .fontColor($r('app.color.status_error'))
-                .layoutWeight(1)
-              Text(`${this.preview!.conflicts.length} 个`)
-                .fontSize(15)
-                .fontColor($r('app.color.status_error'))
-                .fontWeight(FontWeight.Medium)
+        if (this.preview !== null) {
+          ImmersiveListSurface({ isImmersive: true, cornerRadius: LIST_MATERIAL_CARD_RADIUS }) {
+            Column() {
+              this.PreviewInfoRow('会话', `${this.preview!.sessionsCount} 个`)
+              Divider().color(getAppUiState().themePrimaryLight)
+              this.PreviewInfoRow('消息', `${this.preview!.messagesCount} 条`)
+              Divider().color(getAppUiState().themePrimaryLight)
+              this.PreviewInfoRow('附件', `${this.preview!.attachmentsCount} 个`)
+              Divider().color(getAppUiState().themePrimaryLight)
+              this.PreviewInfoRow('供应商', `${this.preview!.providersCount} 个`)
+              if (this.preview!.preferencesCount > 0) {
+                Divider().color(getAppUiState().themePrimaryLight)
+                this.PreviewInfoRow('偏好设置', `${this.preview!.preferencesCount} 项`)
+              }
+              if (this.preview!.conflicts.length > 0) {
+                Divider().color(getAppUiState().themePrimaryLight)
+                Row() {
+                  Text('⚠️ 冲突')
+                    .font(getSettingsTypography().itemTitle)
+                    .fontColor($r('app.color.status_error'))
+                    .layoutWeight(1)
+                  Text(`${this.preview!.conflicts.length} 个`)
+                    .fontSize(15)
+                    .fontColor($r('app.color.status_error'))
+                    .fontWeight(FontWeight.Medium)
+                }
+                .width('100%')
+                .padding(14)
+              }
             }
             .width('100%')
-            .padding(14)
+            .backgroundColor(Color.Transparent)
+            .borderRadius(LIST_MATERIAL_CARD_RADIUS)
           }
+        }
+
+        Row({ space: 12 }) {
+          Stack({ alignContent: Alignment.TopStart }) {
+            ImmersiveButtonSurface({
+              materialFactory: () => (new uiMaterial.ImmersiveMaterial({
+                  style: uiMaterial.ImmersiveStyle.REGULAR,
+                  materialColor: Color.Transparent,
+                  interactive: true,
+                  lightEffect: { color: undefined }
+                })),
+              cornerRadius: 12
+            }) {
+              Button($r('app.string.webdav_preview_cancel'))
+                .height(44)
+                .fontSize(15)
+                .backgroundColor(Color.Transparent)
+                .fontColor(this.themePrimary)
+                .borderRadius(12)
+                .border({ width: 1, color: this.themePrimary })
+                .onClick(() => { this.cleanupDownload() })
+              .width('100%')
+            }
+          }
+          .layoutWeight(1)
+          .height(44)
+          .clip(false)
+          Stack({ alignContent: Alignment.TopStart }) {
+            ImmersiveButtonSurface({
+              materialFactory: () => (new uiMaterial.ImmersiveMaterial({
+                  style: uiMaterial.ImmersiveStyle.THIN,
+                  materialColor: withColorAlpha(this.themePrimary, '26'),
+                  interactive: true,
+                  lightEffect: { color: undefined }
+                })),
+              cornerRadius: 12
+            }) {
+              Button($r('app.string.webdav_preview_confirm'))
+                .fontColor(this.themePrimary)
+                .height(44)
+                .fontSize(15)
+                .backgroundColor(Color.Transparent)
+                .borderRadius(12)
+                .onClick(() => { this.confirmImport() })
+              .width('100%')
+            }
+          }
+          .layoutWeight(1)
+          .height(44)
+          .clip(false)
         }
         .width('100%')
-        .backgroundColor(getAppUiState().themeSurface)
-        .borderRadius(12)
-      }
-
-      Row({ space: 12 }) {
-        Stack({ alignContent: Alignment.TopStart }) {
-          ImmersiveButtonSurface({
-            materialFactory: () => (new uiMaterial.ImmersiveMaterial({
-                style: uiMaterial.ImmersiveStyle.REGULAR,
-                materialColor: Color.Transparent,
-                interactive: true,
-                lightEffect: { color: undefined }
-              })),
-            cornerRadius: 12
-          }) {
-            Button($r('app.string.webdav_preview_cancel'))
-              .height(44)
-              .fontSize(15)
-              .backgroundColor(Color.Transparent)
-              .fontColor(this.themePrimary)
-              .borderRadius(12)
-              .border({ width: 1, color: this.themePrimary })
-              .onClick(() => { this.cleanupDownload() })
-            .width('100%')
-          }
-        }
-        .layoutWeight(1)
-        .height(44)
-        .clip(false)
-        Stack({ alignContent: Alignment.TopStart }) {
-          ImmersiveButtonSurface({
-            materialFactory: () => (new uiMaterial.ImmersiveMaterial({
-                style: uiMaterial.ImmersiveStyle.THIN,
-                materialColor: withColorAlpha(this.themePrimary, '26'),
-                interactive: true,
-                lightEffect: { color: undefined }
-              })),
-            cornerRadius: 12
-          }) {
-            Button($r('app.string.webdav_preview_confirm'))
-              .fontColor(this.themePrimary)
-              .height(44)
-              .fontSize(15)
-              .backgroundColor(Color.Transparent)
-              .borderRadius(12)
-              .onClick(() => { this.confirmImport() })
-            .width('100%')
-          }
-        }
-        .layoutWeight(1)
-        .height(44)
-        .clip(false)
+        .margin({ top: 20 })
       }
       .width('100%')
-      .margin({ top: 20 })
+      .padding(20)
+      .backgroundColor(Color.Transparent)
+      .borderRadius(LIST_MATERIAL_CARD_RADIUS)
     }
-    .width('100%')
-    .padding(20)
-    .backgroundColor(getAppUiState().themeBackground)
-    .borderRadius(20)
   }
 
   @Builder
   private PreviewInfoRow(label: string, value: string) {
     Row() {
       Text(label)
-        .fontSize(15)
-        .fontColor($r('app.color.text_primary'))
+        .font(getSettingsTypography().itemTitle)
+        .fontColor(getAppUiState().themeTextPrimary)
         .layoutWeight(1)
       Text(value)
         .fontSize(15)
@@ -875,9 +884,8 @@ struct WebDAVSyncPage {
     Column() {
       Row() {
         Text($r('app.string.settings_webdav_sync'))
-          .fontSize(18)
-          .fontWeight(FontWeight.Bold)
-          .fontColor($r('app.color.text_primary'))
+          .font(getSettingsTypography().pageTitle)
+          .fontColor(getAppUiState().themeTextPrimary)
           .layoutWeight(1)
       }
       .width('100%')

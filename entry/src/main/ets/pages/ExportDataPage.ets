@@ -1,3 +1,6 @@
+import { SettingsSectionHeading } from '../components/settings/SettingsSectionHeading'
+import { getSettingsTypography, SETTINGS_SUBTITLE_LINE_HEIGHT } from '../components/settings/SettingsTypography'
+import { ImmersiveListSurface, LIST_MATERIAL_CARD_RADIUS } from '../components/ImmersiveListSurface'
 import { shouldUseDrawnNavigation } from '../utils/DrawnNavigationSupport'
 import { withColorAlpha } from '../utils/ColorAlphaUtils'
 import { ImmersiveButtonSurface } from '../components/ImmersiveButtonSurface'
@@ -227,10 +230,10 @@ struct ExportDataPage {
                 .width('100%')
                 .height(this.getCompactContentTopPadding())
 
-              this.SectionTitle($r('app.string.export_select_sessions'))
+              SettingsSectionHeading({ title: $r('app.string.export_select_sessions'), topGap: 24 })
               this.SessionPickerCard()
 
-              this.SectionTitle($r('app.string.export_options'))
+              SettingsSectionHeading({ title: $r('app.string.export_options'), topGap: 24 })
 
               ExportOptionsPanel({
                 includeAttachments: this.includeAttachments,
@@ -306,51 +309,65 @@ struct ExportDataPage {
   @Builder
   private SessionPickerCard() {
     // 头部:全选 toggle + 已选计数
-    Column() {
-      Row() {
+    Stack() {
+      ImmersiveListSurface({ isImmersive: true, cornerRadius: LIST_MATERIAL_CARD_RADIUS }) {
         Column() {
-          Text($r('app.string.export_select_all'))
-            .fontSize(16)
-            .fontColor($r('app.color.text_primary'))
-          Text(`已选 ${this.selectedSessionIds.length} / ${this.sessions.length}`)
-            .fontSize(13)
-            .fontColor($r('app.color.text_secondary'))
-            .margin({ top: 2 })
-        }
-        .alignItems(HorizontalAlign.Start)
-        .layoutWeight(1)
+          Row() {
+            Column() {
+              Text($r('app.string.export_select_all'))
+                .font(getSettingsTypography().itemTitle)
+                .fontColor(getAppUiState().themeTextPrimary)
+              Text(`已选 ${this.selectedSessionIds.length} / ${this.sessions.length}`)
+                .fontSize(13)
+                .fontColor($r('app.color.text_secondary'))
+                .margin({ top: 2 })
+            }
+            .alignItems(HorizontalAlign.Start)
+            .layoutWeight(1)
 
-        Toggle({ type: ToggleType.Switch, isOn: this.selectAll })
-          .selectedColor(this.themePrimary)
-          .systemMaterial(new uiMaterial.Material())
-          .switchPointColor(Color.White)
-          .onChange((_value: boolean) => {
-            this.toggleSelectAll()
-          })
+            Toggle({ type: ToggleType.Switch, isOn: this.selectAll })
+              .selectedColor(this.themePrimary)
+              .systemMaterial(new uiMaterial.Material())
+              .switchPointColor(Color.White)
+              .onChange((_value: boolean) => {
+                this.toggleSelectAll()
+              })
+          }
+          .width('100%')
+          .padding({ left: 16, right: 16, top: 14, bottom: 14 })
+        }
+        .width('100%')
+        .backgroundColor(Color.Transparent)
+        .borderRadius(LIST_MATERIAL_CARD_RADIUS)
       }
-      .width('100%')
-      .padding({ left: 16, right: 16, top: 14, bottom: 14 })
     }
     .width('100%')
-    .backgroundColor(getAppUiState().themeSurface)
-    .borderRadius(16)
     .margin({ bottom: 12 })
+    .clip(false)
+    .hitTestBehavior(HitTestMode.Transparent)
 
     // 会话列表
-    Column() {
-      ForEach(this.sessions, (session: ChatSession, index: number) => {
+    Stack() {
+      ImmersiveListSurface({ isImmersive: true, cornerRadius: LIST_MATERIAL_CARD_RADIUS }) {
         Column() {
-          this.SessionRow(session)
-          if (index < this.sessions.length - 1) {
-            Divider().color(getAppUiState().themePrimaryLight).margin({ left: 52 })
-          }
+          ForEach(this.sessions, (session: ChatSession, index: number) => {
+            Column() {
+              this.SessionRow(session)
+              if (index < this.sessions.length - 1) {
+                Divider().color(getAppUiState().themePrimaryLight).margin({ left: 52 })
+              }
+            }
+          }, (session: ChatSession) => session.id)
         }
-      }, (session: ChatSession) => session.id)
+        .width('100%')
+        .backgroundColor(Color.Transparent)
+        .borderRadius(LIST_MATERIAL_CARD_RADIUS)
+      }
     }
     .width('100%')
-    .backgroundColor(getAppUiState().themeSurface)
-    .borderRadius(16)
     .margin({ bottom: 24 })
+    .clip(false)
+    .hitTestBehavior(HitTestMode.Transparent)
   }
 
   @Builder
@@ -375,14 +392,15 @@ struct ExportDataPage {
       // 会话标题 + 副信息
       Column() {
         Text(session.title)
-          .fontSize(16)
-          .fontColor($r('app.color.text_primary'))
+          .font(getSettingsTypography().itemTitle)
+          .fontColor(getAppUiState().themeTextPrimary)
           .maxLines(1)
           .textOverflow({ overflow: TextOverflow.Ellipsis })
 
         Text(this.buildSessionSubtitle(session))
-          .fontSize(13)
-          .fontColor($r('app.color.text_secondary'))
+          .font(getSettingsTypography().subtitle)
+          .lineHeight(SETTINGS_SUBTITLE_LINE_HEIGHT)
+          .fontColor(getAppUiState().themeTextSecondary)
           .margin({ top: 3 })
           .maxLines(1)
           .textOverflow({ overflow: TextOverflow.Ellipsis })
@@ -441,11 +459,7 @@ struct ExportDataPage {
   private ExportingProgress() {
     Row() {
       Column() {
-        Text($r('app.string.export_progress'))
-          .fontSize(20)
-          .fontWeight(FontWeight.Medium)
-          .fontColor($r('app.color.text_primary'))
-          .margin({ bottom: 28 })
+        SettingsSectionHeading({ title: $r('app.string.export_progress') })
 
         Stack() {
           Progress({ value: this.exportProgress, total: 100, type: ProgressType.Ring })
@@ -471,8 +485,11 @@ struct ExportDataPage {
         .height(140)
 
         Text(this.getExportStageLabel())
-          .fontSize(14)
-          .fontColor($r('app.color.text_secondary'))
+          .font(getSettingsTypography().subtitle)
+          .width('100%')
+          .textAlign(TextAlign.Start)
+          .lineHeight(SETTINGS_SUBTITLE_LINE_HEIGHT)
+          .fontColor(getAppUiState().themeTextSecondary)
           .margin({ top: 24 })
           .maxLines(1)
           .textOverflow({ overflow: TextOverflow.Ellipsis })
@@ -497,9 +514,8 @@ struct ExportDataPage {
     Column() {
       Row() {
         Text($r('app.string.export_title'))
-          .fontSize(18)
-          .fontWeight(FontWeight.Bold)
-          .fontColor($r('app.color.text_primary'))
+          .font(getSettingsTypography().pageTitle)
+          .fontColor(getAppUiState().themeTextPrimary)
           .layoutWeight(1)
       }
       .width('100%')
@@ -566,21 +582,14 @@ struct ExportDataPage {
   }
 
   @Builder
-  SectionTitle(title: Resource) {
-    Text(title)
-      .fontSize(14)
-      .fontColor($r('app.color.text_secondary'))
-      .fontWeight(FontWeight.Medium)
-      .margin({ top: 24, bottom: 12, left: 4 })
-  }
-
-  @Builder
   ExportSecurityNotice() {
     Text($r('app.string.export_security_note'))
-      .fontSize(13)
-      .fontColor($r('app.color.text_secondary'))
-      .lineHeight(19)
-      .margin({ top: 10, left: 4, right: 4 })
+      .font(getSettingsTypography().subtitle)
+      .width('100%')
+      .textAlign(TextAlign.Start)
+      .lineHeight(SETTINGS_SUBTITLE_LINE_HEIGHT)
+      .fontColor(getAppUiState().themeTextSecondary)
+      .margin({ top: 10 })
   }
 }
 

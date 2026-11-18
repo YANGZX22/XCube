@@ -1,3 +1,5 @@
+import { getSettingsTypography } from '../settings/SettingsTypography'
+import { ImmersiveListSurface, LIST_MATERIAL_CARD_RADIUS } from '../ImmersiveListSurface'
 /**
  * 共享导出选项面板
  * 在 ExportDataPage / WebDAVSyncPage 之间复用,
@@ -17,28 +19,30 @@ export struct ExportOptionsPanel {
   @Event onIncludePreferencesChange: (value: boolean) => void = () => {}
 
   build() {
-    Column() {
-      this.OptionRow(
-        $r('app.string.export_include_attachments'),
-        this.includeAttachments,
-        (value: boolean) => { this.onIncludeAttachmentsChange(value) }
-      )
-      Divider().color(getAppUiState().themePrimaryLight)
-      this.OptionRow(
-        $r('app.string.export_include_providers'),
-        this.includeProviders,
-        (value: boolean) => { this.onIncludeProvidersChange(value) }
-      )
-      Divider().color(getAppUiState().themePrimaryLight)
-      this.OptionRow(
-        $r('app.string.export_include_preferences'),
-        this.includePreferences,
-        (value: boolean) => { this.onIncludePreferencesChange(value) }
-      )
+    ImmersiveListSurface({ isImmersive: true, cornerRadius: LIST_MATERIAL_CARD_RADIUS }) {
+      Column() {
+        this.OptionRow(
+          $r('app.string.export_include_attachments'),
+          this.includeAttachments,
+          (value: boolean) => { this.onIncludeAttachmentsChange(value) }
+        )
+        Divider().color(getAppUiState().themePrimaryLight)
+        this.OptionRow(
+          $r('app.string.export_include_providers'),
+          this.includeProviders,
+          (value: boolean) => { this.onIncludeProvidersChange(value) }
+        )
+        Divider().color(getAppUiState().themePrimaryLight)
+        this.OptionRow(
+          $r('app.string.export_include_preferences'),
+          this.includePreferences,
+          (value: boolean) => { this.onIncludePreferencesChange(value) }
+        )
+      }
+      .width('100%')
+      .backgroundColor(Color.Transparent)
+      .borderRadius(LIST_MATERIAL_CARD_RADIUS)
     }
-    .width('100%')
-    .backgroundColor(getAppUiState().themeSurface)
-    .borderRadius(16)
   }
 
   @Builder
@@ -49,8 +53,8 @@ export struct ExportOptionsPanel {
   ) {
     Row() {
       Text(title)
-        .fontSize(16)
-        .fontColor($r('app.color.text_primary'))
+        .font(getSettingsTypography().itemTitle)
+        .fontColor(getAppUiState().themeTextPrimary)
         .layoutWeight(1)
 
       Toggle({ type: ToggleType.Switch, isOn: checked })

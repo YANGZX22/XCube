@@ -1,3 +1,6 @@
+import { getSettingsTypography, SETTINGS_HEADING_CONTENT_GAP, SETTINGS_SUBTITLE_LINE_HEIGHT } from './settings/SettingsTypography'
+import { ImmersiveListSurface, LIST_MATERIAL_CARD_RADIUS } from './ImmersiveListSurface'
+import { ImmersiveButtonSurface } from './ImmersiveButtonSurface'
 import { uiMaterial } from '@kit.ArkUI'
 import { getAppUiState } from '../state/AppUiState'
 import { getBlurBottomShadow } from '../utils/BlurShadowUtils'
@@ -296,70 +299,86 @@ export struct UsageActivityCard {
     Text(pickLocalizedText('左右滑动查看，点击方块查看当日 Token 与预估费用。',
       'Swipe to browse. Tap a day for tokens and estimated cost.'))
       .width('100%')
-      .fontSize(11)
-      .fontColor($r('app.color.text_tertiary'))
+      .font(getSettingsTypography().subtitle)
+      .lineHeight(SETTINGS_SUBTITLE_LINE_HEIGHT)
+      .fontColor(getAppUiState().themeTextSecondary)
       .margin({ top: 8 })
   }
 
   build() {
-    Column() {
-      Row() {
-        Text(pickLocalizedText('Token 活动', 'Token activity'))
-          .fontSize(16)
-          .fontWeight(FontWeight.Medium)
-          .fontColor($r('app.color.text_primary'))
-          .layoutWeight(1)
-        Text(pickLocalizedText('最近一年', 'Past year'))
-          .fontSize(12)
-          .fontColor($r('app.color.text_secondary'))
+    ImmersiveListSurface({ isImmersive: true, cornerRadius: LIST_MATERIAL_CARD_RADIUS }) {
+      Column() {
+        Row() {
+          Text(pickLocalizedText('Token 活动', 'Token activity'))
+            .font(getSettingsTypography().sectionTitle)
+            .fontColor(getAppUiState().themeTextPrimary)
+            .layoutWeight(1)
+          Text(pickLocalizedText('最近一年', 'Past year'))
+            .fontSize(12)
+            .fontColor($r('app.color.text_secondary'))
+        }
+        .width('100%')
+
+        Text(this.startMs > 0 ? `${getUsageActivityDayKey(this.startMs)} — ${getUsageActivityDayKey(this.endMs - 1)}` : '')
+          .width('100%')
+          .font(getSettingsTypography().subtitle)
+          .lineHeight(SETTINGS_SUBTITLE_LINE_HEIGHT)
+          .fontColor(getAppUiState().themeTextSecondary)
+          .margin({ top: 6, bottom: SETTINGS_HEADING_CONTENT_GAP })
+
+        if (this.loading) {
+          Row({ space: 8 }) {
+            LoadingProgress().width(20).height(20).color(getAppUiState().themePrimary)
+            Text(pickLocalizedText('正在读取活动记录…', 'Loading activity…'))
+              .fontSize(13)
+              .fontColor($r('app.color.text_secondary'))
+          }
+          .width('100%')
+          .height(190)
+          .justifyContent(FlexAlign.Center)
+        } else if (this.loadFailed) {
+          Column({ space: 12 }) {
+            Text(pickLocalizedText('活动记录读取失败', 'Could not load activity'))
+              .fontSize(13)
+              .fontColor($r('app.color.text_secondary'))
+            ImmersiveButtonSurface({
+              materialFactory: () => new uiMaterial.ImmersiveMaterial({
+                style: uiMaterial.ImmersiveStyle.THIN,
+                materialColor: withColorAlpha(getAppUiState().themePrimary, '26'),
+                applyShadow: true,
+                interactive: true,
+                lightEffect: {}
+              }),
+              cornerRadius: 16
+            }) {
+              Button(pickLocalizedText('重试', 'Retry'))
+                .height(32)
+                .borderRadius(16)
+                .fontSize(13)
+                .fontColor(getAppUiState().themePrimary)
+                .backgroundColor(Color.Transparent)
+                .onClick(() => this.onRetry())
+            }
+          }
+          .width('100%')
+          .height(190)
+          .justifyContent(FlexAlign.Center)
+        } else {
+          this.Heatmap()
+        }
+
+        Text(pickLocalizedText('按本机已保存消息统计；不同币种分别计费。',
+          'Based on locally saved messages; currencies are kept separate.'))
+          .width('100%')
+          .font(getSettingsTypography().subtitle)
+          .lineHeight(SETTINGS_SUBTITLE_LINE_HEIGHT)
+          .fontColor(getAppUiState().themeTextSecondary)
+          .margin({ top: 6 })
       }
       .width('100%')
-
-      Text(this.startMs > 0 ? `${getUsageActivityDayKey(this.startMs)} — ${getUsageActivityDayKey(this.endMs - 1)}` : '')
-        .width('100%')
-        .fontSize(11)
-        .fontColor($r('app.color.text_tertiary'))
-        .margin({ top: 6, bottom: 12 })
-
-      if (this.loading) {
-        Row({ space: 8 }) {
-          LoadingProgress().width(20).height(20).color(getAppUiState().themePrimary)
-          Text(pickLocalizedText('正在读取活动记录…', 'Loading activity…'))
-            .fontSize(13)
-            .fontColor($r('app.color.text_secondary'))
-        }
-        .width('100%')
-        .height(190)
-        .justifyContent(FlexAlign.Center)
-      } else if (this.loadFailed) {
-        Column({ space: 12 }) {
-          Text(pickLocalizedText('活动记录读取失败', 'Could not load activity'))
-            .fontSize(13)
-            .fontColor($r('app.color.text_secondary'))
-          Button(pickLocalizedText('重试', 'Retry'))
-            .fontSize(13)
-            .fontColor(getAppUiState().themePrimary)
-            .backgroundColor(getAppUiState().themePrimaryLight)
-            .onClick(() => this.onRetry())
-        }
-        .width('100%')
-        .height(190)
-        .justifyContent(FlexAlign.Center)
-      } else {
-        this.Heatmap()
-      }
-
-      Text(pickLocalizedText('按本机已保存消息统计；不同币种分别计费。',
-        'Based on locally saved messages; currencies are kept separate.'))
-        .width('100%')
-        .fontSize(11)
-        .fontColor($r('app.color.text_tertiary'))
-        .margin({ top: 6 })
+      .padding(16)
+      .backgroundColor(Color.Transparent)
+      .borderRadius(LIST_MATERIAL_CARD_RADIUS)
     }
-    .width('100%')
-    .padding(16)
-    .backgroundColor(getAppUiState().themeSurface)
-    .borderRadius(22)
-    .border({ width: 1, color: getAppUiState().themePrimaryLight })
   }
 }
