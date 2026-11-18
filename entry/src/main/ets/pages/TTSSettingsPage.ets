@@ -1,10 +1,13 @@
+import { SettingsSectionHeading } from '../components/settings/SettingsSectionHeading'
+import { getSettingsTypography, SETTINGS_HEADING_CONTENT_GAP, SETTINGS_SUBTITLE_LINE_HEIGHT } from '../components/settings/SettingsTypography'
+import { ImmersiveListSurface, LIST_MATERIAL_CARD_RADIUS } from '../components/ImmersiveListSurface'
+import { ImmersiveFieldSurface } from '../components/ImmersiveFieldSurface'
 import { shouldUseDrawnNavigation } from '../utils/DrawnNavigationSupport'
 import { withColorAlpha } from '../utils/ColorAlphaUtils'
 import { shouldUseWrappedMaterial } from '../utils/WrappedMaterialSupport'
 import { ImmersiveButtonSurface } from '../components/ImmersiveButtonSurface'
 import { ProviderIcon } from '../components/ProviderIcon'
 import { resolveLobeProviderIconUrl } from '../utils/LobeIconResolver'
-import { getBlurBottomShadow } from '../utils/BlurShadowUtils'
 import { curves, uiMaterial } from '@kit.ArkUI'
 import { HdsNavigation, HdsNavigationTitleBarOptions, HdsNavigationTitleMode } from '@kit.UIDesignKit'
 import { picker } from '@kit.CoreFileKit'
@@ -491,23 +494,14 @@ struct TTSSettingsPage {
       .scale({ x: this.ttsEnabled ? 1 : 0.92, y: this.ttsEnabled ? 1 : 0.92 })
       .animation({ duration: 320, curve: curves.springMotion(0.35, 0.82) })
 
-      Column({ space: 4 }) {
-        Text($r('app.string.tts_enabled_title'))
-          .fontSize(16)
-          .fontWeight(FontWeight.Medium)
-          .fontColor($r('app.color.text_primary'))
-          .width('100%')
-
-        Text($r('app.string.tts_enabled_desc'))
-          .fontSize(12)
-          .fontColor($r('app.color.text_secondary'))
-          .lineHeight(18)
-          .width('100%')
-      }
-      .layoutWeight(1)
-      .alignItems(HorizontalAlign.Start)
+      Text($r('app.string.tts_enabled_desc'))
+        .font(getSettingsTypography().subtitle)
+        .lineHeight(SETTINGS_SUBTITLE_LINE_HEIGHT)
+        .fontColor(getAppUiState().themeTextSecondary)
+        .layoutWeight(1)
 
       Toggle({ type: ToggleType.Switch, isOn: this.ttsEnabled })
+        .accessibilityText($r('app.string.tts_enabled_title'))
         .selectedColor(this.themePrimary)
         .switchPointColor(Color.White)
         .systemMaterial(new uiMaterial.Material())
@@ -521,135 +515,117 @@ struct TTSSettingsPage {
   }
 
   @Builder
-  private EngineButton(
+  private EngineOption(
     engine: TTSEngineType,
-    title: Resource
+    title: Resource,
+    description: Resource
   ) {
-    // Keep choices the same height so labels stay aligned across languages.
-    Stack({ alignContent: Alignment.TopStart }) {
-      ImmersiveButtonSurface({
-        materialFactory: () => (new uiMaterial.ImmersiveMaterial({
-          style: uiMaterial.ImmersiveStyle.THIN,
-          materialColor: this.engine === engine ? withColorAlpha(this.themePrimary, '26') : Color.Transparent,
-          applyShadow: false,
-          interactive: true,
-          lightEffect: { color: undefined }
-        })),
-        fallbackShadow: false,
-        cornerRadius: 18
-      }) {
-        Button() {
-          Stack({ alignContent: Alignment.Center }) {
-            Column({ space: 6 }) {
-              Stack({ alignContent: Alignment.Center }) {
-                if (engine === TTSEngineType.LOCAL) {
-                  SymbolGlyph($r('sys.symbol.speaker_wave_2'))
-                    .fontSize(21)
-                    .fontColor([this.themePrimary])
-                } else {
-                  ProviderIcon({
-                    iconType: 'image',
-                    customImagePath: resolveLobeProviderIconUrl(engine),
-                    iconSize: 24,
-                    radius: 0,
-                    textIcon: engine === TTSEngineType.ELEVENLABS ? 'EL' : 'Mi',
-                    tintColor: this.themePrimary,
-                    fallbackSymbol: $r('sys.symbol.speaker_wave_2'),
-                    fallbackColor: this.themePrimary
-                  })
-                }
-              }
-              .width('100%')
-              .height(28)
-
-              Text(title)
-                .fontSize(13)
-                .minFontSize(10)
-                .maxFontSize(13)
-                .maxLines(1)
-                .textOverflow({ overflow: TextOverflow.Ellipsis })
-                .fontWeight(FontWeight.Medium)
-                .fontColor(this.engine === engine ? this.themePrimary : $r('app.color.text_primary'))
-                .textAlign(TextAlign.Center)
-                .width('100%')
-                .height(18)
-            }
-            .width('100%')
-            .height('100%')
-            .alignItems(HorizontalAlign.Center)
-            .justifyContent(FlexAlign.Center)
-
-            // Position the glyph relative to the button content; align() does not position a Stack child.
-            if (this.engine === engine) {
-              SymbolGlyph($r('sys.symbol.checkmark_circle_fill'))
-                .fontSize(14)
-                .fontColor([this.themePrimary])
-                .position({ top: 2, right: 2 })
-                .hitTestBehavior(HitTestMode.None)
-                .transition(
-                  TransitionEffect.OPACITY.combine(TransitionEffect.scale({ x: 0.55, y: 0.55 }))
-                    .animation({ duration: 320, curve: curves.springMotion(0.35, 0.82) })
-                )
-            }
+    Button({ type: ButtonType.Normal, stateEffect: false }) {
+      Row({ space: 12 }) {
+        Stack({ alignContent: Alignment.Center }) {
+          if (engine === TTSEngineType.LOCAL) {
+            SymbolGlyph($r('sys.symbol.speaker_wave_2'))
+              .fontSize(24)
+              .fontColor([this.themePrimary])
+          } else {
+            ProviderIcon({
+              iconType: 'image',
+              customImagePath: resolveLobeProviderIconUrl(engine),
+              iconSize: 24,
+              radius: 0,
+              textIcon: engine === TTSEngineType.ELEVENLABS ? 'EL' : 'Mi',
+              tintColor: this.themePrimary,
+              fallbackSymbol: $r('sys.symbol.speaker_wave_2'),
+              fallbackColor: this.themePrimary
+            })
           }
-          .width('100%')
-          .height('100%')
         }
-        .height(80)
-        .padding(8)
-        .backgroundColor(Color.Transparent)
-        .borderRadius(18)
-        .border({ width: shouldUseWrappedMaterial() ? 0 : 1,
-          color: this.engine === engine ? this.themePrimary : this.themePrimaryLight })
-        .stateEffect(false)
-        .enabled(this.ttsEnabled)
-        .onClick((): void => {
-          this.selectEngine(engine)
-        })
-        .width('100%')
+        .width(40)
+        .height(40)
+        .flexShrink(0)
+        .borderRadius(12)
+        .backgroundColor(withColorAlpha(this.themePrimary, this.engine === engine ? '1A' : '0A'))
+        .accessibilityLevel('no-hide-descendants')
+
+        Column({ space: 3 }) {
+          Text(title)
+            .font(getSettingsTypography().itemTitle)
+            .lineHeight(21)
+            .maxLines(1)
+            .textOverflow({ overflow: TextOverflow.Ellipsis })
+            .fontColor(this.engine === engine ? this.themePrimary : getAppUiState().themeTextPrimary)
+            .width('100%')
+
+          Text(description)
+            .font(getSettingsTypography().subtitle)
+            .lineHeight(SETTINGS_SUBTITLE_LINE_HEIGHT)
+            .fontColor(getAppUiState().themeTextSecondary)
+            .maxLines(2)
+            .textOverflow({ overflow: TextOverflow.Ellipsis })
+            .width('100%')
+        }
+        .layoutWeight(1)
+        .alignItems(HorizontalAlign.Start)
+
+        SymbolGlyph(this.engine === engine ? $r('sys.symbol.checkmark_circle_fill') : $r('sys.symbol.circle'))
+          .fontSize(21)
+          .fontColor([this.engine === engine ? this.themePrimary : $r('app.color.text_tertiary')])
+          .width(24)
+          .height(24)
+          .flexShrink(0)
+          .hitTestBehavior(HitTestMode.None)
+          .accessibilityLevel('no')
       }
+      .width('100%')
+      .constraintSize({ minHeight: 78 })
+      .padding({ top: 12, bottom: 12 })
+      .alignItems(VerticalAlign.Center)
     }
-    .layoutWeight(1)
-    .height(80)
-    .opacity(this.ttsEnabled ? 1 : 0.5)
-    .animation({ duration: 320, curve: curves.springMotion(0.35, 0.82) })
+    .width('100%')
+    .padding(0)
+    .backgroundColor(Color.Transparent)
+    .borderRadius(0)
+    .animation({ duration: 200, curve: Curve.EaseOut })
     .enabled(this.ttsEnabled)
-    .clip(false)
+    .accessibilityGroup(true)
+    .accessibilityText(title)
+    .accessibilityDescription(description)
+    .accessibilityChecked(this.engine === engine)
+    .onClick((): void => {
+      this.selectEngine(engine)
+    })
   }
 
   @Builder
   private EngineCardContent() {
-    Column({ space: 14 }) {
-      Row({ space: 9 }) {
-        SymbolGlyph($r('sys.symbol.waveform'))
-          .fontSize(19)
-          .fontColor([this.themePrimary])
+    Column() {
+      this.EngineOption(
+        TTSEngineType.LOCAL,
+        $r('app.string.tts_engine_local'),
+        $r('app.string.tts_engine_local_desc')
+      )
 
-        Text($r('app.string.tts_engine_title'))
-          .fontSize(16)
-          .fontWeight(FontWeight.Medium)
-          .fontColor($r('app.color.text_primary'))
-          .layoutWeight(1)
-      }
-      .width('100%')
-      .alignItems(VerticalAlign.Center)
+      Divider()
+        .strokeWidth(0.5)
+        .color(this.themePrimaryLight)
+        .margin({ left: 52 })
 
-      Row({ space: 8 }) {
-        this.EngineButton(
-          TTSEngineType.LOCAL,
-          $r('app.string.tts_engine_local')
-        )
-        this.EngineButton(
-          TTSEngineType.ELEVENLABS,
-          $r('app.string.tts_engine_elevenlabs')
-        )
-        this.EngineButton(
-          TTSEngineType.MIMO,
-          $r('app.string.tts_engine_mimo')
-        )
-      }
-      .width('100%')
-      .alignItems(VerticalAlign.Top)
+      this.EngineOption(
+        TTSEngineType.ELEVENLABS,
+        $r('app.string.tts_engine_elevenlabs'),
+        $r('app.string.tts_engine_elevenlabs_desc')
+      )
+
+      Divider()
+        .strokeWidth(0.5)
+        .color(this.themePrimaryLight)
+        .margin({ left: 52 })
+
+      this.EngineOption(
+        TTSEngineType.MIMO,
+        $r('app.string.tts_engine_mimo'),
+        $r('app.string.tts_engine_mimo_desc')
+      )
     }
     .width('100%')
     .alignItems(HorizontalAlign.Start)
@@ -665,27 +641,27 @@ struct TTSSettingsPage {
     password: boolean,
     onChange: (value: string) => void
   ) {
-    Column({ space: 7 }) {
+    Column({ space: SETTINGS_HEADING_CONTENT_GAP }) {
       Text(label)
-        .fontSize(13)
-        .fontColor($r('app.color.text_secondary'))
+        .font(getSettingsTypography().fieldLabel)
+        .fontColor(getAppUiState().themeTextSecondary)
         .width('100%')
 
-      TextInput({ text: value, placeholder: placeholder })
-        .type(password ? InputType.Password : InputType.Normal)
-        .enableAutoFill(false)
-        .width('100%')
-        .height(46)
-        .fontSize(14)
-        .fontColor($r('app.color.text_primary'))
-        .placeholderColor($r('app.color.text_tertiary'))
-        .backgroundColor(Color.Transparent)
-        .borderRadius(16)
-        .padding({ left: 12, right: 12 })
-        .backdropBlur(16)
-        .shadow(getBlurBottomShadow())
-        .enabled(this.ttsEnabled)
-        .onChange(onChange)
+      ImmersiveFieldSurface({ cornerRadius: 16 }) {
+        TextInput({ text: value, placeholder: placeholder })
+          .width('100%')
+          .backgroundColor(Color.Transparent)
+          .type(password ? InputType.Password : InputType.Normal)
+          .enableAutoFill(false)
+          .height(46)
+          .fontSize(14)
+          .fontColor($r('app.color.text_primary'))
+          .placeholderColor($r('app.color.text_tertiary'))
+          .borderRadius(16)
+          .padding({ left: 12, right: 12 })
+          .enabled(this.ttsEnabled)
+          .onChange(onChange)
+      }
     }
     .width('100%')
     .alignItems(HorizontalAlign.Start)
@@ -693,11 +669,11 @@ struct TTSSettingsPage {
 
   @Builder
   private VoiceSelector() {
-    Column({ space: 7 }) {
+    Column({ space: SETTINGS_HEADING_CONTENT_GAP }) {
       Row({ space: 10 }) {
         Text($r('app.string.tts_voice_id'))
-          .fontSize(13)
-          .fontColor($r('app.color.text_secondary'))
+          .font(getSettingsTypography().fieldLabel)
+          .fontColor(getAppUiState().themeTextSecondary)
           .layoutWeight(1)
 
         Stack({ alignContent: Alignment.TopStart }) {
@@ -797,12 +773,11 @@ struct TTSSettingsPage {
 
   @Builder
   private StabilitySlider() {
-    Column({ space: 10 }) {
+    Column({ space: SETTINGS_HEADING_CONTENT_GAP }) {
       Row() {
         Text($r('app.string.tts_stability'))
-          .fontSize(14)
-          .fontWeight(FontWeight.Medium)
-          .fontColor($r('app.color.text_primary'))
+          .font(getSettingsTypography().itemTitle)
+          .fontColor(getAppUiState().themeTextPrimary)
           .layoutWeight(1)
 
         Text(this.stability.toFixed(2))
@@ -839,12 +814,11 @@ struct TTSSettingsPage {
 
   @Builder
   private SimilaritySlider() {
-    Column({ space: 10 }) {
+    Column({ space: SETTINGS_HEADING_CONTENT_GAP }) {
       Row() {
         Text($r('app.string.tts_similarity_boost'))
-          .fontSize(14)
-          .fontWeight(FontWeight.Medium)
-          .fontColor($r('app.color.text_primary'))
+          .font(getSettingsTypography().itemTitle)
+          .fontColor(getAppUiState().themeTextPrimary)
           .layoutWeight(1)
 
         Text(this.similarityBoost.toFixed(2))
@@ -881,12 +855,11 @@ struct TTSSettingsPage {
 
   @Builder
   private SpeedSlider() {
-    Column({ space: 10 }) {
+    Column({ space: SETTINGS_HEADING_CONTENT_GAP }) {
       Row() {
         Text($r('app.string.tts_speed'))
-          .fontSize(14)
-          .fontWeight(FontWeight.Medium)
-          .fontColor($r('app.color.text_primary'))
+          .font(getSettingsTypography().itemTitle)
+          .fontColor(getAppUiState().themeTextPrimary)
           .layoutWeight(1)
 
         Text(`${this.speed.toFixed(2)}×`)
@@ -924,14 +897,6 @@ struct TTSSettingsPage {
   @Builder
   private ElevenLabsCardContent() {
     Column({ space: 16 }) {
-      Row({ space: 9 }) {
-        Text($r('app.string.tts_elevenlabs_config'))
-          .fontSize(16)
-          .fontWeight(FontWeight.Medium)
-          .fontColor($r('app.color.text_primary'))
-      }
-      .width('100%')
-
       this.InputField(
         $r('app.string.tts_api_base_url'),
         this.elevenLabsBaseUrl,
@@ -962,10 +927,10 @@ struct TTSSettingsPage {
       )
       this.VoiceSelector()
 
-      Column({ space: 7 }) {
+      Column({ space: SETTINGS_HEADING_CONTENT_GAP }) {
         Text($r('app.string.tts_model'))
-          .fontSize(13)
-          .fontColor($r('app.color.text_secondary'))
+          .font(getSettingsTypography().fieldLabel)
+          .fontColor(getAppUiState().themeTextSecondary)
           .width('100%')
 
         Select(this.modelOptions)
@@ -997,40 +962,39 @@ struct TTSSettingsPage {
       Divider()
         .color(getAppUiState().themePrimaryLight)
 
-      Column() {
-        this.StabilitySlider()
+      ImmersiveListSurface({ isImmersive: true, cornerRadius: LIST_MATERIAL_CARD_RADIUS }) {
+        Column() {
+          this.StabilitySlider()
 
-        Divider()
-          .color(getAppUiState().themePrimaryLight)
+          Divider()
+            .color(getAppUiState().themePrimaryLight)
 
-        this.SimilaritySlider()
+          this.SimilaritySlider()
 
-        Divider()
-          .color(getAppUiState().themePrimaryLight)
+          Divider()
+            .color(getAppUiState().themePrimaryLight)
 
-        this.SpeedSlider()
+          this.SpeedSlider()
+        }
+        .width('100%')
+        .padding({ left: 12, right: 12, top: 8, bottom: 8 })
+        .backgroundColor(Color.Transparent)
+        .borderRadius(LIST_MATERIAL_CARD_RADIUS)
       }
-      .width('100%')
-      .padding({ left: 12, right: 12, top: 8, bottom: 8 })
-      .backgroundColor(Color.Transparent)
-      .borderRadius(16)
-      .border({ width: 1, color: this.themePrimaryLight })
-      .backdropBlur(16)
-      .shadow(getBlurBottomShadow())
 
       Divider()
         .color(getAppUiState().themePrimaryLight)
 
       Text($r('app.string.tts_output_format_note'))
-        .fontSize(12)
-        .fontColor($r('app.color.text_secondary'))
-        .lineHeight(18)
+        .font(getSettingsTypography().subtitle)
+        .lineHeight(SETTINGS_SUBTITLE_LINE_HEIGHT)
+        .fontColor(getAppUiState().themeTextSecondary)
         .width('100%')
 
       Text($r('app.string.tts_security_note'))
-        .fontSize(12)
-        .fontColor($r('app.color.text_tertiary'))
-        .lineHeight(18)
+        .font(getSettingsTypography().subtitle)
+        .lineHeight(SETTINGS_SUBTITLE_LINE_HEIGHT)
+        .fontColor(getAppUiState().themeTextSecondary)
         .width('100%')
     }
     .width('100%')
@@ -1047,10 +1011,10 @@ struct TTSSettingsPage {
     value: string,
     onSelect: (index: number, value: string) => void
   ) {
-    Column({ space: 7 }) {
+    Column({ space: SETTINGS_HEADING_CONTENT_GAP }) {
       Text(label)
-        .fontSize(13)
-        .fontColor($r('app.color.text_secondary'))
+        .font(getSettingsTypography().fieldLabel)
+        .fontColor(getAppUiState().themeTextSecondary)
         .width('100%')
       Select(options)
         .selected(selected)
@@ -1078,11 +1042,6 @@ struct TTSSettingsPage {
   @Builder
   private MiMoCardContent() {
     Column({ space: 16 }) {
-      Text($r('app.string.tts_mimo_config'))
-        .fontSize(16)
-        .fontWeight(FontWeight.Medium)
-        .fontColor($r('app.color.text_primary'))
-        .width('100%')
       this.InputField($r('app.string.tts_api_base_url'), this.mimoBaseUrl, DEFAULT_MIMO_TTS_BASE_URL, false,
         (value: string): void => { this.mimoBaseUrl = value })
       this.InputField($r('app.string.tts_api_key'), this.mimoApiKey, 'api-key', true,
@@ -1096,31 +1055,31 @@ struct TTSSettingsPage {
           MIMO_TTS_VOICES.indexOf(this.mimoVoice), this.mimoVoice,
           (_index: number, value: string): void => { this.mimoVoice = value })
       } else if (this.mimoModel === MiMoTTSModel.VOICE_DESIGN) {
-        Column({ space: 7 }) {
+        Column({ space: SETTINGS_HEADING_CONTENT_GAP }) {
           Text($r('app.string.tts_mimo_voice_description'))
-            .fontSize(13)
-            .fontColor($r('app.color.text_secondary'))
-          TextArea({ text: this.mimoVoiceDescription, placeholder: $r('app.string.tts_mimo_description_placeholder') })
-            .width('100%')
-            .height(110)
-            .fontSize(14)
-            .fontColor($r('app.color.text_primary'))
-            .placeholderColor($r('app.color.text_tertiary'))
-            .backgroundColor(Color.Transparent)
-            .borderRadius(16)
-            .padding(12)
-            .backdropBlur(16)
-            .shadow(getBlurBottomShadow())
-            .enabled(this.ttsEnabled)
-            .onChange((value: string): void => { this.mimoVoiceDescription = value })
+            .font(getSettingsTypography().fieldLabel)
+            .fontColor(getAppUiState().themeTextSecondary)
+          ImmersiveFieldSurface({ cornerRadius: 16 }) {
+            TextArea({ text: this.mimoVoiceDescription, placeholder: $r('app.string.tts_mimo_description_placeholder') })
+              .width('100%')
+              .backgroundColor(Color.Transparent)
+              .height(110)
+              .fontSize(14)
+              .fontColor($r('app.color.text_primary'))
+              .placeholderColor($r('app.color.text_tertiary'))
+              .borderRadius(16)
+              .padding(12)
+              .enabled(this.ttsEnabled)
+              .onChange((value: string): void => { this.mimoVoiceDescription = value })
+          }
         }
         .width('100%')
         .alignItems(HorizontalAlign.Start)
       } else {
-        Column({ space: 7 }) {
+        Column({ space: SETTINGS_HEADING_CONTENT_GAP }) {
           Text($r('app.string.tts_mimo_voice_sample'))
-            .fontSize(13)
-            .fontColor($r('app.color.text_secondary'))
+            .font(getSettingsTypography().fieldLabel)
+            .fontColor(getAppUiState().themeTextSecondary)
           Button(this.isImportingVoiceSample ? $r('app.string.tts_mimo_importing_sample') :
             $r('app.string.tts_mimo_import_sample'))
             .width('100%')
@@ -1139,24 +1098,13 @@ struct TTSSettingsPage {
               .maxLines(2)
           }
           Text($r('app.string.tts_mimo_sample_note'))
-            .fontSize(12)
-            .fontColor($r('app.color.text_secondary'))
-            .lineHeight(18)
+            .font(getSettingsTypography().subtitle)
+            .lineHeight(SETTINGS_SUBTITLE_LINE_HEIGHT)
+            .fontColor(getAppUiState().themeTextSecondary)
         }
         .width('100%')
         .alignItems(HorizontalAlign.Start)
       }
-
-      Text($r('app.string.tts_mimo_output_note'))
-        .fontSize(12)
-        .fontColor($r('app.color.text_secondary'))
-        .lineHeight(18)
-        .width('100%')
-      Text($r('app.string.tts_mimo_security_note'))
-        .fontSize(12)
-        .fontColor($r('app.color.text_tertiary'))
-        .lineHeight(18)
-        .width('100%')
     }
     .width('100%')
     .alignItems(HorizontalAlign.Start)
@@ -1252,59 +1200,85 @@ struct TTSSettingsPage {
     }
     .width('100%')
     .padding({ top: 2, bottom: 2 })
+    .margin({ top: 16 })
   }
 
   @Builder
   private PageContent(includeCompactTopSpacer: boolean) {
     Scroll(this.compactScroller) {
       Column() {
-        Column({ space: 16 }) {
+        Column() {
           if (includeCompactTopSpacer) {
             Blank()
               .width('100%')
               .height(this.getCompactContentTopPadding())
           }
 
-          Column() {
-            this.EnableCardContent()
+          SettingsSectionHeading({
+            title: $r('app.string.tts_enabled_title'),
+            topGap: includeCompactTopSpacer ? 16 : 0
+          })
+          Stack() {
+            ImmersiveListSurface({ isImmersive: true, cornerRadius: LIST_MATERIAL_CARD_RADIUS }) {
+              Column() {
+                this.EnableCardContent()
+              }
+              .width('100%')
+              .padding(18)
+              .backgroundColor(Color.Transparent)
+              .borderRadius(LIST_MATERIAL_CARD_RADIUS)
+              .animation({ duration: 320, curve: curves.springMotion(0.35, 0.82) })
+            }
           }
           .width('100%')
-          .padding(18)
-          .backgroundColor(Color.Transparent)
-          .borderRadius(24)
-          .border({ width: this.ttsEnabled ? 1.5 : 1, color: this.themePrimaryLight })
           .scale({ x: this.ttsEnabled ? 1 : 0.99, y: this.ttsEnabled ? 1 : 0.99 })
           .animation({ duration: 320, curve: curves.springMotion(0.35, 0.82) })
-          .backdropBlur(16)
-          .shadow(getBlurBottomShadow())
+          .clip(false)
+          .hitTestBehavior(HitTestMode.Transparent)
 
-          Column() {
-            this.EngineCardContent()
-          }
-          .width('100%')
-          .padding(18)
-          .backgroundColor(Color.Transparent)
-          .borderRadius(24)
-          .border({ width: 1, color: this.themePrimaryLight })
-          .backdropBlur(16)
-          .shadow(getBlurBottomShadow())
-
-          if (this.engine === TTSEngineType.ELEVENLABS || this.engine === TTSEngineType.MIMO) {
+          SettingsSectionHeading({
+            title: $r('app.string.tts_engine_title'),
+            trailingSymbol: $r('sys.symbol.waveform'),
+            topGap: 16
+          })
+            .opacity(this.ttsEnabled ? 1 : 0.55)
+            .animation({ duration: 220, curve: Curve.EaseOut })
+          ImmersiveListSurface({ isImmersive: true, cornerRadius: LIST_MATERIAL_CARD_RADIUS }) {
             Column() {
-              if (this.engine === TTSEngineType.MIMO) {
-                this.MiMoCardContent()
-              } else {
-                this.ElevenLabsCardContent()
-              }
+              this.EngineCardContent()
             }
             .width('100%')
             .padding(18)
             .backgroundColor(Color.Transparent)
-            .borderRadius(24)
-            .border({ width: 1, color: this.themePrimaryLight })
-            .backdropBlur(16)
-            .shadow(getBlurBottomShadow())
+            .borderRadius(LIST_MATERIAL_CARD_RADIUS)
+          }
+
+          if (this.engine === TTSEngineType.ELEVENLABS || this.engine === TTSEngineType.MIMO) {
+            Column() {
+              SettingsSectionHeading({
+                title: this.engine === TTSEngineType.MIMO ? $r('app.string.tts_mimo_config') :
+                  $r('app.string.tts_elevenlabs_config'),
+                topGap: 16
+              })
+                .opacity(this.ttsEnabled ? 1 : 0.5)
+              ImmersiveListSurface({ isImmersive: true, cornerRadius: LIST_MATERIAL_CARD_RADIUS }) {
+                Column() {
+                  if (this.engine === TTSEngineType.MIMO) {
+                    this.MiMoCardContent()
+                  } else {
+                    this.ElevenLabsCardContent()
+                  }
+                }
+                .width('100%')
+                .padding(18)
+                .backgroundColor(Color.Transparent)
+                .borderRadius(LIST_MATERIAL_CARD_RADIUS)
+              }
+            }
+            .width('100%')
             .transition(TransitionEffect.OPACITY.animation({ duration: 200, curve: Curve.EaseOut }))
+            .clip(false)
+            .hitTestBehavior(HitTestMode.Transparent)
           }
 
           this.ActionButtons()
@@ -1328,9 +1302,8 @@ struct TTSSettingsPage {
     Column() {
       Row() {
         Text($r('app.string.settings_tts'))
-          .fontSize(18)
-          .fontWeight(FontWeight.Bold)
-          .fontColor($r('app.color.text_primary'))
+          .font(getSettingsTypography().pageTitle)
+          .fontColor(getAppUiState().themeTextPrimary)
           .layoutWeight(1)
       }
       .width('100%')
