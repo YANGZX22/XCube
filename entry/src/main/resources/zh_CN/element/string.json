@@ -1710,11 +1710,15 @@
     },
     {
       "name": "default_model_prompt_variables",
-      "value": "可用变量:"
+      "value": "可用变量"
     },
     {
-      "name": "default_model_prompt_title_variables_hint",
-      "value": "{content} 对话内容 | {locale} 语言"
+      "name": "default_model_variable_content",
+      "value": "对话内容"
+    },
+    {
+      "name": "default_model_variable_locale",
+      "value": "语言"
     },
     {
       "name": "default_model_reset_prompt",

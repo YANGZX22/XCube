@@ -1710,11 +1710,15 @@
     },
     {
       "name": "default_model_prompt_variables",
-      "value": "Available variables:"
+      "value": "Available variables"
     },
     {
-      "name": "default_model_prompt_title_variables_hint",
-      "value": "{content} - Conversation content\\n{locale} - Locale"
+      "name": "default_model_variable_content",
+      "value": "Conversation"
+    },
+    {
+      "name": "default_model_variable_locale",
+      "value": "Language"
     },
     {
       "name": "default_model_reset_prompt",

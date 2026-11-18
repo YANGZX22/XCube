@@ -1,10 +1,10 @@
 import { SettingsSectionHeading } from '../components/settings/SettingsSectionHeading'
-import { getSettingsTypography, SETTINGS_SUBTITLE_LINE_HEIGHT } from '../components/settings/SettingsTypography'
+import { getSettingsTypography, SETTINGS_HEADING_CONTENT_GAP, SETTINGS_SUBTITLE_LINE_HEIGHT } from '../components/settings/SettingsTypography'
 import { ImmersiveListSurface, LIST_MATERIAL_CARD_RADIUS } from '../components/ImmersiveListSurface'
+import { ImmersiveFieldSurface } from '../components/ImmersiveFieldSurface'
 import { ImmersiveButtonSurface } from '../components/ImmersiveButtonSurface'
 import { ImmersiveSheetHeader } from '../components/ImmersiveSheetHeader'
-import { uiMaterial } from '@kit.ArkUI'
-import { getBlurBottomShadow } from '../utils/BlurShadowUtils'
+import { LengthMetrics } from '@kit.ArkUI'
 import { shouldUseDrawnNavigation } from '../utils/DrawnNavigationSupport'
 // 默认模型配置页面
 import { DefaultModelService } from '../services/DefaultModelService'
@@ -25,9 +25,19 @@ import {
   getHdsTopNavigationContentTopPadding,
   getHdsStatusBarContentColor
 } from '../utils/HdsVisualEffectUtil'
-import { getStaticSheetMaterial, shouldUseWrappedMaterial } from '../utils/WrappedMaterialSupport'
+import { createStaticRegularMaterial, getStaticSheetMaterial, shouldUseWrappedMaterial } from '../utils/WrappedMaterialSupport'
 
 let defaultModelPagePathStack: NavPathStack | null = null
+const PROMPT_EDITOR_ID: string = 'default_model_prompt_editor'
+
+@Extend(Button)
+function promptCapsule() {
+  .backgroundColor(Color.Transparent)
+  .height(40)
+  .padding({ left: 14, right: 14 })
+  .focusOnTouch(false)
+}
+
 @Entry
 @ComponentV2
 struct DefaultModelPage {
@@ -37,9 +47,6 @@ struct DefaultModelPage {
   }
   private get themePrimary(): string {
     return getAppUiState().themePrimary
-  }
-  private get themePrimaryLight(): string {
-    return getAppUiState().themePrimaryLight
   }
   private get layoutSizeClass(): string {
     return getAppUiState().layoutSizeClass
@@ -70,6 +77,9 @@ struct DefaultModelPage {
   @Local currentEditRole: ModelRole = ModelRole.CHAT
   @Local showPromptSheet: boolean = false
   @Local currentPrompt: string = ''
+  private promptEditor: TextAreaController = new TextAreaController()
+  private promptEditorFocused: boolean = false
+  private promptSelection: TextRange | undefined = undefined
   private defaultModelService: DefaultModelService = ServiceRegistry.defaultModel()
   private providerViewModel: ProviderViewModel = ServiceRegistry.provider()
   private compactScroller: Scroller = new Scroller()
@@ -328,9 +338,7 @@ struct DefaultModelPage {
           this.showModelSheet = true
         },
         onPromptClick: () => {
-          this.showModelSheet = false
-          this.currentPrompt = this.defaultModelService.getTitlePromptTemplate()
-          this.showPromptSheet = true
+          this.openPromptEditor()
         }
       })
     }
@@ -381,89 +389,112 @@ struct DefaultModelPage {
   }
 
   @Builder
+  private PromptVariableButton(label: Resource, token: string) {
+    ImmersiveButtonSurface({ materialFactory: () => createStaticRegularMaterial() }) {
+      Button({ type: ButtonType.Capsule, stateEffect: false }) {
+        Row({ space: 6 }) {
+          Text(label)
+            .fontSize(14)
+            .fontColor(this.themePrimary)
+          Text(token)
+            .fontSize(12)
+            .fontColor($r('app.color.text_secondary'))
+        }
+      }
+      .promptCapsule()
+      .onClick(() => this.insertPromptVariable(token))
+    }
+  }
+
+  @Builder
   PromptEditSheet() {
     Column() {
       ImmersiveSheetHeader({
+        titleFont: getSettingsTypography().pageTitle,
+        titleColor: getAppUiState().themeTextPrimary,
         title: $r('app.string.default_model_prompt_edit_title_title'),
+        materialFeedback: false,
         showTrailing: true,
         trailingColor: this.themePrimary,
-        onLeadingClick: (): void => {
-          this.showPromptSheet = false
-        },
-        onTrailingClick: (): void => {
-          this.savePrompt()
-        }
+        onLeadingClick: (): void => { this.showPromptSheet = false },
+        onTrailingClick: (): void => { this.savePrompt() }
       })
 
-      // 变量提示
       Column() {
         Text($r('app.string.default_model_prompt_variables'))
-          .fontSize(13)
-          .fontColor($r('app.color.text_secondary'))
-          .width('100%')
-          .textAlign(TextAlign.Center)
+          .font(getSettingsTypography().fieldLabel)
+          .fontColor(getAppUiState().themeTextSecondary)
+        Flex({ wrap: FlexWrap.Wrap, space: { main: LengthMetrics.vp(8), cross: LengthMetrics.vp(8) } }) {
+          this.PromptVariableButton($r('app.string.default_model_variable_content'), '{content}')
+          this.PromptVariableButton($r('app.string.default_model_variable_locale'), '{locale}')
+        }
+        .width('100%')
+        .margin({ top: SETTINGS_HEADING_CONTENT_GAP, bottom: 12 })
 
-        Text($r('app.string.default_model_prompt_title_variables_hint'))
-          .fontSize(12)
-          .fontColor(this.themePrimary)
-          .width('100%')
-          .textAlign(TextAlign.Center)
-          .margin({ top: 4 })
-      }
-      .width('100%')
-      .padding({ left: 16, right: 16, top: 8, bottom: 4 })
+        ImmersiveFieldSurface({ cornerRadius: 16, fillHeight: true, layoutWeightValue: 1 }) {
+          TextArea({ text: this.currentPrompt, controller: this.promptEditor })
+            .id(PROMPT_EDITOR_ID)
+            .width('100%')
+            .height('100%')
+            .backgroundColor(Color.Transparent)
+            .fontSize(14)
+            .fontColor($r('app.color.text_primary'))
+            .padding(16)
+            .borderRadius(16)
+            .onChange((value: string) => { this.currentPrompt = value })
+            .onFocus(() => { this.promptEditorFocused = true })
+            .onBlur(() => { this.promptEditorFocused = false })
+            .onTextSelectionChange((start: number, end: number) => {
+              if (this.promptEditorFocused) {
+                this.promptSelection = { start: start, end: end }
+              }
+            })
+        }
 
-      // 编辑区域
-      TextArea({ text: this.currentPrompt })
-        .fontSize(14)
-        .fontColor($r('app.color.text_primary'))
-        .padding(16)
-        .backgroundColor(Color.Transparent)
-        .borderRadius(16)
-        .backdropBlur(16)
-        .shadow(getBlurBottomShadow())
-        .margin({ left: 16, right: 16, top: 16 })
-        .layoutWeight(1)
-        .onChange((value: string) => {
-          this.currentPrompt = value
-        })
-
-      // 按钮区域
-      Row() {
-        Stack({ alignContent: Alignment.TopStart }) {
-          ImmersiveButtonSurface({
-            materialFactory: () => (new uiMaterial.ImmersiveMaterial({
-                style: uiMaterial.ImmersiveStyle.REGULAR,
-                materialColor: Color.Transparent,
-                applyShadow: false,
-                interactive: true,
-                lightEffect: { color: undefined }
-              })),
-            fallbackShadow: false,
-            cornerRadius: 22
-          }) {
-            Button($r('app.string.default_model_reset_prompt'))
+        Row() {
+          ImmersiveButtonSurface({ materialFactory: () => createStaticRegularMaterial() }) {
+            Button($r('app.string.default_model_reset_prompt'), { type: ButtonType.Capsule, stateEffect: false })
+              .promptCapsule()
               .fontSize(15)
               .fontColor(this.themePrimary)
-              .backgroundColor(Color.Transparent)
-              .borderRadius(22)
-              .border({ width: 1, color: this.themePrimaryLight })
-              .height(44)
-              .width('100%')
-              .onClick(() => {
-                this.resetPrompt()
-              })
+              .onClick(() => { this.resetPrompt() })
           }
         }
-        .height(44)
         .width('100%')
-        .clip(false)
+        .justifyContent(FlexAlign.Center)
+        .margin({ top: 12 })
       }
       .width('100%')
-      .padding({ left: 16, right: 16, top: 16, bottom: 32 })
+      .layoutWeight(1)
+      .alignItems(HorizontalAlign.Start)
+      .padding({ left: 16, right: 16, top: 8, bottom: 16 })
     }
     .width('100%')
     .height('100%')
+    .backgroundColor(Color.Transparent)
+  }
+
+  private openPromptEditor(): void {
+    this.showModelSheet = false
+    this.currentPrompt = this.defaultModelService.getTitlePromptTemplate()
+    this.promptSelection = undefined
+    this.promptEditorFocused = false
+    this.showPromptSheet = true
+  }
+
+  private insertPromptVariable(token: string): void {
+    const selection = this.promptEditorFocused ? this.promptEditor.getSelection() : this.promptSelection
+    this.getUIContext().getFocusController().requestFocus(PROMPT_EDITOR_ID)
+    let offset: number | undefined = undefined
+    if (selection?.start !== undefined && selection.end !== undefined && selection.start >= 0 && selection.end >= 0) {
+      offset = Math.min(selection.start, selection.end)
+      const end = Math.max(selection.start, selection.end)
+      if (end > offset) {
+        this.promptEditor.deleteText({ start: offset, end: end })
+      }
+    }
+    const caret = this.promptEditor.addText(token, offset === undefined ? undefined : { offset: offset })
+    this.promptSelection = { start: caret, end: caret }
   }
 
   private getSheetTitle(): Resource {
