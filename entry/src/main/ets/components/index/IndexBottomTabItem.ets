@@ -10,6 +10,9 @@ import {
 @ComponentV2
 export struct IndexBottomTabItem {
   @Param active: boolean = false
+  @Param collapsed: boolean = false
+  @Param bounceTrigger: number = -1
+  @Param navigationTransitionId: string = ''
   @Param activeIcon: Resource = $r('sys.symbol.circle')
   @Param inactiveIcon: Resource = $r('sys.symbol.circle')
   @Param label: Resource = $r('app.string.tab_chat')
@@ -29,11 +32,13 @@ export struct IndexBottomTabItem {
   }
 
   build() {
-    if (this.isManuscriptMode) {
+    if (this.isManuscriptMode && !this.collapsed) {
       // 书籍页脚导航：大写目录标签 + 选中项短鎏金书签线。
       Column({ space: 5 }) {
         Row({ space: 3 }) {
           Text(this.manuscriptLabel === '' ? this.label : this.manuscriptLabel)
+            .geometryTransition(this.navigationTransitionId)
+            .transition(this.navigationTransitionId ? TransitionEffect.OPACITY : undefined)
             .fontFamily(MANUSCRIPT_BODY_FONT)
             .fontSize(10)
             .fontWeight(FontWeight.Medium)
@@ -75,11 +80,15 @@ export struct IndexBottomTabItem {
         this.pressed = pressed
       }))
     } else {
-      Column({ space: 1 }) {
+      Column({ space: this.collapsed ? 0 : 1 }) {
       Stack({ alignContent: Alignment.Center }) {
         SymbolGlyph(this.active ? this.activeIcon : this.inactiveIcon)
-          .fontSize(22)
+          .renderingStrategy(SymbolRenderingStrategy.SINGLE)
+          .fontSize(this.collapsed ? 24 : 22)
           .fontColor(this.active ? [this.themePrimary] : [$r('app.color.text_secondary')])
+          .symbolEffect(new BounceSymbolEffect(EffectScope.WHOLE), this.bounceTrigger)
+          .geometryTransition(this.navigationTransitionId)
+          .transition(this.navigationTransitionId ? TransitionEffect.OPACITY : undefined)
 
         if (this.badgeCount > 0) {
           Row() {
@@ -100,6 +109,9 @@ export struct IndexBottomTabItem {
 
       Text(this.label)
         .width('100%')
+        .height(this.collapsed ? 0 : undefined)
+        .opacity(this.collapsed ? 0 : 1)
+        .transition(this.navigationTransitionId ? TransitionEffect.OPACITY : undefined)
         .textAlign(TextAlign.Center)
         .fontSize(10)
         .minFontSize(9)

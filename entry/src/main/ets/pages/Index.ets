@@ -15,9 +15,10 @@ import {
   HdsNavigationMenuItemOptions,
   HdsNavigationTitleBarOptions,
   HdsNavigationTitleMode,
-  HdsTabs
+  HdsTabs,
+  HdsTabsFloatingStyle
 } from '@kit.UIDesignKit'
-import { getHdsSystemMaterialEffect, HdsTabsBlurModifier, DrawnTabsContentModifier } from '../utils/HdsMaterialSupport'
+import { getHdsMaterialLightColor, getHdsSystemMaterialEffect, HdsTabsBlurModifier, DrawnTabsContentModifier } from '../utils/HdsMaterialSupport'
 import {
   ApiStyle,
   ChatSession,
@@ -153,6 +154,13 @@ import {
   toRomanNumeral
 } from '../utils/ManuscriptVisualUtils'
 
+interface CompactNavigationTab {
+  index: number
+  icon: Resource
+  activeIcon: Resource
+  label: Resource
+}
+
 @Entry
 @ComponentV2
 struct Index {
@@ -170,6 +178,8 @@ struct Index {
   private static readonly COMPACT_TABS_WITH_ACTION_MEDIUM_WIDTH: number = 316
   private static readonly COMPACT_TABS_WITH_ACTION_LARGE_WIDTH: number = 348
   private static readonly COMPACT_MINI_BAR_WIDTH: number = 56
+  private static readonly COMPACT_ACTION_GAP: number = 8
+  private static readonly COMPACT_DRAWN_TAB_PADDING: number = 12
   private static readonly EXPANDED_NAVIGATION_RAIL_WIDTH: number = 72
   private static readonly EXPANDED_FLOATING_NAVIGATION_RADIUS: number = 28
   private static readonly KNOWLEDGE_SPLIT_TITLE_END_GUARD: number = 56
@@ -209,6 +219,17 @@ struct Index {
   @Local handAdaptiveUnsupported: boolean = false
   @Local compactBottomBarsWidthVp: number = 0
   @Local compactNavigationCollapsed: boolean = false
+  @Local navigationTabBounceTriggers: number[] = [-1, -1, -1, -1]
+  private readonly compactTabs: CompactNavigationTab[] = [
+    { index: Index.TAB_ASSISTANTS, icon: $r('sys.symbol.person'), activeIcon: $r('sys.symbol.person_fill'),
+      label: $r('app.string.tab_assistants') },
+    { index: Index.TAB_CHAT, icon: $r('sys.symbol.ellipsis_message'), activeIcon: $r('sys.symbol.ellipsis_message_fill'),
+      label: $r('app.string.tab_chat') },
+    { index: Index.TAB_KNOWLEDGE, icon: $r('sys.symbol.externaldrive'), activeIcon: $r('sys.symbol.externaldrive_fill'),
+      label: $r('app.string.tab_knowledge') },
+    { index: Index.TAB_SETTINGS, icon: $r('sys.symbol.gearshape'), activeIcon: $r('sys.symbol.gearshape_fill'),
+      label: $r('app.string.tab_settings') }
+  ]
   private get handAdaptiveSettingsChangedAt(): number {
     return getAppUiState().settingsHandAdaptiveChangedAt
   }
@@ -397,7 +418,11 @@ struct Index {
   private handledAssistantAvatarRefreshAt: number = 0
   private searchInputFocusId: string = 'index_session_search_input'
   private holdingHandCallback: (status: motion.HoldingHandStatus) => void = (status: motion.HoldingHandStatus): void => {
-    this.currentHoldingHand = status
+    if (this.currentHoldingHand !== status) {
+      this.getUIContext().animateTo({ duration: 420, curve: curves.springMotion(0.75, 0.86) }, () => {
+        this.currentHoldingHand = status
+      })
+    }
   }
 
   private showIndexSnack(message: string | Resource, duration: number = 2000,
@@ -1861,22 +1886,22 @@ struct Index {
             TabContent() {
               this.AssistantsTab()
             }
-            .tabBar(this.TabBarAssistants())
+            .tabBar(this.CompactTabItem(this.compactTabs[Index.TAB_ASSISTANTS]))
 
             TabContent() {
               this.ChatTab()
             }
-            .tabBar(this.TabBarChat())
+            .tabBar(this.CompactTabItem(this.compactTabs[Index.TAB_CHAT]))
 
             TabContent() {
               this.KnowledgeTab()
             }
-            .tabBar(this.TabBarKnowledge())
+            .tabBar(this.CompactTabItem(this.compactTabs[Index.TAB_KNOWLEDGE]))
 
             TabContent() {
               this.SettingsTab()
             }
-            .tabBar(this.TabBarSettings())
+            .tabBar(this.CompactTabItem(this.compactTabs[Index.TAB_SETTINGS]))
           }
           .width('100%')
           .height('100%')
@@ -2027,6 +2052,7 @@ struct Index {
     Column() {
       IndexBottomTabItem({
         active: this.isTabActive(index),
+        bounceTrigger: this.navigationTabBounceTriggers[index],
         activeIcon: activeIcon,
         inactiveIcon: inactiveIcon,
         label: label,
@@ -2039,7 +2065,7 @@ struct Index {
     .borderRadius(18)
     .backgroundColor(Color.Transparent)
     .onClick(() => {
-      this.switchToTab(index)
+      this.activateNavigationTab(index)
     })
   }
 
@@ -2191,6 +2217,12 @@ struct Index {
     return this.currentTabIndex === index
   }
 
+  private activateNavigationTab(index: number): void {
+    if (index < 0 || index >= this.compactTabs.length) return
+    this.navigationTabBounceTriggers[index]++
+    this.switchToTab(index)
+  }
+
   private isManuscriptMode(): boolean {
     return getAppUiState().visualEffectsMode === VisualEffectsMode.MANUSCRIPT
   }
@@ -2254,12 +2286,11 @@ struct Index {
     if (availableHostWidth <= 0) {
       return preferredWidth
     }
-    const minimumGap = 8
     const maximumAvailableWidth = availableHostWidth -
       Index.COMPACT_TABS_FLOATING_SIDE_MARGIN -
       Index.COMPACT_TABS_FLOATING_TAB_OUTER_MARGIN -
       Index.COMPACT_MINI_BAR_WIDTH -
-      minimumGap
+      Index.COMPACT_ACTION_GAP
     return Math.min(preferredWidth, Math.max(208, maximumAvailableWidth))
   }
 
@@ -2276,15 +2307,6 @@ struct Index {
     }
     return Math.max(Index.COMPACT_TABS_FLOATING_SIDE_MARGIN,
       this.getCompactBottomBarsWidth() - Index.COMPACT_TABS_FLOATING_SIDE_MARGIN - Index.COMPACT_MINI_BAR_WIDTH)
-  }
-
-  private getCompactTabBarX(): number {
-    if (this.shouldPlaceCompactMiniBarOnLeft()) {
-      return Math.max(Index.COMPACT_TABS_FLOATING_TAB_OUTER_MARGIN,
-        this.getCompactBottomBarsWidth() - Index.COMPACT_TABS_FLOATING_TAB_OUTER_MARGIN -
-          this.getCompactBottomTabBarWidth())
-    }
-    return Index.COMPACT_TABS_FLOATING_TAB_OUTER_MARGIN
   }
 
   private handleCompactBottomBarsAreaChange(area: Area): void {
@@ -2322,33 +2344,13 @@ struct Index {
     })
   }
 
-  private getCompactNavigationSymbol(): Resource {
-    switch (this.currentTabIndex) {
-      case Index.TAB_ASSISTANTS:
-        return $r('sys.symbol.person_fill')
-      case Index.TAB_KNOWLEDGE:
-        return $r('sys.symbol.externaldrive_fill')
-      case Index.TAB_SETTINGS:
-        return $r('sys.symbol.gearshape_fill')
-      default:
-        return $r('sys.symbol.ellipsis_message_fill')
-    }
-  }
-
   private getManuscriptNavigationWidth(): number | string {
-    return this.compactNavigationCollapsed ? Index.COMPACT_TABS_BAR_HEIGHT : '100%'
+    if (this.compactNavigationCollapsed) return Index.COMPACT_TABS_BAR_HEIGHT
+    return this.compactBottomBarsWidthVp > 0 ? this.compactBottomBarsWidthVp : '100%'
   }
 
   private getManuscriptNavigationHeight(): number {
     return this.compactNavigationCollapsed ? Index.COMPACT_TABS_BAR_HEIGHT : this.getManuscriptBottomBarHeight()
-  }
-
-  private getManuscriptNavigationX(): number {
-    if (!this.compactNavigationCollapsed) {
-      return 0
-    }
-    return this.shouldPlaceFabOnLeft() ?
-      Math.max(16, this.getCompactBottomBarsWidth() - 16 - Index.COMPACT_TABS_BAR_HEIGHT) : 16
   }
 
   @Builder
@@ -2359,6 +2361,12 @@ struct Index {
     .width(this.isManuscriptMode() ? 40 : Index.COMPACT_MINI_BAR_WIDTH)
     .height(this.isManuscriptMode() ? 40 : Index.COMPACT_TABS_BAR_HEIGHT)
     .clip(false)
+    .onTouchIntercept((event: TouchEvent): HitTestMode => {
+      const touch = event.changedTouches.length > 0 ? event.changedTouches[0] : event.touches[0]
+      const size = this.isManuscriptMode() ? 40 : Index.COMPACT_MINI_BAR_WIDTH
+      return touch && touch.x >= 0 && touch.x < size && touch.y >= 0 && touch.y < size ?
+        HitTestMode.BLOCK_HIERARCHY : HitTestMode.BLOCK_DESCENDANTS
+    })
     // 长按与子 Button 的短按互斥，避免松手时继续触发新建／上传。
     .priorityGesture(
       LongPressGesture({ duration: 500, repeat: false })
@@ -2369,18 +2377,37 @@ struct Index {
     .accessibilityDescription($r('app.string.navigation_collapse_hint'))
   }
 
+  private compactFloatingStyle(width: number): HdsTabsFloatingStyle {
+    return {
+      barWidth: { smallWidth: width, mediumWidth: width, largeWidth: width },
+      barBottomMargin: 0,
+      barSideMargin: 0,
+      gradientMask: { maskColor: Color.Transparent },
+      lightColor: getHdsMaterialLightColor(this.lightColorMode === 'theme' ? this.themePrimary : Color.White),
+      systemMaterialEffect: getHdsSystemMaterialEffect()
+    }
+  }
+
   @Builder
   private CompactBottomBarsOverlay() {
     if (this.isManuscriptMode()) {
       Stack() {
         Row() {
-          this.CompactBottomTabBarBuilder()
+          Row() {
+            this.CompactBottomTabBarBuilder()
+          }
+          .width(this.getManuscriptNavigationWidth())
+          .height(this.getManuscriptNavigationHeight())
+          .alignItems(VerticalAlign.Top)
         }
-        .width(this.getManuscriptNavigationWidth())
-        .height(this.getManuscriptNavigationHeight())
+        .width('100%')
+        .height(this.getManuscriptBottomBarHeight())
+        .direction(Direction.Ltr)
+        .justifyContent(this.shouldPlaceCompactMiniBarOnLeft() ? FlexAlign.End : FlexAlign.Start)
         .alignItems(VerticalAlign.Top)
-        .position({ x: this.getManuscriptNavigationX(), y: 0 })
-        .animation({ duration: 420, curve: curves.springMotion(0.75, 0.86) })
+        .padding({ left: this.compactNavigationCollapsed ? Index.COMPACT_TABS_FLOATING_TAB_OUTER_MARGIN : 0,
+          right: this.compactNavigationCollapsed ? Index.COMPACT_TABS_FLOATING_TAB_OUTER_MARGIN : 0 })
+        .hitTestBehavior(HitTestMode.Transparent)
 
         Row() {
           this.CompactBottomMiniBarControl()
@@ -2388,10 +2415,11 @@ struct Index {
         .width(40)
         .height(40)
         .position({
-          x: this.shouldPlaceFabOnLeft() ? 12 : Math.max(12, this.getCompactBottomBarsWidth() - 52),
+          x: this.shouldPlaceCompactMiniBarOnLeft() ? 12 : Math.max(12, this.getCompactBottomBarsWidth() - 52),
           y: -46
         })
         .animation({ duration: 420, curve: curves.springMotion(0.75, 0.86) })
+        .zIndex(1)
       }
       .height(this.getManuscriptBottomBarHeight())
       .width('100%')
@@ -2411,10 +2439,14 @@ struct Index {
         Row() {
           this.CompactBottomTabBarBuilder()
         }
-        .width(this.getCompactBottomTabBarWidth())
+        // 收展固定在握持侧，选中图标从页签的实际位置过渡到圆钮中心。
+        .direction(Direction.Ltr)
+        .width('100%')
         .height(Index.COMPACT_TABS_BAR_HEIGHT)
-        .position({ x: this.getCompactTabBarX(), y: 0 })
-        .animation({ duration: 420, curve: curves.springMotion(0.75, 0.86) })
+        .padding({ left: Index.COMPACT_TABS_FLOATING_TAB_OUTER_MARGIN, right: Index.COMPACT_TABS_FLOATING_TAB_OUTER_MARGIN })
+        .justifyContent(this.shouldPlaceCompactMiniBarOnLeft() ? FlexAlign.End : FlexAlign.Start)
+        .clip(false)
+        .hitTestBehavior(HitTestMode.Transparent)
 
         Row() {
           this.CompactBottomMiniBarControl()
@@ -2423,6 +2455,7 @@ struct Index {
         .height(Index.COMPACT_TABS_BAR_HEIGHT)
         .position({ x: this.getCompactMiniBarX(), y: 0 })
         .animation({ duration: 420, curve: curves.springMotion(0.75, 0.86) })
+        .zIndex(1)
       }
       .width('100%')
       .height(Index.COMPACT_TABS_BAR_HEIGHT)
@@ -2548,147 +2581,65 @@ struct Index {
       .backgroundColor(Color.Transparent)
       .borderRadius(Index.COMPACT_TABS_BAR_HEIGHT / 2)
       .clip(false)
-      .barFloatingStyle({
-        barBottomMargin: 0,
-        barSideMargin: 0,
-        barWidth: {
-          smallWidth: this.getCompactBottomTabBarWidth(),
-          mediumWidth: this.getCompactBottomTabBarWidth(),
-          largeWidth: this.getCompactBottomTabBarWidth()
-        },
-        gradientMask: { maskColor: Color.Transparent },
-        systemMaterialEffect: getHdsSystemMaterialEffect()
-      })
-      .attributeModifier(new HdsTabsBlurModifier(shouldUseWrappedMaterial()))
+      .barFloatingStyle(this.compactFloatingStyle(this.getCompactBottomTabBarWidth()))
+      .attributeModifier(new HdsTabsBlurModifier(true))
     }
   }
 
   @Builder
   private CompactBottomTabBarContent() {
     Stack({ alignContent: Alignment.Center }) {
-      Row() {
-        Row() {
-          this.TabBarAssistants()
+      if (this.compactNavigationCollapsed) {
+        Button({ type: ButtonType.Circle, stateEffect: false }) {
+          this.CompactTabItem(this.compactTabs[this.currentTabIndex], true, true)
         }
-        .layoutWeight(1)
-        .height('100%')
-        .onClick(() => {
-          this.switchToTab(Index.TAB_ASSISTANTS)
-        })
-
+        .width(Index.COMPACT_TABS_BAR_HEIGHT)
+        .height(Index.COMPACT_TABS_BAR_HEIGHT)
+        .padding(0)
+        .backgroundColor(Color.Transparent)
+        .accessibilityText($r('app.string.navigation_expand'))
+        .onClick(() => this.setCompactNavigationCollapsed(false))
+      } else {
         Row() {
-          this.TabBarChat()
+          ForEach(this.compactTabs, (tab: CompactNavigationTab) => {
+            Row() {
+              this.CompactTabItem(tab, true)
+            }
+            .layoutWeight(1)
+            .height('100%')
+            .focusable(true)
+            .accessibilityText(tab.label)
+            .accessibilityRole(AccessibilityRoleType.BUTTON)
+            .accessibilitySelected(this.isTabActive(tab.index))
+            .onClick(() => this.activateNavigationTab(tab.index))
+          }, (tab: CompactNavigationTab): string => tab.index.toString())
         }
-        .layoutWeight(1)
-        .height('100%')
-        .onClick(() => {
-          this.switchToTab(Index.TAB_CHAT)
-        })
-
-        Row() {
-          this.TabBarKnowledge()
-        }
-        .layoutWeight(1)
-        .height('100%')
-        .onClick(() => {
-          this.switchToTab(Index.TAB_KNOWLEDGE)
-        })
-
-        Row() {
-          this.TabBarSettings()
-        }
-        .layoutWeight(1)
-        .height('100%')
-        .onClick(() => {
-          this.switchToTab(Index.TAB_SETTINGS)
-        })
+        // 原导航在 HDS 内容区内分配四个页签，外层胶囊宽度包含材质留边。
+        .width('100%')
+        .height(Index.COMPACT_TABS_BAR_HEIGHT)
+        .padding({ left: shouldUseDrawnNavigation() ? Index.COMPACT_DRAWN_TAB_PADDING : 0,
+          right: shouldUseDrawnNavigation() ? Index.COMPACT_DRAWN_TAB_PADDING : 0 })
+        .backgroundColor(Color.Transparent)
       }
-      // 跟随 HDS 内容区的实际宽度，避免外框固定宽度让首尾标签越过裁剪边界。
-      .width('100%')
-      .height(Index.COMPACT_TABS_BAR_HEIGHT)
-      // HDS 宿主已为内容留边，不再叠加内边距压缩 Knowledge 等完整标签。
-      .padding({
-        left: this.isManuscriptMode() || shouldUseWrappedMaterial() ? 0 : 12,
-        right: this.isManuscriptMode() || shouldUseWrappedMaterial() ? 0 : 12
-      })
-      .backgroundColor(Color.Transparent)
-      .opacity(this.compactNavigationCollapsed ? 0 : 1)
-      .animation({ duration: 140, curve: Curve.EaseOut })
-      .enabled(!this.compactNavigationCollapsed)
-      .hitTestBehavior(this.compactNavigationCollapsed ? HitTestMode.None : HitTestMode.Default)
-      .accessibilityLevel(this.compactNavigationCollapsed ? 'no-hide-descendants' : 'auto')
-
-      Button({ type: ButtonType.Circle, stateEffect: false }) {
-        SymbolGlyph(this.getCompactNavigationSymbol())
-          .fontSize(24)
-          .fontColor([this.themePrimary])
-      }
-      .width(Index.COMPACT_TABS_BAR_HEIGHT)
-      .height(Index.COMPACT_TABS_BAR_HEIGHT)
-      .padding(0)
-      .backgroundColor(Color.Transparent)
-      .opacity(this.compactNavigationCollapsed ? 1 : 0)
-      .animation({ duration: 180, delay: this.compactNavigationCollapsed ? 120 : 0, curve: Curve.EaseOut })
-      .enabled(this.compactNavigationCollapsed)
-      .hitTestBehavior(this.compactNavigationCollapsed ? HitTestMode.Default : HitTestMode.None)
-      .accessibilityLevel(this.compactNavigationCollapsed ? 'auto' : 'no-hide-descendants')
-      .accessibilityText($r('app.string.navigation_expand'))
-      .onClick(() => {
-        this.setCompactNavigationCollapsed(false)
-      })
     }
     .width('100%')
     .height(Index.COMPACT_TABS_BAR_HEIGHT)
-    // HDS 自定义 tabBar 的位置补偿同时作用于标签和收缩图标，保持两种状态居中。
     .translate({ y: this.isManuscriptMode() || shouldUseDrawnNavigation() ? 0 : -3 })
     .clip(true)
   }
 
   @Builder
-  TabBarChat() {
+  private CompactTabItem(tab: CompactNavigationTab, inBottomBar: boolean = false, collapsed: boolean = false) {
     IndexBottomTabItem({
-      active: this.isTabActive(Index.TAB_CHAT),
+      active: this.isTabActive(tab.index),
+      collapsed: collapsed,
+      navigationTransitionId: inBottomBar ? `index-bottom-tab-${tab.index}` : '',
+      bounceTrigger: inBottomBar ? this.navigationTabBounceTriggers[tab.index] : -1,
       disablePressScale: !this.isManuscriptMode() && !shouldUseWrappedMaterial(),
-      activeIcon: $r('sys.symbol.ellipsis_message_fill'),
-      inactiveIcon: $r('sys.symbol.ellipsis_message'),
-      label: $r('app.string.tab_chat'),
-      manuscriptLabel: $r('app.string.manuscript_tab_chat')
-    })
-  }
-
-  @Builder
-  TabBarAssistants() {
-    IndexBottomTabItem({
-      active: this.isTabActive(Index.TAB_ASSISTANTS),
-      disablePressScale: !this.isManuscriptMode() && !shouldUseWrappedMaterial(),
-      activeIcon: $r('sys.symbol.person_fill'),
-      inactiveIcon: $r('sys.symbol.person'),
-      label: $r('app.string.tab_assistants'),
-      manuscriptLabel: $r('app.string.manuscript_tab_assistants')
-    })
-  }
-
-  @Builder
-  TabBarKnowledge() {
-    IndexBottomTabItem({
-      active: this.isTabActive(Index.TAB_KNOWLEDGE),
-      disablePressScale: !this.isManuscriptMode() && !shouldUseWrappedMaterial(),
-      activeIcon: $r('sys.symbol.externaldrive_fill'),
-      inactiveIcon: $r('sys.symbol.externaldrive'),
-      label: $r('app.string.tab_knowledge'),
-      manuscriptLabel: $r('app.string.manuscript_tab_knowledge')
-    })
-  }
-
-  @Builder
-  TabBarSettings() {
-    IndexBottomTabItem({
-      active: this.isTabActive(Index.TAB_SETTINGS),
-      disablePressScale: !this.isManuscriptMode() && !shouldUseWrappedMaterial(),
-      activeIcon: $r('sys.symbol.gearshape_fill'),
-      inactiveIcon: $r('sys.symbol.gearshape'),
-      label: $r('app.string.tab_settings'),
-      manuscriptLabel: $r('app.string.manuscript_tab_settings')
+      activeIcon: tab.activeIcon,
+      inactiveIcon: tab.icon,
+      label: tab.label,
+      manuscriptLabel: this.getManuscriptTabLabel(tab.index)
     })
   }
 
