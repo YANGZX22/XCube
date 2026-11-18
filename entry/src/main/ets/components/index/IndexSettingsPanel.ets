@@ -1,3 +1,4 @@
+import { SETTINGS_HEADING_CONTENT_GAP } from '../settings/SettingsTypography'
 import { ImmersiveListSurface, LIST_MATERIAL_CARD_RADIUS } from '../ImmersiveListSurface'
 import { bundleManager } from '@kit.AbilityKit'
 import { SettingsRouteName } from '../../config/SettingsRouteName'
@@ -87,14 +88,14 @@ export struct IndexSettingsPanel {
         items: [
           {
             key: SettingsRouteName.MODEL_MANAGE,
-            icon: $r('sys.symbol.square_stack_3d'),
+            icon: $r('sys.symbol.architecture'),
             title: $r('app.string.settings_model_manage'),
             subtitle: $r('app.string.settings_model_manage_desc'),
             action: (): void => { this.onOpenModelManage() }
           } as SettingsListItemModel,
           {
             key: SettingsRouteName.DEFAULT_MODEL,
-            icon: $r('sys.symbol.wand_and_stars'),
+            icon: $r('sys.symbol.rectangle_stack'),
             title: $r('app.string.settings_default_model'),
             subtitle: $r('app.string.settings_default_model_desc'),
             action: (): void => { this.onOpenDefaultModel() }
@@ -107,28 +108,28 @@ export struct IndexSettingsPanel {
         items: [
           {
             key: SettingsRouteName.THEME_MODE,
-            icon: $r('sys.symbol.moon_and_message_fill'),
+            icon: $r('sys.symbol.brush'),
             title: $r('app.string.settings_appearance'),
             subtitle: $r('app.string.settings_appearance_desc'),
             action: (): void => { this.onOpenTheme() }
           } as SettingsListItemModel,
           {
             key: SettingsRouteName.TOOLS_CENTER,
-            icon: $r('sys.symbol.puzzle'),
+            icon: $r('sys.symbol.wrench_and_screwdriver'),
             title: $r('app.string.settings_tools_center'),
             subtitle: $r('app.string.settings_tools_center_desc'),
             action: (): void => { this.onOpenToolsCenter() }
           } as SettingsListItemModel,
           {
             key: SettingsRouteName.SYSTEM_PROMPT,
-            icon: $r('sys.symbol.message'),
+            icon: $r('sys.symbol.selector'),
             title: $r('app.string.settings_system_prompt'),
             subtitle: $r('app.string.settings_system_prompt_desc'),
             action: (): void => { this.onOpenSystemPrompt() }
           } as SettingsListItemModel,
           {
             key: SettingsRouteName.CHAT_INPUT,
-            icon: $r('sys.symbol.textformat'),
+            icon: $r('sys.symbol.text_bubble_left_2'),
             title: $r('app.string.settings_chat_input'),
             subtitle: $r('app.string.settings_chat_input_desc'),
             action: (): void => { this.onOpenChatInput() }
@@ -149,7 +150,7 @@ export struct IndexSettingsPanel {
           } as SettingsListItemModel,
           {
             key: SettingsRouteName.LANGUAGE,
-            icon: $r('sys.symbol.globe_badge_message'),
+            icon: $r('sys.symbol.translation'),
             title: $r('app.string.settings_language'),
             subtitle: $r('app.string.settings_language_desc'),
             action: (): void => { this.onOpenLanguage() }
@@ -196,7 +197,7 @@ export struct IndexSettingsPanel {
         items: [
           {
             key: SettingsRouteName.USAGE_STATS,
-            icon: $r('sys.symbol.line_3_horizontal'),
+            icon: $r('sys.symbol.archivebox'),
             title: $r('app.string.settings_usage_stats'),
             subtitle: $r('app.string.settings_usage_stats_desc'),
             action: (): void => { this.onOpenUsageStats() }
@@ -209,7 +210,7 @@ export struct IndexSettingsPanel {
         items: [
           {
             key: SettingsRouteName.ABOUT,
-            icon: $r('sys.symbol.exclamationmark_message'),
+            icon: $r('sys.symbol.info_rectangle_portrait'),
             title: $r('app.string.settings_about_xcube'),
             subtitle: `v${this.versionName}`,
             action: (): void => { this.onOpenAbout() }
@@ -246,14 +247,15 @@ export struct IndexSettingsPanel {
           .layoutWeight(1)
       }
       .width('100%')
-      .padding({ left: 4, right: 4, top: 16, bottom: 5 })
+      .padding({ top: 16, bottom: SETTINGS_HEADING_CONTENT_GAP })
       .alignItems(VerticalAlign.Center)
     } else {
       Text(title)
         .fontSize(this.sidebarMode ? 11 : 12)
         .fontWeight(FontWeight.Medium)
         .fontColor($r('app.color.text_secondary'))
-        .padding({ left: this.sidebarMode ? 6 : 4, bottom: this.sidebarMode ? 8 : 6 })
+        .textAlign(TextAlign.Start)
+        .padding({ bottom: SETTINGS_HEADING_CONTENT_GAP })
         .width('100%')
     }
   }

@@ -1,3 +1,7 @@
+import { getSettingsTypography, SETTINGS_SUBTITLE_LINE_HEIGHT } from '../components/settings/SettingsTypography'
+import { ImmersiveFieldSurface } from '../components/ImmersiveFieldSurface'
+import { ImmersiveButtonSurface } from '../components/ImmersiveButtonSurface'
+import { withColorAlpha } from '../utils/ColorAlphaUtils'
 import { getAppPromptLanguage } from '../utils/LocalizedTextUtils'
 import { shouldUseDrawnNavigation } from '../utils/DrawnNavigationSupport'
 import { uiMaterial } from '@kit.ArkUI'
@@ -131,21 +135,21 @@ struct SystemPromptSettingsPage {
         }
 
         Text($r('app.string.system_prompt_hint'))
-          .fontSize(12)
-          .fontColor($r('app.color.text_secondary'))
-          .lineHeight(18)
+          .font(getSettingsTypography().subtitle)
+          .lineHeight(SETTINGS_SUBTITLE_LINE_HEIGHT)
+          .fontColor(getAppUiState().themeTextSecondary)
           .width('100%')
 
         Text($r('app.string.system_prompt_variables_hint'))
-          .fontSize(11)
-          .fontColor($r('app.color.text_tertiary'))
-          .lineHeight(16)
+          .font(getSettingsTypography().subtitle)
+          .lineHeight(SETTINGS_SUBTITLE_LINE_HEIGHT)
+          .fontColor(getAppUiState().themeTextSecondary)
           .width('100%')
 
         Row() {
           Text($r('app.string.system_prompt_enabled_label'))
-            .fontSize(14)
-            .fontColor($r('app.color.text_primary'))
+            .font(getSettingsTypography().itemTitle)
+            .fontColor(getAppUiState().themeTextPrimary)
             .layoutWeight(1)
 
           Toggle({ type: ToggleType.Switch, isOn: this.systemPromptEnabled })
@@ -159,45 +163,79 @@ struct SystemPromptSettingsPage {
         .width('100%')
         .padding({ left: 4, right: 4 })
 
-        TextArea({ text: this.customSystemPrompt, placeholder: $r('app.string.system_prompt_placeholder') })
-          .layoutWeight(1)
-          .width('100%')
-          .fontSize(14)
-          .fontColor($r('app.color.text_primary'))
-          .placeholderColor($r('app.color.text_tertiary'))
-          .backgroundColor(getAppUiState().themeSurface)
-          .borderRadius(20)
-          .padding(16)
-          .enabled(this.systemPromptEnabled)
-          .opacity(this.systemPromptEnabled ? 1 : 0.5)
-          .onChange((value: string) => {
-            this.customSystemPrompt = value
-          })
+        ImmersiveFieldSurface({ cornerRadius: 20, fillHeight: true, layoutWeightValue: 1 }) {
+          TextArea({ text: this.customSystemPrompt, placeholder: $r('app.string.system_prompt_placeholder') })
+            .width('100%')
+            .height('100%')
+            .backgroundColor(Color.Transparent)
+            .fontSize(14)
+            .fontColor($r('app.color.text_primary'))
+            .placeholderColor($r('app.color.text_tertiary'))
+            .borderRadius(20)
+            .padding(16)
+            .enabled(this.systemPromptEnabled)
+            .opacity(this.systemPromptEnabled ? 1 : 0.5)
+            .onChange((value: string) => {
+              this.customSystemPrompt = value
+            })
+        }
 
         Row({ space: 12 }) {
-          Button($r('app.string.system_prompt_clear'))
-            .layoutWeight(1)
-            .height(44)
-            .fontSize(14)
-            .fontWeight(FontWeight.Medium)
-            .fontColor($r('app.color.text_secondary'))
-            .backgroundColor(getAppUiState().themeSurface)
-            .borderRadius(22)
-            .onClick(() => {
-              this.resetSystemPrompt()
-            })
+          Stack() {
+            ImmersiveButtonSurface({
+              materialFactory: () => new uiMaterial.ImmersiveMaterial({
+                style: uiMaterial.ImmersiveStyle.REGULAR,
+                materialColor: Color.Transparent,
+                applyShadow: true,
+                interactive: true,
+                lightEffect: {}
+              }),
+              cornerRadius: 22
+            }) {
+              Button($r('app.string.system_prompt_clear'))
+                .width('100%')
+                .height(44)
+                .fontSize(14)
+                .fontWeight(FontWeight.Medium)
+                .fontColor($r('app.color.text_secondary'))
+                .backgroundColor(Color.Transparent)
+                .borderRadius(22)
+                .onClick(() => {
+                  this.resetSystemPrompt()
+                })
+            }
+          }
+          .layoutWeight(1)
+          .height(44)
+          .clip(false)
 
-          Button($r('app.string.save'))
-            .layoutWeight(1)
-            .height(44)
-            .fontSize(14)
-            .fontWeight(FontWeight.Medium)
-            .fontColor(Color.White)
-            .backgroundColor(this.themePrimary)
-            .borderRadius(22)
-            .onClick(() => {
-              this.saveSystemPrompt()
-            })
+          Stack() {
+            ImmersiveButtonSurface({
+              materialFactory: () => new uiMaterial.ImmersiveMaterial({
+                style: uiMaterial.ImmersiveStyle.THIN,
+                materialColor: withColorAlpha(this.themePrimary, '26'),
+                applyShadow: true,
+                interactive: true,
+                lightEffect: {}
+              }),
+              cornerRadius: 22
+            }) {
+              Button($r('app.string.save'))
+                .width('100%')
+                .height(44)
+                .fontSize(14)
+                .fontWeight(FontWeight.Medium)
+                .fontColor(this.themePrimary)
+                .backgroundColor(Color.Transparent)
+                .borderRadius(22)
+                .onClick(() => {
+                  this.saveSystemPrompt()
+                })
+            }
+          }
+          .layoutWeight(1)
+          .height(44)
+          .clip(false)
         }
         .width('100%')
       }
@@ -216,9 +254,8 @@ struct SystemPromptSettingsPage {
     Column() {
       Row() {
         Text($r('app.string.system_prompt_edit_title'))
-          .fontSize(18)
-          .fontWeight(FontWeight.Bold)
-          .fontColor($r('app.color.text_primary'))
+          .font(getSettingsTypography().pageTitle)
+          .fontColor(getAppUiState().themeTextPrimary)
           .layoutWeight(1)
       }
       .width('100%')

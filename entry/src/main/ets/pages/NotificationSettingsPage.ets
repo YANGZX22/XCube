@@ -1,3 +1,4 @@
+import { getSettingsTypography } from '../components/settings/SettingsTypography'
 import { shouldUseDrawnNavigation } from '../utils/DrawnNavigationSupport'
 import { common } from '@kit.AbilityKit'
 import { notificationManager } from '@kit.NotificationKit'
@@ -184,9 +185,8 @@ struct NotificationSettingsPage {
     Column() {
       Row() {
         Text($r('app.string.settings_notifications'))
-          .fontSize(18)
-          .fontWeight(FontWeight.Bold)
-          .fontColor($r('app.color.text_primary'))
+          .font(getSettingsTypography().pageTitle)
+          .fontColor(getAppUiState().themeTextPrimary)
           .layoutWeight(1)
       }
       .width('100%')

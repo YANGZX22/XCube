@@ -1,3 +1,6 @@
+import { SettingsSectionHeading } from '../components/settings/SettingsSectionHeading'
+import { getSettingsTypography, SETTINGS_HEADING_CONTENT_GAP, SETTINGS_SUBTITLE_LINE_HEIGHT } from '../components/settings/SettingsTypography'
+import { ImmersiveListSurface, LIST_MATERIAL_CARD_RADIUS } from '../components/ImmersiveListSurface'
 import { DrawnFloatingTabBar } from '../components/DrawnFloatingTabBar'
 import { withColorAlpha } from '../utils/ColorAlphaUtils'
 import { getDrawnNavigationBorder, shouldUseDrawnNavigation } from '../utils/DrawnNavigationSupport'
@@ -698,99 +701,75 @@ export struct ThemeAppearanceSettingsView {
 
   @Builder
   private VisualEffectsEntryCard() {
-    Column({ space: 0 }) {
-      Row({ space: 14 }) {
-        this.ManuscriptVignette()
+    ImmersiveListSurface({ isImmersive: true, cornerRadius: LIST_MATERIAL_CARD_RADIUS }) {
+      Column({ space: 0 }) {
+        Row({ space: 14 }) {
+          this.ManuscriptVignette()
 
-        Column({ space: 4 }) {
-          Row({ space: 7 }) {
-            Text($r('app.string.visual_effects_title'))
-              .fontSize(16)
-              .fontWeight(FontWeight.Medium)
-              .fontColor($r('app.color.text_primary'))
+          Column({ space: 4 }) {
+            Row({ space: 7 }) {
+              Text($r('app.string.visual_effects_title'))
+                .font(getSettingsTypography().itemTitle)
+                .fontColor(getAppUiState().themeTextPrimary)
 
-            Text($r('app.string.visual_effects_new'))
-              .fontSize(9)
+              Text($r('app.string.visual_effects_new'))
+                .fontSize(9)
+                .fontWeight(FontWeight.Medium)
+                .fontColor(Color.White)
+                .letterSpacing(1)
+                .padding({ left: 6, right: 6, top: 2, bottom: 2 })
+                .backgroundColor('#8A6228')
+                .borderRadius(5)
+            }
+            .width('100%')
+
+            Text($r('app.string.visual_effects_manuscript'))
+              .fontFamily(MANUSCRIPT_HEADING_FONT)
+              .fontSize(14)
               .fontWeight(FontWeight.Medium)
-              .fontColor(Color.White)
-              .letterSpacing(1)
-              .padding({ left: 6, right: 6, top: 2, bottom: 2 })
-              .backgroundColor('#8A6228')
-              .borderRadius(5)
+              .fontColor(this.getManuscriptAccentDeep())
+
+            Text($r('app.string.visual_effects_desc'))
+              .font(getSettingsTypography().subtitle)
+              .lineHeight(SETTINGS_SUBTITLE_LINE_HEIGHT)
+              .fontFamily(MANUSCRIPT_BODY_FONT)
+              .fontColor(getAppUiState().themeTextSecondary)
+              .maxLines(3)
           }
-          .width('100%')
+          .layoutWeight(1)
+          .alignItems(HorizontalAlign.Start)
 
-          Text($r('app.string.visual_effects_manuscript'))
-            .fontFamily(MANUSCRIPT_HEADING_FONT)
-            .fontSize(14)
-            .fontWeight(FontWeight.Medium)
-            .fontColor(this.getManuscriptAccentDeep())
-
-          Text($r('app.string.visual_effects_desc'))
-            .fontFamily(MANUSCRIPT_BODY_FONT)
-            .fontSize(12)
-            .fontColor($r('app.color.text_secondary'))
-            .lineHeight(18)
-            .maxLines(3)
+          Toggle({ type: ToggleType.Switch, isOn: this.isManuscriptMode() })
+            .selectedColor(this.getManuscriptAccentDeep())
+            .switchPointColor(Color.White)
+            .onChange((enabled: boolean) => {
+              this.handleVisualEffectsModeChanged(enabled)
+            })
         }
-        .layoutWeight(1)
-        .alignItems(HorizontalAlign.Start)
+        .width('100%')
+        .alignItems(VerticalAlign.Center)
 
-        Toggle({ type: ToggleType.Switch, isOn: this.isManuscriptMode() })
-          .selectedColor(this.getManuscriptAccentDeep())
-          .switchPointColor(Color.White)
-          .onChange((enabled: boolean) => {
-            this.handleVisualEffectsModeChanged(enabled)
-          })
+        if (this.isManuscriptMode()) {
+          Text($r('app.string.visual_effects_themes_locked'))
+            .width('100%')
+            .font(getSettingsTypography().subtitle)
+            .lineHeight(SETTINGS_SUBTITLE_LINE_HEIGHT)
+            .fontFamily(MANUSCRIPT_BODY_FONT)
+            .fontStyle(FontStyle.Italic)
+            .fontColor(this.getManuscriptAccentDeep())
+            .padding({ top: 12 })
+            .transition(
+              TransitionEffect.OPACITY.combine(TransitionEffect.translate({ y: -6 }))
+                .animation({ duration: 400, curve: Curve.EaseOut })
+            )
+        }
       }
       .width('100%')
-      .alignItems(VerticalAlign.Center)
-
-      if (this.isManuscriptMode()) {
-        Text($r('app.string.visual_effects_themes_locked'))
-          .width('100%')
-          .fontFamily(MANUSCRIPT_BODY_FONT)
-          .fontSize(12)
-          .fontStyle(FontStyle.Italic)
-          .fontColor(this.getManuscriptAccentDeep())
-          .lineHeight(18)
-          .padding({ top: 12 })
-          .transition(
-            TransitionEffect.OPACITY.combine(TransitionEffect.translate({ y: -6 }))
-              .animation({ duration: 400, curve: Curve.EaseOut })
-          )
-      }
+      .padding(18)
+      .backgroundColor(Color.Transparent)
+      .borderRadius(LIST_MATERIAL_CARD_RADIUS)
+      .animation({ duration: 400, curve: Curve.EaseInOut })
     }
-    .width('100%')
-    .padding(18)
-    .backgroundColor(Color.Transparent)
-    .borderRadius(24)
-    .border({
-      width: this.isManuscriptMode() ? 2 : 1,
-      color: this.isManuscriptMode() ? this.getManuscriptAccent() : this.themePrimaryLight
-    })
-    .backdropBlur(16)
-    .shadow(getBlurBottomShadow())
-    .animation({ duration: 400, curve: Curve.EaseInOut })
-  }
-
-  @Builder
-  private SectionHeader(title: Resource, subtitle: Resource) {
-    Column({ space: 4 }) {
-      Text(title)
-        .fontSize(18)
-        .fontWeight(FontWeight.Bold)
-        .fontColor($r('app.color.text_primary'))
-        .width('100%')
-
-      Text(subtitle)
-        .fontSize(12)
-        .fontColor($r('app.color.text_secondary'))
-        .lineHeight(18)
-        .width('100%')
-    }
-    .width('100%')
-    .alignItems(HorizontalAlign.Start)
   }
 
   @Builder
@@ -807,9 +786,8 @@ export struct ThemeAppearanceSettingsView {
     Row({ space: 12 }) {
       Column({ space: 2 }) {
         Text(title)
-          .fontSize(15)
-          .fontWeight(FontWeight.Regular)
-          .fontColor($r('app.color.text_primary'))
+          .font(getSettingsTypography().itemTitle)
+          .fontColor(getAppUiState().themeTextPrimary)
           .maxLines(1)
           .textOverflow({ overflow: TextOverflow.Ellipsis })
       }
@@ -840,136 +818,135 @@ export struct ThemeAppearanceSettingsView {
 
   @Builder
   private ModeRadioGroup() {
-    Column() {
-      this.ModeRadioRow(ThemeMode.SYSTEM, $r('app.string.theme_system'))
-      Divider().color(this.themePrimaryLight).margin({ left: 16, right: 16 })
-      this.ModeRadioRow(ThemeMode.LIGHT, $r('app.string.theme_light'))
-      Divider().color(this.themePrimaryLight).margin({ left: 16, right: 16 })
-      this.ModeRadioRow(ThemeMode.DARK, $r('app.string.theme_dark'))
+    ImmersiveListSurface({ isImmersive: true, cornerRadius: LIST_MATERIAL_CARD_RADIUS }) {
+      Column() {
+        this.ModeRadioRow(ThemeMode.SYSTEM, $r('app.string.theme_system'))
+        Divider().color(this.themePrimaryLight).margin({ left: 16, right: 16 })
+        this.ModeRadioRow(ThemeMode.LIGHT, $r('app.string.theme_light'))
+        Divider().color(this.themePrimaryLight).margin({ left: 16, right: 16 })
+        this.ModeRadioRow(ThemeMode.DARK, $r('app.string.theme_dark'))
+      }
+      .width('100%')
+      .backgroundColor(Color.Transparent)
+      .borderRadius(LIST_MATERIAL_CARD_RADIUS)
+      .padding({ top: 6, bottom: 6 })
     }
-    .width('100%')
-    .backgroundColor(Color.Transparent)
-    .borderRadius(24)
-    .border({ width: 1, color: this.themePrimaryLight })
-    .padding({ top: 6, bottom: 6 })
-    .backdropBlur(16)
-    .shadow(getBlurBottomShadow())
   }
 
   @Builder
   private ThemeCard(theme: ThemeInfo) {
-    Column() {
-      Column({ space: 12 }) {
-        Column({ space: 14 }) {
-          Row({ space: 10 }) {
-            Column()
-              .layoutWeight(1)
-              .height(16)
-              .borderRadius(8)
-              .backgroundColor(this.getThemePreviewSwatch(theme, 0))
-              .border({ width: 1, color: this.getPreviewColors(theme.id).primaryLight })
+    Stack() {
+      ImmersiveListSurface({ isImmersive: true, cornerRadius: LIST_MATERIAL_CARD_RADIUS }) {
+        Column() {
+          Column({ space: 12 }) {
+            Column({ space: 14 }) {
+              Row({ space: 10 }) {
+                Column()
+                  .layoutWeight(1)
+                  .height(16)
+                  .borderRadius(8)
+                  .backgroundColor(this.getThemePreviewSwatch(theme, 0))
+                  .border({ width: 1, color: this.getPreviewColors(theme.id).primaryLight })
 
-            Column()
-              .layoutWeight(1)
-              .height(16)
-              .borderRadius(8)
-              .backgroundColor(this.getThemePreviewSwatch(theme, 1))
+                Column()
+                  .layoutWeight(1)
+                  .height(16)
+                  .borderRadius(8)
+                  .backgroundColor(this.getThemePreviewSwatch(theme, 1))
 
-            Column()
-              .layoutWeight(1)
-              .height(16)
-              .borderRadius(8)
-              .backgroundColor(this.getThemePreviewSwatch(theme, 2))
-          }
-          .width('100%')
-
-          Row({ space: 12 }) {
-            Column({ space: 8 }) {
-              this.PreviewLine(this.getPreviewColors(theme.id).primary, '100%')
-              this.PreviewLine(this.getPreviewColors(theme.id).primaryLight, '72%')
-            }
-            .layoutWeight(1)
-            .alignItems(HorizontalAlign.Start)
-
-            Column()
-              .width(30)
-              .height(30)
-              .borderRadius(15)
-              .backgroundColor(this.getPreviewColors(theme.id).userBubble)
-          }
-          .width('100%')
-          .alignItems(VerticalAlign.Bottom)
-        }
-        .width('100%')
-        .padding(14)
-        .backgroundColor(this.getPreviewColors(theme.id).background)
-        .borderRadius(18)
-        .border({ width: 1, color: this.getPreviewColors(theme.id).primaryLight })
-
-        Row({ space: 8 }) {
-          Column({ space: 2 }) {
-            Text(this.getThemeName(theme.id))
-              .fontSize(13)
-              .fontWeight(FontWeight.Medium)
-              .fontFamily(this.themeCardTitleTypeface)
-              .fontColor($r('app.color.text_primary'))
-              .maxLines(1)
-              .textOverflow({ overflow: TextOverflow.Ellipsis })
-
-            Text(this.getThemeDescription(theme.id))
-              .fontSize(11)
-              .fontFamily(this.themeCardTypeface)
-              .fontColor($r('app.color.text_secondary'))
-              .lineHeight(16)
+                Column()
+                  .layoutWeight(1)
+                  .height(16)
+                  .borderRadius(8)
+                  .backgroundColor(this.getThemePreviewSwatch(theme, 2))
+              }
               .width('100%')
-              .height(18)
-              .textOverflow({ overflow: TextOverflow.MARQUEE })
-              .marqueeOptions({
-                start: true,
-                step: 3,
-                loop: -1,
-                fromStart: true,
-                delay: 1200,
-                fadeout: true
-              })
-          }
-          .layoutWeight(1)
-          .alignItems(HorizontalAlign.Start)
 
-          if (this.currentColorTheme === theme.id) {
-            SymbolGlyph($r('sys.symbol.checkmark_circle_fill'))
-              .fontSize(18)
-              .fontColor([this.themePrimary])
-              .transition(
-                TransitionEffect.OPACITY.combine(TransitionEffect.scale({ x: 0.6, y: 0.6 }))
-                  .animation({ duration: 350, curve: curves.springMotion(0.35, 0.8) })
-              )
+              Row({ space: 12 }) {
+                Column({ space: 8 }) {
+                  this.PreviewLine(this.getPreviewColors(theme.id).primary, '100%')
+                  this.PreviewLine(this.getPreviewColors(theme.id).primaryLight, '72%')
+                }
+                .layoutWeight(1)
+                .alignItems(HorizontalAlign.Start)
+
+                Column()
+                  .width(30)
+                  .height(30)
+                  .borderRadius(15)
+                  .backgroundColor(this.getPreviewColors(theme.id).userBubble)
+              }
+              .width('100%')
+              .alignItems(VerticalAlign.Bottom)
+            }
+            .width('100%')
+            .padding(14)
+            .backgroundColor(this.getPreviewColors(theme.id).background)
+            .borderRadius(18)
+            .border({ width: 1, color: this.getPreviewColors(theme.id).primaryLight })
+
+            Row({ space: 8 }) {
+              Column({ space: 2 }) {
+                Text(this.getThemeName(theme.id))
+                  .font(getSettingsTypography().itemTitle)
+                  .fontFamily(this.themeCardTitleTypeface)
+                  .fontColor(getAppUiState().themeTextPrimary)
+                  .maxLines(1)
+                  .textOverflow({ overflow: TextOverflow.Ellipsis })
+
+                Text(this.getThemeDescription(theme.id))
+                  .font(getSettingsTypography().subtitle)
+                  .lineHeight(SETTINGS_SUBTITLE_LINE_HEIGHT)
+                  .fontFamily(this.themeCardTypeface)
+                  .fontColor(getAppUiState().themeTextSecondary)
+                  .width('100%')
+                  .constraintSize({ minHeight: 18 })
+                  .textOverflow({ overflow: TextOverflow.MARQUEE })
+                  .marqueeOptions({
+                    start: true,
+                    step: 3,
+                    loop: -1,
+                    fromStart: true,
+                    delay: 1200,
+                    fadeout: true
+                  })
+              }
+              .layoutWeight(1)
+              .alignItems(HorizontalAlign.Start)
+
+              if (this.currentColorTheme === theme.id) {
+                SymbolGlyph($r('sys.symbol.checkmark_circle_fill'))
+                  .fontSize(18)
+                  .fontColor([this.themePrimary])
+                  .transition(
+                    TransitionEffect.OPACITY.combine(TransitionEffect.scale({ x: 0.6, y: 0.6 }))
+                      .animation({ duration: 350, curve: curves.springMotion(0.35, 0.8) })
+                  )
+              }
+            }
+            .width('100%')
           }
+          .width('100%')
+          .padding(10)
+          .backgroundColor(Color.Transparent)
+          .borderRadius(20)
         }
         .width('100%')
+        .padding(2)
+        .backgroundColor(Color.Transparent)
+        .borderRadius(LIST_MATERIAL_CARD_RADIUS)
+        .enabled(!this.isManuscriptMode())
+        .onClick(() => {
+          if (!this.isManuscriptMode()) {
+            this.handleColorThemeSelected(theme.id)
+          }
+        })
       }
-      .width('100%')
-      .padding(10)
-      .backgroundColor(Color.Transparent)
-      .borderRadius(20)
     }
-    .padding(2)
-    .backgroundColor(Color.Transparent)
-    .borderRadius(24)
-    .border({
-      width: this.currentColorTheme === theme.id ? 2 : 1,
-      color: this.currentColorTheme === theme.id ? this.themePrimary : this.themePrimaryLight
-    })
     .layoutWeight(1)
-    .backdropBlur(16)
-    .shadow(getBlurBottomShadow())
     .opacity(this.isManuscriptMode() ? 0.45 : 1)
-    .enabled(!this.isManuscriptMode())
-    .onClick(() => {
-      if (!this.isManuscriptMode()) {
-        this.handleColorThemeSelected(theme.id)
-      }
-    })
+    .clip(false)
+    .hitTestBehavior(HitTestMode.Transparent)
   }
 
   @Builder
@@ -1591,45 +1568,57 @@ export struct ThemeAppearanceSettingsView {
     Row({ space: 12 }) {
       Column({ space: 4 }) {
         Text($r('app.string.appearance_live_preview_title'))
-          .fontSize(18)
-          .fontWeight(FontWeight.Bold)
-          .fontColor($r('app.color.text_primary'))
+          .font(getSettingsTypography().sectionTitle)
+          .fontColor(getAppUiState().themeTextPrimary)
           .width('100%')
 
         Text($r('app.string.appearance_live_preview_desc'))
-          .fontSize(12)
-          .fontColor($r('app.color.text_secondary'))
-          .lineHeight(18)
+          .font(getSettingsTypography().subtitle)
+          .lineHeight(SETTINGS_SUBTITLE_LINE_HEIGHT)
+          .fontColor(getAppUiState().themeTextSecondary)
           .width('100%')
       }
       .layoutWeight(1)
       .alignItems(HorizontalAlign.Start)
+      .onClick(() => {
+        this.toggleLivePreview()
+      })
 
-      Row({ space: 3 }) {
-        Text(this.livePreviewExpanded ? $r('app.string.common_collapse') : $r('app.string.common_expand'))
-          .fontSize(11)
-          .fontWeight(FontWeight.Medium)
-          .fontColor(this.themePrimary)
+      ImmersiveButtonSurface({
+        materialFactory: () => new uiMaterial.ImmersiveMaterial({
+          style: uiMaterial.ImmersiveStyle.REGULAR,
+          materialColor: Color.Transparent,
+          applyShadow: true,
+          interactive: true,
+          lightEffect: {}
+        }),
+        cornerRadius: 16
+      }) {
+        Button({ type: ButtonType.Normal, stateEffect: false }) {
+          Row({ space: 3 }) {
+            Text(this.livePreviewExpanded ? $r('app.string.common_collapse') : $r('app.string.common_expand'))
+              .fontSize(11)
+              .fontWeight(FontWeight.Medium)
+              .fontColor(this.themePrimary)
 
-        SymbolGlyph($r('sys.symbol.chevron_down'))
-          .fontSize(12)
-          .fontColor([this.themePrimary])
-          .rotate({ angle: this.livePreviewExpanded ? 180 : 0 })
-          .animation({ duration: 220, curve: Curve.EaseOut })
+            SymbolGlyph($r('sys.symbol.chevron_down'))
+              .fontSize(12)
+              .fontColor([this.themePrimary])
+              .rotate({ angle: this.livePreviewExpanded ? 180 : 0 })
+              .animation({ duration: 220, curve: Curve.EaseOut })
+          }
+        }
+        .height(32)
+        .padding({ left: 10, right: 8 })
+        .borderRadius(16)
+        .backgroundColor(Color.Transparent)
+        .onClick(() => {
+          this.toggleLivePreview()
+        })
       }
-      .height(32)
-      .padding({ left: 10, right: 8 })
-      .borderRadius(16)
-      .backgroundColor(Color.Transparent)
-      .border({ width: 1, color: this.themePrimaryLight })
-      .backdropBlur(16)
-      .shadow(getBlurBottomShadow())
     }
     .width('100%')
     .alignItems(VerticalAlign.Center)
-    .onClick(() => {
-      this.toggleLivePreview()
-    })
   }
 
   @Builder
@@ -1639,7 +1628,7 @@ export struct ThemeAppearanceSettingsView {
 
       Blank()
         .width('100%')
-        .height(this.livePreviewExpanded ? APPEARANCE_BLOCK_GAP : 0)
+        .height(this.livePreviewExpanded ? SETTINGS_HEADING_CONTENT_GAP : 0)
 
       Column() {
         this.CurrentAppearancePreview()
@@ -1677,18 +1666,25 @@ export struct ThemeAppearanceSettingsView {
   private ThemeTabContent() {
     Scroll(this.themeScroller) {
       Row() {
-        Column({ space: APPEARANCE_BLOCK_GAP }) {
-          this.LivePreviewSection()
+        Column() {
+          Column({ space: APPEARANCE_BLOCK_GAP }) {
+            this.LivePreviewSection()
+            this.VisualEffectsEntryCard()
+          }
+          .width('100%')
 
-          this.VisualEffectsEntryCard()
-
-          this.SectionHeader($r('app.string.appearance_display_mode_title'),
-            $r('app.string.appearance_display_mode_desc'))
-
+          SettingsSectionHeading({
+            title: $r('app.string.appearance_display_mode_title'),
+            subtitle: $r('app.string.appearance_display_mode_desc'),
+            topGap: APPEARANCE_BLOCK_GAP
+          })
           this.ModeRadioGroup()
 
-          this.SectionHeader($r('app.string.settings_color_theme'),
-            $r('app.string.appearance_color_theme_desc'))
+          SettingsSectionHeading({
+            title: $r('app.string.settings_color_theme'),
+            subtitle: $r('app.string.appearance_color_theme_desc'),
+            topGap: APPEARANCE_BLOCK_GAP
+          })
 
           ForEach(this.getThemeRowStartIndexes(), (startIndex: number) => {
             Row({ space: APPEARANCE_BLOCK_GAP }) {
@@ -1703,6 +1699,7 @@ export struct ThemeAppearanceSettingsView {
             }
             .width('100%')
             .alignItems(VerticalAlign.Top)
+            .margin({ top: startIndex === 0 ? 0 : APPEARANCE_BLOCK_GAP })
           }, (startIndex: number) => `theme_row_${startIndex}`)
         }
         .width('100%')
@@ -1730,193 +1727,190 @@ export struct ThemeAppearanceSettingsView {
         Column({ space: APPEARANCE_BLOCK_GAP }) {
           this.LivePreviewSection()
 
-          this.SectionHeader($r('app.string.appearance_tab_font'),
-            $r('app.string.settings_chat_font_desc'))
+          Column() {
+            SettingsSectionHeading({
+              title: $r('app.string.appearance_tab_font'),
+              subtitle: $r('app.string.settings_chat_font_desc')
+            })
+            ImmersiveListSurface({ isImmersive: true, cornerRadius: LIST_MATERIAL_CARD_RADIUS }) {
+              Column({ space: 16 }) {
+                Row() {
+                  Column({ space: 2 }) {
+                    Text($r('app.string.settings_font_size'))
+                      .font(getSettingsTypography().itemTitle)
+                      .fontColor(getAppUiState().themeTextPrimary)
 
-          Column({ space: 16 }) {
-            Row() {
-              Column({ space: 2 }) {
-                Text($r('app.string.settings_font_size'))
-                  .fontSize(16)
-                  .fontWeight(FontWeight.Bold)
-                  .fontColor($r('app.color.text_primary'))
+                    Text(this.getFontSizeText(this.chatFontSize))
+                      .font(getSettingsTypography().subtitle)
+                      .lineHeight(SETTINGS_SUBTITLE_LINE_HEIGHT)
+                      .fontColor(getAppUiState().themeTextSecondary)
+                  }
+                  .alignItems(HorizontalAlign.Start)
 
-                Text(this.getFontSizeText(this.chatFontSize))
-                  .fontSize(12)
-                  .fontColor($r('app.color.text_secondary'))
+                  Blank()
+
+                  Text(`${this.chatFontSize} fp`)
+                    .fontSize(13)
+                    .fontWeight(FontWeight.Medium)
+                    .fontColor(this.themePrimary)
+                }
+                .width('100%')
+
+                Row({ space: 10 }) {
+                  Text('A')
+                    .fontSize(14)
+                    .fontColor($r('app.color.text_secondary'))
+
+                  Slider({ value: this.chatFontSize, min: 12, max: 22, step: 1, style: SliderStyle.InSet })
+                    .systemMaterial(new uiMaterial.ImmersiveMaterial({
+                      style: uiMaterial.ImmersiveStyle.ULTRA_THIN
+                    }))
+                    .selectedColor(this.themePrimary)
+                    .trackThickness(20)
+                    .layoutWeight(1)
+                    .onChange((value: number, _mode: SliderChangeMode) => {
+                      this.handleFontSizeChanged(Math.round(value))
+                    })
+
+                  Text('A')
+                    .fontSize(24)
+                    .fontWeight(FontWeight.Bold)
+                    .fontColor($r('app.color.text_secondary'))
+                }
+                .width('100%')
+                .alignItems(VerticalAlign.Center)
+
+                Row({ space: 8 }) {
+                  this.FontPresetButton($r('app.string.font_size_small'), 13)
+                  this.FontPresetButton($r('app.string.font_size_default'), 15)
+                  this.FontPresetButton($r('app.string.font_size_large'), 17)
+                  this.FontPresetButton($r('app.string.font_size_extra_large'), 19)
+                }
+                .width('100%')
               }
+              .width('100%')
+              .padding(18)
+              .backgroundColor(Color.Transparent)
+              .borderRadius(LIST_MATERIAL_CARD_RADIUS)
+            }
+          }
+          .width('100%')
+
+          ImmersiveListSurface({ isImmersive: true, cornerRadius: LIST_MATERIAL_CARD_RADIUS }) {
+            Column({ space: 10 }) {
+              Text($r('app.string.settings_markdown_renderer'))
+                .font(getSettingsTypography().itemTitle)
+                .fontColor(getAppUiState().themeTextPrimary)
+                .width('100%')
+
+              Text($r('app.string.settings_markdown_renderer_desc'))
+                .font(getSettingsTypography().subtitle)
+                .lineHeight(SETTINGS_SUBTITLE_LINE_HEIGHT)
+                .fontColor(getAppUiState().themeTextSecondary)
+                .width('100%')
+
+              Select(this.getMarkdownRendererOptions())
+                .selected(this.getMarkdownRendererSelectedIndex())
+                .value(this.getMarkdownRendererOptions()[this.getMarkdownRendererSelectedIndex()].value)
+                .width('100%')
+                .height(46)
+                .font({ size: 13 })
+                .fontColor($r('app.color.text_primary'))
+                .selectedOptionFontColor(this.themePrimary)
+                .backgroundColor(Color.Transparent)
+                .borderRadius(16)
+                .systemMaterial(new uiMaterial.ImmersiveMaterial({
+                  style: uiMaterial.ImmersiveStyle.ULTRA_THIN,
+                  materialColor: Color.Transparent,
+                  applyShadow: false
+                }))
+                .menuSystemMaterial(new uiMaterial.ImmersiveMaterial({
+                  style: uiMaterial.ImmersiveStyle.THICK
+                }))
+                .onSelect((index: number, _value: string): void => {
+                  this.handleMarkdownRendererChanged(index)
+                })
+            }
+            .width('100%')
+            .padding(18)
+            .alignItems(HorizontalAlign.Start)
+            .backgroundColor(Color.Transparent)
+            .borderRadius(LIST_MATERIAL_CARD_RADIUS)
+          }
+
+          ImmersiveListSurface({ isImmersive: true, cornerRadius: LIST_MATERIAL_CARD_RADIUS }) {
+            Row({ space: 16 }) {
+              Column({ space: 4 }) {
+                Text($r('app.string.settings_chat_serif_font'))
+                  .font(getSettingsTypography().itemTitle)
+                  .fontColor(getAppUiState().themeTextPrimary)
+                  .width('100%')
+
+                Text($r('app.string.settings_chat_serif_font_desc'))
+                  .font(getSettingsTypography().subtitle)
+                  .lineHeight(SETTINGS_SUBTITLE_LINE_HEIGHT)
+                  .fontColor(getAppUiState().themeTextSecondary)
+                  .width('100%')
+              }
+              .layoutWeight(1)
               .alignItems(HorizontalAlign.Start)
 
-              Blank()
-
-              Text(`${this.chatFontSize} fp`)
-                .fontSize(13)
-                .fontWeight(FontWeight.Medium)
-                .fontColor(this.themePrimary)
-            }
-            .width('100%')
-
-            Row({ space: 10 }) {
-              Text('A')
-                .fontSize(14)
-                .fontColor($r('app.color.text_secondary'))
-
-              Slider({ value: this.chatFontSize, min: 12, max: 22, step: 1, style: SliderStyle.InSet })
-                .systemMaterial(new uiMaterial.ImmersiveMaterial({
-                  style: uiMaterial.ImmersiveStyle.ULTRA_THIN
-                }))
+              Toggle({ type: ToggleType.Switch, isOn: this.chatSerifFontEnabled })
                 .selectedColor(this.themePrimary)
-                .trackThickness(20)
-                .layoutWeight(1)
-                .onChange((value: number, _mode: SliderChangeMode) => {
-                  this.handleFontSizeChanged(Math.round(value))
+                .systemMaterial(new uiMaterial.Material())
+                .switchPointColor(Color.White)
+                .animation({ duration: 280, curve: curves.springMotion(0.35, 0.8) })
+                .enabled(!this.isManuscriptMode())
+                .opacity(this.isManuscriptMode() ? 0.45 : 1)
+                .onChange((enabled: boolean) => {
+                  this.handleChatSerifFontChanged(enabled)
                 })
-
-              Text('A')
-                .fontSize(24)
-                .fontWeight(FontWeight.Bold)
-                .fontColor($r('app.color.text_secondary'))
             }
             .width('100%')
+            .padding(18)
             .alignItems(VerticalAlign.Center)
+            .backgroundColor(Color.Transparent)
+            .borderRadius(LIST_MATERIAL_CARD_RADIUS)
+          }
 
-            Row({ space: 8 }) {
-              this.FontPresetButton($r('app.string.font_size_small'), 13)
-              this.FontPresetButton($r('app.string.font_size_default'), 15)
-              this.FontPresetButton($r('app.string.font_size_large'), 17)
-              this.FontPresetButton($r('app.string.font_size_extra_large'), 19)
+          ImmersiveListSurface({ isImmersive: true, cornerRadius: LIST_MATERIAL_CARD_RADIUS }) {
+            Column({ space: 10 }) {
+              Text($r('app.string.settings_chat_serif_font_family'))
+                .font(getSettingsTypography().itemTitle)
+                .fontColor(getAppUiState().themeTextPrimary)
+                .width('100%')
+
+              Select(this.getSerifFontOptions())
+                .key(`serif_font_select_${this.serifFontSelectRevision.toString()}`)
+                .selected(this.getSerifFontSelectedIndex())
+                .value(this.getSerifFontOptions()[this.getSerifFontSelectedIndex()].value)
+                .width('100%')
+                .height(46)
+                .font({ size: 13 })
+                .fontColor($r('app.color.text_primary'))
+                .selectedOptionFontColor(this.themePrimary)
+                .backgroundColor(Color.Transparent)
+                .borderRadius(16)
+                .systemMaterial(new uiMaterial.ImmersiveMaterial({
+                  style: uiMaterial.ImmersiveStyle.ULTRA_THIN,
+                  materialColor: Color.Transparent,
+                  applyShadow: false
+                }))
+                .menuSystemMaterial(new uiMaterial.ImmersiveMaterial({
+                  style: uiMaterial.ImmersiveStyle.THICK
+                }))
+                .enabled(this.chatSerifFontEnabled && !this.isManuscriptMode())
+                .opacity(this.isManuscriptMode() ? 0.45 : 1)
+                .onSelect((index: number, _value: string): void => {
+                  this.handleChatSerifFontFamilyChanged(index)
+                })
             }
             .width('100%')
-          }
-          .width('100%')
-          .padding(18)
-          .backgroundColor(Color.Transparent)
-          .borderRadius(24)
-          .border({ width: 1, color: this.themePrimaryLight })
-          .backdropBlur(16)
-          .shadow(getBlurBottomShadow())
-
-          Column({ space: 10 }) {
-            Text($r('app.string.settings_markdown_renderer'))
-              .fontSize(16)
-              .fontWeight(FontWeight.Medium)
-              .fontColor($r('app.color.text_primary'))
-              .width('100%')
-
-            Text($r('app.string.settings_markdown_renderer_desc'))
-              .fontSize(12)
-              .fontColor($r('app.color.text_secondary'))
-              .lineHeight(18)
-              .width('100%')
-
-            Select(this.getMarkdownRendererOptions())
-              .selected(this.getMarkdownRendererSelectedIndex())
-              .value(this.getMarkdownRendererOptions()[this.getMarkdownRendererSelectedIndex()].value)
-              .width('100%')
-              .height(46)
-              .font({ size: 13 })
-              .fontColor($r('app.color.text_primary'))
-              .selectedOptionFontColor(this.themePrimary)
-              .backgroundColor(Color.Transparent)
-              .borderRadius(16)
-              .systemMaterial(new uiMaterial.ImmersiveMaterial({
-                style: uiMaterial.ImmersiveStyle.ULTRA_THIN,
-                materialColor: Color.Transparent,
-                applyShadow: false
-              }))
-              .menuSystemMaterial(new uiMaterial.ImmersiveMaterial({
-                style: uiMaterial.ImmersiveStyle.THICK
-              }))
-              .onSelect((index: number, _value: string): void => {
-                this.handleMarkdownRendererChanged(index)
-              })
-          }
-          .width('100%')
-          .padding(18)
-          .alignItems(HorizontalAlign.Start)
-          .backgroundColor(Color.Transparent)
-          .borderRadius(24)
-          .border({ width: 1, color: this.themePrimaryLight })
-          .backdropBlur(16)
-          .shadow(getBlurBottomShadow())
-
-          Row({ space: 16 }) {
-            Column({ space: 4 }) {
-              Text($r('app.string.settings_chat_serif_font'))
-                .fontSize(16)
-                .fontWeight(FontWeight.Medium)
-                .fontColor($r('app.color.text_primary'))
-                .width('100%')
-
-              Text($r('app.string.settings_chat_serif_font_desc'))
-                .fontSize(12)
-                .fontColor($r('app.color.text_secondary'))
-                .lineHeight(18)
-                .width('100%')
-            }
-            .layoutWeight(1)
+            .padding(18)
             .alignItems(HorizontalAlign.Start)
-
-            Toggle({ type: ToggleType.Switch, isOn: this.chatSerifFontEnabled })
-              .selectedColor(this.themePrimary)
-              .systemMaterial(new uiMaterial.Material())
-              .switchPointColor(Color.White)
-              .animation({ duration: 280, curve: curves.springMotion(0.35, 0.8) })
-              .enabled(!this.isManuscriptMode())
-              .opacity(this.isManuscriptMode() ? 0.45 : 1)
-              .onChange((enabled: boolean) => {
-                this.handleChatSerifFontChanged(enabled)
-              })
+            .backgroundColor(Color.Transparent)
+            .borderRadius(LIST_MATERIAL_CARD_RADIUS)
           }
-          .width('100%')
-          .padding(18)
-          .alignItems(VerticalAlign.Center)
-          .backgroundColor(Color.Transparent)
-          .borderRadius(24)
-          .border({ width: 1, color: this.themePrimaryLight })
-          .backdropBlur(16)
-          .shadow(getBlurBottomShadow())
-
-          Column({ space: 10 }) {
-            Text($r('app.string.settings_chat_serif_font_family'))
-              .fontSize(16)
-              .fontWeight(FontWeight.Medium)
-              .fontColor($r('app.color.text_primary'))
-              .width('100%')
-
-            Select(this.getSerifFontOptions())
-              .key(`serif_font_select_${this.serifFontSelectRevision.toString()}`)
-              .selected(this.getSerifFontSelectedIndex())
-              .value(this.getSerifFontOptions()[this.getSerifFontSelectedIndex()].value)
-              .width('100%')
-              .height(46)
-              .font({ size: 13 })
-              .fontColor($r('app.color.text_primary'))
-              .selectedOptionFontColor(this.themePrimary)
-              .backgroundColor(Color.Transparent)
-              .borderRadius(16)
-              .systemMaterial(new uiMaterial.ImmersiveMaterial({
-                style: uiMaterial.ImmersiveStyle.ULTRA_THIN,
-                materialColor: Color.Transparent,
-                applyShadow: false
-              }))
-              .menuSystemMaterial(new uiMaterial.ImmersiveMaterial({
-                style: uiMaterial.ImmersiveStyle.THICK
-              }))
-              .enabled(this.chatSerifFontEnabled && !this.isManuscriptMode())
-              .opacity(this.isManuscriptMode() ? 0.45 : 1)
-              .onSelect((index: number, _value: string): void => {
-                this.handleChatSerifFontFamilyChanged(index)
-              })
-          }
-          .width('100%')
-          .padding(18)
-          .alignItems(HorizontalAlign.Start)
-          .backgroundColor(Color.Transparent)
-          .borderRadius(24)
-          .border({ width: 1, color: this.themePrimaryLight })
-          .backdropBlur(16)
-          .shadow(getBlurBottomShadow())
         }
         .width('100%')
         .constraintSize({ maxWidth: this.getContentMaxWidth() })
@@ -1938,51 +1932,49 @@ export struct ThemeAppearanceSettingsView {
 
   @Builder
   private MaterialCompatibilitySection() {
-    Column({ space: 12 }) {
-      Text($r('app.string.wrapped_material_compatibility_title'))
-        .fontSize(16)
-        .fontWeight(FontWeight.Medium)
-        .fontColor($r('app.color.text_primary'))
-        .width('100%')
+    ImmersiveListSurface({ isImmersive: true, cornerRadius: LIST_MATERIAL_CARD_RADIUS }) {
+      Column({ space: SETTINGS_HEADING_CONTENT_GAP }) {
+        Text($r('app.string.wrapped_material_compatibility_title'))
+          .font(getSettingsTypography().sectionTitle)
+          .fontColor(getAppUiState().themeTextPrimary)
+          .width('100%')
 
-      Row({ space: 16 }) {
-        Column({ space: 4 }) {
-          Text($r('app.string.wrapped_material_force_blur_title'))
-            .fontSize(14)
-            .fontColor($r('app.color.text_primary'))
-            .width('100%')
-          Text($r('app.string.wrapped_material_force_blur_desc'))
-            .fontSize(12)
-            .fontColor($r('app.color.text_secondary'))
-            .lineHeight(18)
-            .width('100%')
+        Row({ space: 16 }) {
+          Column({ space: 4 }) {
+            Text($r('app.string.wrapped_material_force_blur_title'))
+              .font(getSettingsTypography().itemTitle)
+              .fontColor(getAppUiState().themeTextPrimary)
+              .width('100%')
+            Text($r('app.string.wrapped_material_force_blur_desc'))
+              .font(getSettingsTypography().subtitle)
+              .lineHeight(SETTINGS_SUBTITLE_LINE_HEIGHT)
+              .fontColor(getAppUiState().themeTextSecondary)
+              .width('100%')
+          }
+          .layoutWeight(1)
+
+          Toggle({ type: ToggleType.Switch, isOn: this.forceWrappedMaterialBlur })
+            .selectedColor(this.themePrimary)
+            .switchPointColor(Color.White)
+            .enabled(!this.savingWrappedMaterialFallback)
+            .onChange((enabled: boolean) => {
+              this.handleWrappedMaterialFallbackChanged(enabled)
+            })
         }
-        .layoutWeight(1)
+        .width('100%')
+        .alignItems(VerticalAlign.Center)
 
-        Toggle({ type: ToggleType.Switch, isOn: this.forceWrappedMaterialBlur })
-          .selectedColor(this.themePrimary)
-          .switchPointColor(Color.White)
-          .enabled(!this.savingWrappedMaterialFallback)
-          .onChange((enabled: boolean) => {
-            this.handleWrappedMaterialFallbackChanged(enabled)
-          })
+        Text(this.getWrappedMaterialStatus())
+          .font(getSettingsTypography().subtitle)
+          .lineHeight(SETTINGS_SUBTITLE_LINE_HEIGHT)
+          .fontColor(getAppUiState().themeTextSecondary)
+          .width('100%')
       }
       .width('100%')
-      .alignItems(VerticalAlign.Center)
-
-      Text(this.getWrappedMaterialStatus())
-        .fontSize(12)
-        .fontColor($r('app.color.text_secondary'))
-        .lineHeight(18)
-        .width('100%')
+      .padding(18)
+      .backgroundColor(Color.Transparent)
+      .borderRadius(LIST_MATERIAL_CARD_RADIUS)
     }
-    .width('100%')
-    .padding(18)
-    .backgroundColor(Color.Transparent)
-    .borderRadius(24)
-    .border({ width: 1, color: this.themePrimaryLight })
-    .backdropBlur(16)
-    .shadow(getBlurBottomShadow())
   }
 
   @Builder
@@ -1993,86 +1985,83 @@ export struct ThemeAppearanceSettingsView {
           this.LivePreviewSection()
           this.MaterialCompatibilitySection()
 
-          Column() {
-            Row({ space: 16 }) {
-              Column({ space: 4 }) {
-                Text($r('app.string.chat_list_immersive_material_title'))
-                  .fontSize(16)
-                  .fontWeight(FontWeight.Medium)
-                  .fontColor($r('app.color.text_primary'))
-                  .width('100%')
+          ImmersiveListSurface({ isImmersive: true, cornerRadius: LIST_MATERIAL_CARD_RADIUS }) {
+            Column() {
+              Row({ space: 16 }) {
+                Column({ space: 4 }) {
+                  Text($r('app.string.chat_list_immersive_material_title'))
+                    .font(getSettingsTypography().itemTitle)
+                    .fontColor(getAppUiState().themeTextPrimary)
+                    .width('100%')
 
-                Text($r('app.string.chat_list_immersive_material_desc'))
-                  .fontSize(12)
-                  .fontColor($r('app.color.text_secondary'))
-                  .lineHeight(18)
-                  .width('100%')
+                  Text($r('app.string.chat_list_immersive_material_desc'))
+                    .font(getSettingsTypography().subtitle)
+                    .lineHeight(SETTINGS_SUBTITLE_LINE_HEIGHT)
+                    .fontColor(getAppUiState().themeTextSecondary)
+                    .width('100%')
+                }
+                .layoutWeight(1)
+                .alignItems(HorizontalAlign.Start)
+
+                Toggle({ type: ToggleType.Switch, isOn: this.chatListImmersiveMaterial })
+                  .selectedColor(this.themePrimary)
+                  .systemMaterial(new uiMaterial.Material())
+                  .switchPointColor(Color.White)
+                  .enabled(!this.savingChatListMaterial)
+                  .onChange((enabled: boolean) => {
+                    this.handleChatListImmersiveMaterialChanged(enabled)
+                  })
               }
-              .layoutWeight(1)
-              .alignItems(HorizontalAlign.Start)
+              .width('100%')
+              .padding(18)
+              .alignItems(VerticalAlign.Center)
 
-              Toggle({ type: ToggleType.Switch, isOn: this.chatListImmersiveMaterial })
-                .selectedColor(this.themePrimary)
-                .systemMaterial(new uiMaterial.Material())
-                .switchPointColor(Color.White)
-                .enabled(!this.savingChatListMaterial)
-                .onChange((enabled: boolean) => {
-                  this.handleChatListImmersiveMaterialChanged(enabled)
-                })
+              Divider()
+                .color(this.themePrimaryLight)
+                .margin({ left: 18, right: 18 })
+
+              Row({ space: 16 }) {
+                Column({ space: 4 }) {
+                  Text($r('app.string.knowledge_list_immersive_material_title'))
+                    .font(getSettingsTypography().itemTitle)
+                    .fontColor(getAppUiState().themeTextPrimary)
+                    .width('100%')
+
+                  Text($r('app.string.knowledge_list_immersive_material_desc'))
+                    .font(getSettingsTypography().subtitle)
+                    .lineHeight(SETTINGS_SUBTITLE_LINE_HEIGHT)
+                    .fontColor(getAppUiState().themeTextSecondary)
+                    .width('100%')
+                }
+                .layoutWeight(1)
+                .alignItems(HorizontalAlign.Start)
+
+                Toggle({ type: ToggleType.Switch, isOn: this.knowledgeListImmersiveMaterial })
+                  .selectedColor(this.themePrimary)
+                  .systemMaterial(new uiMaterial.Material())
+                  .switchPointColor(Color.White)
+                  .enabled(!this.savingKnowledgeListMaterial)
+                  .onChange((enabled: boolean) => {
+                    this.handleKnowledgeListImmersiveMaterialChanged(enabled)
+                  })
+              }
+              .width('100%')
+              .padding(18)
+              .alignItems(VerticalAlign.Center)
             }
             .width('100%')
-            .padding(18)
-            .alignItems(VerticalAlign.Center)
-
-            Divider()
-              .color(this.themePrimaryLight)
-              .margin({ left: 18, right: 18 })
-
-            Row({ space: 16 }) {
-              Column({ space: 4 }) {
-                Text($r('app.string.knowledge_list_immersive_material_title'))
-                  .fontSize(16)
-                  .fontWeight(FontWeight.Medium)
-                  .fontColor($r('app.color.text_primary'))
-                  .width('100%')
-
-                Text($r('app.string.knowledge_list_immersive_material_desc'))
-                  .fontSize(12)
-                  .fontColor($r('app.color.text_secondary'))
-                  .lineHeight(18)
-                  .width('100%')
-              }
-              .layoutWeight(1)
-              .alignItems(HorizontalAlign.Start)
-
-              Toggle({ type: ToggleType.Switch, isOn: this.knowledgeListImmersiveMaterial })
-                .selectedColor(this.themePrimary)
-                .systemMaterial(new uiMaterial.Material())
-                .switchPointColor(Color.White)
-                .enabled(!this.savingKnowledgeListMaterial)
-                .onChange((enabled: boolean) => {
-                  this.handleKnowledgeListImmersiveMaterialChanged(enabled)
-                })
-            }
-            .width('100%')
-            .padding(18)
-            .alignItems(VerticalAlign.Center)
+            .backgroundColor(Color.Transparent)
+            .borderRadius(LIST_MATERIAL_CARD_RADIUS)
           }
-          .width('100%')
-          .backgroundColor(Color.Transparent)
-          .borderRadius(24)
-          .border({ width: 1, color: this.themePrimaryLight })
-          .backdropBlur(16)
-          .shadow(getBlurBottomShadow())
 
           if (this.isManuscriptMode()) {
             Text(pickLocalizedText(
               '手稿模式保留纸面样式；切回普通模式后应用上述材质设置。',
               'Manuscript mode keeps its paper style. These material settings apply in standard mode.'
             ))
-              .fontSize(12)
-              .fontColor($r('app.color.text_secondary'))
-              .lineHeight(18)
+              .font(getSettingsTypography().subtitle)
+              .lineHeight(SETTINGS_SUBTITLE_LINE_HEIGHT)
+              .fontColor(getAppUiState().themeTextSecondary)
               .width('100%')
           }
         }
@@ -2200,9 +2189,8 @@ export struct ThemeAppearanceSettingsView {
     Column() {
       Row() {
         Text($r('app.string.settings_appearance'))
-          .fontSize(18)
-          .fontWeight(FontWeight.Bold)
-          .fontColor($r('app.color.text_primary'))
+          .font(getSettingsTypography().pageTitle)
+          .fontColor(getAppUiState().themeTextPrimary)
           .layoutWeight(1)
       }
       .width('100%')

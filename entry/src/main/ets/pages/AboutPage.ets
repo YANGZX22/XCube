@@ -1,7 +1,9 @@
+import { SettingsSectionHeading } from '../components/settings/SettingsSectionHeading'
+import { getSettingsTypography, SETTINGS_SUBTITLE_LINE_HEIGHT } from '../components/settings/SettingsTypography'
+import { ImmersiveListSurface, LIST_MATERIAL_CARD_RADIUS } from '../components/ImmersiveListSurface'
 import { shouldUseDrawnNavigation } from '../utils/DrawnNavigationSupport'
 import { InteractiveMaterialButton } from '../components/InteractiveMaterialButton'
 import { WRAPPED_MATERIAL_REGULAR } from '../utils/WrappedMaterialSupport'
-import { getBlurBottomShadow } from '../utils/BlurShadowUtils'
 import { Want, bundleManager, common } from '@kit.AbilityKit'
 import { privacyManager } from '@kit.AppGalleryKit'
 import { BusinessError } from '@kit.BasicServicesKit'
@@ -218,62 +220,57 @@ struct AboutPage {
   }
 
   @Builder
-  private LicenseItemCard(item: LicenseCatalogItem) {
-    Column({ space: 8 }) {
+  private LicenseRow(item: LicenseCatalogItem) {
+    Column({ space: 6 }) {
       Row({ space: 8 }) {
         Text(item.version !== '' ? `${item.name} · v${item.version}` : item.name)
-          .fontSize(14)
-          .fontWeight(FontWeight.Medium)
-          .fontColor($r('app.color.text_primary'))
+          .font(getSettingsTypography().itemTitle)
+          .fontColor(getAppUiState().themeTextPrimary)
           .layoutWeight(1)
 
         Text(item.licenseName)
-          .fontSize(10)
+          .fontSize(11)
           .fontWeight(FontWeight.Medium)
           .fontColor(this.themePrimary)
-          .padding({ left: 8, right: 8, top: 4, bottom: 4 })
-          .backgroundColor(Color.Transparent)
-          .borderRadius(8)
-          .backdropBlur(16)
-          .shadow(getBlurBottomShadow())
+          .textAlign(TextAlign.End)
+          .constraintSize({ maxWidth: '48%' })
       }
       .width('100%')
       .alignItems(VerticalAlign.Center)
 
       Text(pickLocalizedText(item.noticeZh, item.noticeEn))
-        .fontSize(12)
-        .lineHeight(18)
-        .fontColor($r('app.color.text_secondary'))
+        .font(getSettingsTypography().subtitle)
+        .lineHeight(SETTINGS_SUBTITLE_LINE_HEIGHT)
+        .fontColor(getAppUiState().themeTextSecondary)
         .width('100%')
     }
     .width('100%')
-    .padding(14)
     .alignItems(HorizontalAlign.Start)
-    .backgroundColor(Color.Transparent)
-    .borderRadius(14)
-    .border({ width: 0.5, color: this.themePrimaryLight })
-    .backdropBlur(16)
-    .shadow(getBlurBottomShadow())
+    .padding({ top: 12, bottom: 12 })
   }
 
   @Builder
   private LicenseSection(title: ResourceStr, items: LicenseCatalogItem[]) {
-    Text(title)
-      .fontSize(12)
-      .fontWeight(FontWeight.Medium)
-      .fontColor($r('app.color.text_secondary'))
-      .padding({ left: 4, top: 8 })
-      .width('100%')
+    Column() {
+      SettingsSectionHeading({ title: title })
 
-    ForEach(items, (item: LicenseCatalogItem) => {
-      this.LicenseItemCard(item)
-    }, (item: LicenseCatalogItem) => `${item.name}_${item.version}_${item.licenseName}`)
+      ForEach(items, (item: LicenseCatalogItem, index: number) => {
+        if (index > 0) {
+          Divider().strokeWidth(0.5).color(this.themePrimaryLight)
+        }
+        this.LicenseRow(item)
+      }, (item: LicenseCatalogItem) => `${item.name}_${item.version}_${item.licenseName}`)
+    }
+    .width('100%')
+    .alignItems(HorizontalAlign.Start)
   }
 
   @Builder
   private LicensesSheetBuilder() {
     Column() {
       ImmersiveSheetHeader({
+        titleFont: getSettingsTypography().pageTitle,
+        titleColor: getAppUiState().themeTextPrimary,
         title: $r('app.string.about_license_sheet_title'),
         showLeading: true,
         showTrailing: false,
@@ -284,13 +281,12 @@ struct AboutPage {
 
       Scroll() {
         Row() {
-          Column({ space: 10 }) {
+          Column({ space: 16 }) {
             Text($r('app.string.about_license_sheet_note'))
-              .fontSize(12)
-              .lineHeight(18)
-              .fontColor($r('app.color.text_secondary'))
+              .font(getSettingsTypography().subtitle)
+              .lineHeight(SETTINGS_SUBTITLE_LINE_HEIGHT)
+              .fontColor(getAppUiState().themeTextSecondary)
               .width('100%')
-              .padding({ left: 4, right: 4, bottom: 2 })
 
             this.LicenseSection($r('app.string.about_license_runtime_section'), RUNTIME_LICENSES)
             this.LicenseSection($r('app.string.about_license_assets_section'), ASSET_LICENSES)
@@ -298,7 +294,7 @@ struct AboutPage {
           }
           .width('100%')
           .constraintSize({ maxWidth: 720 })
-          .padding({ left: 16, right: 16, bottom: 32 })
+          .padding({ left: 20, right: 20, bottom: 32 })
         }
         .width('100%')
         .justifyContent(FlexAlign.Center)
@@ -316,40 +312,40 @@ struct AboutPage {
   @Builder
   private PrivacyPolicyRow() {
     Row() {
-      Column() {
-        Stack({ alignContent: Alignment.Center }) {
-          Image($r('app.media.privacy_policy'))
-            .width(20)
-            .height(20)
-            .objectFit(ImageFit.Contain)
-            .fillColor(this.themePrimary)
-            .draggable(false)
-          Image($r('app.media.privacy_policy_mark'))
-            .width(20)
-            .height(20)
-            .objectFit(ImageFit.Contain)
-            .draggable(false)
+      ImmersiveListSurface({ isImmersive: true, layoutWidth: 36, cornerRadius: 9 }) {
+        Column() {
+          Stack({ alignContent: Alignment.Center }) {
+            Image($r('app.media.privacy_policy'))
+              .width(20)
+              .height(20)
+              .objectFit(ImageFit.Contain)
+              .fillColor(this.themePrimary)
+              .draggable(false)
+            Image($r('app.media.privacy_policy_mark'))
+              .width(20)
+              .height(20)
+              .objectFit(ImageFit.Contain)
+              .draggable(false)
+          }
+          .width(20)
+          .height(20)
         }
-        .width(20)
-        .height(20)
+        .width(36)
+        .height(36)
+        .borderRadius(9)
+        .backgroundColor(Color.Transparent)
+        .justifyContent(FlexAlign.Center)
+        .alignItems(HorizontalAlign.Center)
       }
-      .width(36)
-      .height(36)
-      .borderRadius(9)
-      .backgroundColor(Color.Transparent)
-      .justifyContent(FlexAlign.Center)
-      .alignItems(HorizontalAlign.Center)
-      .backdropBlur(16)
-      .shadow(getBlurBottomShadow())
 
       Column({ space: 2 }) {
         Text($r('app.string.about_view_privacy_policy'))
-          .fontSize(14)
-          .fontWeight(FontWeight.Medium)
-          .fontColor($r('app.color.text_primary'))
+          .font(getSettingsTypography().itemTitle)
+          .fontColor(getAppUiState().themeTextPrimary)
         Text($r('app.string.about_privacy_policy_desc'))
-          .fontSize(12)
-          .fontColor($r('app.color.text_secondary'))
+          .font(getSettingsTypography().subtitle)
+          .lineHeight(SETTINGS_SUBTITLE_LINE_HEIGHT)
+          .fontColor(getAppUiState().themeTextSecondary)
       }
       .alignItems(HorizontalAlign.Start)
       .margin({ left: 12 })
@@ -399,259 +395,251 @@ struct AboutPage {
               .fontColor($r('app.color.text_secondary'))
 
             Text($r('app.string.about_page_slogan'))
-              .fontSize(13)
-              .fontColor($r('app.color.text_tertiary'))
+              .font(getSettingsTypography().subtitle)
+              .lineHeight(SETTINGS_SUBTITLE_LINE_HEIGHT)
+              .fontColor(getAppUiState().themeTextSecondary)
           }
           .width('100%')
           .padding({ top: 24, bottom: 28 })
           .alignItems(HorizontalAlign.Center)
 
-          Text($r('app.string.about_updates_section'))
-            .fontSize(12)
-            .fontWeight(FontWeight.Medium)
-            .fontColor($r('app.color.text_secondary'))
-            .padding({ left: 16, bottom: 6 })
-            .width('100%')
+          SettingsSectionHeading({ title: $r('app.string.about_updates_section') })
 
-          Column() {
-            Row() {
+          Stack() {
+            ImmersiveListSurface({ isImmersive: true, cornerRadius: LIST_MATERIAL_CARD_RADIUS }) {
               Column() {
-                SymbolGlyph($r('sys.symbol.arrow_clockwise'))
-                  .fontSize(20)
-                  .fontColor([this.themePrimary])
+                Row() {
+                  ImmersiveListSurface({ isImmersive: true, layoutWidth: 36, cornerRadius: 9 }) {
+                    Column() {
+                      SymbolGlyph($r('sys.symbol.arrow_clockwise'))
+                        .fontSize(20)
+                        .fontColor([this.themePrimary])
+                    }
+                    .width(36)
+                    .height(36)
+                    .borderRadius(9)
+                    .backgroundColor(Color.Transparent)
+                    .justifyContent(FlexAlign.Center)
+                    .alignItems(HorizontalAlign.Center)
+                  }
+
+                  Column({ space: 2 }) {
+                    Text($r('app.string.about_check_for_updates'))
+                      .font(getSettingsTypography().itemTitle)
+                      .fontColor(getAppUiState().themeTextPrimary)
+                    Text(this.isCheckingUpdate ? $r('app.string.about_checking_for_updates') : `v${this.versionName}`)
+                      .font(getSettingsTypography().subtitle)
+                      .lineHeight(SETTINGS_SUBTITLE_LINE_HEIGHT)
+                      .fontColor(getAppUiState().themeTextSecondary)
+                  }
+                  .alignItems(HorizontalAlign.Start)
+                  .margin({ left: 12 })
+                  .layoutWeight(1)
+
+                  if (this.isCheckingUpdate) {
+                    LoadingProgress()
+                      .width(20)
+                      .height(20)
+                      .color(this.themePrimary)
+                  } else {
+                    SymbolGlyph($r('sys.symbol.chevron_right'))
+                      .fontSize(18)
+                      .fontColor([$r('app.color.text_tertiary')])
+                  }
+                }
+                .width('100%')
+                .height(64)
+                .padding({ left: 16, right: 16 })
+                .alignItems(VerticalAlign.Center)
+                .enabled(!this.isCheckingUpdate)
+                .onClick(() => {
+                  this.handleCheckForUpdates()
+                })
               }
-              .width(36)
-              .height(36)
-              .borderRadius(9)
+              .width('100%')
               .backgroundColor(Color.Transparent)
-              .justifyContent(FlexAlign.Center)
-              .alignItems(HorizontalAlign.Center)
-              .backdropBlur(16)
-              .shadow(getBlurBottomShadow())
+              .borderRadius(LIST_MATERIAL_CARD_RADIUS)
+            }
+          }
+          .width('100%')
+          .margin({ bottom: 24 })
+          .clip(false)
+          .hitTestBehavior(HitTestMode.Transparent)
 
-              Column({ space: 2 }) {
-                Text($r('app.string.about_check_for_updates'))
-                  .fontSize(14)
-                  .fontWeight(FontWeight.Medium)
-                  .fontColor($r('app.color.text_primary'))
-                Text(this.isCheckingUpdate ? $r('app.string.about_checking_for_updates') : `v${this.versionName}`)
-                  .fontSize(12)
-                  .fontColor($r('app.color.text_secondary'))
+          SettingsSectionHeading({ title: $r('app.string.about_storage_section') })
+
+          Stack() {
+            ImmersiveListSurface({ isImmersive: true, cornerRadius: LIST_MATERIAL_CARD_RADIUS }) {
+              Column() {
+                Row() {
+                  ImmersiveListSurface({ isImmersive: true, layoutWidth: 36, cornerRadius: 9 }) {
+                    Column() {
+                      SymbolGlyph($r('sys.symbol.trash'))
+                        .fontSize(20)
+                        .fontColor([this.themePrimary])
+                    }
+                    .width(36)
+                    .height(36)
+                    .borderRadius(9)
+                    .backgroundColor(Color.Transparent)
+                    .justifyContent(FlexAlign.Center)
+                    .alignItems(HorizontalAlign.Center)
+                  }
+
+                  Column({ space: 2 }) {
+                    Text($r('app.string.about_clear_cache'))
+                      .font(getSettingsTypography().itemTitle)
+                      .fontColor(getAppUiState().themeTextPrimary)
+                    Text(this.isCleaningCache ? $r('app.string.about_clearing_cache') :
+                      $r('app.string.about_clear_cache_desc'))
+                      .font(getSettingsTypography().subtitle)
+                      .lineHeight(SETTINGS_SUBTITLE_LINE_HEIGHT)
+                      .fontColor(getAppUiState().themeTextSecondary)
+                  }
+                  .alignItems(HorizontalAlign.Start)
+                  .margin({ left: 12 })
+                  .layoutWeight(1)
+
+                  if (this.isCleaningCache) {
+                    LoadingProgress()
+                      .width(20)
+                      .height(20)
+                      .color(this.themePrimary)
+                  } else {
+                    SymbolGlyph($r('sys.symbol.chevron_right'))
+                      .fontSize(18)
+                      .fontColor([$r('app.color.text_tertiary')])
+                  }
+                }
+                .width('100%')
+                .height(64)
+                .padding({ left: 16, right: 16 })
+                .alignItems(VerticalAlign.Center)
+                .enabled(!this.isCleaningCache)
+                .onClick((): void => {
+                  this.showCacheCleanupWarning()
+                })
               }
-              .alignItems(HorizontalAlign.Start)
-              .margin({ left: 12 })
-              .layoutWeight(1)
+              .width('100%')
+              .backgroundColor(Color.Transparent)
+              .borderRadius(LIST_MATERIAL_CARD_RADIUS)
+            }
+          }
+          .width('100%')
+          .margin({ bottom: 24 })
+          .clip(false)
+          .hitTestBehavior(HitTestMode.Transparent)
 
-              if (this.isCheckingUpdate) {
-                LoadingProgress()
-                  .width(20)
-                  .height(20)
-                  .color(this.themePrimary)
-              } else {
+          SettingsSectionHeading({ title: $r('app.string.about_contact_section') })
+
+          Stack() {
+            ImmersiveListSurface({ isImmersive: true, cornerRadius: LIST_MATERIAL_CARD_RADIUS }) {
+              Column() {
+                Row() {
+                  ImmersiveListSurface({ isImmersive: true, layoutWidth: 36, cornerRadius: 9 }) {
+                    Column() {
+                      SymbolGlyph($r('sys.symbol.link'))
+                        .fontSize(20)
+                        .fontColor([this.themePrimary])
+                    }
+                    .width(36)
+                    .height(36)
+                    .borderRadius(9)
+                    .backgroundColor(Color.Transparent)
+                    .justifyContent(FlexAlign.Center)
+                    .alignItems(HorizontalAlign.Center)
+                  }
+
+                  Column({ space: 2 }) {
+                    Text($r('app.string.about_github'))
+                      .font(getSettingsTypography().itemTitle)
+                      .fontColor(getAppUiState().themeTextPrimary)
+                    Text('YANGZX22/XCube')
+                      .font(getSettingsTypography().subtitle)
+                      .lineHeight(SETTINGS_SUBTITLE_LINE_HEIGHT)
+                      .fontColor(getAppUiState().themeTextSecondary)
+                  }
+                  .alignItems(HorizontalAlign.Start)
+                  .margin({ left: 12 })
+                  .layoutWeight(1)
+
+                  SymbolGlyph($r('sys.symbol.chevron_right'))
+                    .fontSize(18)
+                    .fontColor([$r('app.color.text_tertiary')])
+                }
+                .width('100%')
+                .height(64)
+                .padding({ left: 16, right: 16 })
+                .alignItems(VerticalAlign.Center)
+                .onClick(() => {
+                  this.openGitHubInBrowser()
+                })
+              }
+              .width('100%')
+              .backgroundColor(Color.Transparent)
+              .borderRadius(LIST_MATERIAL_CARD_RADIUS)
+            }
+          }
+          .width('100%')
+          .margin({ bottom: 24 })
+          .clip(false)
+          .hitTestBehavior(HitTestMode.Transparent)
+
+          SettingsSectionHeading({ title: $r('app.string.about_legal_section') })
+
+          ImmersiveListSurface({ isImmersive: true, cornerRadius: LIST_MATERIAL_CARD_RADIUS }) {
+            Column() {
+              this.PrivacyPolicyRow()
+
+              Divider()
+                .strokeWidth(0.5)
+                .color(this.themePrimaryLight)
+                .margin({ left: 16, right: 16 })
+
+              Row() {
+                ImmersiveListSurface({ isImmersive: true, layoutWidth: 36, cornerRadius: 9 }) {
+                  Column() {
+                    SymbolGlyph($r('sys.symbol.doc_text'))
+                      .fontSize(20)
+                      .fontColor([this.themePrimary])
+                  }
+                  .width(36)
+                  .height(36)
+                  .borderRadius(9)
+                  .backgroundColor(Color.Transparent)
+                  .justifyContent(FlexAlign.Center)
+                  .alignItems(HorizontalAlign.Center)
+                }
+
+                Column({ space: 2 }) {
+                  Text($r('app.string.about_open_source_licenses'))
+                    .font(getSettingsTypography().itemTitle)
+                    .fontColor(getAppUiState().themeTextPrimary)
+                  Text($r('app.string.about_open_source_licenses_desc'))
+                    .font(getSettingsTypography().subtitle)
+                    .lineHeight(SETTINGS_SUBTITLE_LINE_HEIGHT)
+                    .fontColor(getAppUiState().themeTextSecondary)
+                }
+                .alignItems(HorizontalAlign.Start)
+                .margin({ left: 12 })
+                .layoutWeight(1)
+
                 SymbolGlyph($r('sys.symbol.chevron_right'))
                   .fontSize(18)
                   .fontColor([$r('app.color.text_tertiary')])
               }
+              .width('100%')
+              .height(64)
+              .padding({ left: 16, right: 16 })
+              .alignItems(VerticalAlign.Center)
+              .onClick(() => {
+                this.showLicensesSheet = true
+              })
             }
             .width('100%')
-            .height(64)
-            .padding({ left: 16, right: 16 })
-            .alignItems(VerticalAlign.Center)
-            .enabled(!this.isCheckingUpdate)
-            .onClick(() => {
-              this.handleCheckForUpdates()
-            })
+            .backgroundColor(Color.Transparent)
+            .borderRadius(LIST_MATERIAL_CARD_RADIUS)
           }
-          .width('100%')
-          .backgroundColor(Color.Transparent)
-          .borderRadius(16)
-          .border({ width: 0.5, color: this.themePrimaryLight })
-          .backdropBlur(16)
-          .shadow(getBlurBottomShadow())
-          .margin({ bottom: 24 })
-
-          Text($r('app.string.about_storage_section'))
-            .fontSize(12)
-            .fontWeight(FontWeight.Medium)
-            .fontColor($r('app.color.text_secondary'))
-            .padding({ left: 16, bottom: 6 })
-            .width('100%')
-
-          Column() {
-            Row() {
-              Column() {
-                SymbolGlyph($r('sys.symbol.trash'))
-                  .fontSize(20)
-                  .fontColor([this.themePrimary])
-              }
-              .width(36)
-              .height(36)
-              .borderRadius(9)
-              .backgroundColor(Color.Transparent)
-              .justifyContent(FlexAlign.Center)
-              .alignItems(HorizontalAlign.Center)
-              .backdropBlur(16)
-              .shadow(getBlurBottomShadow())
-
-              Column({ space: 2 }) {
-                Text($r('app.string.about_clear_cache'))
-                  .fontSize(14)
-                  .fontWeight(FontWeight.Medium)
-                  .fontColor($r('app.color.text_primary'))
-                Text(this.isCleaningCache ? $r('app.string.about_clearing_cache') :
-                  $r('app.string.about_clear_cache_desc'))
-                  .fontSize(12)
-                  .fontColor($r('app.color.text_secondary'))
-              }
-              .alignItems(HorizontalAlign.Start)
-              .margin({ left: 12 })
-              .layoutWeight(1)
-
-              if (this.isCleaningCache) {
-                LoadingProgress()
-                  .width(20)
-                  .height(20)
-                  .color(this.themePrimary)
-              } else {
-                SymbolGlyph($r('sys.symbol.chevron_right'))
-                  .fontSize(18)
-                  .fontColor([$r('app.color.text_tertiary')])
-              }
-            }
-            .width('100%')
-            .height(64)
-            .padding({ left: 16, right: 16 })
-            .alignItems(VerticalAlign.Center)
-            .enabled(!this.isCleaningCache)
-            .onClick((): void => {
-              this.showCacheCleanupWarning()
-            })
-          }
-          .width('100%')
-          .backgroundColor(Color.Transparent)
-          .borderRadius(16)
-          .border({ width: 0.5, color: this.themePrimaryLight })
-          .backdropBlur(16)
-          .shadow(getBlurBottomShadow())
-          .margin({ bottom: 24 })
-
-          Text($r('app.string.about_contact_section'))
-            .fontSize(12)
-            .fontWeight(FontWeight.Medium)
-            .fontColor($r('app.color.text_secondary'))
-            .padding({ left: 16, bottom: 6 })
-            .width('100%')
-
-          Column() {
-            Row() {
-              Column() {
-                SymbolGlyph($r('sys.symbol.link'))
-                  .fontSize(20)
-                  .fontColor([this.themePrimary])
-              }
-              .width(36)
-              .height(36)
-              .borderRadius(9)
-              .backgroundColor(Color.Transparent)
-              .justifyContent(FlexAlign.Center)
-              .alignItems(HorizontalAlign.Center)
-              .backdropBlur(16)
-              .shadow(getBlurBottomShadow())
-
-              Column({ space: 2 }) {
-                Text($r('app.string.about_github'))
-                  .fontSize(14)
-                  .fontWeight(FontWeight.Medium)
-                  .fontColor($r('app.color.text_primary'))
-                Text('YANGZX22/XCube')
-                  .fontSize(12)
-                  .fontColor($r('app.color.text_secondary'))
-              }
-              .alignItems(HorizontalAlign.Start)
-              .margin({ left: 12 })
-              .layoutWeight(1)
-
-              SymbolGlyph($r('sys.symbol.chevron_right'))
-                .fontSize(18)
-                .fontColor([$r('app.color.text_tertiary')])
-            }
-            .width('100%')
-            .height(64)
-            .padding({ left: 16, right: 16 })
-            .alignItems(VerticalAlign.Center)
-            .onClick(() => {
-              this.openGitHubInBrowser()
-            })
-          }
-          .width('100%')
-          .backgroundColor(Color.Transparent)
-          .borderRadius(16)
-          .border({ width: 0.5, color: this.themePrimaryLight })
-          .backdropBlur(16)
-          .shadow(getBlurBottomShadow())
-          .margin({ bottom: 24 })
-
-          Text($r('app.string.about_legal_section'))
-            .fontSize(12)
-            .fontWeight(FontWeight.Medium)
-            .fontColor($r('app.color.text_secondary'))
-            .padding({ left: 16, bottom: 6 })
-            .width('100%')
-
-          Column() {
-            this.PrivacyPolicyRow()
-
-            Divider()
-              .strokeWidth(0.5)
-              .color(this.themePrimaryLight)
-              .margin({ left: 16, right: 16 })
-
-            Row() {
-              Column() {
-                SymbolGlyph($r('sys.symbol.doc_text'))
-                  .fontSize(20)
-                  .fontColor([this.themePrimary])
-              }
-              .width(36)
-              .height(36)
-              .borderRadius(9)
-              .backgroundColor(Color.Transparent)
-              .justifyContent(FlexAlign.Center)
-              .alignItems(HorizontalAlign.Center)
-              .backdropBlur(16)
-              .shadow(getBlurBottomShadow())
-
-              Column({ space: 2 }) {
-                Text($r('app.string.about_open_source_licenses'))
-                  .fontSize(14)
-                  .fontWeight(FontWeight.Medium)
-                  .fontColor($r('app.color.text_primary'))
-                Text($r('app.string.about_open_source_licenses_desc'))
-                  .fontSize(12)
-                  .fontColor($r('app.color.text_secondary'))
-              }
-              .alignItems(HorizontalAlign.Start)
-              .margin({ left: 12 })
-              .layoutWeight(1)
-
-              SymbolGlyph($r('sys.symbol.chevron_right'))
-                .fontSize(18)
-                .fontColor([$r('app.color.text_tertiary')])
-            }
-            .width('100%')
-            .height(64)
-            .padding({ left: 16, right: 16 })
-            .alignItems(VerticalAlign.Center)
-            .onClick(() => {
-              this.showLicensesSheet = true
-            })
-          }
-          .width('100%')
-          .backgroundColor(Color.Transparent)
-          .borderRadius(16)
-          .border({ width: 0.5, color: this.themePrimaryLight })
-          .backdropBlur(16)
-          .shadow(getBlurBottomShadow())
         }
         .width('100%')
         .constraintSize({ maxWidth: this.getContentMaxWidth() })
@@ -671,9 +659,8 @@ struct AboutPage {
     Column() {
       Row() {
         Text($r('app.string.settings_about'))
-          .fontSize(18)
-          .fontWeight(FontWeight.Bold)
-          .fontColor($r('app.color.text_primary'))
+          .font(getSettingsTypography().pageTitle)
+          .fontColor(getAppUiState().themeTextPrimary)
           .layoutWeight(1)
       }
       .width('100%')

@@ -1,3 +1,4 @@
+import { getSettingsTypography } from '../components/settings/SettingsTypography'
 import { shouldUseDrawnNavigation } from '../utils/DrawnNavigationSupport'
 import { motion } from '@kit.MultimodalAwarenessKit'
 import { BusinessError } from '@kit.BasicServicesKit'
@@ -229,9 +230,8 @@ struct HandAdaptiveSettingsPage {
     Column() {
       Row() {
         Text($r('app.string.hand_adaptive_title'))
-          .fontSize(18)
-          .fontWeight(FontWeight.Bold)
-          .fontColor($r('app.color.text_primary'))
+          .font(getSettingsTypography().pageTitle)
+          .fontColor(getAppUiState().themeTextPrimary)
           .layoutWeight(1)
       }
       .width('100%')

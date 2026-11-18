@@ -1,3 +1,4 @@
+import { getSettingsTypography, SETTINGS_SUBTITLE_LINE_HEIGHT } from '../settings/SettingsTypography'
 import { ImmersiveButtonSurface } from '../ImmersiveButtonSurface'
 import { IMMERSIVE_MATERIAL_SHADOW_OUTSET } from '../ImmersiveMaterialBackdrop'
 import { TabSegmentButtonV2, ColorMetrics, LengthMetrics, SegmentButtonV2Items, uiMaterial } from '@kit.ArkUI'
@@ -172,8 +173,8 @@ export struct IndexSettingsSheetContent {
   private ThemeOptionItem(mode: ThemeMode, label: Resource) {
     Row() {
       Text(label)
-        .fontSize(16)
-        .fontColor($r('app.color.text_primary'))
+        .font(getSettingsTypography().itemTitle)
+        .fontColor(getAppUiState().themeTextPrimary)
 
       Blank()
 
@@ -195,8 +196,8 @@ export struct IndexSettingsSheetContent {
   private LanguageOptionItem(language: AppLanguage, label: Resource) {
     Row() {
       Text(label)
-        .fontSize(16)
-        .fontColor($r('app.color.text_primary'))
+        .font(getSettingsTypography().itemTitle)
+        .fontColor(getAppUiState().themeTextPrimary)
 
       Blank()
 
@@ -220,12 +221,13 @@ export struct IndexSettingsSheetContent {
     Row() {
       Column() {
         Text(title)
-          .fontSize(15)
-          .fontColor(enabled ? $r('app.color.text_primary') : $r('app.color.text_tertiary'))
+          .font(getSettingsTypography().itemTitle)
+          .fontColor(enabled ? getAppUiState().themeTextPrimary : getAppUiState().themeTextTertiary)
 
         Text(desc)
-          .fontSize(12)
-          .fontColor(enabled ? $r('app.color.text_secondary') : $r('app.color.text_tertiary'))
+          .font(getSettingsTypography().subtitle)
+          .lineHeight(SETTINGS_SUBTITLE_LINE_HEIGHT)
+          .fontColor(enabled ? getAppUiState().themeTextSecondary : getAppUiState().themeTextTertiary)
           .margin({ top: 4 })
       }
       .alignItems(HorizontalAlign.Start)
@@ -257,15 +259,15 @@ export struct IndexSettingsSheetContent {
 
         Column({ space: 10 }) {
           Text($r('app.string.hand_adaptive_follow_target_title'))
-            .fontSize(15)
-            .fontColor($r('app.color.text_primary'))
+            .font(getSettingsTypography().itemTitle)
+            .fontColor(getAppUiState().themeTextPrimary)
 
           this.FollowTargetSelector()
 
           Text($r('app.string.hand_adaptive_follow_target_desc'))
-            .fontSize(12)
-            .fontColor($r('app.color.text_secondary'))
-            .lineHeight(18)
+            .font(getSettingsTypography().subtitle)
+            .lineHeight(SETTINGS_SUBTITLE_LINE_HEIGHT)
+            .fontColor(getAppUiState().themeTextSecondary)
         }
         .width('100%')
         .alignItems(HorizontalAlign.Start)
@@ -273,10 +275,13 @@ export struct IndexSettingsSheetContent {
 
         if (this.handAdaptiveUnsupported) {
           Text($r('app.string.hand_adaptive_unsupported_tip'))
-            .fontSize(12)
+            .font(getSettingsTypography().subtitle)
+            .width('100%')
+            .textAlign(TextAlign.Start)
+            .lineHeight(SETTINGS_SUBTITLE_LINE_HEIGHT)
             .fontColor($r('app.color.status_error'))
-            .lineHeight(18)
-            .margin({ left: 8, right: 8, top: 12 })
+            .margin({ top: 12 })
+            .padding({ left: 8, right: 8 })
         }
       }
     }
@@ -289,12 +294,13 @@ export struct IndexSettingsSheetContent {
     Row() {
       Column() {
         Text(title)
-          .fontSize(15)
-          .fontColor($r('app.color.text_primary'))
+          .font(getSettingsTypography().itemTitle)
+          .fontColor(getAppUiState().themeTextPrimary)
 
         Text(desc)
-          .fontSize(12)
-          .fontColor($r('app.color.text_secondary'))
+          .font(getSettingsTypography().subtitle)
+          .lineHeight(SETTINGS_SUBTITLE_LINE_HEIGHT)
+          .fontColor(getAppUiState().themeTextSecondary)
           .margin({ top: 4 })
       }
       .alignItems(HorizontalAlign.Start)
@@ -334,9 +340,9 @@ export struct IndexSettingsSheetContent {
   private OpenSystemNotificationSettingsEntry() {
     Column() {
       Text($r('app.string.notification_system_settings_tip'))
-        .fontSize(12)
-        .fontColor($r('app.color.text_secondary'))
-        .lineHeight(18)
+        .font(getSettingsTypography().subtitle)
+        .lineHeight(SETTINGS_SUBTITLE_LINE_HEIGHT)
+        .fontColor(getAppUiState().themeTextSecondary)
         .margin({ top: 10, bottom: 10 })
 
       Stack({ alignContent: Alignment.TopStart }) {

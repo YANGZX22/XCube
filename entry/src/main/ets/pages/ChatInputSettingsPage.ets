@@ -1,3 +1,4 @@
+import { getSettingsTypography } from '../components/settings/SettingsTypography'
 import { shouldUseDrawnNavigation } from '../utils/DrawnNavigationSupport'
 import { AppStorageKeys } from '../config/AppStorageKeys'
 import { ServiceRegistry } from '../services/ServiceRegistry'
@@ -157,9 +158,8 @@ struct ChatInputSettingsPage {
     Column() {
       Row() {
         Text($r('app.string.settings_chat_input'))
-          .fontSize(18)
-          .fontWeight(FontWeight.Bold)
-          .fontColor($r('app.color.text_primary'))
+          .font(getSettingsTypography().pageTitle)
+          .fontColor(getAppUiState().themeTextPrimary)
           .layoutWeight(1)
       }
       .width('100%')

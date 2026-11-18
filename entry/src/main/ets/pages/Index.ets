@@ -6200,6 +6200,8 @@ struct Index {
     Column() {
       Column() {
         ImmersiveSheetHeader({
+          titleFont: getSettingsTypography().pageTitle,
+          titleColor: getAppUiState().themeTextPrimary,
           title: getSettingsSheetTitleText(this.activeSettingsSheetType),
           leadingColor: this.themePrimary,
           onLeadingClick: (): void => {

@@ -550,7 +550,7 @@
     },
     {
       "name": "settings_about_xcube",
-      "value": "关于 XCube"
+      "value": "关于"
     },
     {
       "name": "settings_data_management",
@@ -2082,7 +2082,7 @@
     },
     {
       "name": "markdown_renderer_lv",
-      "value": "lv-markdown-in"
+      "value": "lv-markdown-in (推荐)"
     },
     {
       "name": "font_size_small",
