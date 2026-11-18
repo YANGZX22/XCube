@@ -782,7 +782,7 @@
     },
     {
       "name": "settings_default_model_desc",
-      "value": "Chat, title generation, translation"
+      "value": "Chat, title generation, and search optimization"
     },
     {
       "name": "edit_chat_title",
@@ -1031,14 +1031,6 @@
     {
       "name": "menu_unfavorite",
       "value": "Unfavorite"
-    },
-    {
-      "name": "translation_label",
-      "value": "Translation"
-    },
-    {
-      "name": "translation_loading",
-      "value": "Translating..."
     },
     {
       "name": "reasoning_process",
@@ -1697,18 +1689,6 @@
       "value": "Automatically generate conversation titles"
     },
     {
-      "name": "default_model_section_translate",
-      "value": "Translation Model"
-    },
-    {
-      "name": "default_model_role_translate",
-      "value": "Translate"
-    },
-    {
-      "name": "default_model_desc_translate",
-      "value": "Message translation feature"
-    },
-    {
       "name": "default_model_current_selection",
       "value": "Current selection:"
     },
@@ -1729,20 +1709,12 @@
       "value": "Edit Title Prompt"
     },
     {
-      "name": "default_model_prompt_edit_title_translate",
-      "value": "Edit Translation Prompt"
-    },
-    {
       "name": "default_model_prompt_variables",
       "value": "Available variables:"
     },
     {
       "name": "default_model_prompt_title_variables_hint",
       "value": "{content} - Conversation content\\n{locale} - Locale"
-    },
-    {
-      "name": "default_model_prompt_translate_variables_hint",
-      "value": "{source_text} - Source text\\n{target_lang} - Target language"
     },
     {
       "name": "default_model_reset_prompt",
@@ -1759,10 +1731,6 @@
     {
       "name": "default_model_select_search_model",
       "value": "Select search optimization model"
-    },
-    {
-      "name": "default_model_select_translate_model",
-      "value": "Select translation model"
     },
     {
       "name": "default_model_unconfigured",

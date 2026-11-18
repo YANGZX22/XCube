@@ -59,7 +59,6 @@ struct DefaultModelPage {
 
   @Local chatModel: DefaultModelConfig = new DefaultModelConfig()
   @Local titleModel: DefaultModelConfig = new DefaultModelConfig()
-  @Local translateModel: DefaultModelConfig = new DefaultModelConfig()
   @Local searchOptimizationModel: DefaultModelConfig = new DefaultModelConfig()
 
   @Local providers: ModelProvider[] = []
@@ -67,7 +66,6 @@ struct DefaultModelPage {
   @Local showModelSheet: boolean = false
   @Local currentEditRole: ModelRole = ModelRole.CHAT
   @Local showPromptSheet: boolean = false
-  @Local currentPromptRole: ModelRole = ModelRole.TITLE
   @Local currentPrompt: string = ''
   private defaultModelService: DefaultModelService = ServiceRegistry.defaultModel()
   private providerViewModel: ProviderViewModel = ServiceRegistry.provider()
@@ -115,7 +113,6 @@ struct DefaultModelPage {
     await this.defaultModelService.loadConfig()
     this.chatModel = this.defaultModelService.getModel(ModelRole.CHAT)
     this.titleModel = this.defaultModelService.getModel(ModelRole.TITLE)
-    this.translateModel = this.defaultModelService.getModel(ModelRole.TRANSLATE)
     this.searchOptimizationModel = this.defaultModelService.getModel(ModelRole.SEARCH_OPTIMIZATION)
   }
 
@@ -259,7 +256,6 @@ struct DefaultModelPage {
     Column() {
       this.ChatModelSection()
       this.TitleModelSection()
-      this.TranslateModelSection()
       this.SearchOptimizationModelSection()
       Column().height(40)
     }
@@ -283,19 +279,7 @@ struct DefaultModelPage {
       .width('100%')
       .alignItems(VerticalAlign.Top)
 
-      Row({ space: 16 }) {
-        Column() {
-          this.TranslateModelSection()
-        }
-        .layoutWeight(1)
-
-        Column() {
-          this.SearchOptimizationModelSection()
-        }
-        .layoutWeight(1)
-      }
-      .width('100%')
-      .alignItems(VerticalAlign.Top)
+      this.SearchOptimizationModelSection()
 
       Column().height(40)
     }
@@ -342,35 +326,7 @@ struct DefaultModelPage {
         },
         onPromptClick: () => {
           this.showModelSheet = false
-          this.currentPromptRole = ModelRole.TITLE
           this.currentPrompt = this.defaultModelService.getTitlePromptTemplate()
-          this.showPromptSheet = true
-        }
-      })
-    }
-    .width('100%')
-  }
-
-  @Builder
-  TranslateModelSection() {
-    Column() {
-      this.SectionTitle($r('app.string.default_model_section_translate'))
-      ModelConfigCard({
-        roleName: $r('app.string.default_model_role_translate'),
-        description: $r('app.string.default_model_desc_translate'),
-        showPromptEdit: true,
-        isConfigured: this.translateModel.isConfigured(),
-        displayName: this.translateModel.getDisplayName(),
-        isDefaultPrompt: this.defaultModelService.isDefaultTranslatePrompt(),
-        onCardClick: () => {
-          this.showPromptSheet = false
-          this.currentEditRole = ModelRole.TRANSLATE
-          this.showModelSheet = true
-        },
-        onPromptClick: () => {
-          this.showModelSheet = false
-          this.currentPromptRole = ModelRole.TRANSLATE
-          this.currentPrompt = this.defaultModelService.getTranslatePromptTemplate()
           this.showPromptSheet = true
         }
       })
@@ -417,7 +373,7 @@ struct DefaultModelPage {
       currentSelectionText: this.getCurrentModelDisplayName(),
       isProvidersLoaded: this.isProvidersLoaded,
       providers: this.providers,
-      currentModelId: this.getCurrentModelId(),
+      currentModelId: this.currentModelConfig.modelId,
       onSelectModel: (providerId: string, modelId: string, modelName: string): void => {
         this.selectModel(providerId, modelId, modelName)
       },
@@ -434,9 +390,7 @@ struct DefaultModelPage {
   PromptEditSheet() {
     Column() {
       ImmersiveSheetHeader({
-        title: this.currentPromptRole === ModelRole.TITLE ?
-          $r('app.string.default_model_prompt_edit_title_title') :
-          $r('app.string.default_model_prompt_edit_title_translate'),
+        title: $r('app.string.default_model_prompt_edit_title_title'),
         showTrailing: true,
         trailingColor: this.themePrimary,
         onLeadingClick: (): void => {
@@ -455,21 +409,12 @@ struct DefaultModelPage {
           .width('100%')
           .textAlign(TextAlign.Center)
 
-        if (this.currentPromptRole === ModelRole.TITLE) {
-          Text($r('app.string.default_model_prompt_title_variables_hint'))
-            .fontSize(12)
-            .fontColor(this.themePrimary)
-            .width('100%')
-            .textAlign(TextAlign.Center)
-            .margin({ top: 4 })
-        } else {
-          Text($r('app.string.default_model_prompt_translate_variables_hint'))
-            .fontSize(12)
-            .fontColor(this.themePrimary)
-            .width('100%')
-            .textAlign(TextAlign.Center)
-            .margin({ top: 4 })
-        }
+        Text($r('app.string.default_model_prompt_title_variables_hint'))
+          .fontSize(12)
+          .fontColor(this.themePrimary)
+          .width('100%')
+          .textAlign(TextAlign.Center)
+          .margin({ top: 4 })
       }
       .width('100%')
       .padding({ left: 16, right: 16, top: 8, bottom: 4 })
@@ -532,24 +477,13 @@ struct DefaultModelPage {
       return $r('app.string.default_model_select_chat_model')
     } else if (this.currentEditRole === ModelRole.TITLE) {
       return $r('app.string.default_model_select_title_model')
-    } else if (this.currentEditRole === ModelRole.SEARCH_OPTIMIZATION) {
-      return $r('app.string.default_model_select_search_model')
     }
-    return $r('app.string.default_model_select_translate_model')
+    return $r('app.string.default_model_select_search_model')
   }
 
   // 获取当前选择的模型显示名称
   private getCurrentModelDisplayName(): string | Resource {
-    let config: DefaultModelConfig
-    if (this.currentEditRole === ModelRole.CHAT) {
-      config = this.chatModel
-    } else if (this.currentEditRole === ModelRole.TITLE) {
-      config = this.titleModel
-    } else if (this.currentEditRole === ModelRole.SEARCH_OPTIMIZATION) {
-      config = this.searchOptimizationModel
-    } else {
-      config = this.translateModel
-    }
+    const config = this.currentModelConfig
 
     if (config.isConfigured()) {
       return config.getDisplayName()
@@ -557,18 +491,14 @@ struct DefaultModelPage {
     return $r('app.string.default_model_unconfigured')
   }
 
-  private getCurrentModelId(): string {
-    let config: DefaultModelConfig
+  private get currentModelConfig(): DefaultModelConfig {
     if (this.currentEditRole === ModelRole.CHAT) {
-      config = this.chatModel
-    } else if (this.currentEditRole === ModelRole.TITLE) {
-      config = this.titleModel
-    } else if (this.currentEditRole === ModelRole.SEARCH_OPTIMIZATION) {
-      config = this.searchOptimizationModel
-    } else {
-      config = this.translateModel
+      return this.chatModel
     }
-    return config.modelId
+    if (this.currentEditRole === ModelRole.TITLE) {
+      return this.titleModel
+    }
+    return this.searchOptimizationModel
   }
 
   private getProviderNameById(providerId: string): string {
@@ -593,10 +523,8 @@ struct DefaultModelPage {
       this.chatModel = new DefaultModelConfig(config.modelId, config.providerId, config.modelName, config.providerName)
     } else if (this.currentEditRole === ModelRole.TITLE) {
       this.titleModel = new DefaultModelConfig(config.modelId, config.providerId, config.modelName, config.providerName)
-    } else if (this.currentEditRole === ModelRole.SEARCH_OPTIMIZATION) {
-      this.searchOptimizationModel = new DefaultModelConfig(config.modelId, config.providerId, config.modelName, config.providerName)
     } else {
-      this.translateModel = new DefaultModelConfig(config.modelId, config.providerId, config.modelName, config.providerName)
+      this.searchOptimizationModel = new DefaultModelConfig(config.modelId, config.providerId, config.modelName, config.providerName)
     }
 
     // 关闭 sheet
@@ -614,10 +542,8 @@ struct DefaultModelPage {
       this.chatModel = new DefaultModelConfig()
     } else if (this.currentEditRole === ModelRole.TITLE) {
       this.titleModel = new DefaultModelConfig()
-    } else if (this.currentEditRole === ModelRole.SEARCH_OPTIMIZATION) {
-      this.searchOptimizationModel = new DefaultModelConfig()
     } else {
-      this.translateModel = new DefaultModelConfig()
+      this.searchOptimizationModel = new DefaultModelConfig()
     }
 
     // 关闭 sheet
@@ -625,21 +551,12 @@ struct DefaultModelPage {
   }
 
   private async resetPrompt(): Promise<void> {
-    if (this.currentPromptRole === ModelRole.TITLE) {
-      await this.defaultModelService.resetTitlePrompt()
-      this.currentPrompt = DefaultPrompts.TITLE_PROMPT
-    } else {
-      await this.defaultModelService.resetTranslatePrompt()
-      this.currentPrompt = DefaultPrompts.TRANSLATE_PROMPT
-    }
+    await this.defaultModelService.resetTitlePrompt()
+    this.currentPrompt = DefaultPrompts.TITLE_PROMPT
   }
 
   private async savePrompt(): Promise<void> {
-    if (this.currentPromptRole === ModelRole.TITLE) {
-      await this.defaultModelService.setTitlePromptTemplate(this.currentPrompt)
-    } else {
-      await this.defaultModelService.setTranslatePromptTemplate(this.currentPrompt)
-    }
+    await this.defaultModelService.setTitlePromptTemplate(this.currentPrompt)
     this.showPromptSheet = false
   }
 

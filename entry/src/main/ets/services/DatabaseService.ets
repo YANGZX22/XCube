@@ -280,8 +280,6 @@ export class DatabaseService {
         reasoning_content TEXT,
         response_timeline_json TEXT DEFAULT '',
         context_compaction_state TEXT DEFAULT '',
-        translated_text TEXT DEFAULT '',
-        translated_lang TEXT DEFAULT '',
         billing_enabled INTEGER DEFAULT 0,
         billing_currency TEXT DEFAULT '',
         input_price_per_million REAL DEFAULT 0,
@@ -396,8 +394,6 @@ export class DatabaseService {
       await this.addMessageModelIdColumnIfNeeded()
       // 尝试添加消息 parent_id 字段（用于消息级对话树版本）
       await this.addMessageParentIdColumnIfNeeded()
-      // 尝试添加消息翻译字段（用于保存翻译结果）
-      await this.addMessageTranslationColumnsIfNeeded()
       await this.addMessageBillingColumnsIfNeeded()
       await this.addMessageCacheUsageColumnsIfNeeded()
 	      // 迁移现有供应商数据
@@ -465,23 +461,6 @@ export class DatabaseService {
       )
     } catch (error) {
       console.info('DatabaseService', 'context_compaction_state column may already exist')
-    }
-  }
-
-  // 添加消息翻译字段（用于保存翻译结果）
-  private async addMessageTranslationColumnsIfNeeded(): Promise<void> {
-    if (this.rdbStore === null) {
-      return
-    }
-    try {
-      await this.rdbStore.executeSql(`ALTER TABLE ${TableNames.MESSAGES} ADD COLUMN translated_text TEXT DEFAULT ''`)
-    } catch (error) {
-      console.info('DatabaseService', 'translated_text column may already exist')
-    }
-    try {
-      await this.rdbStore.executeSql(`ALTER TABLE ${TableNames.MESSAGES} ADD COLUMN translated_lang TEXT DEFAULT ''`)
-    } catch (error) {
-      console.info('DatabaseService', 'translated_lang column may already exist')
     }
   }
 
@@ -2315,8 +2294,6 @@ export class DatabaseService {
       reasoning_content: message.reasoningContent,
       response_timeline_json: this.serializeResponseTimeline(message),
       context_compaction_state: message.contextCompactionState,
-      translated_text: message.translatedText || '',
-      translated_lang: message.translatedLang || '',
       billing_enabled: message.billingEnabled ? 1 : 0,
       billing_currency: message.billingCurrency || '',
       input_price_per_million: message.inputPricePerMillion,
@@ -2523,8 +2500,6 @@ export class DatabaseService {
     if (contextCompactionState === 'completed') {
       message.contextCompactionState = ContextCompactionUiState.COMPLETED
     }
-    message.translatedText = this.safeGetString(resultSet, 'translated_text')
-    message.translatedLang = this.safeGetString(resultSet, 'translated_lang')
     message.billingEnabled = this.safeGetLong(resultSet, 'billing_enabled') === 1
     message.billingCurrency = this.safeGetString(resultSet, 'billing_currency')
     message.inputPricePerMillion = this.safeGetDouble(resultSet, 'input_price_per_million')
@@ -2716,24 +2691,6 @@ export class DatabaseService {
       }
     } catch (error) {
       console.error('DatabaseService', `Failed to update message: ${JSON.stringify(error)}`)
-    }
-  }
-
-  async updateMessageTranslation(messageId: string, translatedText: string, translatedLang: string): Promise<void> {
-    await this.waitForInitialization()
-    if (this.rdbStore === null || messageId === '') {
-      return
-    }
-    const valueBucket: relationalStore.ValuesBucket = {
-      translated_text: translatedText,
-      translated_lang: translatedLang
-    }
-    const predicates = new relationalStore.RdbPredicates(TableNames.MESSAGES)
-    predicates.equalTo('id', messageId)
-    try {
-      await this.rdbStore.update(valueBucket, predicates)
-    } catch (error) {
-      console.error('DatabaseService', `Failed to update message translation: ${JSON.stringify(error)}`)
     }
   }
 

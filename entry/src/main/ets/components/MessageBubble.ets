@@ -79,13 +79,6 @@ function hasNonWhitespace(text: string): boolean {
 const DOMAIN = 0x0002
 const TAG = 'MessageBubble'
 
-// 翻译目标语言配置
-interface TranslateLanguage {
-  code: string
-  name: string
-  nativeName: string
-}
-
 // 内容分段（用于 HTML 代码块内联预览）
 interface ContentSegment {
   isHtml: boolean
@@ -159,11 +152,6 @@ export struct MessageBubble {
   @Local collapsedTimelineReasoningIds: string[] = []
   // 三条及以上的展示块默认合并成单栏，按块记住用户的展开选择。
   @Local expandedTimelineBlockKeys: string[] = []
-  @Local translatedText: string = ''  // 翻译结果
-  @Local isTranslating: boolean = false  // 是否正在翻译
-  @Local showTranslation: boolean = false  // 是否显示翻译结果
-  @Local isTranslationExpanded: boolean = true  // 翻译结果是否展开
-  @Local currentTranslateLang: string = ''  // 当前翻译的目标语言
   @Local showEstimatedCostPopup: boolean = false
   @Local showCacheHitPopup: boolean = false
   @Local showLatexPreview: boolean = false
@@ -220,21 +208,6 @@ export struct MessageBubble {
   private get messageToolbarIconColor(): ResourceColor {
     return this.isManuscriptMode ? this.manuscriptAccentDeep : $r('app.color.text_tertiary')
   }
-  private get translationLightSurface(): string {
-    return '#FFFFFF'
-  }
-  private get translationLightBorder(): string {
-    return '#E5E7EB'
-  }
-  private get translationLightTextPrimary(): string {
-    return '#111827'
-  }
-  private get translationLightTextSecondary(): string {
-    return '#6B7280'
-  }
-  private get translationLightTextTertiary(): string {
-    return '#9CA3AF'
-  }
 
   // 聊天字体大小
   @Param chatFontSize: number = 15
@@ -247,7 +220,6 @@ export struct MessageBubble {
   // ========== 流式渲染优化 ==========
   // lv-markdown-in 自带流式渲染，无需手动节流
   private boundMessageId: string = ''
-  private translationRequestToken: number = 0
   private get speakingMessageId(): string {
     return getAppUiState().speakingMessageId
   }
@@ -268,7 +240,6 @@ export struct MessageBubble {
   private cachedReadonlyReasoningContent: string = ''
   private readonlyMessageContentDirty: boolean = true
   private readonlyReasoningContentDirty: boolean = true
-  private cachedReadonlyTranslatedText: string = ''
   private cachedHasHtmlSegments: boolean = false
   private cachedContentSegments: ContentSegment[] = []
   private cachedPreContentBlockSignature: string = ''
@@ -292,9 +263,6 @@ export struct MessageBubble {
   @Event onEdit: () => void = () => {}
   @Event onCancelEdit: () => void = () => {}  // 取消编辑回调
   @Event onShareMessage: () => void = () => {}
-  @Event onTranslate: (content: string, targetLang: string, callback: (result: string, errorMessage: string) => void) => void = () => {}
-  @Event onTranslationUpdated: (messageId: string, translatedText: string, translatedLang: string) => void =
-    (_messageId: string, _translatedText: string, _translatedLang: string): void => {}
   // 图片点击预览回调
   @Event onImageClick: (images: Array<string>, index: number) => void = () => {}
   @Event onFileAttachmentClick: (attachment: MessageAttachment) => void = (_attachment: MessageAttachment): void => {}
@@ -310,19 +278,6 @@ export struct MessageBubble {
   @Event onSelect: (messageId: string) => void = () => {}
   @Event onEnterMultiSelect: (messageId: string) => void = () => {}
   @Event onSwitchVersion: (delta: number) => void = (_delta: number): void => {}
-
-  // 支持的翻译语言列表
-  private translateLanguages: TranslateLanguage[] = [
-    { code: 'zh-CN', name: 'Chinese', nativeName: '简体中文' },
-    { code: 'en', name: 'English', nativeName: 'English' },
-    { code: 'zh-TW', name: 'Traditional Chinese', nativeName: '繁體中文' },
-    { code: 'ja', name: 'Japanese', nativeName: '日本語' },
-    { code: 'ko', name: 'Korean', nativeName: '한국어' },
-    { code: 'fr', name: 'French', nativeName: 'Français' },
-    { code: 'de', name: 'German', nativeName: 'Deutsch' },
-    { code: 'it', name: 'Italian', nativeName: 'Italiano' },
-    { code: 'es', name: 'Spanish', nativeName: 'Español' }
-  ]
 
   // 获取当前消息模型图标文件名（空字符串表示无可用图标）
   private getCurrentMessageModelIconPath(): string {
@@ -449,11 +404,6 @@ export struct MessageBubble {
     this.syncDerivedRenderCaches()
   }
 
-  @Monitor('translatedText')
-  onTranslatedTextChange(): void {
-    this.syncDerivedRenderCaches()
-  }
-
   private syncMessageScopedState(): void {
     if (this.message.id === this.boundMessageId) {
       return
@@ -463,16 +413,10 @@ export struct MessageBubble {
   }
 
   private resetMessageScopedState(): void {
-    this.translationRequestToken++
     this.isReasoningExpanded = false
     this.expandedTimelineReasoningIds = []
     this.collapsedTimelineReasoningIds = []
     this.expandedTimelineBlockKeys = []
-    this.translatedText = this.message.translatedText
-    this.isTranslating = false
-    this.showTranslation = this.message.translatedText !== ''
-    this.isTranslationExpanded = true
-    this.currentTranslateLang = this.message.translatedLang
     this.showCacheHitPopup = false
     this.showLatexPreview = false
     this.latexPreviewText = ''
@@ -524,7 +468,6 @@ export struct MessageBubble {
       this.currentModelId,
       this.isEditing ? '1' : '0',
       encodeRenderText(this.message, 'bubblePreviewContent', this.previewContent),
-      encodeRenderText(this.message, 'bubbleTranslatedText', this.translatedText),
       this.message.documentToolHint,
       this.buildAttachmentSignature(this.previewAttachments),
       this.buildAttachmentSignature(this.message.attachments)
@@ -553,7 +496,6 @@ export struct MessageBubble {
     // 路径读它们，急切计算等于每个分片白扫两遍正文和思考。
     this.readonlyMessageContentDirty = true
     this.readonlyReasoningContentDirty = true
-    this.cachedReadonlyTranslatedText = this.convertTaskListToReadonly(this.translatedText)
     this.cachedHasHtmlSegments = !this.message.isGenerating && this.hasHtmlBlocks(this.message.content)
     this.cachedContentSegments = this.cachedHasHtmlSegments ? this.splitContentToSegments(this.message.content) : []
     this.cachedPreviewImageEntries = this.buildImageAttachmentEntries(this.previewAttachments)
@@ -631,21 +573,17 @@ export struct MessageBubble {
       .backgroundColor(Color.Transparent)
   }
 
-  // 静态内容渲染（翻译结果 / HTML 分段正文）：仅在非流式时出现，传参不涉及响应式断链问题。
+  // HTML 分段中的 Markdown 正文仅在流式输出结束后渲染。
   @Builder
-  StaticMarkdown(content: string, compact: boolean, textColorOverride: string = '', titleColorOverride: string = '',
-    useChatBubbleTypeface: boolean = false) {
+  StaticMarkdown(content: string) {
     ChatMarkdownRenderer({
       content: this.resolvePythonSandboxImageSources(content),
       isInputEnded: true,
       incrementalAnalysis: false,
       useCangjieComponent: true,
       chatFontSize: this.chatFontSize,
-      compact: compact,
       latexFontSize: this.chatFontSize,
-      textColorOverride: textColorOverride,
-      titleColorOverride: titleColorOverride,
-      textTypeface: useChatBubbleTypeface ? this.chatBubbleTypeface : 'HarmonyOS Sans',
+      textTypeface: this.chatBubbleTypeface,
       themeRenderKey: this.themeRenderKey,
       onOpenLink: (title: string, url: string): void => {
         this.openWebSheetForLink(title, url)
@@ -987,39 +925,6 @@ export struct MessageBubble {
     .backgroundColor(Color.Transparent)
   }
 
-  // 处理翻译
-  private handleTranslate(targetLang: string): void {
-    if (this.isTranslating) {
-      return
-    }
-    const requestToken = ++this.translationRequestToken
-    const requestMessageId = this.message.id
-    this.isTranslating = true
-    this.showTranslation = true
-    this.isTranslationExpanded = true
-    this.translatedText = ''
-    this.currentTranslateLang = targetLang
-
-    this.onTranslate(this.message.content, targetLang, (result: string, errorMessage: string) => {
-      if (requestToken !== this.translationRequestToken || this.message.id !== requestMessageId) {
-        return
-      }
-      this.translatedText = result
-      this.isTranslating = false
-      if (result !== '') {
-        this.message.translatedText = result
-        this.message.translatedLang = targetLang
-        this.onTranslationUpdated(this.message.id, this.message.translatedText, this.message.translatedLang)
-      }
-      if (result === '' && errorMessage !== '') {
-        this.translatedText = this.message.translatedText
-        this.currentTranslateLang = this.message.translatedLang
-        this.showTranslation = this.message.translatedText !== ''
-        showToast(this.getUIContext(), errorMessage, 3000)
-      }
-    })
-  }
-
   // 获取显示内容（编辑模式下使用预览内容）
   private computeDisplayContent(): string {
     if (this.isEditing) {
@@ -1256,11 +1161,6 @@ export struct MessageBubble {
     return this.cachedReadonlyReasoningContent
   }
 
-  private getReadonlyTranslatedText(): string {
-    this.ensureDerivedRenderCaches()
-    return this.cachedReadonlyTranslatedText
-  }
-
   private shouldShowUserToolbar(): boolean {
     return !this.isMultiSelectMode && !this.isEditing && this.hasToolbarPayload()
   }
@@ -1307,10 +1207,6 @@ export struct MessageBubble {
   }
 
   private canCopyMessageContent(): boolean {
-    return this.hasMessageTextContent()
-  }
-
-  private canTranslateMessageContent(): boolean {
     return this.hasMessageTextContent()
   }
 
@@ -1554,19 +1450,6 @@ export struct MessageBubble {
     return rows
   }
 
-  // 清空翻译
-  private clearTranslation(): void {
-    this.translationRequestToken++
-    this.showTranslation = false
-    this.translatedText = ''
-    this.isTranslating = false
-    this.isTranslationExpanded = true
-    this.currentTranslateLang = ''
-    this.message.translatedText = ''
-    this.message.translatedLang = ''
-    this.onTranslationUpdated(this.message.id, '', '')
-  }
-
   // 将 hex 颜色向白色方向混合（用于多选选中态）
   private lightenColor(hex: string, amount: number): string {
     let c = hex.replace('#', '')
@@ -1665,7 +1548,7 @@ export struct MessageBubble {
 
   private getAssistantActionToolbarWidth(): number {
     const actionCount = 3 + (this.canCopyMessageContent() ? 1 : 0) +
-      (this.canReadMessageContent() ? 1 : 0) + (this.canTranslateMessageContent() ? 1 : 0) +
+      (this.canReadMessageContent() ? 1 : 0) +
       (this.shouldShowEstimatedCost() ? 1 : 0)
     return this.getActionToolbarWidth(actionCount, 1)
   }
@@ -2164,21 +2047,6 @@ export struct MessageBubble {
     }
   }
 
-  // 翻译子菜单
-  @Builder
-  TranslateSubMenu() {
-    Menu() {
-      ForEach(this.translateLanguages, (lang: TranslateLanguage) => {
-        MenuItem({ content: lang.nativeName })
-          .contentFont({ size: 14 })
-          .contentFontColor($r('app.color.text_primary'))
-          .onClick(() => { this.handleTranslate(lang.name) })
-      }, (lang: TranslateLanguage) => lang.code)
-    }
-    .backgroundColor(Color.Transparent)
-    .borderRadius(12)
-  }
-
   // AI 消息更多菜单（分享/多选/删除）
   @Builder
   AssistantMoreMenu() {
@@ -2347,23 +2215,6 @@ export struct MessageBubble {
         } else {
           this.onTTS(this.message.id, this.message.content)
         }
-      })
-    }
-
-    if (this.canTranslateMessageContent()) {
-      Button({ type: ButtonType.Circle, stateEffect: this.isManuscriptMode }) {
-        SymbolGlyph($r('sys.symbol.translate'))
-          .fontSize(this.getMessageToolbarIconSize())
-          .fontColor([this.messageToolbarIconColor])
-      }
-      .width(this.getMessageToolbarButtonSize())
-      .height(this.getMessageToolbarButtonSize())
-      .padding(0)
-      .backgroundColor(Color.Transparent)
-      .bindMenu(this.TranslateSubMenu(), {
-        systemMaterial: new uiMaterial.ImmersiveMaterial({
-          style: uiMaterial.ImmersiveStyle.THICK
-        })
       })
     }
 
@@ -3091,7 +2942,7 @@ export struct MessageBubble {
               }
             })
           } else {
-            this.StaticMarkdown(contentSegment.renderContent, false, '', '', true)
+            this.StaticMarkdown(contentSegment.renderContent)
           }
         }, (contentSegment: ContentSegment, index: number) => `${segment.id}_${index}`)
       } else {
@@ -3161,7 +3012,7 @@ export struct MessageBubble {
           .alignItems(VerticalAlign.Center)
         }
 
-        // 回复内容只使用一层材质背板；流式内容、工具和翻译继续由原节点绘制。
+        // 回复内容只使用一层材质背板；流式内容和工具继续由原节点绘制。
         Stack({ alignContent: Alignment.TopStart }) {
           if (!this.isManuscriptMode) {
             ImmersiveMaterialAnchor({
@@ -3214,7 +3065,7 @@ export struct MessageBubble {
                             }
                           })
                         } else {
-                          this.StaticMarkdown(segment.renderContent, false, '', '', true)
+                          this.StaticMarkdown(segment.renderContent)
                         }
                       },
                       (segment: ContentSegment, index: number) => {
@@ -3229,11 +3080,6 @@ export struct MessageBubble {
                       .transition(TransitionEffect.OPACITY.animation({ duration: 200 }))
                   }
                 }
-              }
-
-              // ========== 翻译结果区域（嵌入式可折叠卡片） ==========
-              if (this.showTranslation) {
-                this.TranslationCard()
               }
             }
             .width('100%')
@@ -3404,93 +3250,6 @@ export struct MessageBubble {
     .justifyContent(FlexAlign.Start)
     // 搜索指示器淡出过渡动画
     .transition(TransitionEffect.OPACITY.animation({ duration: 150 }))
-  }
-
-  // 翻译结果卡片（嵌入式可折叠）
-  @Builder
-  TranslationCard() {
-    Column() {
-      // 翻译标题栏（点击可折叠）
-      Row() {
-        SymbolGlyph($r('sys.symbol.translate'))
-          .fontSize(14)
-          .fontColor([this.translationLightTextSecondary])
-
-        Text($r('app.string.translation_label'))
-          .fontSize(12)
-          .fontWeight(FontWeight.Medium)
-          .fontColor(this.translationLightTextSecondary)
-          .margin({ left: 6 })
-
-        Blank()
-
-        // 展开/折叠箭头
-        SymbolGlyph($r('sys.symbol.chevron_down'))
-          .fontSize(14)
-          .fontColor([this.translationLightTextTertiary])
-          .rotate({ angle: this.isTranslationExpanded ? 0 : -90 })
-          .animation({ duration: 200, curve: Curve.EaseOut })
-      }
-      .width('100%')
-      .height(36)
-      .padding({ left: 12, right: 12 })
-      .backgroundColor(Color.Transparent)
-      .onClick(() => {
-        this.getUIContext().animateTo({ duration: 200, curve: Curve.EaseOut }, () => {
-          this.isTranslationExpanded = !this.isTranslationExpanded
-        })
-      })
-
-      // 翻译内容
-      if (this.isTranslationExpanded) {
-        Column() {
-          if (this.isTranslating) {
-            Row() {
-              LoadingProgress()
-                .width(14)
-                .height(14)
-                .color(this.themePrimary)
-              Text($r('app.string.translation_loading'))
-                .fontSize(13)
-                .fontColor(this.translationLightTextSecondary)
-                .margin({ left: 8 })
-            }
-            .padding({ left: 12, right: 12, bottom: 12 })
-          } else if (this.translatedText !== '') {
-            Column() {
-              this.StaticMarkdown(
-                this.getReadonlyTranslatedText(),
-                true,
-                this.translationLightTextPrimary,
-                this.translationLightTextPrimary
-              )
-            }
-            .width('100%')
-            .padding({ left: 12, right: 12, bottom: 12 })
-          }
-        }
-        .width('100%')
-        .backgroundColor(Color.Transparent)
-        .transition(TransitionEffect.OPACITY.animation({ duration: 200 }))
-      }
-    }
-    .width('100%')
-    .margin({ top: 8 })
-    .backgroundColor(Color.Transparent)
-    .border({
-      width: this.isManuscriptMode ? { top: 1, bottom: 1 } : 0.5,
-      color: this.isManuscriptMode ? getAppUiState().themeDivider : this.getTimelineRailColor()
-    })
-    .borderRadius(this.isManuscriptMode ? 0 : 12)
-    .clip(false)
-    .backdropBlur(this.isManuscriptMode ? 0 : 24)
-    .shadow({
-      radius: this.isManuscriptMode ? 0 : 12,
-      color: this.isManuscriptMode ? Color.Transparent :
-        (this.isDarkMode ? 'rgba(0, 0, 0, 0.32)' : 'rgba(15, 23, 42, 0.14)'),
-      offsetX: 0,
-      offsetY: 3
-    })
   }
 
   // ===== Timeline 主题色 helper（与设计稿一致：底色跟随 AI 气泡，竖线/边框用主题色半透明） =====

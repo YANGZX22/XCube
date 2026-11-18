@@ -297,7 +297,6 @@ export enum ProviderIconType {
 export enum ModelRole {
   CHAT = 'chat',
   TITLE = 'title',
-  TRANSLATE = 'translate',
   SEARCH_OPTIMIZATION = 'search_optimization'
 }
 
@@ -632,8 +631,6 @@ export class ChatMessage {
   @Trace responseSegments: AssistantResponseSegment[] // AI 消息内部按生成顺序保留的展示时间线
   @Trace toolCallId: string         // 用于 tool 角色消息，关联到对应的 tool_call
   @Trace documentToolHint: string   // 用户消息上的文档工具提示（不作为正文发送）
-  @Trace translatedText: string     // 翻译结果
-  @Trace translatedLang: string     // 翻译目标语言
 
   constructor(id: string, role: MessageRole, content: string, modelName: string = '', modelId: string = '') {
     this.id = id
@@ -671,8 +668,6 @@ export class ChatMessage {
     this.responseSegments = []
     this.toolCallId = ''
     this.documentToolHint = ''
-    this.translatedText = ''
-    this.translatedLang = ''
   }
 
   // 检查是否有推理内容

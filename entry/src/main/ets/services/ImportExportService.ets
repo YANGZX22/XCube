@@ -31,7 +31,7 @@ import {
 import { Assistant, DEFAULT_ASSISTANT_ID } from '../models/AssistantModels'
 import { DatabaseService } from './DatabaseService'
 import { AttachmentStorageService } from './AttachmentStorageService'
-import { getPreferencesService, PreferenceKeys } from './PreferencesService'
+import { getPreferencesService, PreferenceKeys, RETIRED_TRANSLATION_PREFERENCE_KEYS } from './PreferencesService'
 import { getThemeService } from './ThemeService'
 import { getSettingsManager } from '../viewmodels/SettingsManager'
 import { DEFAULT_PRIMARY_COLOR } from '../config/ThemeDefaults'
@@ -498,8 +498,8 @@ export class ImportExportService {
       const keys = Array.from(allData.keys())
       const includeSecrets = this.shouldIncludeSecrets(options)
       for (const key of keys) {
-        // 若不含 API 密钥，跳过敏感键
-        if (!includeSecrets && SENSITIVE_PREFERENCE_KEYS.includes(key)) {
+        if (RETIRED_TRANSLATION_PREFERENCE_KEYS.includes(key) ||
+          (!includeSecrets && SENSITIVE_PREFERENCE_KEYS.includes(key))) {
           continue
         }
         const value = allData.get(key)
@@ -1311,6 +1311,9 @@ export class ImportExportService {
     let restored = 0
     const preferencesService = getPreferencesService()
     for (const entry of preferences) {
+      if (RETIRED_TRANSLATION_PREFERENCE_KEYS.includes(entry.key)) {
+        continue
+      }
       try {
         if (entry.type === 'string') {
           await preferencesService.setString(entry.key, entry.value as string)

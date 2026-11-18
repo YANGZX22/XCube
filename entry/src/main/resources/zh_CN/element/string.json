@@ -782,7 +782,7 @@
     },
     {
       "name": "settings_default_model_desc",
-      "value": "聊天、标题生成、翻译"
+      "value": "聊天、标题生成、搜索优化"
     },
     {
       "name": "edit_chat_title",
@@ -1031,14 +1031,6 @@
     {
       "name": "menu_unfavorite",
       "value": "取消收藏"
-    },
-    {
-      "name": "translation_label",
-      "value": "翻译"
-    },
-    {
-      "name": "translation_loading",
-      "value": "正在翻译..."
     },
     {
       "name": "reasoning_process",
@@ -1697,18 +1689,6 @@
       "value": "自动生成对话标题"
     },
     {
-      "name": "default_model_section_translate",
-      "value": "翻译模型"
-    },
-    {
-      "name": "default_model_role_translate",
-      "value": "翻译"
-    },
-    {
-      "name": "default_model_desc_translate",
-      "value": "消息翻译功能"
-    },
-    {
       "name": "default_model_current_selection",
       "value": "当前选择："
     },
@@ -1729,20 +1709,12 @@
       "value": "编辑标题 Prompt"
     },
     {
-      "name": "default_model_prompt_edit_title_translate",
-      "value": "编辑翻译 Prompt"
-    },
-    {
       "name": "default_model_prompt_variables",
       "value": "可用变量:"
     },
     {
       "name": "default_model_prompt_title_variables_hint",
       "value": "{content} 对话内容 | {locale} 语言"
-    },
-    {
-      "name": "default_model_prompt_translate_variables_hint",
-      "value": "{source_text} 原文 | {target_lang} 目标语言"
     },
     {
       "name": "default_model_reset_prompt",
@@ -1759,10 +1731,6 @@
     {
       "name": "default_model_select_search_model",
       "value": "选择搜索优化模型"
-    },
-    {
-      "name": "default_model_select_translate_model",
-      "value": "选择翻译模型"
     },
     {
       "name": "default_model_unconfigured",

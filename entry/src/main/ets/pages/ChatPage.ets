@@ -35,7 +35,6 @@ import { SharePreviewSheet } from '../components/SharePreviewSheet'
 import { ChatViewModel, TitleGenerationCallbacks } from '../viewmodels/ChatViewModel'
 import { ProviderViewModel } from '../viewmodels/ProviderViewModel'
 import { AppStateManager } from '../viewmodels/AppStateManager'
-import { AITaskService } from '../services/AITaskService'
 import { WebSearchService } from '../services/WebSearchService'
 import { DefaultModelService } from '../services/DefaultModelService'
 import { PreferenceKeys, PreferencesService } from '../services/PreferencesService'
@@ -506,7 +505,6 @@ export struct ChatPage {
   private webSearchService: WebSearchService = ServiceRegistry.webSearch()
   private defaultModelService: DefaultModelService = ServiceRegistry.defaultModel()
   private preferencesService: PreferencesService = ServiceRegistry.preferences()
-  private aiTaskService: AITaskService = ServiceRegistry.aiTask()
   private toolRegistry: ToolRegistry = ServiceRegistry.toolRegistry()
   private mcpService: McpService = ServiceRegistry.mcp()
   private skillService: SkillService = ServiceRegistry.skill()
@@ -4233,13 +4231,6 @@ export struct ChatPage {
           onShareMessage: (message: ChatMessage): void => {
             this.handleShareSingleMessage(message)
           },
-          onTranslate: (content: string, targetLang: string,
-            callback: (result: string, errorMessage: string) => void): void => {
-            this.handleTranslate(content, targetLang, callback)
-          },
-          onTranslationUpdated: (messageId: string, translatedText: string, translatedLang: string): void => {
-            this.handleTranslationUpdated(messageId, translatedText, translatedLang)
-          },
           onImageClick: (images: Array<string>, imageIndex: number): void => {
             this.handleImagePreview(images, imageIndex)
           },
@@ -6917,31 +6908,6 @@ export struct ChatPage {
       await this.chatViewModel.deleteMessage(message.id)
     }
     this.showChatSnack($r('app.string.message_deleted'), 2000, SnackBarTone.SUCCESS)
-  }
-
-  // 处理翻译请求
-  handleTranslate(content: string, targetLang: string, callback: (result: string, errorMessage: string) => void): void {
-    this.aiTaskService.translateText(content, targetLang).then((result) => {
-      if (result.success) {
-        callback(result.content, '')
-      } else {
-        callback('', result.errorMessage)
-      }
-    }).catch((error: Error) => {
-      callback('', `${pickLocalizedText('翻译失败：', 'Translation failed: ')}${error.message}`)
-    })
-  }
-
-  private handleTranslationUpdated(messageId: string, translatedText: string, translatedLang: string): void {
-    const index = findMessageIndexById(this.messages, messageId)
-    if (index >= 0) {
-      this.messages[index].translatedText = translatedText
-      this.messages[index].translatedLang = translatedLang
-      this.markMessageListChanged()
-    }
-    this.chatViewModel.updateMessageTranslation(messageId, translatedText, translatedLang).catch((error: Error): void => {
-      console.error('ChatPage', `Failed to save translation: ${JSON.stringify(error)}`)
-    })
   }
 
   // 处理TTS朗读

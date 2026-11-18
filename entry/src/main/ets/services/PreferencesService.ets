@@ -25,10 +25,6 @@ export class PreferenceKeys {
   static readonly DEFAULT_TITLE_PROVIDER_ID: string = 'default_title_provider_id'
   static readonly DEFAULT_TITLE_MODEL_NAME: string = 'default_title_model_name'
   static readonly DEFAULT_TITLE_PROVIDER_NAME: string = 'default_title_provider_name'
-  static readonly DEFAULT_TRANSLATE_MODEL_ID: string = 'default_translate_model_id'
-  static readonly DEFAULT_TRANSLATE_PROVIDER_ID: string = 'default_translate_provider_id'
-  static readonly DEFAULT_TRANSLATE_MODEL_NAME: string = 'default_translate_model_name'
-  static readonly DEFAULT_TRANSLATE_PROVIDER_NAME: string = 'default_translate_provider_name'
   static readonly DEFAULT_SEARCH_OPTIMIZATION_MODEL_ID: string = 'default_search_optimization_model_id'
   static readonly DEFAULT_SEARCH_OPTIMIZATION_PROVIDER_ID: string = 'default_search_optimization_provider_id'
   static readonly DEFAULT_SEARCH_OPTIMIZATION_MODEL_NAME: string = 'default_search_optimization_model_name'
@@ -36,8 +32,6 @@ export class PreferenceKeys {
 
   // Prompt 配置
   static readonly TITLE_PROMPT_TEMPLATE: string = 'title_prompt_template'
-  static readonly TRANSLATE_PROMPT_TEMPLATE: string = 'translate_prompt_template'
-  static readonly TRANSLATE_TARGET_LANGUAGE: string = 'translate_target_language'
   static readonly CUSTOM_SYSTEM_PROMPT: string = 'custom_system_prompt'
   static readonly SYSTEM_PROMPT_ENABLED: string = 'system_prompt_enabled'
 
@@ -147,6 +141,16 @@ export class PreferenceKeys {
 // models.dev 默认基址，PreferenceKeys.MODELS_DEV_BASE_URL 未配置时使用
 export const DEFAULT_MODELS_DEV_BASE_URL: string = 'https://models.dev'
 
+// 仅用于清理旧偏好及过滤旧版备份。
+export const RETIRED_TRANSLATION_PREFERENCE_KEYS: ReadonlyArray<string> = [
+  'default_translate_model_id',
+  'default_translate_provider_id',
+  'default_translate_model_name',
+  'default_translate_provider_name',
+  'translate_prompt_template',
+  'translate_target_language'
+]
+
 // 主题模式枚举
 export enum ThemeMode {
   SYSTEM = 'system',
@@ -212,6 +216,7 @@ export class PreferencesService {
     try {
       // 获取偏好设置实例
       this.dataPreferences = await preferences.getPreferences(context, this.PREFERENCES_NAME)
+      await this.removeRetiredTranslationPreferences(this.dataPreferences)
       // 标记为已初始化
       this.isInitialized = true
     } catch (error) {
@@ -223,6 +228,23 @@ export class PreferencesService {
         toErrorDetail(error as Object),
         false
       )
+    }
+  }
+
+  private async removeRetiredTranslationPreferences(store: preferences.Preferences): Promise<void> {
+    try {
+      let changed = false
+      for (const key of RETIRED_TRANSLATION_PREFERENCE_KEYS) {
+        if (store.hasSync(key)) {
+          store.deleteSync(key)
+          changed = true
+        }
+      }
+      if (changed) {
+        await store.flush()
+      }
+    } catch (error) {
+      console.warn('PreferencesService', `Failed to clean up legacy translation preferences: ${JSON.stringify(error)}`)
     }
   }
 

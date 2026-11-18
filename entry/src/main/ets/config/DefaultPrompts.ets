@@ -41,21 +41,8 @@ export class DefaultPrompts {
 对话内容：
 {content}`
 
-  // 翻译 Prompt
-  static readonly TRANSLATE_PROMPT: string = `You are a translation expert, skilled in translating various languages, and maintaining accuracy, faithfulness, and elegance in translation.
-Next, I will send you text. Please translate it into {target_lang}, and return the translation result directly, without adding any explanations or other content.
-
-Please translate the <source_text> section:
-<source_text>
-{source_text}
-</source_text>`
-
-  // 默认翻译目标语言
-  static readonly DEFAULT_TARGET_LANGUAGE: string = 'Chinese'
-
   // 硅基流动默认配置（免费模型）
   static readonly SILICONFLOW_PROVIDER_ID: string = 'siliconflow'
   static readonly SILICONFLOW_TITLE_MODEL: string = 'Qwen/Qwen3-8B'
-  static readonly SILICONFLOW_TRANSLATE_MODEL: string = 'THUDM/GLM-4-9B-0414'
   static readonly SILICONFLOW_SEARCH_OPTIMIZATION_MODEL: string = 'Qwen/Qwen3-8B'
 }

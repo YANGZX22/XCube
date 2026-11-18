@@ -34,11 +34,6 @@ export struct ChatMessageListItem {
   @Event onEdit: () => void = () => {}
   @Event onCancelEdit: () => void = () => {}
   @Event onShareMessage: () => void = () => {}
-  @Event onTranslate: (content: string, targetLang: string,
-    callback: (result: string, errorMessage: string) => void) => void =
-    (_content: string, _targetLang: string, _callback: (result: string, errorMessage: string) => void): void => {}
-  @Event onTranslationUpdated: (messageId: string, translatedText: string, translatedLang: string) => void =
-    (_messageId: string, _translatedText: string, _translatedLang: string): void => {}
   @Event onImageClick: (images: Array<string>, imageIndex: number) => void =
     (_images: Array<string>, _imageIndex: number): void => {}
   @Event onFileAttachmentClick: (attachment: MessageAttachment) => void =
@@ -103,13 +98,6 @@ export struct ChatMessageListItem {
           },
           onShareMessage: () => {
             this.onShareMessage()
-          },
-          onTranslate: (content: string, targetLang: string,
-            callback: (result: string, errorMessage: string) => void): void => {
-            this.onTranslate(content, targetLang, callback)
-          },
-          onTranslationUpdated: (messageId: string, translatedText: string, translatedLang: string): void => {
-            this.onTranslationUpdated(messageId, translatedText, translatedLang)
           },
           onImageClick: (images: Array<string>, imageIndex: number): void => {
             this.onImageClick(images, imageIndex)

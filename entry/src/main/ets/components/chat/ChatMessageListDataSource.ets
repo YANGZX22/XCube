@@ -184,8 +184,6 @@ export function buildChatMessageContentRenderSignature(
     encodeNumber(message.versionCount),
     encodeRenderText(message, 'content', message.content),
     encodeRenderText(message, 'reasoningContent', message.reasoningContent),
-    encodeRenderText(message, 'translatedText', message.translatedText),
-    encodeValue(message.translatedLang),
     encodeValue(message.searchQuery),
     encodeValue(message.searchEngine),
     encodeValue(message.searchSource),

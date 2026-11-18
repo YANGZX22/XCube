@@ -1,27 +1,18 @@
-// AI 任务服务 - 处理标题生成和翻译
-import { getAIApiService, AIApiService, AIApiConfig, RequestMessage } from './AIApiService'
+// 对话标题生成服务
+import { AIApiService, AIApiConfig, RequestMessage } from './AIApiService'
 import { getDefaultModelService, DefaultModelService } from './DefaultModelService'
 import { getProviderViewModel, ProviderViewModel } from '../viewmodels/ProviderViewModel'
 import { ModelRole, OpenAITransport, ReasoningLevel } from '../models/ChatModels'
 import { getEffectiveApiKey } from '../config/PresetProviders'
 
-// 翻译/标题生成结果
-export interface AITaskResult {
-  success: boolean
-  content: string
-  errorMessage: string
-}
-
 // AI 任务服务 - 单例模式
 export class AITaskService {
   private static instance: AITaskService | null = null
-  private aiApiService: AIApiService
   private defaultModelService: DefaultModelService
   private providerViewModel: ProviderViewModel
   private readonly TITLE_REQUEST_TIMEOUT_MS: number = 20000
 
   private constructor() {
-    this.aiApiService = getAIApiService()
     this.defaultModelService = getDefaultModelService()
     this.providerViewModel = getProviderViewModel()
   }
@@ -258,13 +249,10 @@ export class AITaskService {
       }
     }
 
-    // 构建 Prompt（使用 system + user 双消息模式）
-    const systemPrompt = this.defaultModelService.getTitleSystemPrompt(effectiveLocale)
-    const userPrompt = this.defaultModelService.getTitleUserPrompt(truncatedContent)
-    const messages: RequestMessage[] = [
-      new RequestMessage('system', systemPrompt),
-      new RequestMessage('user', userPrompt)
-    ]
+    const messages: RequestMessage[] = this.defaultModelService.isDefaultTitlePrompt() ? [
+      new RequestMessage('system', this.defaultModelService.getTitleSystemPrompt(effectiveLocale)),
+      new RequestMessage('user', this.defaultModelService.getTitleUserPrompt(truncatedContent))
+    ] : [new RequestMessage('user', this.defaultModelService.getTitlePrompt(truncatedContent, effectiveLocale))]
 
     try {
       // 标题请求使用独立实例，避免与正在进行的流式对话共享解析状态。
@@ -306,82 +294,6 @@ export class AITaskService {
       }
       const errorMessage = error instanceof Error ? error.message : JSON.stringify(error)
       throw new Error(errorMessage !== '' ? errorMessage : 'Title generation request failed')
-    }
-  }
-
-  // 翻译文本
-  async translateText(sourceText: string, targetLang: string = ''): Promise<AITaskResult> {
-    const translateModel = this.defaultModelService.getModel(ModelRole.TRANSLATE)
-
-    // 获取供应商信息（使用异步方法，确保缓存已加载）
-    const provider = await this.providerViewModel.getProviderByIdAsync(translateModel.providerId)
-
-    if (provider === null) {
-      console.error('AITaskService', 'Provider not found: ' + translateModel.providerId)
-      return { success: false, content: '', errorMessage: '未找到翻译模型对应的服务商' }
-    }
-
-    // 获取有效的 API Key（优先用户配置，其次预设）
-    const effectiveApiKey = getEffectiveApiKey(provider.id, provider.apiKey)
-    if (effectiveApiKey === '') {
-      console.error('AITaskService', 'No API Key configured for provider: ' + provider.id)
-      return { success: false, content: '', errorMessage: `请为 ${provider.name} 配置 API Key` }
-    }
-
-    // 构建 API 配置
-    const apiConfig: AIApiConfig = {
-      providerId: provider.id,
-      providerType: provider.type,
-      apiStyle: provider.apiStyle,
-      apiKey: effectiveApiKey,
-      baseUrl: provider.baseUrl,
-      apiPath: provider.apiPath !== '' ? provider.apiPath : undefined,
-      customHeadersJson: provider.customHeadersJson || undefined
-    }
-    for (let i = 0; i < provider.models.length; i++) {
-      if (provider.models[i].id === translateModel.modelId) {
-        apiConfig.topP = provider.models[i].parameters.topP
-        apiConfig.presencePenalty = provider.models[i].parameters.presencePenalty
-        apiConfig.frequencyPenalty = provider.models[i].parameters.frequencyPenalty
-        if (!provider.models[i].capabilities.supportsReasoning) {
-          apiConfig.modelReasoningStrategyOverride = ''
-        } else {
-          apiConfig.modelReasoningStrategyOverride = provider.models[i].reasoningStrategyOverride
-        }
-        apiConfig.modelSupportsReasoning = provider.models[i].capabilities.supportsReasoning
-        break
-      }
-    }
-
-    // 构建 Prompt
-    const prompt = this.defaultModelService.getTranslatePrompt(sourceText, targetLang)
-    const messages: RequestMessage[] = [
-      new RequestMessage('user', prompt)
-    ]
-
-    try {
-      const result = await this.aiApiService.sendChatRequest(
-        apiConfig,
-        messages,
-        translateModel.modelId,
-        0.3,  // 低温度以获得更准确的翻译
-        4096  // 翻译可能需要较多 token
-      )
-
-      if (result.success) {
-        return { success: true, content: result.content.trim(), errorMessage: '' }
-      } else {
-        // 检查是否是 401 认证错误
-        let errorMessage = result.errorMessage
-        if (errorMessage.includes('401') || errorMessage.toLowerCase().includes('unauthorized') || errorMessage.toLowerCase().includes('authentication')) {
-          errorMessage = `API Key 认证失败，请检查 ${provider.name} 的 API Key 是否正确`
-        }
-        console.error('AITaskService', 'Failed to translate: ' + result.errorMessage)
-        return { success: false, content: '', errorMessage: errorMessage }
-      }
-    } catch (error) {
-      console.error('AITaskService', 'Error translating: ' + JSON.stringify(error))
-      return { success: false, content: '', errorMessage: '翻译失败：' + JSON.stringify(error) }
     }
   }
 }

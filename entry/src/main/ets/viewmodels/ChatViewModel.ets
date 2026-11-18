@@ -5309,17 +5309,6 @@ ${preview}`
     }
   }
 
-  async updateMessageTranslation(messageId: string, translatedText: string, translatedLang: string): Promise<void> {
-    await this.databaseService.updateMessageTranslation(messageId, translatedText, translatedLang)
-    if (this.currentSession !== null) {
-      const index = this.currentSession.messages.findIndex((m: ChatMessage) => m.id === messageId)
-      if (index >= 0) {
-        this.currentSession.messages[index].translatedText = translatedText
-        this.currentSession.messages[index].translatedLang = translatedLang
-      }
-    }
-  }
-
   // 更新消息内容和附件
   async updateMessageContentAndAttachments(
     messageId: string,
