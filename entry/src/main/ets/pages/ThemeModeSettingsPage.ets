@@ -1332,7 +1332,7 @@ export struct ThemeAppearanceSettingsView {
   @Builder
   private PreviewMessageActions(alignment: FlexAlign) {
     Row({ space: 12 }) {
-      SymbolGlyph($r('sys.symbol.checkmark_square_on_square'))
+      SymbolGlyph($r('sys.symbol.plus_square_on_square'))
         .fontSize(12)
         .fontColor([this.isManuscriptMode() ? this.getManuscriptAccentDeep() : $r('app.color.text_tertiary')])
       SymbolGlyph($r('sys.symbol.arrow_clockwise'))

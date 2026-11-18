@@ -79,6 +79,13 @@ function hasNonWhitespace(text: string): boolean {
 const DOMAIN = 0x0002
 const TAG = 'MessageBubble'
 
+// ArkUI 使用 -1 跳过首帧动效，之后每次图标切换都使用不同的触发值。
+enum CopyIconState {
+  INITIAL = -1,
+  COPIED = 0,
+  RESTORED = 1
+}
+
 // 内容分段（用于 HTML 代码块内联预览）
 interface ContentSegment {
   isHtml: boolean
@@ -154,6 +161,9 @@ export struct MessageBubble {
   @Local expandedTimelineBlockKeys: string[] = []
   @Local showEstimatedCostPopup: boolean = false
   @Local showCacheHitPopup: boolean = false
+  @Local private copyIconState: CopyIconState = CopyIconState.INITIAL
+  private copyFeedbackTimer: number = -1
+  private copyFeedbackGeneration: number = 0
   @Local showLatexPreview: boolean = false
   // 子智能体实时预览面板（bindSheet 挂在工具区域 Column 上，避免卡片重建时被关闭）
   @Local showSubAgentPreviewSheet: boolean = false
@@ -371,6 +381,10 @@ export struct MessageBubble {
     this.expandedTimelineBlockKeys = []
   }
 
+  aboutToDisappear(): void {
+    this.resetCopyFeedback()
+  }
+
   // 消息状态变化回调（优化跳动点动画性能）
   @Monitor('message')
   onMessageStateChange(): void {
@@ -413,6 +427,7 @@ export struct MessageBubble {
   }
 
   private resetMessageScopedState(): void {
+    this.resetCopyFeedback()
     this.isReasoningExpanded = false
     this.expandedTimelineReasoningIds = []
     this.collapsedTimelineReasoningIds = []
@@ -756,20 +771,7 @@ export struct MessageBubble {
               .margin(0)
           }
 
-          if (this.canCopyMessageContent()) {
-            Button({ type: ButtonType.Circle, stateEffect: true }) {
-              SymbolGlyph($r('sys.symbol.checkmark_square_on_square'))
-                .fontSize(this.getMessageToolbarIconSize())
-                .fontColor([this.manuscriptAccentDeep])
-            }
-            .width(this.getMessageToolbarButtonSize())
-            .height(this.getMessageToolbarButtonSize())
-            .padding(0)
-            .backgroundColor(Color.Transparent)
-            .onClick(() => {
-              this.handleCopy()
-            })
-          }
+          this.MessageCopyButton()
 
           Button({ type: ButtonType.Circle, stateEffect: true }) {
             SymbolGlyph($r('sys.symbol.arrow_clockwise'))
@@ -806,7 +808,7 @@ export struct MessageBubble {
           .height(this.getMessageToolbarButtonSize())
           .padding(0)
           .backgroundColor(Color.Transparent)
-          .bindMenu(this.UserMoreMenu(), {
+          .bindMenu(this.MessageMoreMenu(), {
             systemMaterial: new uiMaterial.ImmersiveMaterial({
               style: uiMaterial.ImmersiveStyle.THICK
             })
@@ -1532,6 +1534,27 @@ export struct MessageBubble {
     return this.isManuscriptMode ? 14 : 13
   }
 
+  @Builder
+  private MessageCopyButton() {
+    if (this.canCopyMessageContent()) {
+      Button({ type: ButtonType.Circle, stateEffect: this.isManuscriptMode }) {
+        SymbolGlyph(this.copyIconState === CopyIconState.COPIED ?
+          $r('sys.symbol.checkmark_square_on_square_fill') : $r('sys.symbol.plus_square_on_square'))
+          .fontSize(this.getMessageToolbarIconSize())
+          .fontColor([this.copyIconState === CopyIconState.COPIED ? this.themePrimary : this.messageToolbarIconColor])
+          .symbolEffect(new ReplaceSymbolEffect(EffectScope.WHOLE), this.copyIconState)
+      }
+      .width(this.getMessageToolbarButtonSize())
+      .height(this.getMessageToolbarButtonSize())
+      .padding(0)
+      .backgroundColor(Color.Transparent)
+      .accessibilityText(this.copyIconState === CopyIconState.COPIED ? $r('app.string.copy_success') : $r('app.string.copy'))
+      .onClick((): void => {
+        this.copyToClipboard(this.message.content, true)
+      })
+    }
+  }
+
   // 工具栏各按钮/版本文本都是固定宽度，Divider 固定 1vp。
   // 根据可见项求宽度，避免把整个 TabBar 的外扩尺寸当作 Row 宽度，或锁住后续增减项。
   private getActionToolbarWidth(actionCount: number, separators: number): number {
@@ -1602,21 +1625,7 @@ export struct MessageBubble {
         .margin({ left: 3, right: 3 })
     }
 
-    // 复制
-    if (this.canCopyMessageContent()) {
-      Button({ type: ButtonType.Circle, stateEffect: false }) {
-        SymbolGlyph($r('sys.symbol.checkmark_square_on_square'))
-          .fontSize(13)
-          .fontColor([$r('app.color.text_tertiary')])
-      }
-      .width(this.getMessageToolbarButtonSize())
-      .height(this.getMessageToolbarButtonSize())
-      .padding(0)
-      .backgroundColor(Color.Transparent)
-      .onClick(() => {
-        this.handleCopy()
-      })
-    }
+    this.MessageCopyButton()
 
     // 重新生成
     Button({ type: ButtonType.Circle, stateEffect: false }) {
@@ -1656,7 +1665,7 @@ export struct MessageBubble {
     .height(this.getMessageToolbarButtonSize())
     .padding(0)
     .backgroundColor(Color.Transparent)
-    .bindMenu(this.UserMoreMenu(), {
+    .bindMenu(this.MessageMoreMenu(), {
       systemMaterial: new uiMaterial.ImmersiveMaterial({
         style: uiMaterial.ImmersiveStyle.THICK
       })
@@ -2047,41 +2056,35 @@ export struct MessageBubble {
     }
   }
 
-  // AI 消息更多菜单（分享/多选/删除）
   @Builder
-  AssistantMoreMenu() {
+  private MessageMoreMenu() {
     Menu() {
-      MenuItem({ symbolStartIcon: new SymbolGlyphModifier($r('sys.symbol.share')).fontSize(16), content: $r('app.string.menu_share') })
-        .contentFont({ size: 14 })
+      MenuItem({
+        symbolStartIcon: new SymbolGlyphModifier($r('sys.symbol.share'))
+          .fontSize(16)
+          .fontWeight(FontWeight.Medium),
+        content: $r('app.string.menu_share')
+      })
+        .contentFont({ size: 14, weight: FontWeight.Medium })
         .onClick(() => { this.onShareMessage() })
 
-      MenuItem({ symbolStartIcon: new SymbolGlyphModifier($r('sys.symbol.checkmark_circle')).fontSize(16), content: $r('app.string.menu_multi_select') })
-        .contentFont({ size: 14 })
+      MenuItem({
+        symbolStartIcon: new SymbolGlyphModifier($r('sys.symbol.checkmark_circle'))
+          .fontSize(16)
+          .fontWeight(FontWeight.Medium),
+        content: $r('app.string.menu_multi_select')
+      })
+        .contentFont({ size: 14, weight: FontWeight.Medium })
         .onClick(() => { this.onEnterMultiSelect(this.message.id) })
 
-      MenuItem({ symbolStartIcon: new SymbolGlyphModifier($r('sys.symbol.trash')).fontSize(16), content: $r('app.string.delete') })
-        .contentFont({ size: 14 })
-        .contentFontColor($r('app.color.status_error'))
-        .onClick(() => { this.onDelete() })
-    }
-    .backgroundColor(Color.Transparent)
-    .borderRadius(12)
-  }
-
-  // 用户消息更多菜单（分享/多选/删除）
-  @Builder
-  UserMoreMenu() {
-    Menu() {
-      MenuItem({ symbolStartIcon: new SymbolGlyphModifier($r('sys.symbol.share')).fontSize(16), content: $r('app.string.menu_share') })
-        .contentFont({ size: 14 })
-        .onClick(() => { this.onShareMessage() })
-
-      MenuItem({ symbolStartIcon: new SymbolGlyphModifier($r('sys.symbol.checkmark_circle')).fontSize(16), content: $r('app.string.menu_multi_select') })
-        .contentFont({ size: 14 })
-        .onClick(() => { this.onEnterMultiSelect(this.message.id) })
-
-      MenuItem({ symbolStartIcon: new SymbolGlyphModifier($r('sys.symbol.trash')).fontSize(16), content: $r('app.string.delete') })
-        .contentFont({ size: 14 })
+      MenuItem({
+        symbolStartIcon: new SymbolGlyphModifier($r('sys.symbol.trash'))
+          .fontSize(16)
+          .fontWeight(FontWeight.Medium)
+          .fontColor([$r('app.color.status_error')]),
+        content: $r('app.string.delete')
+      })
+        .contentFont({ size: 14, weight: FontWeight.Medium })
         .contentFontColor($r('app.color.status_error'))
         .onClick(() => { this.onDelete() })
     }
@@ -2161,20 +2164,7 @@ export struct MessageBubble {
         .margin(this.isManuscriptMode ? 0 : { left: 3, right: 3 })
     }
 
-    if (this.canCopyMessageContent()) {
-      Button({ type: ButtonType.Circle, stateEffect: this.isManuscriptMode }) {
-        SymbolGlyph($r('sys.symbol.checkmark_square_on_square'))
-          .fontSize(this.getMessageToolbarIconSize())
-          .fontColor([this.messageToolbarIconColor])
-      }
-      .width(this.getMessageToolbarButtonSize())
-      .height(this.getMessageToolbarButtonSize())
-      .padding(0)
-      .backgroundColor(Color.Transparent)
-      .onClick(() => {
-        this.handleCopy()
-      })
-    }
+    this.MessageCopyButton()
 
     Button({ type: ButtonType.Circle, stateEffect: this.isManuscriptMode }) {
       SymbolGlyph($r('sys.symbol.arrow_clockwise'))
@@ -2282,7 +2272,7 @@ export struct MessageBubble {
     .height(this.getMessageToolbarButtonSize())
     .padding(0)
     .backgroundColor(Color.Transparent)
-    .bindMenu(this.AssistantMoreMenu(), {
+    .bindMenu(this.MessageMoreMenu(), {
       systemMaterial: new uiMaterial.ImmersiveMaterial({
         style: uiMaterial.ImmersiveStyle.THICK
       })
@@ -2938,7 +2928,6 @@ export struct MessageBubble {
               htmlCode: contentSegment.renderContent,
               onCopyCode: (code: string): void => {
                 this.copyToClipboard(code)
-                showToast(this.getUIContext(), $r('app.string.copy_success'))
               }
             })
           } else {
@@ -3061,7 +3050,6 @@ export struct MessageBubble {
                             htmlCode: segment.renderContent,
                             onCopyCode: (code: string) => {
                               this.copyToClipboard(code)
-                              showToast(this.getUIContext(), $r('app.string.copy_success'))
                             }
                           })
                         } else {
@@ -3448,27 +3436,42 @@ export struct MessageBubble {
     return pickLocalizedText('正在查询...', 'Searching...')
   }
 
-  private handleCopy() {
-    try {
-      const copyContent = this.message.content
-      const pasteboardData = pasteboard.createData(pasteboard.MIMETYPE_TEXT_PLAIN, copyContent)
-      const systemPasteboard = pasteboard.getSystemPasteboard()
-      systemPasteboard.setData(pasteboardData)
-      showToast(this.getUIContext(), $r('app.string.copy_success'))
-    } catch (error) {
-      hilog.error(DOMAIN, TAG, `Copy message failed: ${JSON.stringify(error)}`)
+  private resetCopyFeedback(): void {
+    this.copyFeedbackGeneration++
+    if (this.copyFeedbackTimer !== -1) {
+      clearTimeout(this.copyFeedbackTimer)
+      this.copyFeedbackTimer = -1
     }
+    this.copyIconState = CopyIconState.INITIAL
   }
 
-  // 复制指定文本到剪贴板（用于代码块复制）
-  private copyToClipboard(text: string) {
+  private showCopyFeedback(): void {
+    if (this.copyFeedbackTimer !== -1) {
+      clearTimeout(this.copyFeedbackTimer)
+    }
+    this.copyIconState = CopyIconState.COPIED
+    this.copyFeedbackTimer = setTimeout((): void => {
+      this.copyFeedbackTimer = -1
+      this.copyIconState = CopyIconState.RESTORED
+    }, 2000)
+  }
+
+  private async copyToClipboard(text: string, fromToolbar: boolean = false): Promise<void> {
+    const generation = this.copyFeedbackGeneration
+    const messageId = this.message.id
     try {
       const pasteboardData = pasteboard.createData(pasteboard.MIMETYPE_TEXT_PLAIN, text)
-      const systemPasteboard = pasteboard.getSystemPasteboard()
-      systemPasteboard.setData(pasteboardData)
-      showToast(this.getUIContext(), $r('app.string.copy_success'))
+      await pasteboard.getSystemPasteboard().setData(pasteboardData)
     } catch (error) {
-      hilog.error(DOMAIN, TAG, `Copy code failed: ${JSON.stringify(error)}`)
+      hilog.error(DOMAIN, TAG, `Copy to clipboard failed: ${JSON.stringify(error)}`)
+      return
     }
+    if (generation !== this.copyFeedbackGeneration || messageId !== this.message.id) {
+      return
+    }
+    if (fromToolbar) {
+      this.showCopyFeedback()
+    }
+    showToast(this.getUIContext(), $r('app.string.copy_success'))
   }
 }
