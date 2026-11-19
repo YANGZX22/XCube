@@ -148,6 +148,8 @@ import {
 } from '../services/KnowledgeRerankService'
 import { KnowledgeRerankSelectSheetContent } from '../components/KnowledgeRerankSelectSheetContent'
 import { ImmersiveSheetHeader } from '../components/ImmersiveSheetHeader'
+import { PromptTemplateEditor, SYSTEM_PROMPT_VARIABLES } from '../components/settings/PromptTemplateEditor'
+import { SystemPromptActions } from '../components/settings/PromptEditorButton'
 import {
   MANUSCRIPT_BODY_FONT,
   MANUSCRIPT_HEADING_FONT,
@@ -6378,61 +6380,38 @@ struct Index {
     Column() {
       ImmersiveSheetHeader({
         title: $r('app.string.system_prompt_edit_title'),
-        showTrailing: true,
-        trailingColor: this.themePrimary,
+        titleAlignment: TextAlign.Start,
         onLeadingClick: (): void => {
           this.showSystemPromptSheet = false
-        },
-        onTrailingClick: (): void => {
-          this.saveSystemPrompt()
         }
       })
 
       Text($r('app.string.system_prompt_hint'))
         .fontSize(12)
         .fontColor($r('app.color.text_secondary'))
+        .textAlign(TextAlign.Start)
         .padding({ left: 16, right: 16, bottom: 8 })
         .width('100%')
 
-      Text($r('app.string.system_prompt_variables_hint'))
-        .fontSize(11)
-        .fontColor($r('app.color.text_tertiary'))
-        .padding({ left: 16, right: 16, bottom: 12 })
-        .width('100%')
+      PromptTemplateEditor({
+        editorId: 'system_prompt_sheet_editor',
+        text: this.customSystemPrompt,
+        variables: SYSTEM_PROMPT_VARIABLES,
+        placeholder: $r('app.string.system_prompt_placeholder'),
+        onTextChange: (value: string): void => { this.customSystemPrompt = value }
+      })
+      .padding({ left: 16, right: 16 })
+      .layoutWeight(1)
 
-      ImmersiveFieldSurface({ cornerRadius: 16, fillHeight: true, layoutWeightValue: 1 }) {
-        TextArea({ text: this.customSystemPrompt, placeholder: $r('app.string.system_prompt_placeholder') })
-          .width('100%')
-          .height('100%')
-          .backgroundColor(Color.Transparent)
-          .borderRadius(16)
-          .padding({ left: 16, right: 16 })
-          .fontSize(14)
-          .fontColor($r('app.color.text_primary'))
-          .placeholderColor($r('app.color.text_tertiary'))
-          .onChange((value: string) => {
-            this.customSystemPrompt = value
-          })
-      }
-
-      Row() {
-        Button($r('app.string.system_prompt_clear'))
-          .fontSize(14)
-          .fontColor($r('app.color.text_secondary'))
-          .backgroundColor(this.themeSurface)
-          .borderRadius(20)
-          .height(40)
-          .padding({ left: 18, right: 18 })
-          .onClick(() => {
-            this.resetSystemPrompt()
-          })
-      }
-      .width('100%')
-      .justifyContent(FlexAlign.Center)
-      .padding({ top: 12, bottom: 12 + this.px2vp(this.bottomAvoidHeight) })
+      SystemPromptActions({
+        onReset: () => this.resetSystemPrompt(),
+        onSave: () => { this.saveSystemPrompt() }
+      })
+        .padding({ left: 16, right: 16, top: 12, bottom: 12 + this.px2vp(this.bottomAvoidHeight) })
     }
     .width('100%')
     .height('100%')
+    .alignItems(HorizontalAlign.Start)
   }
 
   // ========== 多选模式相关方法 ==========

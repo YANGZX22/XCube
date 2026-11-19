@@ -1725,8 +1725,8 @@
       "value": "Edit Title Prompt"
     },
     {
-      "name": "default_model_prompt_variables",
-      "value": "Available variables"
+      "name": "prompt_insert_variable",
+      "value": "Insert variable"
     },
     {
       "name": "default_model_variable_content",
@@ -1806,7 +1806,7 @@
     },
     {
       "name": "settings_system_prompt_desc",
-      "value": "Custom instructions for AI"
+      "value": "Set the tone and format of replies"
     },
     {
       "name": "settings_chat_input",
@@ -1838,15 +1838,31 @@
     },
     {
       "name": "system_prompt_hint",
-      "value": "Custom system prompt will be prepended to all conversations. It applies to normal chat, web search, and tool calls."
+      "value": "These instructions apply to all chats. Date and time variables update when you send a message."
     },
     {
-      "name": "system_prompt_variables_hint",
-      "value": "Variables: {{current_time}}, {{current_date}}, {{current_clock}}, {{current_weekday}}, {{current_lunar}}"
+      "name": "system_prompt_variable_datetime",
+      "value": "Date and time"
+    },
+    {
+      "name": "system_prompt_variable_date",
+      "value": "Date"
+    },
+    {
+      "name": "system_prompt_variable_time",
+      "value": "Time"
+    },
+    {
+      "name": "system_prompt_variable_weekday",
+      "value": "Day of week"
+    },
+    {
+      "name": "system_prompt_variable_lunar",
+      "value": "Lunar date"
     },
     {
       "name": "system_prompt_placeholder",
-      "value": "Enter custom system prompt..."
+      "value": "For example, give the answer first, then briefly explain why."
     },
     {
       "name": "system_prompt_clear",

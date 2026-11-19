@@ -1725,8 +1725,8 @@
       "value": "编辑标题 Prompt"
     },
     {
-      "name": "default_model_prompt_variables",
-      "value": "可用变量"
+      "name": "prompt_insert_variable",
+      "value": "插入变量"
     },
     {
       "name": "default_model_variable_content",
@@ -1806,7 +1806,7 @@
     },
     {
       "name": "settings_system_prompt_desc",
-      "value": "自定义 AI 行为指令"
+      "value": "设置助手回复的语气和格式"
     },
     {
       "name": "settings_chat_input",
@@ -1838,15 +1838,31 @@
     },
     {
       "name": "system_prompt_hint",
-      "value": "自定义系统提示词会注入到所有对话中，包括普通聊天、联网搜索和工具调用场景。"
+      "value": "这些要求适用于所有对话。日期、时间等变量会在发送消息时更新。"
     },
     {
-      "name": "system_prompt_variables_hint",
-      "value": "可用变量：{{current_time}}、{{current_date}}、{{current_clock}}、{{current_weekday}}、{{current_lunar}}"
+      "name": "system_prompt_variable_datetime",
+      "value": "日期和时间"
+    },
+    {
+      "name": "system_prompt_variable_date",
+      "value": "日期"
+    },
+    {
+      "name": "system_prompt_variable_time",
+      "value": "时间"
+    },
+    {
+      "name": "system_prompt_variable_weekday",
+      "value": "星期"
+    },
+    {
+      "name": "system_prompt_variable_lunar",
+      "value": "农历"
     },
     {
       "name": "system_prompt_placeholder",
-      "value": "输入自定义系统提示词..."
+      "value": "例如，先给结论，再简要说明理由。"
     },
     {
       "name": "system_prompt_clear",

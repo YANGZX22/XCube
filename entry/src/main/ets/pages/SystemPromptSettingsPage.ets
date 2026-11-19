@@ -1,7 +1,6 @@
 import { getSettingsTypography, SETTINGS_SUBTITLE_LINE_HEIGHT } from '../components/settings/SettingsTypography'
-import { ImmersiveFieldSurface } from '../components/ImmersiveFieldSurface'
-import { ImmersiveButtonSurface } from '../components/ImmersiveButtonSurface'
-import { withColorAlpha } from '../utils/ColorAlphaUtils'
+import { PromptTemplateEditor, SYSTEM_PROMPT_VARIABLES } from '../components/settings/PromptTemplateEditor'
+import { SystemPromptActions } from '../components/settings/PromptEditorButton'
 import { getAppPromptLanguage } from '../utils/LocalizedTextUtils'
 import { shouldUseDrawnNavigation } from '../utils/DrawnNavigationSupport'
 import { uiMaterial } from '@kit.ArkUI'
@@ -55,6 +54,7 @@ struct SystemPromptSettingsPage {
 
   @Local customSystemPrompt: string = ''
   @Local systemPromptEnabled: boolean = true
+  @Local promptLoaded: boolean = false
 
   private preferencesService = ServiceRegistry.preferences()
 
@@ -76,6 +76,7 @@ struct SystemPromptSettingsPage {
       getDefaultSystemPromptTemplate(getAppPromptLanguage())
     )
     this.customSystemPrompt = normalizeSystemPromptTemplate(saved, getAppPromptLanguage())
+    this.promptLoaded = true
   }
 
   private getContentMaxWidth(): number {
@@ -138,114 +139,53 @@ struct SystemPromptSettingsPage {
           .font(getSettingsTypography().subtitle)
           .lineHeight(SETTINGS_SUBTITLE_LINE_HEIGHT)
           .fontColor($r('app.color.text_caption'))
+          .textAlign(TextAlign.Start)
           .width('100%')
 
-        Text($r('app.string.system_prompt_variables_hint'))
-          .font(getSettingsTypography().subtitle)
-          .lineHeight(SETTINGS_SUBTITLE_LINE_HEIGHT)
-          .fontColor(getAppUiState().themeTextSecondary)
-          .width('100%')
-
-        Row() {
+        Row({ space: 12 }) {
           Text($r('app.string.system_prompt_enabled_label'))
             .font(getSettingsTypography().itemTitle)
             .fontColor(getAppUiState().themeTextPrimary)
+            .textAlign(TextAlign.Start)
             .layoutWeight(1)
 
           Toggle({ type: ToggleType.Switch, isOn: this.systemPromptEnabled })
-            .systemMaterial(new uiMaterial.Material())
+            .accessibilityText($r('app.string.system_prompt_enabled_label'))
+            .selectedColor(this.themePrimary)
             .switchPointColor(Color.White)
+            .systemMaterial(new uiMaterial.Material())
             .onChange((isOn: boolean) => {
               this.systemPromptEnabled = isOn
               this.preferencesService.setBoolean(PreferenceKeys.SYSTEM_PROMPT_ENABLED, isOn)
             })
         }
         .width('100%')
-        .padding({ left: 4, right: 4 })
 
-        ImmersiveFieldSurface({ cornerRadius: 20, fillHeight: true, layoutWeightValue: 1 }) {
-          TextArea({ text: this.customSystemPrompt, placeholder: $r('app.string.system_prompt_placeholder') })
-            .width('100%')
-            .height('100%')
-            .backgroundColor(Color.Transparent)
-            .fontSize(14)
-            .fontColor($r('app.color.text_primary'))
-            .placeholderColor($r('app.color.text_tertiary'))
-            .borderRadius(20)
-            .padding(16)
-            .enabled(this.systemPromptEnabled)
-            .opacity(this.systemPromptEnabled ? 1 : 0.5)
-            .onChange((value: string) => {
-              this.customSystemPrompt = value
-            })
-        }
+        PromptTemplateEditor({
+          editorId: 'system_prompt_editor',
+          text: this.customSystemPrompt,
+          variables: SYSTEM_PROMPT_VARIABLES,
+          placeholder: $r('app.string.system_prompt_placeholder'),
+          editable: this.systemPromptEnabled,
+          cornerRadius: 20,
+          onTextChange: (value: string): void => { this.customSystemPrompt = value }
+        })
 
-        Row({ space: 12 }) {
-          Stack() {
-            ImmersiveButtonSurface({
-              materialFactory: () => new uiMaterial.ImmersiveMaterial({
-                style: uiMaterial.ImmersiveStyle.REGULAR,
-                materialColor: Color.Transparent,
-                applyShadow: true,
-                interactive: true,
-                lightEffect: {}
-              }),
-              cornerRadius: 22
-            }) {
-              Button($r('app.string.system_prompt_clear'))
-                .width('100%')
-                .height(44)
-                .fontSize(14)
-                .fontWeight(FontWeight.Medium)
-                .fontColor($r('app.color.text_secondary'))
-                .backgroundColor(Color.Transparent)
-                .borderRadius(22)
-                .onClick(() => {
-                  this.resetSystemPrompt()
-                })
-            }
-          }
-          .layoutWeight(1)
-          .height(44)
-          .clip(false)
-
-          Stack() {
-            ImmersiveButtonSurface({
-              materialFactory: () => new uiMaterial.ImmersiveMaterial({
-                style: uiMaterial.ImmersiveStyle.THIN,
-                materialColor: withColorAlpha(this.themePrimary, '26'),
-                applyShadow: true,
-                interactive: true,
-                lightEffect: {}
-              }),
-              cornerRadius: 22
-            }) {
-              Button($r('app.string.save'))
-                .width('100%')
-                .height(44)
-                .fontSize(14)
-                .fontWeight(FontWeight.Medium)
-                .fontColor(this.themePrimary)
-                .backgroundColor(Color.Transparent)
-                .borderRadius(22)
-                .onClick(() => {
-                  this.saveSystemPrompt()
-                })
-            }
-          }
-          .layoutWeight(1)
-          .height(44)
-          .clip(false)
-        }
-        .width('100%')
+        SystemPromptActions({
+          onReset: () => this.resetSystemPrompt(),
+          onSave: () => this.saveSystemPrompt()
+        })
       }
       .width('100%')
       .layoutWeight(1)
       .constraintSize({ maxWidth: this.getContentMaxWidth() })
+      .alignItems(HorizontalAlign.Start)
+      .clip(false)
+      .enabled(this.promptLoaded)
     }
     .width('100%')
     .layoutWeight(1)
-    .justifyContent(FlexAlign.Center)
+    .justifyContent(FlexAlign.Start)
     .padding({ left: 16, right: 16, bottom: this.getContentBottomPadding() })
   }
 
@@ -256,6 +196,7 @@ struct SystemPromptSettingsPage {
         Text($r('app.string.system_prompt_edit_title'))
           .font(getSettingsTypography().pageTitle)
           .fontColor(getAppUiState().themeTextPrimary)
+          .textAlign(TextAlign.Start)
           .layoutWeight(1)
       }
       .width('100%')

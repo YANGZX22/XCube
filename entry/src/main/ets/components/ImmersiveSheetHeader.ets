@@ -4,13 +4,14 @@ import { uiMaterial } from '@kit.ArkUI'
 /**
  * bindSheet 统一标题栏。
  *
- * 左右操作区等宽，标题始终对准弹窗中线。
+ * 左右操作区等宽，标题默认对准弹窗中线。
  * 标题栏中的操作统一使用 36vp 原生圆形沉浸光感 Button。
  */
 @ComponentV2
 export struct ImmersiveSheetHeader {
   @Param title: string | Resource = ''
   @Param titleFont: Font = { size: 17, weight: FontWeight.Bold }
+  @Param titleAlignment: TextAlign = TextAlign.Center
   @Param leadingSymbol: Resource = $r('sys.symbol.xmark')
   @Param trailingSymbol: Resource = $r('sys.symbol.checkmark')
   @Param showLeading: boolean = true
@@ -87,7 +88,7 @@ export struct ImmersiveSheetHeader {
         .font(this.titleFont)
         .fontColor(this.titleColor)
         .layoutWeight(1)
-        .textAlign(TextAlign.Center)
+        .textAlign(this.titleAlignment)
         .maxLines(1)
         .textOverflow({ overflow: TextOverflow.Ellipsis })
         .padding({ left: 8, right: 8 })

@@ -1,10 +1,9 @@
 import { SettingsSectionHeading } from '../components/settings/SettingsSectionHeading'
-import { getSettingsTypography, SETTINGS_HEADING_CONTENT_GAP, SETTINGS_SUBTITLE_LINE_HEIGHT } from '../components/settings/SettingsTypography'
+import { getSettingsTypography, SETTINGS_SUBTITLE_LINE_HEIGHT } from '../components/settings/SettingsTypography'
 import { ImmersiveListSurface, LIST_MATERIAL_CARD_RADIUS } from '../components/ImmersiveListSurface'
-import { ImmersiveFieldSurface } from '../components/ImmersiveFieldSurface'
+import { PromptTemplateEditor, PromptVariable } from '../components/settings/PromptTemplateEditor'
 import { ImmersiveButtonSurface } from '../components/ImmersiveButtonSurface'
 import { ImmersiveSheetHeader } from '../components/ImmersiveSheetHeader'
-import { LengthMetrics } from '@kit.ArkUI'
 import { shouldUseDrawnNavigation } from '../utils/DrawnNavigationSupport'
 // 默认模型配置页面
 import { DefaultModelService } from '../services/DefaultModelService'
@@ -28,15 +27,10 @@ import {
 import { createStaticRegularMaterial, getStaticSheetMaterial, shouldUseWrappedMaterial } from '../utils/WrappedMaterialSupport'
 
 let defaultModelPagePathStack: NavPathStack | null = null
-const PROMPT_EDITOR_ID: string = 'default_model_prompt_editor'
-
-@Extend(Button)
-function promptCapsule() {
-  .backgroundColor(Color.Transparent)
-  .height(40)
-  .padding({ left: 14, right: 14 })
-  .focusOnTouch(false)
-}
+const TITLE_PROMPT_VARIABLES: PromptVariable[] = [
+  { label: $r('app.string.default_model_variable_content'), token: '{content}' },
+  { label: $r('app.string.default_model_variable_locale'), token: '{locale}' }
+]
 
 @Entry
 @ComponentV2
@@ -77,9 +71,6 @@ struct DefaultModelPage {
   @Local currentEditRole: ModelRole = ModelRole.CHAT
   @Local showPromptSheet: boolean = false
   @Local currentPrompt: string = ''
-  private promptEditor: TextAreaController = new TextAreaController()
-  private promptEditorFocused: boolean = false
-  private promptSelection: TextRange | undefined = undefined
   private defaultModelService: DefaultModelService = ServiceRegistry.defaultModel()
   private providerViewModel: ProviderViewModel = ServiceRegistry.provider()
   private compactScroller: Scroller = new Scroller()
@@ -389,24 +380,6 @@ struct DefaultModelPage {
   }
 
   @Builder
-  private PromptVariableButton(label: Resource, token: string) {
-    ImmersiveButtonSurface({ materialFactory: () => createStaticRegularMaterial() }) {
-      Button({ type: ButtonType.Capsule, stateEffect: false }) {
-        Row({ space: 6 }) {
-          Text(label)
-            .fontSize(14)
-            .fontColor(this.themePrimary)
-          Text(token)
-            .fontSize(12)
-            .fontColor($r('app.color.text_secondary'))
-        }
-      }
-      .promptCapsule()
-      .onClick(() => this.insertPromptVariable(token))
-    }
-  }
-
-  @Builder
   PromptEditSheet() {
     Column() {
       ImmersiveSheetHeader({
@@ -421,40 +394,20 @@ struct DefaultModelPage {
       })
 
       Column() {
-        Text($r('app.string.default_model_prompt_variables'))
-          .font(getSettingsTypography().fieldLabel)
-          .fontColor(getAppUiState().themeTextSecondary)
-        Flex({ wrap: FlexWrap.Wrap, space: { main: LengthMetrics.vp(8), cross: LengthMetrics.vp(8) } }) {
-          this.PromptVariableButton($r('app.string.default_model_variable_content'), '{content}')
-          this.PromptVariableButton($r('app.string.default_model_variable_locale'), '{locale}')
-        }
-        .width('100%')
-        .margin({ top: SETTINGS_HEADING_CONTENT_GAP, bottom: 12 })
-
-        ImmersiveFieldSurface({ cornerRadius: 16, fillHeight: true, layoutWeightValue: 1 }) {
-          TextArea({ text: this.currentPrompt, controller: this.promptEditor })
-            .id(PROMPT_EDITOR_ID)
-            .width('100%')
-            .height('100%')
-            .backgroundColor(Color.Transparent)
-            .fontSize(14)
-            .fontColor($r('app.color.text_primary'))
-            .padding(16)
-            .borderRadius(16)
-            .onChange((value: string) => { this.currentPrompt = value })
-            .onFocus(() => { this.promptEditorFocused = true })
-            .onBlur(() => { this.promptEditorFocused = false })
-            .onTextSelectionChange((start: number, end: number) => {
-              if (this.promptEditorFocused) {
-                this.promptSelection = { start: start, end: end }
-              }
-            })
-        }
+        PromptTemplateEditor({
+          editorId: 'default_model_prompt_editor',
+          text: this.currentPrompt,
+          variables: TITLE_PROMPT_VARIABLES,
+          onTextChange: (value: string): void => { this.currentPrompt = value }
+        })
 
         Row() {
           ImmersiveButtonSurface({ materialFactory: () => createStaticRegularMaterial() }) {
             Button($r('app.string.default_model_reset_prompt'), { type: ButtonType.Capsule, stateEffect: false })
-              .promptCapsule()
+              .backgroundColor(Color.Transparent)
+              .height(40)
+              .padding({ left: 14, right: 14 })
+              .focusOnTouch(false)
               .fontSize(15)
               .fontColor(this.themePrimary)
               .onClick(() => { this.resetPrompt() })
@@ -477,24 +430,7 @@ struct DefaultModelPage {
   private openPromptEditor(): void {
     this.showModelSheet = false
     this.currentPrompt = this.defaultModelService.getTitlePromptTemplate()
-    this.promptSelection = undefined
-    this.promptEditorFocused = false
     this.showPromptSheet = true
-  }
-
-  private insertPromptVariable(token: string): void {
-    const selection = this.promptEditorFocused ? this.promptEditor.getSelection() : this.promptSelection
-    this.getUIContext().getFocusController().requestFocus(PROMPT_EDITOR_ID)
-    let offset: number | undefined = undefined
-    if (selection?.start !== undefined && selection.end !== undefined && selection.start >= 0 && selection.end >= 0) {
-      offset = Math.min(selection.start, selection.end)
-      const end = Math.max(selection.start, selection.end)
-      if (end > offset) {
-        this.promptEditor.deleteText({ start: offset, end: end })
-      }
-    }
-    const caret = this.promptEditor.addText(token, offset === undefined ? undefined : { offset: offset })
-    this.promptSelection = { start: caret, end: caret }
   }
 
   private getSheetTitle(): Resource {
