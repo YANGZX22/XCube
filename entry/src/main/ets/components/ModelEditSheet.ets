@@ -15,6 +15,7 @@ import {
 } from '../models/ChatModels'
 import { LengthMetrics, uiMaterial } from '@kit.ArkUI'
 import { getAppUiState } from '../state/AppUiState'
+import { ThinSelectModifier } from '../utils/WrappedMaterialSupport'
 import { pickLocalizedText } from '../utils/LocalizedTextUtils'
 import {
   hasOverlappingBillingPeakPeriods,
@@ -795,16 +796,8 @@ export struct ModelEditSheet {
             .font({ size: 13 })
             .fontColor($r('app.color.text_primary'))
             .selectedOptionFontColor(this.themePrimary)
-            .backgroundColor(Color.Transparent)
             .borderRadius(14)
-            .systemMaterial(new uiMaterial.ImmersiveMaterial({
-              style: uiMaterial.ImmersiveStyle.ULTRA_THIN,
-              materialColor: Color.Transparent,
-              applyShadow: false
-            }))
-            .menuSystemMaterial(new uiMaterial.ImmersiveMaterial({
-              style: uiMaterial.ImmersiveStyle.THICK
-            }))
+            .attributeModifier(new ThinSelectModifier())
             .onSelect((index: number, value: string) => {
               this.billingCurrencySelectedIndex = index
               this.billingCurrency = normalizeBillingCurrency(value)

@@ -45,7 +45,7 @@ import { showSnackBar, SnackBarDisplayOptions, SnackBarTone } from '../utils/Toa
 import { getAppUiState } from '../state/AppUiState'
 import { formatLocalizedCount, pickLocalizedText } from '../utils/LocalizedTextUtils'
 import { getSettingsSheetContentMaxHeight } from '../utils/SettingsPageLayoutHelper'
-import { shouldUseWrappedMaterial } from '../utils/WrappedMaterialSupport'
+import { shouldUseWrappedMaterial, ThinSelectModifier } from '../utils/WrappedMaterialSupport'
 import { withColorAlpha } from '../utils/ColorAlphaUtils'
 import { ChatFloatingImmersiveButton } from './ChatFloatingImmersiveButton'
 import { ImmersiveSheetHeader } from './ImmersiveSheetHeader'
@@ -2218,8 +2218,8 @@ export struct ToolsCenterPanel {
                   .fontColor($r('app.color.text_primary'))
                   .width('100%')
                   .height(46)
-                  .backgroundColor(getAppUiState().themeBackground)
                   .borderRadius(14)
+                  .attributeModifier(new ThinSelectModifier())
                   .border({ width: 1, color: getAppUiState().themePrimaryLight })
                   .padding({ left: 10, right: 10 })
               }

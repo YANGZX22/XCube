@@ -35,6 +35,96 @@ export function getStaticSheetMaterial(): uiMaterial.Material | undefined {
   return shouldUseWrappedMaterial() ? createStaticRegularMaterial() : undefined
 }
 
+function createThinMenuMaterial(): uiMaterial.Material {
+  return new uiMaterial.ImmersiveMaterial({
+    style: uiMaterial.ImmersiveStyle.THIN,
+    materialColor: Color.Transparent
+  })
+}
+
+let deviceSupportsThinMaterial: boolean | undefined = undefined
+
+function shouldUseThinMenuMaterial(): boolean {
+  if (!shouldUseWrappedMaterial()) return false
+  if (deviceSupportsThinMaterial === undefined) {
+    try {
+      // 流畅档的原生菜单会使用系统底色，走透明模糊分支。
+      deviceSupportsThinMaterial = uiMaterial.isImmersiveMaterialSupported() &&
+        uiMaterial.getGlobalMaterialLevel() !== uiMaterial.MaterialLevel.SMOOTH
+    } catch (_error) {
+      deviceSupportsThinMaterial = false
+    }
+  }
+  return deviceSupportsThinMaterial
+}
+
+function getThinMenuBlurEffect(): BackgroundEffectOptions {
+  return {
+    radius: 12,
+    saturation: 1,
+    brightness: 1,
+    color: Color.Transparent,
+    policy: BlurStyleActivePolicy.ALWAYS_ACTIVE,
+    inactiveColor: Color.Transparent
+  }
+}
+
+export function getThinMenuOptions(onDisappear?: () => void): MenuOptions {
+  const options: MenuOptions = {
+    backgroundColor: Color.Transparent,
+    backgroundBlurStyle: BlurStyle.NONE,
+    onDisappear: onDisappear
+  }
+  if (shouldUseThinMenuMaterial()) {
+    options.systemMaterial = createThinMenuMaterial()
+  } else {
+    options.systemMaterial = isWrappedMaterialApiAvailable() ? uiMaterial.Material.empty : undefined
+    options.backgroundEffect = getThinMenuBlurEffect()
+  }
+  return options
+}
+
+export class ThinSelectModifier implements AttributeModifier<SelectAttribute> {
+  private readonly useMaterial: boolean = shouldUseThinMenuMaterial()
+  private readonly trigger: 'thin' | 'plain'
+
+  constructor(trigger: 'thin' | 'plain' = 'thin') {
+    this.trigger = trigger
+  }
+
+  applyNormalAttribute(select: SelectAttribute): void {
+    select.backgroundColor(Color.Transparent)
+    select.menuBackgroundColor(Color.Transparent)
+    if (this.useMaterial) {
+      select.backgroundBlurStyle(BlurStyle.NONE)
+      select.menuBackgroundBlurStyle(BlurStyle.NONE)
+      select.systemMaterial(this.trigger === 'plain' ? uiMaterial.Material.empty : new uiMaterial.ImmersiveMaterial({
+        style: uiMaterial.ImmersiveStyle.THIN,
+        materialColor: Color.Transparent,
+        applyShadow: false,
+        interactive: false,
+        lightEffect: null
+      }))
+      select.menuSystemMaterial(createThinMenuMaterial())
+      return
+    }
+
+    if (isWrappedMaterialApiAvailable()) {
+      select.systemMaterial(uiMaterial.Material.empty)
+      select.menuSystemMaterial(uiMaterial.Material.empty)
+      select.menuBackgroundBlurStyle(BlurStyle.NONE)
+      select.menuBackgroundEffect(getThinMenuBlurEffect())
+    } else {
+      // 旧版 Select 没有独立的自定义弹窗模糊接口。
+      select.menuBackgroundBlurStyle(BlurStyle.COMPONENT_THIN)
+    }
+    select.backgroundBlurStyle(this.trigger === 'plain' ? BlurStyle.NONE : BlurStyle.COMPONENT_THIN)
+    if (this.trigger === 'thin') {
+      select.shadow(getBlurBottomShadow())
+    }
+  }
+}
+
 // 支持材质的设备在降级时显式清除旧材质；低版本不访问 systemMaterial 或 Material.empty。
 export class WrappedMaterialModifier implements AttributeModifier<CommonAttribute> {
   private factory: WrappedMaterialFactory

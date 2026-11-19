@@ -13,9 +13,10 @@ import {
 } from '@kit.MediaLibraryKit'
 import { fileIo } from '@kit.CoreFileKit'
 import { util } from '@kit.ArkTS'
-import { SymbolGlyphModifier, uiMaterial } from '@kit.ArkUI'
+import { SymbolGlyphModifier } from '@kit.ArkUI'
 import { getAttachmentStorageService } from '../services/AttachmentStorageService'
 import { getAppUiState } from '../state/AppUiState'
+import { getThinMenuOptions } from '../utils/WrappedMaterialSupport'
 import { withColorAlpha } from '../utils/ColorAlphaUtils'
 import { VisualEffectsMode } from '../models/ThemeColors'
 import {
@@ -388,14 +389,9 @@ export struct ChatInputBar {
             this.onSend()
           }
         })
-        .bindMenu(this.showInFlightSendMenu, this.InFlightSendMenu(), {
-          systemMaterial: new uiMaterial.ImmersiveMaterial({
-            style: uiMaterial.ImmersiveStyle.THICK
-          }),
-          onDisappear: (): void => {
-            this.showInFlightSendMenu = false
-          }
-        })
+        .bindMenu(this.showInFlightSendMenu, this.InFlightSendMenu(), getThinMenuOptions((): void => {
+          this.showInFlightSendMenu = false
+        }))
       }
       .width('100%')
       .alignItems(VerticalAlign.Bottom)
@@ -692,14 +688,9 @@ export struct ChatInputBar {
         .scale({ x: this.sendBtnScale, y: this.sendBtnScale })
         .rotate({ angle: this.sendBtnRotation })
         .animation({ duration: 200, curve: Curve.EaseInOut })
-        .bindMenu(this.showInFlightSendMenu, this.InFlightSendMenu(), {
-          systemMaterial: new uiMaterial.ImmersiveMaterial({
-            style: uiMaterial.ImmersiveStyle.THICK
-          }),
-          onDisappear: (): void => {
-            this.showInFlightSendMenu = false
-          }
-        })
+        .bindMenu(this.showInFlightSendMenu, this.InFlightSendMenu(), getThinMenuOptions((): void => {
+          this.showInFlightSendMenu = false
+        }))
       }
       .width('100%')
       .constraintSize({ minHeight: INPUT_ROW_MIN_HEIGHT_VP, maxHeight: INPUT_ROW_MAX_HEIGHT_VP })
@@ -735,6 +726,7 @@ export struct ChatInputBar {
         })
     }
     .backgroundColor(Color.Transparent)
+    .backgroundBlurStyle(BlurStyle.NONE)
     .borderRadius(12)
   }
 

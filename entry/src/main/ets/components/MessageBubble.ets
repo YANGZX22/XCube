@@ -25,6 +25,7 @@ import { AssistantAvatarView } from './AssistantAvatar'
 import { hilog } from '@kit.PerformanceAnalysisKit'
 import { SymbolGlyphModifier, uiMaterial } from '@kit.ArkUI'
 import { getAppUiState } from '../state/AppUiState'
+import { getThinMenuOptions } from '../utils/WrappedMaterialSupport'
 import { withColorAlpha } from '../utils/ColorAlphaUtils'
 import { MAP_SEARCH_ROUTE_TOOL_ID, MATH_CHART_TOOL_ID } from '../config/BuiltinTools'
 import { formatBillingAmount, formatCacheHitPercent } from '../utils/ModelBillingUtils'
@@ -808,11 +809,7 @@ export struct MessageBubble {
           .height(this.getMessageToolbarButtonSize())
           .padding(0)
           .backgroundColor(Color.Transparent)
-          .bindMenu(this.MessageMoreMenu(), {
-            systemMaterial: new uiMaterial.ImmersiveMaterial({
-              style: uiMaterial.ImmersiveStyle.THICK
-            })
-          })
+          .bindMenu(this.MessageMoreMenu(), getThinMenuOptions())
         }
         .height(this.getMessageToolbarHeight())
         .padding({ left: 3, right: 3 })
@@ -1665,11 +1662,7 @@ export struct MessageBubble {
     .height(this.getMessageToolbarButtonSize())
     .padding(0)
     .backgroundColor(Color.Transparent)
-    .bindMenu(this.MessageMoreMenu(), {
-      systemMaterial: new uiMaterial.ImmersiveMaterial({
-        style: uiMaterial.ImmersiveStyle.THICK
-      })
-    })
+    .bindMenu(this.MessageMoreMenu(), getThinMenuOptions())
   }
 
   @Builder
@@ -2089,6 +2082,7 @@ export struct MessageBubble {
         .onClick(() => { this.onDelete() })
     }
     .backgroundColor(Color.Transparent)
+    .backgroundBlurStyle(BlurStyle.NONE)
     .borderRadius(12)
   }
 
@@ -2272,11 +2266,7 @@ export struct MessageBubble {
     .height(this.getMessageToolbarButtonSize())
     .padding(0)
     .backgroundColor(Color.Transparent)
-    .bindMenu(this.MessageMoreMenu(), {
-      systemMaterial: new uiMaterial.ImmersiveMaterial({
-        style: uiMaterial.ImmersiveStyle.THICK
-      })
-    })
+    .bindMenu(this.MessageMoreMenu(), getThinMenuOptions())
   }
 
   @Computed

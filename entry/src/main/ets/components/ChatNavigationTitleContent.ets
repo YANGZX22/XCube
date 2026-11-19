@@ -5,8 +5,7 @@ import { ProviderIconSmall } from './ProviderIcon'
 import { getAppUiState } from '../state/AppUiState'
 import { buildIconResourcePath, getModelIconPath, isNetworkIconPath, isSandboxIconPath } from '../utils/ProviderIconUtils'
 import { VisualEffectsMode } from '../models/ThemeColors'
-import { shouldUseWrappedMaterial, WrappedMaterialModifier } from '../utils/WrappedMaterialSupport'
-import { getHdsFallbackBackgroundEffect } from '../utils/HdsMaterialSupport'
+import { getThinMenuOptions, shouldUseWrappedMaterial, WrappedMaterialModifier } from '../utils/WrappedMaterialSupport'
 import {
   ensureManuscriptFonts,
   MANUSCRIPT_BODY_FONT,
@@ -249,19 +248,6 @@ export struct ChatNavigationTitleContent {
     return Math.min(100, Math.max(0, this.contextPercent))
   }
 
-  private getMoreMenuOptions(): MenuOptions {
-    if (shouldUseWrappedMaterial()) {
-      return {
-        systemMaterial: new uiMaterial.ImmersiveMaterial({ style: uiMaterial.ImmersiveStyle.THICK })
-      }
-    }
-    return {
-      backgroundColor: Color.Transparent,
-      backgroundBlurStyle: BlurStyle.NONE,
-      backgroundEffect: getHdsFallbackBackgroundEffect()
-    }
-  }
-
   @Builder
   private MoreMenuBuilder() {
     Menu() {
@@ -293,6 +279,8 @@ export struct ChatNavigationTitleContent {
           })
       }
     }
+    .backgroundColor(Color.Transparent)
+    .backgroundBlurStyle(BlurStyle.NONE)
   }
 
   @Builder
@@ -364,7 +352,7 @@ export struct ChatNavigationTitleContent {
       .backgroundColor(Color.Transparent)
       .borderRadius(this.isManuscriptMode ? 0 : this.getActionButtonSize() / 2)
       .clip(!this.isManuscriptMode)
-      .bindMenu(this.MoreMenuBuilder(), this.getMoreMenuOptions())
+      .bindMenu(this.MoreMenuBuilder(), getThinMenuOptions())
       .attributeModifier(this.isManuscriptMode ? undefined : new WrappedMaterialModifier(() => new uiMaterial.ImmersiveMaterial({
         style: uiMaterial.ImmersiveStyle.REGULAR,
         interactive: true,

@@ -1,7 +1,6 @@
 import { getSettingsTypography, SETTINGS_HEADING_CONTENT_GAP } from './SettingsTypography'
-import { uiMaterial } from '@kit.ArkUI'
 import { getAppUiState } from '../../state/AppUiState'
-import { shouldUseWrappedMaterial, WrappedMaterialModifier } from '../../utils/WrappedMaterialSupport'
+import { ThinSelectModifier } from '../../utils/WrappedMaterialSupport'
 
 export const SETTINGS_FORM_VALUE_FONT_SIZE: number = 13
 
@@ -33,16 +32,8 @@ export struct SettingsFormSelect {
         .height(40)
         .align(Alignment.Start)
         .menuAlign(MenuAlignType.START)
-        .backgroundColor(Color.Transparent)
         .borderRadius(10)
-        .attributeModifier(new WrappedMaterialModifier(() => new uiMaterial.ImmersiveMaterial({
-          style: uiMaterial.ImmersiveStyle.ULTRA_THIN,
-          materialColor: Color.Transparent,
-          applyShadow: false
-        }), shouldUseWrappedMaterial(), true))
-        .menuSystemMaterial(shouldUseWrappedMaterial() ? new uiMaterial.ImmersiveMaterial({
-          style: uiMaterial.ImmersiveStyle.THICK
-        }) : undefined)
+        .attributeModifier(new ThinSelectModifier())
         .padding({ left: 8, right: 8 })
     }
     .width('100%')

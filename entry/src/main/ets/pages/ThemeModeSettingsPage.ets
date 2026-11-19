@@ -6,7 +6,7 @@ import { withColorAlpha } from '../utils/ColorAlphaUtils'
 import { getDrawnNavigationBorder, shouldUseDrawnNavigation } from '../utils/DrawnNavigationSupport'
 import { ImmersiveButtonSurface } from '../components/ImmersiveButtonSurface'
 import { getBlurBottomShadow } from '../utils/BlurShadowUtils'
-import { isWrappedMaterialApiAvailable, shouldUseWrappedMaterial } from '../utils/WrappedMaterialSupport'
+import { isWrappedMaterialApiAvailable, shouldUseWrappedMaterial, ThinSelectModifier } from '../utils/WrappedMaterialSupport'
 import {
   HdsNavigation,
   HdsNavigationTitleBarOptions,
@@ -1817,16 +1817,8 @@ export struct ThemeAppearanceSettingsView {
                 .font({ size: 13 })
                 .fontColor($r('app.color.text_primary'))
                 .selectedOptionFontColor(this.themePrimary)
-                .backgroundColor(Color.Transparent)
                 .borderRadius(16)
-                .systemMaterial(new uiMaterial.ImmersiveMaterial({
-                  style: uiMaterial.ImmersiveStyle.ULTRA_THIN,
-                  materialColor: Color.Transparent,
-                  applyShadow: false
-                }))
-                .menuSystemMaterial(new uiMaterial.ImmersiveMaterial({
-                  style: uiMaterial.ImmersiveStyle.THICK
-                }))
+                .attributeModifier(new ThinSelectModifier())
                 .onSelect((index: number, _value: string): void => {
                   this.handleMarkdownRendererChanged(index)
                 })
@@ -1889,16 +1881,8 @@ export struct ThemeAppearanceSettingsView {
                 .font({ size: 13 })
                 .fontColor($r('app.color.text_primary'))
                 .selectedOptionFontColor(this.themePrimary)
-                .backgroundColor(Color.Transparent)
                 .borderRadius(16)
-                .systemMaterial(new uiMaterial.ImmersiveMaterial({
-                  style: uiMaterial.ImmersiveStyle.ULTRA_THIN,
-                  materialColor: Color.Transparent,
-                  applyShadow: false
-                }))
-                .menuSystemMaterial(new uiMaterial.ImmersiveMaterial({
-                  style: uiMaterial.ImmersiveStyle.THICK
-                }))
+                .attributeModifier(new ThinSelectModifier())
                 .enabled(this.chatSerifFontEnabled && !this.isManuscriptMode())
                 .opacity(this.isManuscriptMode() ? 0.45 : 1)
                 .onSelect((index: number, _value: string): void => {

@@ -4,7 +4,7 @@ import { ImmersiveListSurface, LIST_MATERIAL_CARD_RADIUS } from '../components/I
 import { ImmersiveFieldSurface } from '../components/ImmersiveFieldSurface'
 import { shouldUseDrawnNavigation } from '../utils/DrawnNavigationSupport'
 import { withColorAlpha } from '../utils/ColorAlphaUtils'
-import { shouldUseWrappedMaterial } from '../utils/WrappedMaterialSupport'
+import { shouldUseWrappedMaterial, ThinSelectModifier } from '../utils/WrappedMaterialSupport'
 import { ImmersiveButtonSurface } from '../components/ImmersiveButtonSurface'
 import { ProviderIcon } from '../components/ProviderIcon'
 import { resolveLobeProviderIconUrl } from '../utils/LobeIconResolver'
@@ -731,16 +731,8 @@ struct TTSSettingsPage {
           .font({ size: 13 })
           .fontColor($r('app.color.text_primary'))
           .selectedOptionFontColor(this.themePrimary)
-          .backgroundColor(Color.Transparent)
           .borderRadius(14)
-          .systemMaterial(new uiMaterial.ImmersiveMaterial({
-            style: uiMaterial.ImmersiveStyle.ULTRA_THIN,
-            materialColor: Color.Transparent,
-            applyShadow: false
-          }))
-          .menuSystemMaterial(new uiMaterial.ImmersiveMaterial({
-            style: uiMaterial.ImmersiveStyle.THICK
-          }))
+          .attributeModifier(new ThinSelectModifier())
           .enabled(this.ttsEnabled)
           .onSelect((index: number, _value: string): void => {
             if (index >= 0 && index < this.voiceIds.length) {
@@ -757,13 +749,8 @@ struct TTSSettingsPage {
           .height(46)
           .font({ size: 13 })
           .fontColor($r('app.color.text_tertiary'))
-          .backgroundColor(Color.Transparent)
           .borderRadius(14)
-          .systemMaterial(new uiMaterial.ImmersiveMaterial({
-            style: uiMaterial.ImmersiveStyle.ULTRA_THIN,
-            materialColor: Color.Transparent,
-            applyShadow: false
-          }))
+          .attributeModifier(new ThinSelectModifier())
           .enabled(false)
       }
     }
@@ -941,16 +928,8 @@ struct TTSSettingsPage {
           .font({ size: 13 })
           .fontColor($r('app.color.text_primary'))
           .selectedOptionFontColor(this.themePrimary)
-          .backgroundColor(Color.Transparent)
           .borderRadius(14)
-          .systemMaterial(new uiMaterial.ImmersiveMaterial({
-            style: uiMaterial.ImmersiveStyle.ULTRA_THIN,
-            materialColor: Color.Transparent,
-            applyShadow: false
-          }))
-          .menuSystemMaterial(new uiMaterial.ImmersiveMaterial({
-            style: uiMaterial.ImmersiveStyle.THICK
-          }))
+          .attributeModifier(new ThinSelectModifier())
           .enabled(this.ttsEnabled)
           .onSelect((_index: number, value: string): void => {
             this.elevenLabsModelId = value
@@ -1024,14 +1003,8 @@ struct TTSSettingsPage {
         .font({ size: 13 })
         .fontColor($r('app.color.text_primary'))
         .selectedOptionFontColor(this.themePrimary)
-        .backgroundColor(Color.Transparent)
         .borderRadius(14)
-        .systemMaterial(new uiMaterial.ImmersiveMaterial({
-          style: uiMaterial.ImmersiveStyle.ULTRA_THIN,
-          materialColor: Color.Transparent,
-          applyShadow: false
-        }))
-        .menuSystemMaterial(new uiMaterial.ImmersiveMaterial({ style: uiMaterial.ImmersiveStyle.THICK }))
+        .attributeModifier(new ThinSelectModifier())
         .enabled(this.ttsEnabled)
         .onSelect(onSelect)
     }
