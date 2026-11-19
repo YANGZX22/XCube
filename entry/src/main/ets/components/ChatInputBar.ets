@@ -1,4 +1,5 @@
 import { ImmersiveInputSurface } from './ImmersiveInputSurface'
+import { AttachmentPicker } from './AttachmentPicker'
 import { InteractiveMaterialButton } from './InteractiveMaterialButton'
 import { getModelIconPath, buildIconResourcePath } from '../utils/ProviderIconUtils'
 import { FileIcon } from './FileIcon'
@@ -32,7 +33,6 @@ const INPUT_ROW_MAX_HEIGHT_VP: number = 132
 export struct ChatInputBar {
   // 图标动画触发器
   @Local iconTrigger: number = 0
-  @Local attachIconTrigger: number = 0
   // pause 呼吸动效透明度
   @Local breathOpacity: number = 1
   // 按钮按下状态
@@ -40,7 +40,6 @@ export struct ChatInputBar {
   @Local sendBtnScale: number = 1
   @Local sendBtnRotation: number = 0
   @Local modelBtnPressed: boolean = false
-  @Local attachmentBtnPressed: boolean = false
   @Local showInFlightSendMenu: boolean = false
   private readonly editingHeaderHeightVp: number = 28
   @Param inputText: string = ''
@@ -113,9 +112,8 @@ export struct ChatInputBar {
   }
   @Event onModelIconClick: () => void = () => {
   }
-  @Param isAttachmentPanelOpen: boolean = false
-  @Event onAttachmentClick: () => void = () => {
-  }
+  @Event onSelectAttachments: (attachments: MessageAttachment[]) => void = () => {}
+  @Event onVoiceInput: () => void = () => {}
   @Event onInputFocus: () => void = () => {
   } // 输入框获得焦点回调
   @Event onInputBlur: () => void = () => {
@@ -320,24 +318,7 @@ export struct ChatInputBar {
         .layoutWeight(1)
         .border({ width: { bottom: 1 }, color: getAppUiState().themeTextSecondary })
 
-        Button({ type: ButtonType.Normal, stateEffect: false }) {
-          SymbolGlyph(this.getAttachmentButtonSymbol())
-            .fontSize(18)
-            .fontColor([this.attachmentBtnPressed ? this.manuscriptAccentDeep :
-              getAppUiState().themeTextSecondary])
-            .symbolEffect(new ReplaceSymbolEffect(EffectScope.WHOLE), this.attachIconTrigger)
-        }
-        .width(44)
-        .height(44)
-        .padding(0)
-        .backgroundColor(Color.Transparent)
-        .borderRadius(0)
-        .onTouch((event: TouchEvent) => {
-          this.attachmentBtnPressed = event.type === TouchType.Down
-        })
-        .onClick(() => {
-          this.onAttachmentClick()
-        })
+        this.AttachmentSelect()
 
         if (this.isInFlightSendChoiceActive() && this.computeHasContent()) {
           Button({ type: ButtonType.Normal, stateEffect: false }) {
@@ -592,22 +573,7 @@ export struct ChatInputBar {
             this.onInputBlur()
           })
 
-        // 附件按钮（+号 / x号）
-        Button({ type: ButtonType.Circle, stateEffect: false }) {
-          SymbolGlyph(this.getAttachmentButtonSymbol())
-            .fontSize(20)
-            .fontColor([$r('app.color.text_secondary')])
-            .symbolEffect(
-              new ReplaceSymbolEffect(EffectScope.WHOLE),
-              this.attachIconTrigger
-            )
-        }
-        .width(40)
-        .height(40)
-        .backgroundColor(Color.Transparent)
-        .onClick(() => {
-          this.onAttachmentClick()
-        })
+        this.AttachmentSelect()
 
         if (this.isInFlightSendChoiceActive() && this.computeHasContent()) {
           // 生成期间仍保留独立停止入口，发送按钮用于选择“引导”或“排队”。
@@ -700,6 +666,16 @@ export struct ChatInputBar {
         top: 6,
         bottom: 6
       })
+  }
+
+  @Builder
+  AttachmentSelect() {
+    AttachmentPicker({
+      isManuscript: this.isManuscriptMode,
+      pressedIconColor: this.manuscriptAccentDeep,
+      onSelectAttachments: this.onSelectAttachments,
+      onVoiceInput: this.onVoiceInput
+    })
   }
 
   @Builder
@@ -872,10 +848,6 @@ export struct ChatInputBar {
     return $r('sys.symbol.paperplane')
   }
 
-  private getAttachmentButtonSymbol(): Resource {
-    return this.isAttachmentPanelOpen ? $r('sys.symbol.xmark') : $r('sys.symbol.plus')
-  }
-
   @Monitor('inputText', 'attachments')
   onInputOrAttachmentsChanged(): void {
     if (!this.isSendDispatching) {
@@ -915,11 +887,6 @@ export struct ChatInputBar {
     this.iconTrigger++
     this.updateBreathing()
     this.animateSendButton()
-  }
-
-  @Monitor('isAttachmentPanelOpen')
-  onAttachmentPanelOpenChanged(): void {
-    this.attachIconTrigger++
   }
 
   // 发送按钮状态切换动画

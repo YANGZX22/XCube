@@ -278,12 +278,8 @@ export struct ChatPage {
   @Local providers: ModelProvider[] = []
   // 附件相关状态
   @Local pendingAttachments: MessageAttachment[] = []
-  @Local showAttachmentPicker: boolean = false
   // 语音输入录音浮层
   @Local showVoiceInputSheet: boolean = false
-  @Local attachmentPanelHeightVp: number = 0
-  private readonly ATTACHMENT_PANEL_EXPANDED_HEIGHT: number = 84
-  private attachmentOpenAutoCloseGuardUntil: number = 0
   // 是否在列表底部
   @Local isAtBottom: boolean = false
   // 是否在列表顶部
@@ -1206,7 +1202,7 @@ export struct ChatPage {
   // Canvas 与计划面板共用这个高度，交接和布局才一致。
   private getCanvasPanelHeightVp(): number {
     const top = this.getMessageListTopSpacerHeight()
-    const bottom = this.getFloatingOverlayBottomAvoidHeightVp() + 24
+    const bottom = this.getComposerBottomAvoidHeightVp() + 24
     const available = this.windowHeightVp - top - bottom
     if (this.isManuscriptMode) {
       // 手稿模式下面板更像压在稿纸上的一张便笺：占满整页会盖掉正文的版面感，
@@ -4351,14 +4347,11 @@ export struct ChatPage {
               currentProviderBrandColor: this.currentProvider?.brandColor ?? '',
               autoFocus: this.autoFocusInput,
               isEditing: this.isEditingMessage,
-              isAttachmentPanelOpen: this.showAttachmentPicker,
               onSelectAttachments: (attachments: MessageAttachment[]): void => {
-                this.handleAttachmentsSelected(attachments)
-              },
-              onCloseAttachmentPicker: (): void => {
-                this.closeAttachmentPanel()
+                this.pendingAttachments = [...this.pendingAttachments, ...attachments]
               },
               onVoiceInput: (): void => {
+                this.safeStopInputSession()
                 this.showVoiceInputSheet = true
               },
               toolSelectionAvailable: shouldShowToolSelectionChipForChat(
@@ -4423,18 +4416,8 @@ export struct ChatPage {
                 this.modelSheetActivePanel = 'selector'
                 this.isModelEditAdvancedExpanded = false
               },
-              onAttachmentClick: (): void => {
-                this.toggleAttachmentPanel()
-              },
               onInputFocus: (): void => {
                 if (!this.isEditingMessage) {
-                  if (this.showAttachmentPicker) {
-                    if (this.shouldIgnoreAttachmentAutoClose()) {
-                      this.isInputFocused = true
-                      return
-                    }
-                    this.closeAttachmentPanel()
-                  }
                   this.isInputFocused = true
                   setTimeout(() => {
                     this.getScrollUiFlow().alignToBottomAfterLayout()
@@ -4747,10 +4730,6 @@ export struct ChatPage {
         this.updateStatusBar()
         return true
       }
-      if (this.showAttachmentPicker) {
-        this.closeAttachmentPanel()
-        return true
-      }
       if (this.isCanvasPanelOpen) {
         this.setCanvasPanelOpen(false)
         return true
@@ -5056,53 +5035,6 @@ export struct ChatPage {
     })
   }
 
-  // 处理附件选择
-  private handleAttachmentsSelected(attachments: MessageAttachment[]): void {
-    // 普通输入模式：添加到输入框的附件列表
-    for (let i = 0; i < attachments.length; i++) {
-      this.pendingAttachments.push(attachments[i])
-    }
-    // 触发数组更新，便于子组件监听并驱动发送按钮动效
-    this.pendingAttachments = [...this.pendingAttachments]
-    this.closeAttachmentPanel()
-  }
-
-  // 切换附件面板
-  private toggleAttachmentPanel(): void {
-    if (this.showAttachmentPicker) {
-      this.closeAttachmentPanel()
-    } else {
-      this.openAttachmentPanel()
-    }
-  }
-
-  private openAttachmentPanel(): void {
-    this.attachmentOpenAutoCloseGuardUntil = Date.now() + 450
-    this.safeStopInputSession()
-    this.getUIContext().animateTo({
-      duration: 260,
-      curve: Curve.FastOutSlowIn
-    }, () => {
-      this.showAttachmentPicker = true
-      this.attachmentPanelHeightVp = this.ATTACHMENT_PANEL_EXPANDED_HEIGHT
-    })
-  }
-
-  private closeAttachmentPanel(): void {
-    this.attachmentOpenAutoCloseGuardUntil = 0
-    this.getUIContext().animateTo({
-      duration: 220,
-      curve: Curve.FastOutSlowIn
-    }, () => {
-      this.attachmentPanelHeightVp = 0
-      this.showAttachmentPicker = false
-    })
-  }
-
-  private shouldIgnoreAttachmentAutoClose(): boolean {
-    return Date.now() < this.attachmentOpenAutoCloseGuardUntil
-  }
-
   onAppInBackgroundChanged(): void {
     // 后台切换由任务调度器与后台守护服务处理，这里只保留日志
     console.info('ChatPage', `[onAppInBackgroundChanged] appInBackground=${this.appInBackground}`)
@@ -5204,22 +5136,15 @@ export struct ChatPage {
   }
 
   private getComposerBottomAvoidHeightVp(): number {
-    if (this.showAttachmentPicker) {
-      return 0
-    }
     return this.px2vp(this.bottomAvoidHeight)
-  }
-
-  private getFloatingOverlayBottomAvoidHeightVp(): number {
-    return this.px2vp(this.bottomAvoidHeight) + this.attachmentPanelHeightVp
   }
 
   private getFloatingRightButtonBottomOffsetVp(): number {
     if (this.inputAreaHeightVp > 0) {
       return this.inputAreaHeightVp + this.floatingButtonInputGapVp
     }
-    return this.floatingScrollButtonBottomOffsetVp + this.getFloatingOverlayBottomAvoidHeightVp() +
-      getChatAiNoticeExtraInsetVp(this.getComposerBottomAvoidHeightVp())
+    const bottomInset = this.getComposerBottomAvoidHeightVp()
+    return this.floatingScrollButtonBottomOffsetVp + bottomInset + getChatAiNoticeExtraInsetVp(bottomInset)
   }
 
   private getScrollToTopButtonExtraOffsetY(): number {
@@ -5403,9 +5328,6 @@ export struct ChatPage {
   private handleHistoryPreviewJumpToMessage(index: number): void {
     if (index < 0 || index >= this.messages.length) {
       return
-    }
-    if (this.showAttachmentPicker) {
-      this.closeAttachmentPanel()
     }
     this.setHistoryPreviewExpanded(false)
     this.scroller.scrollToIndex(toListScrollIndexForMessage(index), true, ScrollAlign.CENTER)
@@ -5668,11 +5590,6 @@ export struct ChatPage {
   }
 
   private handleMessageListDidScroll(scrollOffset: number, scrollState: ScrollState): void {
-    if (this.showAttachmentPicker && (scrollState === ScrollState.Scroll || scrollState === ScrollState.Fling)) {
-      if (!this.shouldIgnoreAttachmentAutoClose()) {
-        this.closeAttachmentPanel()
-      }
-    }
     const userScrolledAwayFromBottom = this.getScrollUiFlow().handleMessageListDidScroll(scrollOffset, scrollState)
     if (this.pendingInitialBottomAlignment && userScrolledAwayFromBottom) {
       this.cancelPendingInitialBottomAlignment()
@@ -6028,9 +5945,6 @@ export struct ChatPage {
     if (slashCommandId !== '' && this.pendingAttachments.length === 0 && !this.isEditingMessage) {
       this.handleSlashCommand(slashCommandId)
       return
-    }
-    if (this.showAttachmentPicker) {
-      this.closeAttachmentPanel()
     }
     this.sendMessage()
   }

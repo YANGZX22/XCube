@@ -2,7 +2,6 @@ import { MessageAttachment, ReasoningLevel } from '../../models/ChatModels'
 import { ChatToolbar } from '../ChatToolbar'
 import { ChatInputBar } from '../ChatInputBar'
 import { ScreenshotBanner } from '../ScreenshotBanner'
-import { AttachmentPicker } from '../AttachmentPicker'
 import { SlashCommandPanel } from './SlashCommandPanel'
 import { ReasoningControlMode } from '../../services/ProviderCompatibilityRegistry'
 import { matchSlashCommands, SlashCommandItem } from '../../utils/SlashCommandUtils'
@@ -60,11 +59,8 @@ export struct ChatInputAreaSection {
   @Event onQueueSend: () => void = () => {}
   @Event onSteerSend: () => void = () => {}
   @Event onModelIconClick: () => void = () => {}
-  @Param isAttachmentPanelOpen: boolean = false
-  @Event onAttachmentClick: () => void = () => {}
   @Event onSelectAttachments: (attachments: MessageAttachment[]) => void =
     (_attachments: MessageAttachment[]): void => {}
-  @Event onCloseAttachmentPicker: () => void = (): void => {}
   @Event onVoiceInput: () => void = (): void => {}
   @Event onInputFocus: () => void = () => {}
   @Event onInputBlur: () => void = () => {}
@@ -235,7 +231,6 @@ export struct ChatInputAreaSection {
         })
 
         ChatInputBar({
-          isAttachmentPanelOpen: this.isAttachmentPanelOpen,
           inputText: this.inputText,
           onInputTextChange: (value: string): void => {
             this.onInputTextChange(value)
@@ -278,9 +273,8 @@ export struct ChatInputAreaSection {
           onModelIconClick: (): void => {
             this.onModelIconClick()
           },
-          onAttachmentClick: (): void => {
-            this.onAttachmentClick()
-          },
+          onSelectAttachments: this.onSelectAttachments,
+          onVoiceInput: this.onVoiceInput,
           onInputFocus: (): void => {
             this.onInputFocus()
           },
@@ -317,30 +311,6 @@ export struct ChatInputAreaSection {
         })
 
         this.AiGenerationNotice()
-
-        Column() {
-          AttachmentPicker({
-            showDragBar: false,
-            onSelectAttachments: (attachments: MessageAttachment[]): void => {
-              this.onSelectAttachments(attachments)
-            },
-            onClose: (): void => {
-              this.onCloseAttachmentPicker()
-            },
-            onVoiceInput: (): void => {
-              this.onVoiceInput()
-            }
-          })
-        }
-        .width('100%')
-        .height(this.isAttachmentPanelOpen ? 84 : 0)
-        .opacity(this.isAttachmentPanelOpen ? 1 : 0)
-        .clip(false)
-        .enabled(this.isAttachmentPanelOpen)
-        .animation({
-          duration: this.isAttachmentPanelOpen ? 260 : 200,
-          curve: Curve.FastOutSlowIn
-        })
 
         Column()
           .width('100%')

@@ -129,6 +129,22 @@
       "value": "仅当您要求 AI 推荐附近地点、从当前位置规划路线或导航时，此应用才会使用您的精确位置。"
     },
     {
+      "name": "chat_input_actions",
+      "value": "聊天输入选项"
+    },
+    {
+      "name": "chat_take_photo",
+      "value": "拍照"
+    },
+    {
+      "name": "chat_pick_photos",
+      "value": "照片"
+    },
+    {
+      "name": "chat_upload_file",
+      "value": "上传文件"
+    },
+    {
       "name": "voice_input",
       "value": "语音输入"
     },

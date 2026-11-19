@@ -1,142 +1,107 @@
-import { ImmersiveButtonSurface } from './ImmersiveButtonSurface'
-import { uiMaterial } from '@kit.ArkUI'
-/**
- * 附件选择器组件
- * 点击输入栏的 + 按钮后弹出，支持拍照、选择照片、上传文件
- */
-
-import { picker } from '@kit.CoreFileKit'
+import { SymbolGlyphModifier } from '@kit.ArkUI'
+import { fileIo, picker } from '@kit.CoreFileKit'
 import { camera, cameraPicker } from '@kit.CameraKit'
 import { photoAccessHelper } from '@kit.MediaLibraryKit'
 import { MessageAttachment, AttachmentType } from '../models/ChatModels'
-import { fileIo } from '@kit.CoreFileKit'
 import { util } from '@kit.ArkTS'
-import { BusinessError } from '@kit.BasicServicesKit'
-import { getAttachmentStorageService, AttachmentStorageService } from '../services/AttachmentStorageService'
+import { getAttachmentStorageService } from '../services/AttachmentStorageService'
 import { getAppUiState } from '../state/AppUiState'
-import { VisualEffectsMode } from '../models/ThemeColors'
+import { ThinSelectModifier } from '../utils/WrappedMaterialSupport'
+
+interface AttachmentMenuOption extends SelectOption {
+  activate: () => Promise<void> | void
+}
 
 @ComponentV2
 export struct AttachmentPicker {
-  @Local isLoading: boolean = false
-  @Param showDragBar: boolean = true
-  @Event onSelectAttachments: (attachments: MessageAttachment[]) => void = () => {
-  }
-  @Event onClose: () => void = () => {
-  }
-  // 点击「语音输入」回调（由父组件打开录音浮层）
-  @Event onVoiceInput: () => void = () => {
+  @Param isManuscript: boolean = false
+  @Param pressedIconColor: ResourceColor = $r('app.color.text_secondary')
+  @Event onSelectAttachments: (attachments: MessageAttachment[]) => void = () => {}
+  @Event onVoiceInput: () => void = () => {}
+  @Local pressed: boolean = false
+  @Local selectedIndex: number = -1
+  private picking: boolean = false
+  private readonly options: AttachmentMenuOption[] = [
+    {
+      value: $r('app.string.chat_take_photo'),
+      symbolIcon: new SymbolGlyphModifier($r('sys.symbol.camera')),
+      activate: (): Promise<void> => this.openCamera()
+    },
+    {
+      value: $r('app.string.chat_pick_photos'),
+      symbolIcon: new SymbolGlyphModifier($r('sys.symbol.shutter_photo')),
+      activate: (): Promise<void> => this.openPhotoPicker()
+    },
+    {
+      value: $r('app.string.chat_upload_file'),
+      symbolIcon: new SymbolGlyphModifier($r('sys.symbol.paperclip')),
+      activate: (): Promise<void> => this.openFilePicker()
+    },
+    {
+      value: $r('app.string.voice_input'),
+      symbolIcon: new SymbolGlyphModifier($r('sys.symbol.mic')),
+      activate: (): void => this.onVoiceInput()
+    }
+  ]
+
+  private get buttonDiameter(): number {
+    return this.isManuscript ? 44 : 40
   }
 
-  private get themePrimary(): string {
-    return getAppUiState().themePrimary
-  }
-  private get isManuscriptMode(): boolean {
-    return getAppUiState().visualEffectsMode === VisualEffectsMode.MANUSCRIPT
+  private get iconColor(): ResourceColor {
+    if (this.isManuscript) {
+      return this.pressed ? this.pressedIconColor : getAppUiState().themeTextSecondary
+    }
+    return $r('app.color.text_secondary')
   }
 
   build() {
-    Column() {
-      // 拖动条（仅半模态模式下显示）
-      if (this.showDragBar) {
-        Column()
-          .width(36)
-          .height(4)
-          .borderRadius(2)
-          .backgroundColor(getAppUiState().themePrimaryLight)
-          .margin({ top: 8, bottom: 16 })
-      }
-
-      // 主要选项：拍照、照片、上传文件
-      Row() {
-        this.OptionButton($r('sys.symbol.camera'), '拍照', () => {
-          this.openCamera()
-        })
-
-        this.OptionButton($r('sys.symbol.shutter_photo'), '照片', () => {
-          this.openPhotoPicker()
-        })
-
-        this.OptionButton($r('sys.symbol.paperclip'), '上传文件', () => {
-          this.openFilePicker()
-        })
-
-        this.OptionButton($r('sys.symbol.mic'), '语音输入', () => {
-          this.onClose()
-          this.onVoiceInput()
-        })
-      }
-      .width('100%')
-      .justifyContent(FlexAlign.SpaceBetween)
-      .padding({ top: this.showDragBar ? 0 : 10, bottom: 10 })
-      .border({
-        width: this.isManuscriptMode ? { top: 1, bottom: 1 } : 0,
-        color: this.isManuscriptMode ? getAppUiState().themeDivider : Color.Transparent
-      })
-    }
-    .width('100%')
-    .backgroundColor(Color.Transparent)
-  }
-
-  private getOptionButtonWidth(): number {
-    return 76
-  }
-
-  private getOptionButtonHeight(): number {
-    return 64
-  }
-
-  private getOptionButtonRadius(): number {
-    return 24
-  }
-
-  @Builder
-  OptionButton(icon: Resource, label: string, action: () => void) {
-    Stack({ alignContent: Alignment.TopStart }) {
-      ImmersiveButtonSurface({
-        materialFactory: this.isManuscriptMode ? undefined : () => (new uiMaterial.ImmersiveMaterial({
-          style: uiMaterial.ImmersiveStyle.REGULAR,
-          materialColor: Color.Transparent,
-          applyShadow: false,
-          interactive: true,
-          lightEffect: { color: undefined }
-        })),
-        cornerRadius: this.isManuscriptMode ? 0 : this.getOptionButtonRadius()
-      }) {
-        Button({
-          type: ButtonType.Normal,
-          stateEffect: false
-        }) {
-          Column() {
-            SymbolGlyph(icon)
-              .fontSize(22)
-              .fontColor([this.isManuscriptMode ? getAppUiState().themeTextSecondary : this.themePrimary])
-
-            Text(label)
-              .fontSize(12)
-              .fontWeight(FontWeight.Medium)
-              .fontColor(this.isManuscriptMode ? getAppUiState().themeTextSecondary : this.themePrimary)
-              .maxLines(1)
-              .margin({ top: 4 })
-          }
-          .width('100%')
-          .height('100%')
-          .justifyContent(FlexAlign.Center)
-          .alignItems(HorizontalAlign.Center)
-        }
-        .width(this.getOptionButtonWidth())
-        .height(this.getOptionButtonHeight())
+    Stack({ alignContent: Alignment.Center }) {
+      Select(this.options)
+        .selected(this.selectedIndex!!)
+        .value('')
+        .font({ size: 0 })
+        .arrowModifier(new SymbolGlyphModifier().fontColor([Color.Transparent]))
+        .width('100%')
+        .height('100%')
         .padding(0)
-        .backgroundColor(Color.Transparent)
-        .borderRadius(this.isManuscriptMode ? 0 : this.getOptionButtonRadius())
-        .onClick(() => {
-          action()
+        .borderRadius(this.buttonDiameter / 2)
+        .optionWidth(OptionWidthMode.FIT_CONTENT)
+        .menuAlign(MenuAlignType.END)
+        .attributeModifier(new ThinSelectModifier('plain'))
+        .accessibilityText($r('app.string.chat_input_actions'))
+        .onTouch((event: TouchEvent): void => {
+          if (event.type === TouchType.Down) this.pressed = true
+          if (event.type === TouchType.Up || event.type === TouchType.Cancel) this.pressed = false
         })
-      }
+        .onSelect((index: number): void => {
+          this.selectedIndex = -1
+          this.activateOption(index)
+        })
+
+      // 加号独立居中，点击和键盘焦点交给下方的 Select。
+      SymbolGlyph($r('sys.symbol.plus'))
+        .fontSize(this.isManuscript ? 18 : 20)
+        .fontColor([this.iconColor])
+        .hitTestBehavior(HitTestMode.None)
+        .accessibilityLevel('no')
     }
-    .width(this.getOptionButtonWidth())
-    .height(this.getOptionButtonHeight())
-    .clip(false)
+    .width(this.buttonDiameter)
+    .height(this.buttonDiameter)
+    .flexShrink(0)
+    .borderRadius(this.buttonDiameter / 2)
+    .clip(true)
+  }
+
+  private async activateOption(index: number): Promise<void> {
+    const option = this.options[index]
+    if (!option || this.picking) return
+    this.picking = true
+    try {
+      await option.activate()
+    } finally {
+      this.picking = false
+    }
   }
 
   // 打开相机拍照
@@ -161,7 +126,6 @@ export struct AttachmentPicker {
         const attachment = await this.createAttachmentFromUri(pickerResult.resultUri, 'camera_photo.jpg')
         if (attachment !== null) {
           this.onSelectAttachments([attachment])
-          this.onClose()
         }
       }
     } catch (error) {
@@ -191,7 +155,6 @@ export struct AttachmentPicker {
         }
         if (attachments.length > 0) {
           this.onSelectAttachments(attachments)
-          this.onClose()
         }
       }
     } catch (error) {
@@ -226,7 +189,6 @@ export struct AttachmentPicker {
         }
         if (attachments.length > 0) {
           this.onSelectAttachments(attachments)
-          this.onClose()
         }
       }
     } catch (error) {

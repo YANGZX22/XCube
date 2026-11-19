@@ -129,6 +129,22 @@
       "value": "This app uses your precise location only when you ask AI to find nearby places, plan a route, or navigate from your current location."
     },
     {
+      "name": "chat_input_actions",
+      "value": "Chat input actions"
+    },
+    {
+      "name": "chat_take_photo",
+      "value": "Take photo"
+    },
+    {
+      "name": "chat_pick_photos",
+      "value": "Photos"
+    },
+    {
+      "name": "chat_upload_file",
+      "value": "Upload file"
+    },
+    {
       "name": "voice_input",
       "value": "Voice Input"
     },
