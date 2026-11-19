@@ -1,7 +1,7 @@
 import { getSettingsTypography, SETTINGS_HEADING_CONTENT_GAP, SETTINGS_SUBTITLE_LINE_HEIGHT } from './settings/SettingsTypography'
 import { ImmersiveListSurface, LIST_MATERIAL_CARD_RADIUS } from './ImmersiveListSurface'
 import { ImmersiveFieldSurface } from './ImmersiveFieldSurface'
-import { InteractiveMaterialButton } from './InteractiveMaterialButton'
+import { SettingsActionButton } from './settings/SettingsActionButton'
 import { uiMaterial } from '@kit.ArkUI'
 import { common, Want } from '@kit.AbilityKit'
 import {
@@ -18,7 +18,7 @@ import { getAppUiState } from '../state/AppUiState'
 import { withColorAlpha } from '../utils/ColorAlphaUtils'
 import { pickLocalizedText } from '../utils/LocalizedTextUtils'
 import { getSettingsSheetContentMaxHeight } from '../utils/SettingsPageLayoutHelper'
-import { shouldUseWrappedMaterial, WRAPPED_MATERIAL_REGULAR } from '../utils/WrappedMaterialSupport'
+import { shouldUseWrappedMaterial } from '../utils/WrappedMaterialSupport'
 import { showSnackBar, SnackBarDisplayOptions, SnackBarTone } from '../utils/ToastUtil'
 import { ChatFloatingImmersiveButton } from './ChatFloatingImmersiveButton'
 import { ImmersiveSheetHeader } from './ImmersiveSheetHeader'
@@ -27,66 +27,6 @@ import { SETTINGS_FORM_VALUE_FONT_SIZE, SettingsFormSelect } from './settings/Se
 interface EmailConfigurationError {
   code?: number
   message?: string
-}
-
-@ComponentV2
-struct MailboxActionButton {
-  @Require @Param label: string
-  @Require @Param foreground: ResourceColor
-  @Param accessibilityLabel: string = ''
-  @Param compact: boolean = false
-  @Param buttonHeight: number = 42
-  @Param maxWidth: Length = '100%'
-  @Param tint: ResourceColor = Color.Transparent
-  @Param isEnabled: boolean = true
-  @Event onActivate: () => void = (): void => {}
-  @Local private measuredWidth: number = 0
-
-  private get layoutWidth(): Length {
-    if (!this.compact) {
-      return '100%'
-    }
-    const context = this.getUIContext()
-    const size = context.getMeasureUtils().measureTextSize({
-      textContent: this.label, fontSize: 12, fontWeight: FontWeight.Medium
-    })
-    return Math.ceil(context.px2vp(Number(size.width))) + 20
-  }
-
-  build() {
-    Stack() {
-      InteractiveMaterialButton({
-        surfaceWidth: this.measuredWidth,
-        surfaceHeight: this.buttonHeight,
-        buttonType: ButtonType.Capsule,
-        materialStyle: WRAPPED_MATERIAL_REGULAR,
-        materialColor: this.tint,
-        applyShadow: true,
-        isEnabled: this.isEnabled,
-        interactive: this.isEnabled,
-        accessibilityLabel: this.accessibilityLabel || this.label,
-        onActivate: (): void => this.onActivate()
-      }) {
-        Text(this.label)
-          .fontSize(this.compact ? 12 : 14)
-          .fontWeight(FontWeight.Medium)
-          .fontColor(this.foreground)
-          .maxLines(1)
-          .textOverflow({ overflow: TextOverflow.Ellipsis })
-      }
-    }
-    .width(this.layoutWidth)
-    .constraintSize({ maxWidth: this.maxWidth })
-    .height(this.buttonHeight)
-    .clip(false)
-    .hitTestBehavior(HitTestMode.Transparent)
-    .onSizeChange((_previous: SizeOptions, size: SizeOptions): void => {
-      const width = Number(size.width)
-      if (Number.isFinite(width) && width >= 0 && this.measuredWidth !== width) {
-        this.measuredWidth = width
-      }
-    })
-  }
 }
 
 /** Account authorization belongs to Settings; knowledge only consumes the authorized mailbox. */
@@ -386,7 +326,7 @@ export struct EmailAccountSettingsCard {
               this.formEmail = value
               this.connectionMessage = ''
             })
-          MailboxActionButton({
+          SettingsActionButton({
             label: pickLocalizedText('自动填充', 'Autofill'),
             accessibilityLabel: pickLocalizedText('自动填充常用服务器', 'Autofill common mail servers'),
             compact: true,
@@ -680,7 +620,7 @@ export struct EmailAccountSettingsCard {
                   .width('100%')
                 Text(this.oauthUserCode).fontSize(24).fontWeight(FontWeight.Bold)
                   .fontColor(this.themePrimary).letterSpacing(2).width('100%')
-                MailboxActionButton({
+                SettingsActionButton({
                   label: pickLocalizedText('重新打开 Microsoft 授权页', 'Reopen Microsoft authorization page'),
                   compact: true,
                   buttonHeight: 34,
@@ -729,7 +669,7 @@ export struct EmailAccountSettingsCard {
               .width('100%')
           }
 
-          MailboxActionButton({
+          SettingsActionButton({
             label: this.isWorking
               ? (this.formAuthenticationMethod === EmailAuthenticationMethod.MICROSOFT_OAUTH2
                 ? pickLocalizedText('等待 Microsoft 授权...', 'Waiting for Microsoft authorization...')
@@ -745,7 +685,7 @@ export struct EmailAccountSettingsCard {
           })
 
           if (this.account.configured) {
-            MailboxActionButton({
+            SettingsActionButton({
               label: pickLocalizedText('撤销当前邮箱授权', 'Revoke Current Mailbox Authorization'),
               foreground: $r('app.color.status_error'),
               isEnabled: !this.isWorking,

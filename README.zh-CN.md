@@ -111,7 +111,7 @@ OpenAI · Claude · Gemini · DeepSeek · Grok · Ollama · OpenRouter · Silico
 | **视觉理解**<sup>*</sup>         | 模型支持原生视觉输入时直接交付原图；否则通过 [ModLens](https://github.com/liustack/modlens) 提供图片 OCR、布局、语义与视觉线索，需要单独部署              |
 | **DOCX 工具包**                 | 模型支持原生文档输入时直接交付原始 DOCX；否则在本地提取标题、段落、列表和表格，不把原始文件交给模型                                                         |
 | **XLSX 工具包**                 | 模型支持原生文档输入时直接交付原始 XLSX；否则在本地提取工作表、单元格、日期及公式结果，不把原始文件交给模型                                                    |
-| **Skill**                    | 读取用户已启用的技能说明                                                                                                  |
+| **Skill**                    | 从 SKILL.md、ZIP、.skill 包或目录导入技能，可预览多篇 Markdown 并让模型按需读取引用文件                                                                                                  |
 | **Canvas 文档**                | 在对话区域旁维护用户与 AI 均可编辑的共享文档，并支持 Markdown 预览                                                                      |
 | **计划模式**                     | 由模型创建多步骤任务计划，并在各步骤实际完成后更新状态。计划状态仅允许模型修改；用户可通过 `/plan` 打开只读面板查看当前执行项与总体进度。计划按会话保存在本地，并在再次进入会话时自动恢复             |
 | **数学绘图**                     | 生成基于 [VChart](https://ohpm.openharmony.cn/#/cn/detail/@visactor%2Fharmony-vchart) 的折线图、柱状图、饼图、散点图、桑基图、词云图等可视化 |

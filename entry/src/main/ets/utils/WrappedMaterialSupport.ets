@@ -35,6 +35,23 @@ export function getStaticSheetMaterial(): uiMaterial.Material | undefined {
   return shouldUseWrappedMaterial() ? createStaticRegularMaterial() : undefined
 }
 
+export function getPopupMaterial(): uiMaterial.Material | undefined {
+  if (shouldUseWrappedMaterial()) {
+    return new uiMaterial.ImmersiveMaterial({ style: uiMaterial.ImmersiveStyle.THICK })
+  }
+  return isWrappedMaterialApiAvailable() ? uiMaterial.Material.empty : undefined
+}
+
+export function getImmersiveMenuOptions(onDisappear?: () => void): MenuOptions {
+  const options: MenuOptions = { systemMaterial: getPopupMaterial(), onDisappear: onDisappear }
+  if (!shouldUseWrappedMaterial()) {
+    options.backgroundColor = Color.Transparent
+    options.backgroundBlurStyle = BlurStyle.NONE
+    options.backgroundEffect = { radius: 24, saturation: 1, brightness: 1, color: Color.Transparent }
+  }
+  return options
+}
+
 function createThinMenuMaterial(): uiMaterial.Material {
   return new uiMaterial.ImmersiveMaterial({
     style: uiMaterial.ImmersiveStyle.THIN,

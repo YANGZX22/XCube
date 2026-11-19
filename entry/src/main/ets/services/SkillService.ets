@@ -1,3 +1,8 @@
+import { Context } from '@kit.AbilityKit'
+import { util } from '@kit.ArkTS'
+import { checkSkillPath, isSkillMarkdown, normalizeSkillBundle, packSkill, readPackedSkillFile, readStoredSkillMetadata,
+  SKILL_ENTRY, SkillFile, skillFileText, skillTextFile, unpackSkill } from '../utils/SkillPackage'
+import { SkillPackageStorage } from './SkillPackageStorage'
 import { getPreferencesService, PreferenceKeys, PreferencesService } from './PreferencesService'
 
 @ObservedV2
@@ -9,6 +14,9 @@ export class SkillConfig {
   @Trace enabled: boolean = true
   @Trace createdAt: number = 0
   @Trace updatedAt: number = 0
+  bundleKey: string = ''
+  manualOnly: boolean = false
+  paths: string[] = [SKILL_ENTRY]
 
   constructor(
     id: string = '',
@@ -35,18 +43,23 @@ interface UseSkillArgs {
   id?: string
   name?: string
   path?: string
+  offset?: number
   max_chars?: number | string
   maxChars?: number | string
 }
 
-class SkillConfigJson {
-  id: string = ''
-  name: string = ''
-  description: string = ''
-  content: string = ''
-  enabled: boolean = true
-  createdAt: number = 0
-  updatedAt: number = 0
+interface SkillRecord {
+  id: string
+  name: string
+  description: string
+  content: string
+  enabled: boolean
+  createdAt: number
+  updatedAt: number
+  bundleKey?: string
+  paths?: string[]
+  manualOnly?: boolean
+  archive?: string
 }
 
 class SkillSummary {
@@ -72,13 +85,22 @@ class SkillReadOutput {
   content: string = ''
   truncated: boolean = false
 
-  constructor(skill: SkillConfig, content: string, truncated: boolean) {
+  files?: string[]
+  encoding: string
+  offset: number
+  next_offset?: number
+
+  constructor(skill: SkillConfig, path: string, content: string, encoding: string, offset: number, end: number) {
     this.id = skill.id
     this.name = skill.name
     this.description = skill.description
-    this.path = `${skill.id}/SKILL.md`
-    this.content = content
-    this.truncated = truncated
+    this.path = skill.id + '/' + path
+    this.offset = offset
+    this.encoding = encoding
+    this.content = content.slice(offset, end)
+    this.truncated = end < content.length
+    if (this.truncated) this.next_offset = end
+    if (path === SKILL_ENTRY) this.files = skill.paths
   }
 }
 
@@ -89,7 +111,7 @@ class SkillListOutput {
 
   constructor(skills: SkillConfig[]) {
     this.message = skills.length > 0
-      ? '传入 skill_id、name 或 path 读取某个 skill 的 SKILL.md 正文。'
+      ? '传入 skill_id 读取 SKILL.md 和文件清单，再用同一 skill_id 和相对 path 读取所需文件。'
       : '当前没有已启用的 skill。'
     for (let i = 0; i < skills.length; i++) {
       this.skills.push(new SkillSummary(skills[i]))
@@ -109,6 +131,8 @@ class SkillErrorOutput {
 export class SkillService {
   private static instance: SkillService | null = null
   private preferencesService: PreferencesService
+  private storage: SkillPackageStorage | null = null
+  private pending: Promise<void> = Promise.resolve()
   private readonly defaultAppHelpContent: string = `# 应用使用帮助
 
 本技能用于回答 APP 的使用、配置和功能说明问题。
@@ -120,6 +144,10 @@ export class SkillService {
 - 回答时优先给出具体入口和操作步骤，必要时说明前提条件、限制和注意事项。
 - 如果帮助资料没有明确说明，不要编造入口或能力边界；请直接说明“当前帮助中没有明确说明”。
 - 如果用户的问题不够具体，而继续回答可能误导，使用 ask_user 工具确认 1 个最关键的问题。
+
+## Skill
+
+在设置的工具中心打开 Skill。可新增技能，也可导入 SKILL.md、ZIP、.skill 包或包含 SKILL.md 的文件夹。点预览后可切换 Markdown 文档。启用后，模型可按相对路径读取技能里引用的文件。
 
 ## 子智能体
 
@@ -149,99 +177,212 @@ export class SkillService {
     await this.preferencesService.setBoolean(PreferenceKeys.SKILL_TOOL_ENABLED, enabled)
   }
 
-  async loadSkills(): Promise<SkillConfig[]> {
-    const raw = await this.preferencesService.getString(PreferenceKeys.SKILL_CONFIGS_JSON, '[]')
-    if (raw.trim() === '') {
-      return [this.createDefaultAppHelpSkill()]
-    }
-    try {
-      const parsed = JSON.parse(raw) as Array<Record<string, Object>>
-      const skills: SkillConfig[] = []
-      for (let i = 0; i < parsed.length; i++) {
-        const item = parsed[i]
-        const id = this.normalizeSkillId(this.readString(item, 'id'))
-        const name = this.readString(item, 'name')
-        if (id === '' || name.trim() === '') {
-          continue
-        }
-        skills.push(new SkillConfig(
-          id,
-          name,
-          this.readString(item, 'description'),
-          this.readString(item, 'content'),
-          this.readBoolean(item, 'enabled', true),
-          this.readNumber(item, 'createdAt', Date.now()),
-          this.readNumber(item, 'updatedAt', Date.now())
-        ))
-      }
-      if (skills.length === 0) {
-        return [this.createDefaultAppHelpSkill()]
-      }
-      return skills
-    } catch (error) {
-      console.error('SkillService', `Failed to parse skills: ${JSON.stringify(error)}`)
-      return [this.createDefaultAppHelpSkill()]
-    }
+  initialize(context: Context): void {
+    this.storage = new SkillPackageStorage(context.filesDir + '/skill_packages')
   }
 
-  async saveSkills(skills: SkillConfig[]): Promise<void> {
-    const serialized: SkillConfigJson[] = []
-    for (let i = 0; i < skills.length; i++) {
-      const skill = skills[i]
-      const id = this.normalizeSkillId(skill.id)
-      const name = skill.name.trim()
-      if (id === '' || name === '') {
-        continue
-      }
-      const item = new SkillConfigJson()
-      item.id = id
-      item.name = name
-      item.description = skill.description.trim()
-      item.content = skill.content
-      item.enabled = skill.enabled
-      item.createdAt = skill.createdAt > 0 ? skill.createdAt : Date.now()
-      item.updatedAt = skill.updatedAt > 0 ? skill.updatedAt : Date.now()
-      serialized.push(item)
+  private store(): SkillPackageStorage {
+    if (!this.storage) throw new Error('Skill storage is unavailable')
+    return this.storage
+  }
+
+  private exclusive<T>(action: () => Promise<T>): Promise<T> {
+    const result = this.pending.then(action)
+    this.pending = result.then((): void => {}, (): void => {})
+    return result
+  }
+
+  async loadSkills(): Promise<SkillConfig[]> {
+    const raw = await this.preferencesService.getString(PreferenceKeys.SKILL_CONFIGS_JSON, '')
+    if (!raw.trim()) return [this.createDefaultAppHelpSkill()]
+    return this.parseRecords(raw).map((item: SkillRecord): SkillConfig => this.fromRecord(item))
+  }
+
+  private parseRecords(raw: string): SkillRecord[] {
+    const records = JSON.parse(raw) as SkillRecord[]
+    if (!Array.isArray(records)) throw new Error('Invalid skill catalog')
+    return records
+  }
+
+  private fromRecord(item: SkillRecord): SkillConfig {
+    if (typeof item.id !== 'string' || !item.id || typeof item.name !== 'string' || !item.name.trim()) {
+      throw new Error('Invalid skill identity')
     }
-    await this.preferencesService.setString(PreferenceKeys.SKILL_CONFIGS_JSON, JSON.stringify(serialized))
+    const skill = new SkillConfig(item.id, item.name, item.description ?? '', item.content ?? '',
+      item.enabled !== false, item.createdAt ?? Date.now(), item.updatedAt ?? Date.now())
+    skill.manualOnly = item.manualOnly === true
+    skill.bundleKey = item.bundleKey ?? ''
+    skill.paths = skill.bundleKey && item.paths ? item.paths : [SKILL_ENTRY]
+    return skill
+  }
+
+  private toRecord(skill: SkillConfig): SkillRecord {
+    return { id: skill.id, name: skill.name, description: skill.description, content: skill.content,
+      enabled: skill.enabled, createdAt: skill.createdAt, updatedAt: skill.updatedAt,
+      bundleKey: skill.bundleKey, paths: skill.paths, manualOnly: skill.manualOnly }
+  }
+
+  private async saveIndex(skills: SkillConfig[]): Promise<void> {
+    const records = skills.map((skill: SkillConfig): SkillRecord => this.toRecord(skill))
+    await this.preferencesService.setString(PreferenceKeys.SKILL_CONFIGS_JSON, JSON.stringify(records), true)
+  }
+
+  async filesForSkill(skill: SkillConfig): Promise<SkillFile[]> {
+    if (!skill.bundleKey) return [skillTextFile(SKILL_ENTRY, skill.content)]
+    return unpackSkill(await this.store().read(skill.bundleKey)).files
+  }
+
+  async savePackage(skill: SkillConfig, files: SkillFile[]): Promise<void> {
+    const normalized = normalizeSkillBundle(files).files
+    for (const file of normalized) {
+      if (isSkillMarkdown(file.path)) skillFileText(file)
+    }
+    const blob = packSkill(normalized)
+    await this.exclusive(async (): Promise<void> => {
+      const skills = await this.loadSkills()
+      const index = skills.findIndex((entry: SkillConfig): boolean => entry.id === skill.id)
+      if (skill.id && (index < 0 || skill.bundleKey !== skills[index].bundleKey)) {
+        throw new Error('Skill changed since it was opened')
+      }
+      const now = Date.now()
+      const next = new SkillConfig(skill.id || this.buildNewSkillId(skill.name), skill.name.trim(),
+        skill.description.trim(), '', skill.enabled, skill.createdAt || now, now)
+      const previous = index < 0 ? '' : skills[index].bundleKey
+      next.manualOnly = readStoredSkillMetadata(skillFileText(normalized[0]), next.name, next.description).manualOnly
+      next.paths = normalized.map((file: SkillFile): string => file.path)
+      next.bundleKey = await this.store().write(blob)
+      if (index < 0) skills.push(next)
+      else skills[index] = next
+      try {
+        await this.saveIndex(skills)
+      } catch (error) {
+        await this.store().remove(next.bundleKey)
+        throw error as Error
+      }
+      if (previous) await this.store().remove(previous)
+    })
+  }
+
+  async setSkillEnabled(id: string, enabled: boolean): Promise<void> {
+    await this.exclusive(async (): Promise<void> => {
+      const skills = await this.loadSkills()
+      const skill = skills.find((item: SkillConfig): boolean => item.id === id)
+      if (skill) {
+        skill.enabled = enabled
+        skill.updatedAt = Date.now()
+        await this.saveIndex(skills)
+      }
+    })
+  }
+
+  async deleteSkill(id: string): Promise<void> {
+    await this.exclusive(async (): Promise<void> => {
+      const skills = await this.loadSkills()
+      const skill = skills.find((item: SkillConfig): boolean => item.id === id)
+      if (!skill) return
+      await this.saveIndex(skills.filter((item: SkillConfig): boolean => item.id !== id))
+      if (skill.bundleKey) await this.store().remove(skill.bundleKey)
+    })
+  }
+
+  async exportCatalog(): Promise<string> {
+    return this.exclusive(async (): Promise<string> => {
+      const records: SkillRecord[] = []
+      for (const skill of await this.loadSkills()) {
+        const record = this.toRecord(skill)
+        if (skill.bundleKey) record.archive = new util.Base64Helper().encodeToStringSync(await this.store().read(skill.bundleKey))
+        record.bundleKey = ''
+        records.push(record)
+      }
+      return JSON.stringify(records)
+    })
+  }
+
+  async restoreCatalog(raw: string): Promise<void> {
+    const records = this.parseRecords(raw)
+    await this.exclusive(async (): Promise<void> => {
+      const previous = await this.loadSkills()
+      const restored: SkillConfig[] = []
+      const staged: string[] = []
+      try {
+        for (const record of records) {
+          const skill = this.fromRecord(record)
+          if (restored.some((item: SkillConfig): boolean => item.id === skill.id)) throw new Error('Duplicate skill id')
+          if (record.bundleKey && !record.archive) throw new Error('Skill backup has no archive')
+          skill.bundleKey = ''
+          if (record.archive) {
+            const files = unpackSkill(new util.Base64Helper().decodeSync(record.archive)).files
+            skill.manualOnly = readStoredSkillMetadata(skillFileText(files[0]), skill.name, skill.description).manualOnly
+            skill.paths = files.map((file: SkillFile): string => file.path)
+            skill.bundleKey = await this.store().write(packSkill(files))
+            staged.push(skill.bundleKey)
+          }
+          restored.push(skill)
+        }
+        await this.saveIndex(restored)
+      } catch (error) {
+        for (const key of staged) await this.store().remove(key)
+        throw error as Error
+      }
+      for (const old of previous) {
+        if (old.bundleKey) await this.store().remove(old.bundleKey)
+      }
+    })
   }
 
   async readForTool(args: string): Promise<string> {
     try {
       const params = this.parseArgs(args)
-      const skills = await this.getEnabledSkills()
-      const target = this.resolveTarget(params)
-      if (target === '') {
-        return JSON.stringify(new SkillListOutput(skills))
-      }
-      const skill = this.findSkill(skills, target)
-      if (skill === null) {
-        return JSON.stringify(new SkillErrorOutput(`未找到已启用的 skill: ${target}`))
-      }
-      const maxChars = this.resolveNumber(params.maxChars, this.resolveNumber(params.max_chars, 16000))
-      const content = skill.content
-      const clipped = maxChars > 0 && content.length > maxChars ? content.substring(0, maxChars) : content
-      return JSON.stringify(new SkillReadOutput(skill, clipped, clipped.length < content.length))
+      return await this.exclusive(async (): Promise<string> => {
+        const skills = await this.getEnabledSkills()
+        let target = (params.skill_id ?? params.skillId ?? params.id ?? params.name ?? '').trim()
+        let path = (params.path ?? '').trim().replace(/^\.\//, '')
+        if (!target && !path) return JSON.stringify(new SkillListOutput(skills))
+        if (!target) {
+          const slash = path.indexOf('/')
+          target = slash < 0 ? path : path.slice(0, slash)
+          path = slash < 0 ? '' : path.slice(slash + 1)
+        }
+        const lookup = target.toLowerCase()
+        let skill = skills.find((item: SkillConfig): boolean => item.id.toLowerCase() === lookup)
+        if (!skill) {
+          const matches = skills.filter((item: SkillConfig): boolean => item.name.toLowerCase() === lookup)
+          if (matches.length > 1) throw new Error('Multiple enabled skills share this name. Use skill_id: ' + target)
+          skill = matches[0]
+        }
+        if (!skill) throw new Error('Enabled skill not found: ' + target)
+        if (!skill.paths.includes(path) && path.startsWith(skill.id + '/')) path = path.slice(skill.id.length + 1)
+        path = !path || (!skill.paths.includes(path) && path.toLowerCase() === 'skill.md')
+          ? SKILL_ENTRY : checkSkillPath(path)
+        if (!skill.paths.includes(path)) throw new Error('File not found: ' + path)
+        let content = skill.content
+        let encoding = 'utf8'
+        if (skill.bundleKey) {
+          const file = readPackedSkillFile(await this.store().read(skill.bundleKey), path)
+          try {
+            content = skillFileText(file)
+            if (content.includes('\u0000')) throw new Error('Binary')
+          } catch {
+            content = new util.Base64Helper().encodeToStringSync(file.bytes)
+            encoding = 'base64'
+          }
+        }
+        const max = this.resolveNumber(params.maxChars, this.resolveNumber(params.max_chars, 16000))
+        const start = Math.min(content.length, Math.max(0, Math.floor(this.resolveNumber(params.offset, 0))))
+        const end = max <= 0 ? content.length : Math.min(content.length, start + Math.max(1, Math.floor(max)))
+        return JSON.stringify(new SkillReadOutput(skill, path, content, encoding, start, end))
+      })
     } catch (error) {
-      return JSON.stringify(new SkillErrorOutput(`读取 skill 失败: ${this.stringifyError(error)}`))
+      return JSON.stringify(new SkillErrorOutput(this.stringifyError(error)))
     }
   }
 
   async getEnabledSkills(): Promise<SkillConfig[]> {
-    const skills = await this.loadSkills()
-    const enabled: SkillConfig[] = []
-    for (let i = 0; i < skills.length; i++) {
-      if (skills[i].enabled) {
-        enabled.push(skills[i])
-      }
-    }
-    return enabled
+    return (await this.loadSkills()).filter((skill: SkillConfig): boolean => skill.enabled && !skill.manualOnly)
   }
 
   buildNewSkillId(name: string): string {
-    const normalizedName = this.normalizeSkillId(name)
-    const base = normalizedName !== '' ? normalizedName : 'skill'
-    return `${base}_${Date.now()}`
+    return (this.normalizeSkillId(name).slice(0, 64) || 'skill') + '_' + util.generateRandomUUID()
   }
 
   private createDefaultAppHelpSkill(): SkillConfig {
@@ -264,38 +405,6 @@ export class SkillService {
     return JSON.parse(args) as UseSkillArgs
   }
 
-  private resolveTarget(params: UseSkillArgs): string {
-    if (params.skill_id !== undefined) {
-      return `${params.skill_id}`.trim()
-    }
-    if (params.skillId !== undefined) {
-      return `${params.skillId}`.trim()
-    }
-    if (params.id !== undefined) {
-      return `${params.id}`.trim()
-    }
-    if (params.path !== undefined) {
-      return `${params.path}`.trim()
-    }
-    if (params.name !== undefined) {
-      return `${params.name}`.trim()
-    }
-    return ''
-  }
-
-  private findSkill(skills: SkillConfig[], target: string): SkillConfig | null {
-    const normalizedTarget = target.trim().toLowerCase()
-    const pathTarget = normalizedTarget.endsWith('/skill.md')
-      ? normalizedTarget.substring(0, normalizedTarget.length - '/skill.md'.length)
-      : normalizedTarget
-    for (let i = 0; i < skills.length; i++) {
-      if (skills[i].id.toLowerCase() === pathTarget || skills[i].name.toLowerCase() === normalizedTarget) {
-        return skills[i]
-      }
-    }
-    return null
-  }
-
   private normalizeSkillId(value: string): string {
     return value.trim().toLowerCase().replace(/[^a-z0-9_\-]+/g, '_').replace(/^_+|_+$/g, '')
   }
@@ -309,24 +418,6 @@ export class SkillService {
     }
     const parsed = Number.parseInt(value, 10)
     return Number.isNaN(parsed) ? fallback : parsed
-  }
-
-  private readString(item: Record<string, Object>, key: string, fallback: string = ''): string {
-    const value = item[key]
-    if (value === undefined || value === null) {
-      return fallback
-    }
-    return `${value}`
-  }
-
-  private readBoolean(item: Record<string, Object>, key: string, fallback: boolean): boolean {
-    const value = item[key]
-    return typeof value === 'boolean' ? value : fallback
-  }
-
-  private readNumber(item: Record<string, Object>, key: string, fallback: number): number {
-    const value = item[key]
-    return typeof value === 'number' && Number.isFinite(value) ? value : fallback
   }
 
   private stringifyError(error: Object): string {

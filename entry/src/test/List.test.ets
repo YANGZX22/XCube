@@ -26,6 +26,7 @@ import planServiceTest from './PlanService.test';
 import toolProgressGuardTest from './ToolProgressGuard.test';
 import toolRoundPolicyTest from './ToolRoundPolicy.test';
 import promptLanguageTest from './PromptLanguage.test';
+import skillPackageTest from './SkillPackage.test';
 import pythonSandboxRuntimeTest from './PythonSandboxRuntime.test';
 import attachmentCleanupTest from './AttachmentCleanup.test';
 import chatInFlightMessageTest from './ChatInFlightMessage.test';
@@ -68,6 +69,7 @@ export default function testsuite() {
   toolProgressGuardTest();
   toolRoundPolicyTest();
   promptLanguageTest();
+  skillPackageTest();
   pythonSandboxRuntimeTest();
   attachmentCleanupTest();
   chatInFlightMessageTest();

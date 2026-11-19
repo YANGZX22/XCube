@@ -36,6 +36,14 @@ export const RUNTIME_LICENSES: LicenseCatalogItem[] = [
     'Copyright © 2024-present LiuWei.'
   ),
   new LicenseCatalogItem(
+    'yaml', '2.8.0', 'ISC',
+    'Copyright Eemeli Aro。', 'Copyright Eemeli Aro.'
+  ),
+  new LicenseCatalogItem(
+    'fflate', '0.8.2', 'MIT',
+    'Copyright © 2023 Arjun Barrett。', 'Copyright © 2023 Arjun Barrett.'
+  ),
+  new LicenseCatalogItem(
     '@cangjie-tpc/markdown_hybrid', '1.3.6', 'Apache-2.0',
     'Cangjie-TPC Markdown4cj 混合库。',
     'Cangjie-TPC Markdown4cj hybrid library.'

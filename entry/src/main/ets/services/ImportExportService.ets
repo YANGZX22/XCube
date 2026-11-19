@@ -32,6 +32,7 @@ import { Assistant, DEFAULT_ASSISTANT_ID } from '../models/AssistantModels'
 import { DatabaseService } from './DatabaseService'
 import { AttachmentStorageService } from './AttachmentStorageService'
 import { getPreferencesService, PreferenceKeys, RETIRED_TRANSLATION_PREFERENCE_KEYS } from './PreferencesService'
+import { getSkillService } from './SkillService'
 import { getThemeService } from './ThemeService'
 import { getSettingsManager } from '../viewmodels/SettingsManager'
 import { DEFAULT_PRIMARY_COLOR } from '../config/ThemeDefaults'
@@ -522,6 +523,8 @@ export class ImportExportService {
     } catch (error) {
       console.error('ImportExportService', `Failed to collect preferences: ${JSON.stringify(error)}`)
     }
+    const skills = entries.find((entry: PreferenceEntry): boolean => entry.key === PreferenceKeys.SKILL_CONFIGS_JSON)
+    if (skills) skills.value = await getSkillService().exportCatalog()
     return entries
   }
 
@@ -1312,6 +1315,11 @@ export class ImportExportService {
     const preferencesService = getPreferencesService()
     for (const entry of preferences) {
       if (RETIRED_TRANSLATION_PREFERENCE_KEYS.includes(entry.key)) {
+        continue
+      }
+      if (entry.key === PreferenceKeys.SKILL_CONFIGS_JSON && entry.type === 'string') {
+        await getSkillService().restoreCatalog(entry.value as string)
+        restored++
         continue
       }
       try {

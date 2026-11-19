@@ -3277,7 +3277,11 @@ function createUseSkillToolDefinition(): ToolDefinition {
       },
       "path": {
         "type": "string",
-        "description": "虚拟路径，如 app_help/SKILL.md。"
+        "description": "Skill 内文件的相对路径，如 references/guide.md，需配合 skill_id。也可传完整的 id/相对路径。"
+      },
+      "offset": {
+        "type": "integer",
+        "description": "续读时传入上一次返回的 next_offset。"
       },
       "maxChars": {
         "type": "number",
@@ -3294,7 +3298,7 @@ function createUseSkillToolDefinition(): ToolDefinition {
 
   const func = new ToolFunction(
     USE_SKILL_TOOL_ID,
-    '读取用户在应用设置中维护且已启用的 skill。空参调用会返回可用 skill 列表；回答需要某个技能说明时，使用 skill_id/name/path 读取对应 SKILL.md 正文，并严格以读取到的内容为准。只能读取已启用 skill，不要臆造未返回的能力、入口或限制。',
+    '列出已启用的 Skill，或读取指定文件。空参列出 Skill，传 skill_id 取得 SKILL.md 和相对文件清单，再用同一 skill_id 和 path 按需读取。truncated 时用 next_offset 续读。返回的 base64 表示二进制文件。',
     parameters
   )
 

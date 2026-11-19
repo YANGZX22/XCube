@@ -91,6 +91,7 @@ export default class EntryAbility extends UIAbility {
     try {
       // 初始化偏好设置服务
       await ServiceRegistry.preferences().initialize(this.context);
+      ServiceRegistry.skill().initialize(this.context);
       hilog.info(DOMAIN, 'testTag', 'PreferencesService initialized successfully');
       await getBuiltinBrowserManager().initialize();
 

@@ -10,6 +10,14 @@ import { BUILTIN_BROWSER_TOOL_ID } from '../services/BuiltinBrowserPolicy'
 import { getBuiltinBrowserManager } from '../services/BuiltinBrowserManager'
 import { BrowserSettingsSheet } from './BrowserSettingsSheet'
 import { McpService } from '../services/McpService'
+import { picker } from '@kit.CoreFileKit'
+import { readPickedSkill } from '../services/SkillPackageStorage'
+import { SkillDocumentsEditor, SkillDraftDocument } from './SkillDocumentsEditor'
+import { openSkillDeleteDialog, SkillDeleteDialog } from './SkillDeleteDialog'
+import { SettingsActionButton } from './settings/SettingsActionButton'
+import { KnowledgeCategoryToggleButton } from './KnowledgeCategoryToggleButton'
+import { editSkillEntry, readSkillMetadata, readStoredSkillMetadata, isSkillMarkdown, SKILL_ENTRY, SkillFile, skillFileText,
+  skillTextFile } from '../utils/SkillPackage'
 import { SkillConfig, SkillService } from '../services/SkillService'
 import { ServiceRegistry } from '../services/ServiceRegistry'
 import {
@@ -45,7 +53,12 @@ import { showSnackBar, SnackBarDisplayOptions, SnackBarTone } from '../utils/Toa
 import { getAppUiState } from '../state/AppUiState'
 import { formatLocalizedCount, pickLocalizedText } from '../utils/LocalizedTextUtils'
 import { getSettingsSheetContentMaxHeight } from '../utils/SettingsPageLayoutHelper'
-import { shouldUseWrappedMaterial, ThinSelectModifier } from '../utils/WrappedMaterialSupport'
+import {
+  getImmersiveMenuOptions,
+  getStaticSheetMaterial,
+  shouldUseWrappedMaterial,
+  ThinSelectModifier
+} from '../utils/WrappedMaterialSupport'
 import { withColorAlpha } from '../utils/ColorAlphaUtils'
 import { ChatFloatingImmersiveButton } from './ChatFloatingImmersiveButton'
 import { ImmersiveSheetHeader } from './ImmersiveSheetHeader'
@@ -126,12 +139,16 @@ export struct ToolsCenterPanel {
   @Local skillToolEnabled: boolean = false
   @Local skills: SkillConfig[] = []
   @Local showSkillConfigSheet: boolean = false
-  @Local skillFormId: string = ''
+  @Local skillForm: SkillConfig = new SkillConfig()
   @Local skillFormName: string = ''
   @Local skillFormDescription: string = ''
-  @Local skillFormContent: string = ''
   @Local skillFormEnabled: boolean = true
-  @Local skillFormCreatedAt: number = 0
+  @Local skillDocuments: SkillDraftDocument[] = []
+  @Local skillReadOnly: boolean = false
+  @Local isOpeningSkill: boolean = false
+  @Local isImportingSkillDocs: boolean = false
+  private originalSkillEntry: string = ''
+  private skillResources: SkillFile[] = []
   @Local isSavingSkill: boolean = false
   @Local mcpServers: McpServerConfig[] = []
   @Local showMcpServerSheet: boolean = false
@@ -653,7 +670,7 @@ export struct ToolsCenterPanel {
   private getEnabledSkillCount(): number {
     let count = 0
     for (let i = 0; i < this.skills.length; i++) {
-      if (this.skills[i].enabled) {
+      if (this.skills[i].enabled && !this.skills[i].manualOnly) {
         count += 1
       }
     }
@@ -671,104 +688,109 @@ export struct ToolsCenterPanel {
     this.handleToolSelectionChanged(USE_SKILL_TOOL_ID, enabled)
   }
 
-  private resetSkillForm(): void {
-    this.skillFormId = ''
-    this.skillFormName = ''
-    this.skillFormDescription = ''
-    this.skillFormContent = ''
-    this.skillFormEnabled = true
-    this.skillFormCreatedAt = 0
-    this.isSavingSkill = false
+  private prepareSkill(skill: SkillConfig, files: SkillFile[], readOnly: boolean): void {
+    const documents: SkillDraftDocument[] = []
+    const resources: SkillFile[] = []
+    const legacy = skill.id !== '' && skill.bundleKey === ''
+    this.originalSkillEntry = ''
+    for (const file of files) {
+      if (!isSkillMarkdown(file.path)) {
+        resources.push(file)
+        continue
+      }
+      let text = skillFileText(file)
+      if (file.path === SKILL_ENTRY && !legacy) {
+        this.originalSkillEntry = text
+        text = readStoredSkillMetadata(text, skill.name, skill.description).body
+      }
+      documents.push(new SkillDraftDocument(file.path, text))
+    }
+    this.skillForm = skill
+    this.skillFormName = skill.name
+    this.skillFormDescription = skill.description
+    this.skillFormEnabled = skill.enabled
+    this.skillDocuments = documents
+    this.skillResources = resources
+    this.skillReadOnly = readOnly
+    this.showSkillConfigSheet = true
   }
 
   private openCreateSkill(): void {
-    this.resetSkillForm()
-    this.showSkillConfigSheet = true
+    if (!this.isOpeningSkill) this.prepareSkill(new SkillConfig(), [skillTextFile(SKILL_ENTRY, '')], false)
   }
 
-  private openEditSkill(skill: SkillConfig): void {
-    this.skillFormId = skill.id
-    this.skillFormName = skill.name
-    this.skillFormDescription = skill.description
-    this.skillFormContent = skill.content
-    this.skillFormEnabled = skill.enabled
-    this.skillFormCreatedAt = skill.createdAt
-    this.showSkillConfigSheet = true
+  private async openEditSkill(skill: SkillConfig, readOnly: boolean = false): Promise<void> {
+    if (this.isOpeningSkill) return
+    this.isOpeningSkill = true
+    try {
+      this.prepareSkill(skill, await this.skillService.filesForSkill(skill), readOnly)
+    } catch (error) {
+      this.showToolsSnack((error as Error).message, 2500, SnackBarTone.ERROR)
+    } finally {
+      this.isOpeningSkill = false
+    }
   }
 
-  private isEditingSkill(): boolean {
-    return this.skillFormId.trim() !== ''
+  private async importSkill(directory: boolean): Promise<void> {
+    if (this.isOpeningSkill) return
+    this.isOpeningSkill = true
+    try {
+      const context = this.getUIContext().getHostContext()
+      if (!context) return
+      const options = new picker.DocumentSelectOptions()
+      options.maxSelectNumber = 1
+      if (directory) options.selectMode = picker.DocumentSelectMode.FOLDER
+      else options.fileSuffixFilters = ['Skill|.zip,.skill,.md']
+      const uris = await new picker.DocumentViewPicker(context).select(options)
+      if (!uris.length) return
+      const picked = await readPickedSkill(uris[0], directory)
+      const metadata = readSkillMetadata(skillFileText(picked.files[0]), picked.name)
+      const skill = new SkillConfig('', metadata.name, metadata.description)
+      skill.manualOnly = metadata.manualOnly
+      this.prepareSkill(skill, picked.files, false)
+    } catch (error) {
+      if (!/cancel/i.test((error as Error).message ?? '')) {
+        this.showToolsSnack(pickLocalizedText('导入失败', 'Import failed') + ' · ' + (error as Error).message,
+          3500, SnackBarTone.ERROR)
+      }
+    } finally {
+      this.isOpeningSkill = false
+    }
   }
 
   private getSkillFormTitle(): string {
-    return this.isEditingSkill()
-      ? pickLocalizedText('编辑 Skill', 'Edit Skill')
-      : pickLocalizedText('新增 Skill', 'Add Skill')
-  }
-
-  private getSkillFormHeroTitle(): string {
-    const name = this.skillFormName.trim()
-    return name !== '' ? name : pickLocalizedText('未命名 Skill', 'Untitled Skill')
-  }
-
-  private buildSkillIdFromName(name: string): string {
-    return this.skillService.buildNewSkillId(name)
-  }
-
-  private findSkillIndex(skills: SkillConfig[], skillId: string): number {
-    for (let i = 0; i < skills.length; i++) {
-      if (skills[i].id === skillId) {
-        return i
-      }
-    }
-    return -1
+    if (this.skillReadOnly) return this.skillForm.name
+    return this.skillForm.id ? pickLocalizedText('编辑 Skill', 'Edit Skill') : pickLocalizedText('新增 Skill', 'Add Skill')
   }
 
   private async handleSaveSkill(): Promise<void> {
-    if (this.isSavingSkill) {
-      return
-    }
+    if (this.isSavingSkill || this.skillReadOnly || this.isImportingSkillDocs) return
     const name = this.skillFormName.trim()
-    const content = this.skillFormContent
-    if (name === '') {
-      this.showToolsSnack(pickLocalizedText('Skill 名称不能为空', 'Skill name is required'),
-        2000, SnackBarTone.ERROR)
-      return
-    }
-    if (content.trim() === '') {
-      this.showToolsSnack(pickLocalizedText('SKILL.md 正文不能为空', 'SKILL.md content is required'),
-        2000, SnackBarTone.ERROR)
+    const description = this.skillFormDescription.trim()
+    if (!name) {
+      this.showToolsSnack(pickLocalizedText('Skill 名称不能为空', 'Skill name is required'), 2000, SnackBarTone.ERROR)
       return
     }
     this.isSavingSkill = true
     try {
-      const now = Date.now()
-      const skills = await this.skillService.loadSkills()
-      const targetId = this.isEditingSkill() ? this.skillFormId : this.buildSkillIdFromName(name)
-      const index = this.findSkillIndex(skills, targetId)
-      const createdAt = this.skillFormCreatedAt > 0 ? this.skillFormCreatedAt : now
-      const nextSkill = new SkillConfig(
-        targetId,
-        name,
-        this.skillFormDescription.trim(),
-        content,
-        this.skillFormEnabled,
-        createdAt,
-        now
-      )
-      if (index >= 0) {
-        skills[index] = nextSkill
-      } else {
-        skills.push(nextSkill)
+      const files = this.skillResources.slice()
+      for (const doc of this.skillDocuments) {
+        const text = doc.path === SKILL_ENTRY
+          ? editSkillEntry(this.originalSkillEntry, name, description, doc.text, this.skillForm.name, this.skillForm.description)
+          : doc.text
+        if (doc.path === SKILL_ENTRY && !text.trim()) {
+          throw new Error(pickLocalizedText('SKILL.md 正文不能为空', 'SKILL.md content is required'))
+        }
+        files.push(skillTextFile(doc.path, text))
       }
-      await this.skillService.saveSkills(skills)
-      this.skills = [...skills]
+      const skill = new SkillConfig(this.skillForm.id, name, description, '', this.skillFormEnabled, this.skillForm.createdAt)
+      skill.bundleKey = this.skillForm.bundleKey
+      await this.skillService.savePackage(skill, files)
+      await this.loadSkills()
       this.showSkillConfigSheet = false
       this.showToolsSnack(pickLocalizedText('Skill 已保存', 'Skill saved'), 2000, SnackBarTone.SUCCESS)
     } catch (error) {
-      console.error('ToolsCenterPanel', `Failed to save skill: ${JSON.stringify(error)}`)
-      this.showToolsSnack(pickLocalizedText('保存 Skill 失败', 'Failed to save Skill'),
-        2000, SnackBarTone.ERROR)
+      this.showToolsSnack((error as Error).message, 3000, SnackBarTone.ERROR)
     } finally {
       this.isSavingSkill = false
     }
@@ -783,34 +805,22 @@ export struct ToolsCenterPanel {
   }
 
   private async performUpdateSkillEnabled(skillId: string, enabled: boolean): Promise<void> {
-    const skills = await this.skillService.loadSkills()
-    const index = this.findSkillIndex(skills, skillId)
-    if (index < 0) {
-      return
-    }
-    skills[index].enabled = enabled
-    skills[index].updatedAt = Date.now()
-    await this.skillService.saveSkills(skills)
-    this.skills = [...skills]
+    await this.skillService.setSkillEnabled(skillId, enabled)
+    await this.loadSkills()
+  }
+
+  @Builder
+  private DeleteSkillDialog(skillId: string, dialogId: number) {
+    SkillDeleteDialog({
+      dialogId: dialogId,
+      title: pickLocalizedText('删除 Skill', 'Delete Skill'),
+      message: pickLocalizedText('删除后模型将无法再读取该 Skill。', 'The model will no longer be able to read it.'),
+      onDelete: (): void => this.deleteSkill(skillId)
+    })
   }
 
   private handleDeleteSkill(skillId: string): void {
-    this.getUIContext().showAlertDialog({
-      title: pickLocalizedText('删除 Skill', 'Delete Skill'),
-      message: pickLocalizedText('删除后模型将无法再读取该 Skill。', 'The model will no longer be able to read it.'),
-      primaryButton: {
-        value: $r('app.string.cancel'),
-        action: () => {
-        }
-      },
-      secondaryButton: {
-        value: $r('app.string.delete'),
-        fontColor: Color.Red,
-        action: () => {
-          this.deleteSkill(skillId)
-        }
-      }
-    })
+    openSkillDeleteDialog(this.getUIContext(), (dialogId: number): void => this.DeleteSkillDialog(skillId, dialogId))
   }
 
   private deleteSkill(skillId: string): void {
@@ -822,15 +832,8 @@ export struct ToolsCenterPanel {
   }
 
   private async performDeleteSkill(skillId: string): Promise<void> {
-    const skills = await this.skillService.loadSkills()
-    const nextSkills: SkillConfig[] = []
-    for (let i = 0; i < skills.length; i++) {
-      if (skills[i].id !== skillId) {
-        nextSkills.push(skills[i])
-      }
-    }
-    await this.skillService.saveSkills(nextSkills)
-    this.skills = [...nextSkills]
+    await this.skillService.deleteSkill(skillId)
+    await this.loadSkills()
     this.showToolsSnack(pickLocalizedText('Skill 已删除', 'Skill deleted'), 2000, SnackBarTone.SUCCESS)
   }
 
@@ -2522,8 +2525,8 @@ export struct ToolsCenterPanel {
         titleFont: getSettingsTypography().pageTitle,
         titleColor: getAppUiState().themeTextPrimary,
         title: this.getSkillFormTitle(),
-        showTrailing: true,
-        trailingButtonEnabled: !this.isSavingSkill,
+        showTrailing: !this.skillReadOnly,
+        trailingButtonEnabled: !this.isSavingSkill && !this.isImportingSkillDocs,
         trailingLoading: this.isSavingSkill,
         trailingColor: this.themePrimary,
         onLeadingClick: (): void => {
@@ -2536,147 +2539,49 @@ export struct ToolsCenterPanel {
 
       Scroll() {
         Column({ space: 14 }) {
-          ImmersiveListSurface({ isImmersive: true, cornerRadius: LIST_MATERIAL_CARD_RADIUS }) {
-            Column({ space: 12 }) {
-              Row({ space: 12 }) {
-                Column() {
-                  SymbolGlyph($r('sys.symbol.doc_text_badge_magnifyingglass'))
-                    .renderingStrategy(SymbolRenderingStrategy.SINGLE)
-                    .fontSize(22)
-                    .fontColor([this.themePrimary])
-                }
-                .width(46)
-                .height(46)
-                .borderRadius(16)
-                .backgroundColor(withColorAlpha(this.themePrimary, this.isDarkMode ? '26' : '12'))
-                .justifyContent(FlexAlign.Center)
-
-                Column({ space: 4 }) {
-                  Text(this.getSkillFormHeroTitle())
-                    .font(getSettingsTypography().sectionTitle)
-                    .fontColor(getAppUiState().themeTextPrimary)
-                    .maxLines(1)
-                    .textOverflow({ overflow: TextOverflow.Ellipsis })
-
-                  Text(pickLocalizedText(
-                    '为常用任务编写操作说明。',
-                    'Write instructions for recurring tasks.'
-                  ))
-                    .font(getSettingsTypography().subtitle)
-                    .lineHeight(SETTINGS_SUBTITLE_LINE_HEIGHT)
-                    .fontColor(getAppUiState().themeTextSecondary)
-                    .width('100%')
-                }
-                .layoutWeight(1)
-                .alignItems(HorizontalAlign.Start)
-              }
-              .width('100%')
-
-              Row({ space: 12 }) {
-                Blank()
-
-                Toggle({ type: ToggleType.Switch, isOn: this.skillFormEnabled })
-                  .selectedColor(this.themePrimary)
-                  .systemMaterial(new uiMaterial.Material())
-                  .switchPointColor(Color.White)
-                  .onChange((value: boolean) => {
-                    this.skillFormEnabled = value
-                  })
-              }
-              .width('100%')
-            }
-            .width('100%')
-            .padding(16)
-            .borderRadius(LIST_MATERIAL_CARD_RADIUS)
-            .backgroundColor(Color.Transparent)
-          }
-
-          ImmersiveListSurface({ isImmersive: true, cornerRadius: LIST_MATERIAL_CARD_RADIUS }) {
-            Column({ space: 12 }) {
-              Column({ space: SETTINGS_HEADING_CONTENT_GAP }) {
-                Text(pickLocalizedText('名称', 'Name'))
-                  .font(getSettingsTypography().fieldLabel)
-                  .fontColor(getAppUiState().themeTextSecondary)
-                  .width('100%')
-
+          if (!this.skillReadOnly) {
+            ImmersiveListSurface({ isImmersive: true, cornerRadius: LIST_MATERIAL_CARD_RADIUS }) {
+              Column({ space: 10 }) {
+                Text(pickLocalizedText('名称', 'Name')).font(getSettingsTypography().fieldLabel)
+                  .fontColor($r('app.color.text_secondary'))
                 ImmersiveFieldSurface({ cornerRadius: 14 }) {
                   TextInput({ text: this.skillFormName, placeholder: 'app-help' })
-                    .width('100%')
-                    .backgroundColor(Color.Transparent)
-                    .onChange((value: string) => {
-                      this.skillFormName = value
-                    })
-                    .fontSize(14)
-                    .height(46)
-                    .borderRadius(14)
-                    .border({ width: 1, color: getAppUiState().themePrimaryLight })
-                    .padding({ left: 14, right: 14 })
+                    .width('100%').height(44).fontSize(14).backgroundColor(Color.Transparent)
+                    .onChange((value: string): void => { this.skillFormName = value })
                 }
-              }
-              .width('100%')
-
-              Column({ space: SETTINGS_HEADING_CONTENT_GAP }) {
-                Text(pickLocalizedText('描述', 'Description'))
-                  .font(getSettingsTypography().fieldLabel)
-                  .fontColor(getAppUiState().themeTextSecondary)
-                  .width('100%')
-
+                Text(pickLocalizedText('描述', 'Description')).font(getSettingsTypography().fieldLabel)
+                  .fontColor($r('app.color.text_secondary'))
                 ImmersiveFieldSurface({ cornerRadius: 14 }) {
-                  TextInput({ text: this.skillFormDescription, placeholder: pickLocalizedText(
-                    '一句话说明这个 Skill 适合回答什么问题',
-                    'Describe when this Skill should be used'
-                  ) })
-                    .width('100%')
-                    .backgroundColor(Color.Transparent)
-                    .onChange((value: string) => {
-                      this.skillFormDescription = value
-                    })
-                    .fontSize(14)
-                    .height(46)
-                    .borderRadius(14)
-                    .border({ width: 1, color: getAppUiState().themePrimaryLight })
-                    .padding({ left: 14, right: 14 })
+                  TextArea({ text: this.skillFormDescription,
+                    placeholder: pickLocalizedText('什么时候使用这个 Skill？', 'When should this skill be used?') })
+                    .width('100%').constraintSize({ minHeight: 44, maxHeight: 120 })
+                    .align(Alignment.Start)
+                    .textAlign(TextAlign.Start)
+                    .padding({ left: 12, right: 12, top: 8, bottom: 8 })
+                    .fontSize(14).backgroundColor(Color.Transparent)
+                    .onChange((value: string): void => { this.skillFormDescription = value })
                 }
-              }
-              .width('100%')
+                Row() {
+                  Text(this.skillForm.manualOnly ? pickLocalizedText('文档设为仅手动使用', 'Manual use only')
+                    : pickLocalizedText('允许模型使用', 'Available to the model'))
+                    .font(getSettingsTypography().fieldLabel).fontColor(getAppUiState().themeTextPrimary)
+                    .layoutWeight(1)
+                  Toggle({ type: ToggleType.Switch, isOn: this.skillFormEnabled && !this.skillForm.manualOnly })
+                    .enabled(!this.skillForm.manualOnly).selectedColor(this.themePrimary)
+                    .systemMaterial(new uiMaterial.Material())
+                    .onChange((value: boolean): void => { this.skillFormEnabled = value })
+                }.width('100%')
+              }.width('100%').padding(16).alignItems(HorizontalAlign.Start)
             }
-            .width('100%')
-            .padding(16)
-            .borderRadius(LIST_MATERIAL_CARD_RADIUS)
-            .backgroundColor(Color.Transparent)
           }
-
           ImmersiveListSurface({ isImmersive: true, cornerRadius: LIST_MATERIAL_CARD_RADIUS }) {
-            Column({ space: 8 }) {
-              Text('SKILL.md')
-                .font(getSettingsTypography().sectionTitle)
-                .fontColor(getAppUiState().themeTextPrimary)
-                .width('100%')
-
-              ImmersiveFieldSurface({ cornerRadius: 14 }) {
-                TextArea({ text: this.skillFormContent, placeholder: pickLocalizedText(
-                  '# 使用说明\\n\\n写下模型需要遵守的能力说明、入口和限制。',
-                  '# Instructions\\n\\nWrite the capability guidance, entry points, and limits.'
-                ) })
-                  .width('100%')
-                  .backgroundColor(Color.Transparent)
-                  .fontSize(14)
-                  .lineHeight(20)
-                  .fontColor($r('app.color.text_primary'))
-                  .placeholderColor($r('app.color.text_tertiary'))
-                  .borderRadius(14)
-                  .border({ width: 1, color: getAppUiState().themePrimaryLight })
-                  .padding({ left: 14, right: 14, top: 12, bottom: 12 })
-                  .height(260)
-                  .onChange((value: string) => {
-                    this.skillFormContent = value
-                  })
-              }
-            }
-            .width('100%')
-            .padding(16)
-            .borderRadius(LIST_MATERIAL_CARD_RADIUS)
-            .backgroundColor(Color.Transparent)
+            SkillDocumentsEditor({
+              documents: this.skillDocuments,
+              resourcePaths: this.skillResources.map((file: SkillFile): string => file.path),
+              readOnly: this.skillReadOnly,
+              onImportState: (busy: boolean): void => { this.isImportingSkillDocs = busy },
+              onDocumentsChange: (docs: SkillDraftDocument[]): void => { this.skillDocuments = docs }
+            }).padding(16)
           }
         }
         .width('100%')
@@ -2688,7 +2593,7 @@ export struct ToolsCenterPanel {
     }
     .width('100%')
     .height('100%')
-    .backgroundColor(getAppUiState().themeBackground)
+    .backgroundColor(Color.Transparent)
   }
 
   @Builder
@@ -2863,6 +2768,8 @@ export struct ToolsCenterPanel {
                   onCreateSkill: () => {
                     this.openCreateSkill()
                   },
+                  onImportSkill: (folder: boolean): void => { this.importSkill(folder) },
+                  onPreviewSkill: (skill: SkillConfig): void => { this.openEditSkill(skill, true) },
                   onToggleSkillEnabled: (skillId: string, enabled: boolean) => {
                     this.updateSkillEnabled(skillId, enabled)
                   },
@@ -3080,9 +2987,16 @@ export struct ToolsCenterPanel {
           detents: [SheetSize.LARGE],
           showClose: false,
           dragBar: true,
-          blurStyle: BlurStyle.Regular,
+          backgroundColor: Color.Transparent,
+          blurStyle: shouldUseWrappedMaterial() ? undefined : BlurStyle.Regular,
+          systemMaterial: getStaticSheetMaterial(),
+          keyboardAvoidMode: SheetKeyboardAvoidMode.TRANSLATE_AND_RESIZE,
           onDisappear: () => {
             this.showSkillConfigSheet = false
+            this.isImportingSkillDocs = false
+            this.skillDocuments = []
+            this.skillResources = []
+            this.originalSkillEntry = ''
             this.loadSkills()
           }
         })
@@ -3581,12 +3495,15 @@ struct SkillServiceCardItem {
   @Param enabledSkillCount: number = 0
   @Param skills: SkillConfig[] = []
   @Event onToggle: (enabled: boolean) => void = (_enabled: boolean) => {}
+  @Event onImportSkill: (folder: boolean) => void = () => {}
+  @Event onPreviewSkill: (skill: SkillConfig) => void = () => {}
   @Event onCreateSkill: () => void = () => {}
   @Event onToggleSkillEnabled: (skillId: string, enabled: boolean) => void =
     (_skillId: string, _enabled: boolean) => {}
   @Event onEditSkill: (skill: SkillConfig) => void = (_skill: SkillConfig) => {}
   @Event onDeleteSkill: (skillId: string) => void = (_skillId: string) => {}
   @Local isSkillsExpanded: boolean = false
+  @Local showImportMenu: boolean = false
 
   private get themePrimary(): string {
     return getAppUiState().themePrimary
@@ -3603,10 +3520,6 @@ struct SkillServiceCardItem {
     return formatLocalizedCount(this.enabledSkillCount, '个启用 Skill', 'enabled Skill', 'enabled Skills')
   }
 
-  private getManageText(): string {
-    return this.isSkillsExpanded ? pickLocalizedText('收起', 'Collapse') : pickLocalizedText('展开', 'Expand')
-  }
-
   build() {
     ImmersiveListSurface({ isImmersive: true, cornerRadius: LIST_MATERIAL_CARD_RADIUS }) {
       Column({ space: 12 }) {
@@ -3618,19 +3531,12 @@ struct SkillServiceCardItem {
             iconSize: 20,
             iconColor: [this.themePrimary],
             responsePadding: 0,
+            enableMaterialInteraction: true,
+            enableShadow: true,
             onButtonClick: (): void => {
               this.isSkillsExpanded = !this.isSkillsExpanded
             }
-          }) {
-            Stack({ alignContent: Alignment.Center }) {
-              SymbolGlyph($r('sys.symbol.more'))
-                .renderingStrategy(SymbolRenderingStrategy.SINGLE)
-                .fontSize(20)
-                .fontColor([this.themePrimary])
-            }
-            .width(44)
-            .height(44)
-          }
+          })
 
           Column({ space: 6 }) {
             Text('Skill')
@@ -3660,47 +3566,32 @@ struct SkillServiceCardItem {
         .width('100%')
 
         Row({ space: 10 }) {
-          Button() {
-            Row({ space: 4 }) {
-              SymbolGlyph($r('sys.symbol.plus'))
-                .renderingStrategy(SymbolRenderingStrategy.SINGLE)
-                .fontSize(13)
-                .fontColor([Color.White])
-              Text(pickLocalizedText('新增 Skill', 'Add Skill'))
-                .fontSize(12)
-                .fontWeight(FontWeight.Medium)
-                .fontColor(Color.White)
-            }
-          }
-          .height(32)
-          .padding({ left: 14, right: 14 })
-          .type(ButtonType.Capsule)
-          .stateEffect(false)
-          .backgroundColor(this.themePrimary)
-          .onClick(() => {
-            this.onCreateSkill()
+          SettingsActionButton({
+            label: pickLocalizedText('新增 Skill', 'Add Skill'),
+            leadingSymbol: $r('sys.symbol.plus'),
+            compact: true,
+            buttonHeight: 32,
+            tint: withColorAlpha(this.themePrimary, '30'),
+            onActivate: (): void => this.onCreateSkill()
           })
+
+          SettingsActionButton({
+            label: pickLocalizedText('导入', 'Import'),
+            compact: true,
+            buttonHeight: 32,
+            onActivate: (): void => { this.showImportMenu = true }
+          })
+          .bindMenu(this.showImportMenu, [
+            { value: pickLocalizedText('选择文件', 'Choose file'), action: (): void => this.onImportSkill(false) },
+            { value: pickLocalizedText('选择文件夹', 'Choose folder'), action: (): void => this.onImportSkill(true) }
+          ], getImmersiveMenuOptions((): void => { this.showImportMenu = false }))
 
           Blank()
 
-          Row({ space: 4 }) {
-            Text(this.getManageText())
-              .fontSize(11)
-              .fontWeight(FontWeight.Medium)
-              .fontColor(this.themePrimary)
-
-            SymbolGlyph($r('sys.symbol.chevron_down'))
-              .renderingStrategy(SymbolRenderingStrategy.SINGLE)
-              .fontSize(12)
-              .fontColor([this.themePrimary])
-              .rotate({ angle: this.isSkillsExpanded ? 180 : 0 })
-              .animation({ duration: 180, curve: Curve.EaseOut })
-          }
-          .padding({ left: 10, right: 10, top: 6, bottom: 6 })
-          .borderRadius(999)
-          .backgroundColor(getAppUiState().themeBackground)
-          .onClick(() => {
-            this.isSkillsExpanded = !this.isSkillsExpanded
+          KnowledgeCategoryToggleButton({
+            expanded: this.isSkillsExpanded,
+            accentColor: this.themePrimary,
+            onToggle: (): void => { this.isSkillsExpanded = !this.isSkillsExpanded }
           })
         }
         .width('100%')
@@ -3741,6 +3632,7 @@ struct SkillServiceCardItem {
               ForEach(this.skills, (skill: SkillConfig) => {
                 SkillListCardItem({
                   skill: skill,
+                  onPreview: (): void => this.onPreviewSkill(skill),
                   onToggleEnabled: (enabled: boolean) => {
                     this.onToggleSkillEnabled(skill.id, enabled)
                   },
@@ -3776,6 +3668,7 @@ struct SkillServiceCardItem {
 struct SkillListCardItem {
   @Param skill: SkillConfig = new SkillConfig()
   @Event onToggleEnabled: (enabled: boolean) => void = (_enabled: boolean) => {}
+  @Event onPreview: () => void = () => {}
   @Event onEdit: () => void = () => {}
   @Event onDelete: () => void = () => {}
 
@@ -3830,7 +3723,8 @@ struct SkillListCardItem {
           .layoutWeight(1)
           .alignItems(HorizontalAlign.Start)
 
-          Toggle({ type: ToggleType.Switch, isOn: this.skill.enabled })
+          Toggle({ type: ToggleType.Switch, isOn: this.skill.enabled && !this.skill.manualOnly })
+            .enabled(!this.skill.manualOnly)
             .selectedColor(this.themePrimary)
             .systemMaterial(new uiMaterial.Material())
             .switchPointColor(Color.White)
@@ -3843,27 +3737,18 @@ struct SkillListCardItem {
         Row({ space: 8 }) {
           Blank()
 
-          Button(pickLocalizedText('编辑', 'Edit'))
-            .height(30)
-            .fontSize(11)
-            .type(ButtonType.Capsule)
-            .stateEffect(false)
-            .fontColor(this.themePrimary)
-            .backgroundColor(getAppUiState().themeBackground)
-            .onClick(() => {
-              this.onEdit()
-            })
-
-          Button($r('app.string.delete'))
-            .height(30)
-            .fontSize(11)
-            .type(ButtonType.Capsule)
-            .stateEffect(false)
-            .fontColor('#D9485F')
-            .backgroundColor(getAppUiState().themeBackground)
-            .onClick(() => {
-              this.onDelete()
-            })
+          SettingsActionButton({
+            label: pickLocalizedText('预览', 'Preview'), compact: true, buttonHeight: 30,
+            onActivate: (): void => this.onPreview()
+          })
+          SettingsActionButton({
+            label: pickLocalizedText('编辑', 'Edit'), compact: true, buttonHeight: 30,
+            onActivate: (): void => this.onEdit()
+          })
+          SettingsActionButton({
+            label: $r('app.string.delete'), compact: true, buttonHeight: 30, foreground: $r('app.color.status_error'),
+            onActivate: (): void => this.onDelete()
+          })
         }
         .width('100%')
       }
