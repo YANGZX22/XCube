@@ -282,7 +282,7 @@ export struct SessionCard {
   }
 
   build() {
-    ImmersiveListSurface({ isImmersive: this.chatListImmersiveMaterial }) {
+    ImmersiveListSurface({ isImmersive: this.chatListImmersiveMaterial, receivePointLight: true }) {
       this.SessionCardRow()
     }
   }

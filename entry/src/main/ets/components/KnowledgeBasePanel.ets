@@ -1106,7 +1106,7 @@ export struct KnowledgeBasePanel {
         this.ManuscriptDocumentRow(document)
       } else {
         // 材质背板与完整卡片一起常驻在堆叠中；使用对话列表的同款 REGULAR 沉浸表面。
-        ImmersiveListSurface({ isImmersive: this.knowledgeListImmersiveMaterial }) {
+        ImmersiveListSurface({ isImmersive: this.knowledgeListImmersiveMaterial, receivePointLight: true }) {
           this.StandardDocumentCard(document)
         }
       }

@@ -1,4 +1,5 @@
 import { uiMaterial } from '@kit.ArkUI'
+import { buildPointLightBorderEffect } from '../utils/HdsVisualEffectUtil'
 import { ImmersiveMaterialAnchor } from './ImmersiveMaterialBackdrop'
 
 // 对话、知识库卡片及常规设置分组共用的圆角。
@@ -8,6 +9,7 @@ export const LIST_MATERIAL_CARD_RADIUS: number = 22
 @ComponentV2
 export struct ImmersiveListSurface {
   @Param isImmersive: boolean = false
+  @Param receivePointLight: boolean = false
   @Param layoutWidth: Length = '100%'
   @Param cornerRadius: number | BorderRadiuses = LIST_MATERIAL_CARD_RADIUS
   @Local surfaceWidth: number = 0
@@ -34,6 +36,9 @@ export struct ImmersiveListSurface {
       this.content()
     }
     .width(this.layoutWidth)
+    // 受光边缘与卡片圆角对齐，前景 Row 的固定描边保留在独立节点上。
+    .borderRadius(this.receivePointLight ? this.cornerRadius : 0)
+    .visualEffect(this.receivePointLight ? buildPointLightBorderEffect() : undefined)
     .clip(false)
     .hitTestBehavior(HitTestMode.Transparent)
     .accessibilityLevel('no')

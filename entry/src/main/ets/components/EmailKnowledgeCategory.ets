@@ -797,7 +797,7 @@ export struct EmailKnowledgeCategory {
       if (this.isManuscriptMode) {
         this.ManuscriptDocumentRow(document)
       } else {
-        ImmersiveListSurface({ isImmersive: this.knowledgeListImmersiveMaterial }) {
+        ImmersiveListSurface({ isImmersive: this.knowledgeListImmersiveMaterial, receivePointLight: true }) {
           this.StandardDocumentCard(document)
         }
       }
