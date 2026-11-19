@@ -475,7 +475,7 @@ export struct ModelPickerSheet {
         : (this.availableModels.length === 0 ? $r('app.string.provider_no_models') : $r('app.string.provider_models_not_found')))
         .font(getSettingsTypography().itemTitle)
         .width('100%')
-        .textAlign(TextAlign.Start)
+        .textAlign(TextAlign.Center)
         .fontColor(getAppUiState().themeTextPrimary)
         .margin({ top: 16 })
 
@@ -484,7 +484,7 @@ export struct ModelPickerSheet {
         : (this.availableModels.length === 0 ? $r('app.string.provider_no_models_hint') : $r('app.string.try_different_keyword')))
         .font(getSettingsTypography().subtitle)
         .width('100%')
-        .textAlign(TextAlign.Start)
+        .textAlign(TextAlign.Center)
         .lineHeight(SETTINGS_SUBTITLE_LINE_HEIGHT)
         .fontColor($r('app.color.text_caption'))
         .margin({ top: 4 })
