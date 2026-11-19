@@ -14,7 +14,7 @@ import {
   HdsTabs,
   HdsTabsFloatingStyle
 } from '@kit.UIDesignKit'
-import { getHdsSystemMaterialEffect, HdsTabsBlurModifier, DrawnTabsContentModifier, getHdsMaterialLightColor } from '../utils/HdsMaterialSupport'
+import { getHdsSystemMaterialEffect, getNavigationBarMaterialEffect, HdsTabsBlurModifier, DrawnTabsContentModifier } from '../utils/HdsMaterialSupport'
 import { curves, uiMaterial } from '@kit.ArkUI'
 import { picker } from '@kit.CoreFileKit'
 import {
@@ -157,7 +157,6 @@ export struct ThemeAppearanceSettingsView {
   @Local serifFontSelectRevision: number = 0
   @Local materialType: number = 100
   @Local materialLevel: number = 10
-  @Local lightColorMode: string = 'default'
   @Local chatListImmersiveMaterial: boolean = false
   @Local knowledgeListImmersiveMaterial: boolean = false
   @Local savingChatListMaterial: boolean = false
@@ -198,7 +197,6 @@ export struct ThemeAppearanceSettingsView {
     }
     this.materialType = this.settingsManager.getMaterialType()
     this.materialLevel = this.settingsManager.getMaterialLevel()
-    this.lightColorMode = this.settingsManager.getLightColorMode()
     this.chatListImmersiveMaterial = this.settingsManager.getChatListImmersiveMaterial()
     this.knowledgeListImmersiveMaterial = this.settingsManager.getKnowledgeListImmersiveMaterial()
     this.forceWrappedMaterialBlur = this.settingsManager.getForceWrappedMaterialBlur()
@@ -606,8 +604,7 @@ export struct ThemeAppearanceSettingsView {
         largeWidth: this.getPreviewFloatingTabBarWidth()
       },
       gradientMask: { maskColor: Color.Transparent },
-      lightColor: getHdsMaterialLightColor(Color.White),
-      systemMaterialEffect: getHdsSystemMaterialEffect()
+      systemMaterialEffect: getNavigationBarMaterialEffect()
     }
   }
 
@@ -642,7 +639,6 @@ export struct ThemeAppearanceSettingsView {
         largeWidth: APPEARANCE_FLOATING_TAB_BAR_WIDTH
       },
       gradientMask: { maskColor: Color.Transparent },
-      lightColor: getHdsMaterialLightColor(Color.White),
       systemMaterialEffect: getHdsSystemMaterialEffect()
     }
   }

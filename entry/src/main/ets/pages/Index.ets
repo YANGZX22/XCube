@@ -18,7 +18,7 @@ import {
   HdsTabs,
   HdsTabsFloatingStyle
 } from '@kit.UIDesignKit'
-import { getHdsMaterialLightColor, getHdsSystemMaterialEffect, HdsTabsBlurModifier, DrawnTabsContentModifier } from '../utils/HdsMaterialSupport'
+import { getHdsMaterialLightColor, getNavigationBarMaterialEffect, HdsTabsBlurModifier, DrawnTabsContentModifier } from '../utils/HdsMaterialSupport'
 import {
   ApiStyle,
   ChatSession,
@@ -2383,8 +2383,8 @@ struct Index {
       barBottomMargin: 0,
       barSideMargin: 0,
       gradientMask: { maskColor: Color.Transparent },
-      lightColor: getHdsMaterialLightColor(this.lightColorMode === 'theme' ? this.themePrimary : Color.White),
-      systemMaterialEffect: getHdsSystemMaterialEffect()
+      // lightColor: getHdsMaterialLightColor(this.lightColorMode === 'theme' ? this.themePrimary : Color.White),
+      systemMaterialEffect: getNavigationBarMaterialEffect()
     }
   }
 

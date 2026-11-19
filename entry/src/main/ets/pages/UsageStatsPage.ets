@@ -11,7 +11,7 @@ import {
   HdsNavigationTitleMode,
   HdsTabs
 } from '@kit.UIDesignKit'
-import { getHdsSystemMaterialEffect, HdsTabsBlurModifier, DrawnTabsContentModifier, getHdsMaterialLightColor } from '../utils/HdsMaterialSupport'
+import { getHdsSystemMaterialEffect, HdsTabsBlurModifier, DrawnTabsContentModifier } from '../utils/HdsMaterialSupport'
 import { shouldUseWrappedMaterial } from '../utils/WrappedMaterialSupport'
 import { SettingsCompactTitleBarContent } from '../components/settings/SettingsCompactPageHeader'
 import { SettingsPagePresentationMode } from '../config/SettingsDetailPresentation'
@@ -891,7 +891,6 @@ struct UsageStatsPage {
           largeWidth: RANGE_FLOATING_TAB_BAR_WIDTH
         },
         gradientMask: { maskColor: Color.Transparent },
-        lightColor: getHdsMaterialLightColor(Color.White),
         systemMaterialEffect: getHdsSystemMaterialEffect()
       })
       .attributeModifier(shouldUseDrawnNavigation() ? new DrawnTabsContentModifier() : new HdsTabsBlurModifier(shouldUseWrappedMaterial()))

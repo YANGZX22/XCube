@@ -1,4 +1,4 @@
-import { BlurStrategy, HdsTabsAttribute, SystemMaterialParams } from '@kit.UIDesignKit'
+import { BlurStrategy, hdsMaterial, HdsTabsAttribute, SystemMaterialParams } from '@kit.UIDesignKit'
 import { shouldUseWrappedMaterial } from './WrappedMaterialSupport'
 
 // HDS 与 ArkUI 包装材质共用自动检测和手动降级策略。
@@ -8,6 +8,19 @@ export function getHdsSystemMaterialEffect(materialType: number = 101,
   return {
     materialType: shouldUseWrappedMaterial() ? materialType : 0,
     materialLevel: materialLevel
+  }
+}
+
+export function getNavigationBarMaterialEffect(): SystemMaterialParams {
+  const fallback = getHdsSystemMaterialEffect()
+  if (fallback.materialType === 0) return fallback
+  try {
+    if (hdsMaterial.getSystemMaterialTypes().includes(hdsMaterial.MaterialType.IMMERSIVE)) {
+      return { materialType: hdsMaterial.MaterialType.IMMERSIVE, materialLevel: hdsMaterial.MaterialLevel.EXQUISITE }
+    }
+    return { materialType: hdsMaterial.MaterialType.ADAPTIVE, materialLevel: hdsMaterial.MaterialLevel.SMOOTH }
+  } catch (_) {
+    return fallback
   }
 }
 

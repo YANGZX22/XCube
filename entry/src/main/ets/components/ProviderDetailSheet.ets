@@ -18,7 +18,7 @@ import {
   HdsNavigationTitleMode,
   HdsTabs
 } from '@kit.UIDesignKit'
-import { getHdsSystemMaterialEffect, HdsTabsBlurModifier, DrawnTabsContentModifier, getHdsMaterialLightColor } from '../utils/HdsMaterialSupport'
+import { getHdsSystemMaterialEffect, HdsTabsBlurModifier, DrawnTabsContentModifier } from '../utils/HdsMaterialSupport'
 import { getStaticSheetMaterial, shouldUseWrappedMaterial, WRAPPED_MATERIAL_REGULAR } from '../utils/WrappedMaterialSupport'
 import {
   ModelProvider,
@@ -1319,7 +1319,6 @@ export struct ProviderDetailPanel {
           largeWidth: PROVIDER_DETAIL_FLOATING_TAB_BAR_WIDTH
         },
         gradientMask: { maskColor: Color.Transparent },
-        lightColor: getHdsMaterialLightColor(Color.White),
         systemMaterialEffect: getHdsSystemMaterialEffect()
       })
       .attributeModifier(shouldUseDrawnNavigation() ? new DrawnTabsContentModifier() : new HdsTabsBlurModifier(shouldUseWrappedMaterial()))
