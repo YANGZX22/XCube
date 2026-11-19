@@ -1249,7 +1249,7 @@ export default function refactorGuardTest() {
     })
 
     it('slashCommands_should_match_only_leading_slash_token', 0, () => {
-      expect(matchSlashCommands('/').length).assertEqual(5)
+      expect(matchSlashCommands('/').length).assertEqual(6)
       expect(matchSlashCommands('/comp')[0].id).assertEqual(SLASH_COMMAND_COMPACT)
       expect(matchSlashCommands('/COMPACT')[0].name).assertEqual('/compact')
       expect(matchSlashCommands('/mod')[0].id).assertEqual(SLASH_COMMAND_MODELS)

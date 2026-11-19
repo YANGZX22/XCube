@@ -29,6 +29,7 @@ import { appendSubAgentResultTool, PYTHON_SANDBOX_TOOL_ID } from '../config/Buil
 import { getProviderViewModel, ProviderViewModel } from './ProviderViewModel'
 import { getAssistantService, AssistantService, AssistantRuntimeConfig } from '../services/AssistantService'
 import { getSkillService } from '../services/SkillService'
+import { buildRequiredSkillPrompt } from '../utils/SlashCommandUtils'
 import { ChatMessage, ChatSession, MessageRole, ProviderType, ApiStyle, OpenAITransport, MessageAttachment, AttachmentType, ContextCompactionUiState, ReasoningLevel, ToolDefinition, ToolCall, ToolResult, SearchReference, ModelParameters, ModelProvider, AssistantResponseSegment, AssistantResponseSegmentType } from '../models/ChatModels'
 import {
   extractNativeAttachmentText,
@@ -228,6 +229,7 @@ interface PendingAIMessageInfo {
   persisted: boolean
   onUpdated: (message: ChatMessage) => void
   steeringSupported: boolean
+  hasSkillTool: boolean
 }
 
 // 重新生成分叉上下文：本次发送不创建新的用户消息，
@@ -788,21 +790,24 @@ export class ChatViewModel {
     message: ChatMessage,
     sessionId: string,
     onUpdated: (message: ChatMessage) => void,
-    steeringSupported: boolean = false
+    steeringSupported: boolean = false,
+    hasSkillTool: boolean = false
   ): void {
     this.pendingAIMessages.set(message.id, {
       message: message,
       sessionId: sessionId,
       persisted: false,
       onUpdated: onUpdated,
-      steeringSupported: steeringSupported
+      steeringSupported: steeringSupported,
+      hasSkillTool: hasSkillTool
     } as PendingAIMessageInfo)
   }
 
   submitSteeringMessage(
     sessionId: string,
     content: string,
-    attachments: MessageAttachment[] = []
+    attachments: MessageAttachment[] = [],
+    requiredSkillId: string = ''
   ): boolean {
     if (sessionId === '' || (content.trim() === '' && attachments.length === 0)) {
       return false
@@ -823,7 +828,9 @@ export class ChatViewModel {
       }
     }
 
+    if (requiredSkillId && !target.hasSkillTool) return false
     const item = new ChatInFlightMessage(content, attachments, InFlightMessageDelivery.STEER)
+    item.requiredSkillId = requiredSkillId
     const pending = this.pendingSteeringMessages.get(sessionId) ?? []
     pending.push(item)
     this.pendingSteeringMessages.set(sessionId, pending)
@@ -869,9 +876,13 @@ export class ChatViewModel {
         supportsDocuments,
         supportsVision
       )
+      let guidance = buildSteeringRequestContent(pending[i].content)
+      if (pending[i].requiredSkillId) {
+        guidance += '\n\n' + buildRequiredSkillPrompt(pending[i].requiredSkillId, getAppPromptLanguage())
+      }
       requestMessages.push(new RequestMessage(
         'user',
-        buildSteeringRequestContent(pending[i].content),
+        guidance,
         preparedAttachments
       ))
     }
@@ -2967,7 +2978,8 @@ Use relevant facts already present in these results to answer directly. Report m
     requestContent: string = '',
     userDocumentToolHint: string = '',
     apiPath?: string,
-    customHeadersJson?: string
+    customHeadersJson?: string,
+    requiredSkillId: string = ''
   ): Promise<void> {
     const cancelSnapshot = this.cancelToken
     // 工具模式拥有独立的用户请求生命周期。每次发送都必须清空上一轮的搜索分页与
@@ -3085,7 +3097,7 @@ Use relevant facts already present in these results to answer directly. Report m
     let requestTools: ToolDefinition[] = hasSubAgentTool ? appendSubAgentResultTool(tools) : tools
 
     onAIMessageAdded(aiMessage)
-    this.addPendingAIMessage(aiMessage, snapshotSessionId, onAIMessageUpdated, true)
+    this.addPendingAIMessage(aiMessage, snapshotSessionId, onAIMessageUpdated, true, hasSkillTool)
 
     // 保存用户消息到数据库
     if (snapshotSession !== null && userMessage !== null) {
@@ -3120,6 +3132,9 @@ Use relevant facts already present in these results to answer directly. Report m
       const skillContext = await this.buildEnabledSkillSystemContext()
       if (skillContext !== '') {
         toolUsageSystemPrompt += skillContext
+      }
+      if (requiredSkillId) {
+        toolUsageSystemPrompt += '\n\n' + buildRequiredSkillPrompt(requiredSkillId, promptOptions.language)
       }
     }
     const apiConfig: AIApiConfig = {

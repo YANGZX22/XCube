@@ -10,6 +10,7 @@ export class ChatInFlightMessage {
   attachments: MessageAttachment[]
   delivery: InFlightMessageDelivery
   sessionId: string
+  requiredSkillId: string = ''
 
   constructor(
     content: string,

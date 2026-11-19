@@ -158,7 +158,8 @@ export class ChatSendFlow {
     modelSupportsDocuments: boolean = true,
     modelSupportsVision: boolean = true,
     requestContent: string = '',
-    userDocumentToolHint: string = ''
+    userDocumentToolHint: string = '',
+    requiredSkillId: string = ''
   ): Promise<void> {
     const plan = this.buildExecutionPlan(
       messageContent,
@@ -188,7 +189,8 @@ export class ChatSendFlow {
         modelSupportsDocuments,
         modelSupportsVision,
         requestContent,
-        userDocumentToolHint
+        userDocumentToolHint,
+        requiredSkillId
       )
       return
     }
@@ -493,7 +495,8 @@ export class ChatSendFlow {
     modelSupportsDocuments: boolean = true,
     modelSupportsVision: boolean = true,
     requestContent: string = '',
-    userDocumentToolHint: string = ''
+    userDocumentToolHint: string = '',
+    requiredSkillId: string = ''
   ): Promise<void> {
     const taskId = this.startTaskOrFail(messageContent)
     if (taskId === '') {
@@ -574,7 +577,8 @@ export class ChatSendFlow {
         requestContent,
         userDocumentToolHint,
         currentProvider.apiPath || undefined,
-        currentProvider.customHeadersJson || undefined
+        currentProvider.customHeadersJson || undefined,
+        requiredSkillId
       )
     } catch (error) {
       const message = `发送失败: ${toErrorDetail(error as Object)}`

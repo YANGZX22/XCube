@@ -25,6 +25,7 @@ export struct ChatInputAreaSection {
   @Param currentProviderId: string = ''
   @Param currentModelName: string = ''
   @Param currentConversationGoal: string = ''
+  @Param skillCommands: SlashCommandItem[] = []
   @Param currentProviderIconType: string = ''
   @Param currentProviderIconPath: string = ''
   @Param currentProviderTextIcon: string = ''
@@ -67,6 +68,7 @@ export struct ChatInputAreaSection {
   @Event onComposerContentChanged: () => void = () => {}
   @Event onRecentPhotoDetected: (detected: boolean) => void = (_detected: boolean): void => {}
   @Event onSlashCommand: (commandId: string) => void = (_commandId: string): void => {}
+  private composerController: TextAreaController = new TextAreaController()
   @Param showManuscriptScrollTop: boolean = false
   @Param showManuscriptScrollBottom: boolean = false
   @Param manuscriptScrollBottomLoading: boolean = false
@@ -90,11 +92,25 @@ export struct ChatInputAreaSection {
   }
 
   // 编辑既有消息时不接受斜杠命令：那次输入的目标是改写消息本身
-  private getVisibleSlashCommands(): SlashCommandItem[] {
+  @Computed
+  private get visibleSlashCommands(): SlashCommandItem[] {
     if (this.isEditing) {
       return []
     }
-    return matchSlashCommands(this.inputText)
+    return matchSlashCommands(this.inputText, this.skillCommands)
+  }
+
+  private selectCommand(command: SlashCommandItem): void {
+    if (!command.skillId) {
+      this.onSlashCommand(command.id)
+      return
+    }
+    const draft = command.name + ' '
+    this.onInputTextChange(draft)
+    this.getUIContext().getFocusController().requestFocus(this.isManuscriptMode ? 'manuscriptChatInputTextArea' : 'chatInputTextArea')
+    setTimeout((): void => {
+      if (this.inputText === draft) this.composerController.caretPosition(draft.length)
+    }, 0)
   }
 
   private getBottomSpacerHeight(): number {
@@ -167,15 +183,15 @@ export struct ChatInputAreaSection {
         .justifyContent(FlexAlign.Center)
         .padding({ bottom: 8 })
 
-        if (this.getVisibleSlashCommands().length > 0) {
+        if (this.visibleSlashCommands.length > 0) {
           SlashCommandPanel({
-            commands: this.getVisibleSlashCommands(),
+            commands: this.visibleSlashCommands,
             currentModelId: this.currentModelId,
             currentProviderId: this.currentProviderId,
             currentModelName: this.currentModelName,
             currentConversationGoal: this.currentConversationGoal,
-            onSelectCommand: (commandId: string): void => {
-              this.onSlashCommand(commandId)
+            onSelectCommand: (command: SlashCommandItem): void => {
+              this.selectCommand(command)
             }
           })
         }
@@ -231,6 +247,7 @@ export struct ChatInputAreaSection {
         })
 
         ChatInputBar({
+          composerController: this.composerController,
           inputText: this.inputText,
           onInputTextChange: (value: string): void => {
             this.onInputTextChange(value)

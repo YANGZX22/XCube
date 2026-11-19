@@ -43,6 +43,7 @@ export struct ChatInputBar {
   @Local showInFlightSendMenu: boolean = false
   private readonly editingHeaderHeightVp: number = 28
   @Param inputText: string = ''
+  @Param composerController: TextAreaController | undefined = undefined
   @Event onInputTextChange: (value: string) => void = (_value: string): void => {}
   @Param attachments: MessageAttachment[] = []
   @Event onAttachmentsChange: (value: MessageAttachment[]) => void = (_value: MessageAttachment[]): void => {}
@@ -281,7 +282,7 @@ export struct ChatInputBar {
         Column() {
           this.AttachmentPreview()
 
-          TextArea({ text: this.inputText, placeholder: $r('app.string.manuscript_reply_placeholder') })
+          TextArea({ text: this.inputText, controller: this.composerController, placeholder: $r('app.string.manuscript_reply_placeholder') })
             .id('manuscriptChatInputTextArea')
             .placeholderColor(getAppUiState().themeTextTertiary)
             .placeholderFont({ size: 15, style: FontStyle.Italic, family: MANUSCRIPT_BODY_FONT })
@@ -537,7 +538,7 @@ export struct ChatInputBar {
       }
 
         // 输入框
-        TextArea({ text: this.inputText, placeholder: $r('app.string.input_placeholder') })
+        TextArea({ text: this.inputText, controller: this.composerController, placeholder: $r('app.string.input_placeholder') })
           .id('chatInputTextArea')
           .placeholderColor($r('app.color.text_tertiary'))
           .placeholderFont({ size: 16 })

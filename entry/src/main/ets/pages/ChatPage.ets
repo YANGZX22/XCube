@@ -161,10 +161,12 @@ import {
   getContextCompactionService
 } from '../services/ContextCompactionService'
 import {
+  buildSkillSlashCommands,
   GOAL_COMMAND_ACTION_CLEAR,
   GOAL_COMMAND_ACTION_PROMPT,
   isGoalSlashCommandInput,
   resolveSlashCommandId,
+  resolveSlashSkillId,
   resolveGoalSlashCommandAction,
   resolveGoalSlashCommandText,
   SLASH_COMMAND_CANVAS,
@@ -172,7 +174,8 @@ import {
   SLASH_COMMAND_GOAL,
   SLASH_COMMAND_MODELS,
   SLASH_COMMAND_PLAN,
-  SLASH_COMMAND_REASONING
+  SLASH_COMMAND_REASONING,
+  SlashCommandItem
 } from '../utils/SlashCommandUtils'
 import { MAX_CONVERSATION_GOAL_LENGTH } from '../utils/ConversationGoalUtils'
 import { VisualEffectsMode } from '../models/ThemeColors'
@@ -215,6 +218,11 @@ class DocumentFallbackSendResult {
     this.requestContent = requestContent
     this.userHintText = userHintText
   }
+}
+
+interface ChatResendOptions {
+  queuedSkillId?: string
+  regenerateFromId?: string
 }
 
 interface ReadScheduleApprovalArgs {
@@ -356,6 +364,8 @@ export struct ChatPage {
   @Local workspaceActive: boolean = false
   @Local browserState: BuiltinBrowserState = new BuiltinBrowserState()
   @Local selectedToolIds: string[] = []
+  @Local skillSlashCommands: SlashCommandItem[] = []
+  private skillCatalogRevision: number = 0
   @Local availableChatTools: ToolConfig[] = []
   @Local isRefreshingMcpToolAvailability: boolean = false
   @Local showToolPickerSheet: boolean = false
@@ -3001,16 +3011,6 @@ export struct ChatPage {
     if (compactTool !== undefined) {
       compactTool.config.enabled = ServiceRegistry.contextCompaction().isEnabled()
     }
-    const skillTool = this.toolRegistry.getTool(USE_SKILL_TOOL_ID)
-    if (skillTool !== undefined) {
-      this.skillService.isToolEnabled()
-        .then((enabled: boolean): void => {
-          skillTool.config.enabled = enabled
-        })
-        .catch((error: Object): void => {
-          console.warn('ChatPage', `Failed to load skill tool state: ${JSON.stringify(error)}`)
-        })
-    }
   }
 
   private rebuildAvailableChatTools(): void {
@@ -3072,6 +3072,21 @@ export struct ChatPage {
     return raw.substring(0, separatorIndex)
   }
 
+  private async refreshSkillSlashCommands(): Promise<void> {
+    const revision = ++this.skillCatalogRevision
+    try {
+      const enabled = await this.skillService.isToolEnabled()
+      const commands = enabled ? buildSkillSlashCommands(await this.skillService.getEnabledSkills()) : []
+      if (revision !== this.skillCatalogRevision) return
+      const tool = this.toolRegistry.getTool(USE_SKILL_TOOL_ID)
+      if (tool) tool.config.enabled = enabled
+      this.skillSlashCommands = tool ? commands : []
+    } catch (error) {
+      if (revision === this.skillCatalogRevision) this.skillSlashCommands = []
+      console.warn('ChatPage', `Failed to load Skill commands: ${JSON.stringify(error)}`)
+    }
+  }
+
   private async syncToolAvailabilityFromPreferences(): Promise<void> {
     // compact 的可用性来自设置-工具中心的偏好，需在同步工具面板前读入缓存
     await ServiceRegistry.contextCompaction().loadPreferences()
@@ -3082,10 +3097,7 @@ export struct ChatPage {
       webSearchAvailable
     )
     this.ensureBuiltinChatToolsAvailable()
-    const skillTool = this.toolRegistry.getTool(USE_SKILL_TOOL_ID)
-    if (skillTool !== undefined) {
-      skillTool.config.enabled = await this.skillService.isToolEnabled()
-    }
+    await this.refreshSkillSlashCommands()
     this.rebuildAvailableChatTools()
     const enabledMcpServerIds = await this.loadEnabledMcpServerIds()
     const selectedToolIds = await this.mcpService.loadSelectedToolIds()
@@ -3611,7 +3623,7 @@ export struct ChatPage {
           this.currentModelId,
           this.chatTaskOrchestrator.canStartNewTask()
         )
-        return prepareResult.shouldSend
+        return prepareResult.shouldSend && this.getRequestedSkillId(content) !== ''
       },
       onSyncMessages: (): void => {
         this.markMessageListChanged()
@@ -4339,6 +4351,7 @@ export struct ChatPage {
               currentProviderId: this.currentProvider?.id ?? '',
               currentModelName: this.currentModel,
               currentConversationGoal: this.chatViewModel.getCurrentSessionConversationGoal(),
+              skillCommands: this.skillSlashCommands,
               currentProviderIconType: this.currentProvider?.iconType ?? 'svg',
               currentProviderIconPath: this.currentProvider?.iconPath ?? '',
               currentProviderTextIcon: this.currentProvider?.textIcon ?? '',
@@ -4910,9 +4923,13 @@ export struct ChatPage {
       if (skillTool !== undefined) {
         skillTool.config.enabled = enabled
       }
-      this.skillService.setToolEnabled(enabled).catch((error: Object) => {
-        console.error('ChatPage', `Failed to sync skill tool state: ${JSON.stringify(error)}`)
-      })
+      this.skillCatalogRevision++
+      if (!enabled) this.skillSlashCommands = []
+      this.skillService.setToolEnabled(enabled)
+        .catch((error: Object): void => {
+          console.error('ChatPage', `Failed to sync skill tool state: ${JSON.stringify(error)}`)
+        })
+        .then((): Promise<void> => this.refreshSkillSlashCommands())
       return
     }
     if (toolId === 'web_search') {
@@ -6155,6 +6172,9 @@ export struct ChatPage {
     if (message.content === '' && message.attachments.length === 0) {
       return true
     }
+    const requiredSkillId = this.getRequestedSkillId(message.content)
+    if (requiredSkillId === '') return true
+    message.requiredSkillId = requiredSkillId ?? ''
     this.queuedInFlightMessages.push(message)
     this.queuedMessageCount = this.queuedInFlightMessages.length
     this.clearComposerAfterInFlightSend()
@@ -6279,6 +6299,20 @@ export struct ChatPage {
     this.getStopFlow().stopCurrentTask()
   }
 
+  private getRequestedSkillId(content: string, queuedSkillId: string = ''): string | undefined {
+    // 排队时已选定的技能按 ID 复核，避免同名条目替换后调用另一个技能。
+    const id = queuedSkillId ? this.skillSlashCommands.find((cmd: SlashCommandItem): boolean =>
+      cmd.skillId === queuedSkillId)?.skillId ?? '' : resolveSlashSkillId(content, this.skillSlashCommands)
+    if (id === '') {
+      this.showError(pickLocalizedText('此 Skill 已停用或找不到，请从 / 面板重新选择。',
+        'This skill is disabled or unavailable. Select a skill from the / menu.'))
+    } else if (id && !this.getSendFlow().isCurrentModelSupportsTools(this.currentProvider, this.currentModelId)) {
+      this.showError(pickLocalizedText('此 Skill 需要支持工具调用的模型。', 'This skill requires a model that supports tools.'))
+      return ''
+    }
+    return id
+  }
+
   private handleInFlightSend(delivery: InFlightMessageDelivery): void {
     if (!this.isSending || this.isSendDispatching) {
       return
@@ -6292,11 +6326,14 @@ export struct ChatPage {
     if (message.content === '' && message.attachments.length === 0) {
       return
     }
+    const requiredSkillId = this.getRequestedSkillId(message.content)
+    if (requiredSkillId === '') return
+    message.requiredSkillId = requiredSkillId ?? ''
 
     // 压缩期间不能引导当前这一轮：引导消息会在请求边界插进正在被摘要覆盖的历史里。
     // 降级为排队，压缩结束后再作为正常消息发出。
     if (delivery === InFlightMessageDelivery.STEER && !this.isContextCompactionInProgress() &&
-      this.chatViewModel.submitSteeringMessage(this.sessionId, message.content, message.attachments)) {
+      this.chatViewModel.submitSteeringMessage(this.sessionId, message.content, message.attachments, message.requiredSkillId)) {
       this.clearComposerAfterInFlightSend()
       this.markMessageListChanged()
       this.showChatSnack($r('app.string.chat_inflight_steer_accepted'), 2200, SnackBarTone.SUCCESS)
@@ -6365,7 +6402,7 @@ export struct ChatPage {
     const preservedDraftText = this.inputText
     const preservedDraftAttachments = this.pendingAttachments.slice()
     try {
-      await this.sendMessage(next.content, next.attachments)
+      await this.sendMessage(next.content, next.attachments, { queuedSkillId: next.requiredSkillId })
     } finally {
       // 排队期间用户可能已经开始输入下一条草稿；自动续发不能把它一起清空。
       if (preservedDraftText !== '' || preservedDraftAttachments.length > 0) {
@@ -6394,7 +6431,7 @@ export struct ChatPage {
     this.showChatSnack($r('app.string.model_switched'), 2000, SnackBarTone.SUCCESS)
   }
 
-  async sendMessage(contentOverride?: string, attachmentsOverride?: MessageAttachment[]): Promise<void> {
+  async sendMessage(contentOverride?: string, attachmentsOverride?: MessageAttachment[], options?: ChatResendOptions): Promise<void> {
     if (this.isSendDispatching || this.isSending) {
       return
     }
@@ -6425,6 +6462,8 @@ export struct ChatPage {
       const effectiveApiKey = prepareResult.effectiveApiKey
 
       await this.syncToolAvailabilityFromPreferences()
+      const requiredSkillId = this.getRequestedSkillId(messageContent, options?.queuedSkillId)
+      if (requiredSkillId === '') return
       const requestedToolIds = [
         ...this.selectedToolIds,
         ...this.forcedToolIdsOnce
@@ -6463,6 +6502,9 @@ export struct ChatPage {
       })
       const forcedToolIds = this.forcedToolIdsOnce
         .filter((toolId: string): boolean => toolId !== KNOWLEDGE_SEARCH_TOOL_ID && toolId !== COMPACT_TOOL_ID)
+      if (requiredSkillId && !selectedToolIds.includes(USE_SKILL_TOOL_ID) && !forcedToolIds.includes(USE_SKILL_TOOL_ID)) {
+        forcedToolIds.push(USE_SKILL_TOOL_ID)
+      }
       // 读取类工具按 attachmentId 定位文件，注册与是否走降级路径无关。
       this.documentAttachmentRegistry.registerAttachments(this.sessionId, attachmentsToSend)
       const fallbackHintTexts: string[] = []
@@ -6501,6 +6543,13 @@ export struct ChatPage {
       userDocumentToolHint = fallbackHintTexts.join('\n')
       const searchEnabled = this.webSearchAvailable &&
         (selectedToolIds.includes('web_search') || forcedToolIds.includes('web_search'))
+      if (options?.regenerateFromId) {
+        const index = this.messages.findIndex((message: ChatMessage): boolean => message.id === options.regenerateFromId)
+        if (index < 0) return
+        this.replaceMessages(this.messages.slice(0, index + 1))
+        if (index === 0) this.titleGenerateFailed = false
+        this.chatViewModel.setPendingForkContext({ aiParentId: options.regenerateFromId })
+      }
       this.syncActiveSessionBinding()
       await this.getSendFlow().executeSend(
         messageContent,
@@ -6514,7 +6563,8 @@ export struct ChatPage {
         modelSupportsDocuments,
         modelSupportsVision,
         requestMessageContent,
-        userDocumentToolHint
+        userDocumentToolHint,
+        requiredSkillId
       )
       this.forcedToolIdsOnce = []
     } catch (error) {
@@ -6528,7 +6578,7 @@ export struct ChatPage {
 
   // 处理重新生成：在对应用户消息下新建一个 AI 版本（不删除旧答案，旧答案保留为可切换的历史版本）
   async handleRegenerate(message: ChatMessage): Promise<void> {
-    if (this.isSending) {
+    if (this.isSending || this.isSendDispatching) {
       return
     }
     const userMsgIndex = resolveUserMessageIndexForRegenerate(this.messages, message)
@@ -6536,21 +6586,8 @@ export struct ChatPage {
       return
     }
     const userMsg = this.messages[userMsgIndex]
-    const savedContent = userMsg.content
-    const savedAttachments = userMsg.attachments.slice()
-    const isFirstRound = userMsgIndex === 0
-
-    // 截断活跃路径到该用户消息（含），作为发送历史；
-    // 设置分叉上下文：新 AI 消息直接挂到该用户消息下，作为其新版本，不删除旧答案。
-    const truncatedPath = this.messages.slice(0, userMsgIndex + 1)
-    this.replaceMessages(truncatedPath)
-    if (isFirstRound) {
-      this.titleGenerateFailed = false
-    }
-    // 走正常发送链路（保留工具/联网执行计划路由），但内容来自原用户消息、不触碰输入框草稿。
-    // 分叉上下文会被本次发送消费，使新 AI 消息成为该用户消息的新版本。
-    this.chatViewModel.setPendingForkContext({ aiParentId: userMsg.id })
-    this.sendMessage(savedContent, savedAttachments)
+    // 发送校验通过后才切换分支，已停用的技能不会截断当前回答。
+    await this.sendMessage(userMsg.content, userMsg.attachments.slice(), { regenerateFromId: userMsg.id })
   }
 
   showError(message: string | Resource): void {

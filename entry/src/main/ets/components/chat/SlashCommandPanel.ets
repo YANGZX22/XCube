@@ -13,8 +13,8 @@ import { withColorAlpha } from '../../utils/ColorAlphaUtils'
 import { VisualEffectsMode } from '../../models/ThemeColors'
 import { buildModelIconRenderData, ModelIconRenderData } from '../../utils/ModelIconRenderUtils'
 import { MANUSCRIPT_BODY_FONT } from '../../utils/ManuscriptVisualUtils'
+import { ImmersiveListSurface } from '../ImmersiveListSurface'
 
-// 输入框上方的斜杠命令面板：输入 "/" 时浮出，点选后立即执行对应命令
 @ComponentV2
 export struct SlashCommandPanel {
   @Param commands: SlashCommandItem[] = []
@@ -22,7 +22,7 @@ export struct SlashCommandPanel {
   @Param currentProviderId: string = ''
   @Param currentModelName: string = ''
   @Param currentConversationGoal: string = ''
-  @Event onSelectCommand: (commandId: string) => void = (_commandId: string): void => {}
+  @Event onSelectCommand: (command: SlashCommandItem) => void = (_command: SlashCommandItem): void => {}
   @Local pressedCommandId: string = ''
 
   private get themePrimary(): string {
@@ -133,24 +133,26 @@ export struct SlashCommandPanel {
 
   build() {
     Column() {
-      ForEach(this.commands, (command: SlashCommandItem, index: number) => {
-        this.CommandRow(command, index)
-      }, (command: SlashCommandItem): string => command.id)
+      ImmersiveListSurface({ isImmersive: true, cornerRadius: this.isManuscriptMode ? 0 : 20 }) {
+        Scroll() {
+          Column() {
+            ForEach(this.commands, (command: SlashCommandItem) => {
+              this.CommandRow(command)
+            }, (command: SlashCommandItem): string =>
+              JSON.stringify([command.id, command.name, command.skillName, command.description]))
+          }.width('100%')
+        }
+        .width('100%')
+        .constraintSize({ maxHeight: Math.min(300, (getAppUiState().windowHeightVp || 800) * 0.32) })
+        .scrollBar(BarState.Auto)
+        .borderRadius(this.isManuscriptMode ? 0 : 20)
+        .clip(true)
+      }
     }
     .width('100%')
-    .backgroundColor(Color.Transparent)
-    .borderRadius(this.isManuscriptMode ? 0 : 20)
     .border({
       width: this.isManuscriptMode ? { top: 1, bottom: 1 } : 0,
-      color: this.isManuscriptMode ? getAppUiState().themeDivider : this.themePrimary
-    })
-    .clip(!this.isManuscriptMode)
-    .backdropBlur(this.isManuscriptMode ? 0 : 24)
-    .shadow({
-      radius: this.isManuscriptMode ? 0 : 24,
-      color: this.isManuscriptMode ? Color.Transparent : 'rgba(0, 0, 0, 0.12)',
-      offsetX: 0,
-      offsetY: 6
+      color: getAppUiState().themeDivider
     })
     .margin({ bottom: 8 })
     // 输入 "/" 时从输入框上方浮出，删掉命令时淡出
@@ -163,9 +165,9 @@ export struct SlashCommandPanel {
   }
 
   @Builder
-  private CommandRow(command: SlashCommandItem, index: number) {
+  private CommandRow(command: SlashCommandItem) {
     Column() {
-      if (index > 0) {
+      if (command.id !== this.commands[0]?.id) {
         Divider()
           .strokeWidth(0.5)
           .color(withColorAlpha(this.themeUserBubble, '40'))
@@ -188,6 +190,10 @@ export struct SlashCommandPanel {
                 .objectFit(ImageFit.Contain)
                 .fillColor(this.themePrimary)
             }
+          } else if (command.skillId) {
+            SymbolGlyph($r('sys.symbol.doc_text_badge_magnifyingglass'))
+              .fontSize(16)
+              .fontColor([this.themePrimary])
           } else {
             SymbolGlyph(command.id === SLASH_COMMAND_MODELS
               ? $r('sys.symbol.ai_edit') : this.getCommandSymbol(command.id))
@@ -204,14 +210,16 @@ export struct SlashCommandPanel {
 
         Column() {
           Row() {
-            Text(command.name)
+            Text(command.skillId ? command.skillName : command.name)
               .fontFamily(this.isManuscriptMode ? MANUSCRIPT_BODY_FONT : 'HarmonyOS Sans')
               .fontSize(14)
               .fontWeight(FontWeight.Medium)
               .fontColor(this.themePrimary)
               .maxLines(1)
+              .flexShrink(1)
+              .textOverflow({ overflow: TextOverflow.Ellipsis })
 
-            Text(this.getCommandTitle(command.id))
+            Text(command.skillId ? command.name : this.getCommandTitle(command.id))
               .fontFamily(this.isManuscriptMode ? MANUSCRIPT_BODY_FONT : 'HarmonyOS Sans')
               .fontSize(13)
               .fontColor($r('app.color.text_primary'))
@@ -223,15 +231,17 @@ export struct SlashCommandPanel {
           .width('100%')
           .alignItems(VerticalAlign.Center)
 
-          Text(this.getCommandDescription(command.id))
-            .fontFamily(this.isManuscriptMode ? MANUSCRIPT_BODY_FONT : 'HarmonyOS Sans')
-            .fontSize(11)
-            .lineHeight(16)
-            .fontColor($r('app.color.text_tertiary'))
-            .maxLines(command.id === SLASH_COMMAND_GOAL && this.getCurrentGoalPreview() !== '' ? 3 : 2)
-            .textOverflow({ overflow: TextOverflow.Ellipsis })
-            .width('100%')
-            .margin({ top: 2 })
+          if (!command.skillId || command.description) {
+            Text(command.skillId ? command.description : this.getCommandDescription(command.id))
+              .fontFamily(this.isManuscriptMode ? MANUSCRIPT_BODY_FONT : 'HarmonyOS Sans')
+              .fontSize(11)
+              .lineHeight(16)
+              .fontColor($r('app.color.text_tertiary'))
+              .maxLines(command.id === SLASH_COMMAND_GOAL && this.getCurrentGoalPreview() !== '' ? 3 : 2)
+              .textOverflow({ overflow: TextOverflow.Ellipsis })
+              .width('100%')
+              .margin({ top: 2 })
+          }
         }
         .layoutWeight(1)
         .alignItems(HorizontalAlign.Start)
@@ -258,7 +268,7 @@ export struct SlashCommandPanel {
     })
     .onClick(() => {
       this.pressedCommandId = ''
-      this.onSelectCommand(command.id)
+      this.onSelectCommand(command)
     })
   }
 }
