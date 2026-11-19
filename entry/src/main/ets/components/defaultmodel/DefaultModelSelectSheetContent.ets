@@ -35,12 +35,12 @@ export struct DefaultModelSelectSheetContent {
       Row() {
         Text($r('app.string.default_model_current_selection'))
           .font(getSettingsTypography().fieldLabel)
-          .fontColor(getAppUiState().themeTextSecondary)
+          .fontColor($r('app.color.text_secondary'))
 
         Text(this.currentSelectionText)
           .fontSize(14)
           .fontWeight(FontWeight.Medium)
-          .fontColor(this.themePrimary)
+          .fontColor($r('app.color.text_caption'))
           .constraintSize({ maxWidth: '60%' })
           .maxLines(1)
           .textOverflow({ overflow: TextOverflow.Ellipsis })

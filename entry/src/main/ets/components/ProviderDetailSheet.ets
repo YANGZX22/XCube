@@ -1406,7 +1406,7 @@ export struct ProviderDetailPanel {
         Text(this.currentTabIndex === 0 ? $r('app.string.provider_api_config') : $r('app.string.provider_models_manage'))
           .font(getSettingsTypography().subtitle)
           .lineHeight(SETTINGS_SUBTITLE_LINE_HEIGHT)
-          .fontColor(getAppUiState().themeTextSecondary)
+          .fontColor($r('app.color.text_caption'))
           .width('100%')
       }
       .alignItems(HorizontalAlign.Start)
@@ -1450,7 +1450,7 @@ export struct ProviderDetailPanel {
             Text(this.currentTabIndex === 0 ? $r('app.string.provider_api_config') : $r('app.string.provider_models_manage'))
               .font(getSettingsTypography().subtitle)
               .lineHeight(SETTINGS_SUBTITLE_LINE_HEIGHT)
-              .fontColor(getAppUiState().themeTextSecondary)
+              .fontColor($r('app.color.text_caption'))
               .width('100%')
           }
           .alignItems(HorizontalAlign.Start)
@@ -1518,7 +1518,7 @@ export struct ProviderDetailPanel {
               $r('app.string.provider_models_manage'))
               .font(getSettingsTypography().subtitle)
               .lineHeight(SETTINGS_SUBTITLE_LINE_HEIGHT)
-              .fontColor(getAppUiState().themeTextSecondary)
+              .fontColor($r('app.color.text_caption'))
               .width('100%')
           }
           .alignItems(HorizontalAlign.Start)
@@ -1718,7 +1718,7 @@ export struct ProviderDetailPanel {
               Text(this.provider?.baseUrl ?? '')
                 .font(getSettingsTypography().subtitle)
                 .lineHeight(SETTINGS_SUBTITLE_LINE_HEIGHT)
-                .fontColor(getAppUiState().themeTextSecondary)
+                .fontColor($r('app.color.text_caption'))
                 .margin({ left: 8 })
                 .maxLines(1)
                 .textOverflow({ overflow: TextOverflow.Ellipsis })
@@ -1881,7 +1881,7 @@ export struct ProviderDetailPanel {
             Text(this.provider?.baseUrl ?? '')
               .font(getSettingsTypography().subtitle)
               .lineHeight(SETTINGS_SUBTITLE_LINE_HEIGHT)
-              .fontColor(getAppUiState().themeTextSecondary)
+              .fontColor($r('app.color.text_caption'))
               .margin({ left: 8, top: 2 })
               .maxLines(1)
               .textOverflow({ overflow: TextOverflow.Ellipsis })
@@ -1941,7 +1941,7 @@ export struct ProviderDetailPanel {
         Column() {
           Text($r('app.string.api_style'))
             .font(getSettingsTypography().fieldLabel)
-            .fontColor(getAppUiState().themeTextSecondary)
+            .fontColor($r('app.color.text_secondary'))
             .width('100%')
 
           Column() {
@@ -1967,7 +1967,7 @@ export struct ProviderDetailPanel {
                   Text(option.description)
                     .font(getSettingsTypography().subtitle)
                     .lineHeight(SETTINGS_SUBTITLE_LINE_HEIGHT)
-                    .fontColor(getAppUiState().themeTextSecondary)
+                    .fontColor($r('app.color.text_caption'))
                     .margin({ top: 2 })
                 }
                 .alignItems(HorizontalAlign.Start)
@@ -2003,7 +2003,7 @@ export struct ProviderDetailPanel {
           Column() {
             Text('OpenAI 协议')
               .font(getSettingsTypography().fieldLabel)
-              .fontColor(getAppUiState().themeTextSecondary)
+              .fontColor($r('app.color.text_secondary'))
               .width('100%')
 
             Column() {
@@ -2029,7 +2029,7 @@ export struct ProviderDetailPanel {
                     Text(option.description)
                       .font(getSettingsTypography().subtitle)
                       .lineHeight(SETTINGS_SUBTITLE_LINE_HEIGHT)
-                      .fontColor(getAppUiState().themeTextSecondary)
+                      .fontColor($r('app.color.text_caption'))
                       .margin({ top: 2 })
                   }
                   .alignItems(HorizontalAlign.Start)
@@ -2073,7 +2073,7 @@ export struct ProviderDetailPanel {
                 Text($r('app.string.provider_requires_api_key_desc'))
                   .font(getSettingsTypography().subtitle)
                   .lineHeight(SETTINGS_SUBTITLE_LINE_HEIGHT)
-                  .fontColor(getAppUiState().themeTextSecondary)
+                  .fontColor($r('app.color.text_caption'))
                   .margin({ top: 2 })
               }
               .alignItems(HorizontalAlign.Start)
@@ -2105,7 +2105,7 @@ export struct ProviderDetailPanel {
         Row() {
           Text($r('app.string.api_key'))
             .font(getSettingsTypography().fieldLabel)
-            .fontColor(getAppUiState().themeTextSecondary)
+            .fontColor($r('app.color.text_secondary'))
           if (this.provider?.requiresApiKey ?? true) {
             Text(' *')
               .fontSize(13)
@@ -2187,7 +2187,7 @@ export struct ProviderDetailPanel {
         Row() {
           Text($r('app.string.base_url'))
             .font(getSettingsTypography().fieldLabel)
-            .fontColor(getAppUiState().themeTextSecondary)
+            .fontColor($r('app.color.text_secondary'))
           Text(' *')
             .fontSize(13)
             .fontColor(Color.Red)
@@ -2221,7 +2221,7 @@ export struct ProviderDetailPanel {
       Column() {
         Text($r('app.string.api_path_optional'))
           .font(getSettingsTypography().fieldLabel)
-          .fontColor(getAppUiState().themeTextSecondary)
+          .fontColor($r('app.color.text_secondary'))
           .width('100%')
 
         ImmersiveFieldSurface({ cornerRadius: 16, layoutMargin: { top: SETTINGS_HEADING_CONTENT_GAP } }) {
@@ -2251,7 +2251,7 @@ export struct ProviderDetailPanel {
         Row({ space: 8 }) {
           Text($r('app.string.provider_custom_headers_title'))
             .font(getSettingsTypography().fieldLabel)
-            .fontColor(getAppUiState().themeTextSecondary)
+            .fontColor($r('app.color.text_secondary'))
             .layoutWeight(1)
             .maxLines(1)
             .textOverflow({ overflow: TextOverflow.Ellipsis })
@@ -2329,7 +2329,7 @@ export struct ProviderDetailPanel {
               Column({ space: SETTINGS_HEADING_CONTENT_GAP }) {
                 Text($r('app.string.provider_custom_header_name'))
                   .font(getSettingsTypography().fieldLabel)
-                  .fontColor(getAppUiState().themeTextSecondary)
+                  .fontColor($r('app.color.text_secondary'))
                   .width('100%')
 
                 ImmersiveFieldSurface({ cornerRadius: 14 }) {
@@ -2350,7 +2350,7 @@ export struct ProviderDetailPanel {
               Column({ space: SETTINGS_HEADING_CONTENT_GAP }) {
                 Text($r('app.string.provider_custom_header_value'))
                   .font(getSettingsTypography().fieldLabel)
-                  .fontColor(getAppUiState().themeTextSecondary)
+                  .fontColor($r('app.color.text_secondary'))
                   .width('100%')
 
                 if (this.isSensitiveProviderHeaderName(entry.name)) {
@@ -2413,7 +2413,7 @@ BalanceConfigSection() {
     Row({ space: 8 }) {
       Text($r('app.string.balance_config_title'))
         .font(getSettingsTypography().fieldLabel)
-        .fontColor(getAppUiState().themeTextSecondary)
+        .fontColor($r('app.color.text_secondary'))
         .layoutWeight(1)
         .maxLines(1)
         .textOverflow({ overflow: TextOverflow.Ellipsis })
@@ -2451,7 +2451,7 @@ BalanceInput(label: Resource, placeholder: Resource, value: string, field: strin
   Column({ space: SETTINGS_HEADING_CONTENT_GAP }) {
     Text(label)
       .font(getSettingsTypography().fieldLabel)
-      .fontColor(getAppUiState().themeTextSecondary)
+      .fontColor($r('app.color.text_secondary'))
       .width('100%')
 
     ImmersiveFieldSurface({ cornerRadius: 14 }) {
@@ -2791,7 +2791,7 @@ ModelsCard() {
             .width('100%')
             .textAlign(TextAlign.Start)
             .lineHeight(SETTINGS_SUBTITLE_LINE_HEIGHT)
-            .fontColor(getAppUiState().themeTextSecondary)
+            .fontColor($r('app.color.text_caption'))
             .margin({ top: 4 })
         }
         .width('100%')
@@ -3041,7 +3041,7 @@ export struct ModelItemCard {
         Column() {
           Text(this.model.name)
             .font(getSettingsTypography().itemTitle)
-            .fontColor(this.model.isEnabled ? getAppUiState().themeTextPrimary : getAppUiState().themeTextTertiary)
+            .fontColor(this.model.isEnabled ? getAppUiState().themeTextPrimary : $r('app.color.text_tertiary'))
             .maxLines(2)
             .textOverflow({ overflow: TextOverflow.Ellipsis })
 

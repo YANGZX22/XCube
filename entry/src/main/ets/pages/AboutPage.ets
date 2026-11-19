@@ -231,7 +231,7 @@ struct AboutPage {
         Text(item.licenseName)
           .fontSize(11)
           .fontWeight(FontWeight.Medium)
-          .fontColor(this.themePrimary)
+          .fontColor($r('app.color.text_caption'))
           .textAlign(TextAlign.End)
           .constraintSize({ maxWidth: '48%' })
       }
@@ -241,7 +241,7 @@ struct AboutPage {
       Text(pickLocalizedText(item.noticeZh, item.noticeEn))
         .font(getSettingsTypography().subtitle)
         .lineHeight(SETTINGS_SUBTITLE_LINE_HEIGHT)
-        .fontColor(getAppUiState().themeTextSecondary)
+        .fontColor($r('app.color.text_caption'))
         .width('100%')
     }
     .width('100%')
@@ -285,7 +285,7 @@ struct AboutPage {
             Text($r('app.string.about_license_sheet_note'))
               .font(getSettingsTypography().subtitle)
               .lineHeight(SETTINGS_SUBTITLE_LINE_HEIGHT)
-              .fontColor(getAppUiState().themeTextSecondary)
+              .fontColor($r('app.color.text_caption'))
               .width('100%')
 
             this.LicenseSection($r('app.string.about_license_runtime_section'), RUNTIME_LICENSES)
@@ -345,7 +345,7 @@ struct AboutPage {
         Text($r('app.string.about_privacy_policy_desc'))
           .font(getSettingsTypography().subtitle)
           .lineHeight(SETTINGS_SUBTITLE_LINE_HEIGHT)
-          .fontColor(getAppUiState().themeTextSecondary)
+          .fontColor($r('app.color.text_caption'))
       }
       .alignItems(HorizontalAlign.Start)
       .margin({ left: 12 })
@@ -397,7 +397,7 @@ struct AboutPage {
             Text($r('app.string.about_page_slogan'))
               .font(getSettingsTypography().subtitle)
               .lineHeight(SETTINGS_SUBTITLE_LINE_HEIGHT)
-              .fontColor(getAppUiState().themeTextSecondary)
+              .fontColor($r('app.color.text_caption'))
           }
           .width('100%')
           .padding({ top: 24, bottom: 28 })
@@ -430,7 +430,7 @@ struct AboutPage {
                     Text(this.isCheckingUpdate ? $r('app.string.about_checking_for_updates') : `v${this.versionName}`)
                       .font(getSettingsTypography().subtitle)
                       .lineHeight(SETTINGS_SUBTITLE_LINE_HEIGHT)
-                      .fontColor(getAppUiState().themeTextSecondary)
+                      .fontColor($r('app.color.text_caption'))
                   }
                   .alignItems(HorizontalAlign.Start)
                   .margin({ left: 12 })
@@ -494,7 +494,7 @@ struct AboutPage {
                       $r('app.string.about_clear_cache_desc'))
                       .font(getSettingsTypography().subtitle)
                       .lineHeight(SETTINGS_SUBTITLE_LINE_HEIGHT)
-                      .fontColor(getAppUiState().themeTextSecondary)
+                      .fontColor($r('app.color.text_caption'))
                   }
                   .alignItems(HorizontalAlign.Start)
                   .margin({ left: 12 })
@@ -557,7 +557,7 @@ struct AboutPage {
                     Text('YANGZX22/XCube')
                       .font(getSettingsTypography().subtitle)
                       .lineHeight(SETTINGS_SUBTITLE_LINE_HEIGHT)
-                      .fontColor(getAppUiState().themeTextSecondary)
+                      .fontColor($r('app.color.text_caption'))
                   }
                   .alignItems(HorizontalAlign.Start)
                   .margin({ left: 12 })
@@ -618,7 +618,7 @@ struct AboutPage {
                   Text($r('app.string.about_open_source_licenses_desc'))
                     .font(getSettingsTypography().subtitle)
                     .lineHeight(SETTINGS_SUBTITLE_LINE_HEIGHT)
-                    .fontColor(getAppUiState().themeTextSecondary)
+                    .fontColor($r('app.color.text_caption'))
                 }
                 .alignItems(HorizontalAlign.Start)
                 .margin({ left: 12 })

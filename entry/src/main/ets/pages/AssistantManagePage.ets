@@ -600,7 +600,7 @@ struct AssistantManagePage {
           Text(this.getAssistantDefaultModelText(assistant))
             .font(getSettingsTypography().subtitle)
             .lineHeight(SETTINGS_SUBTITLE_LINE_HEIGHT)
-            .fontColor(getAppUiState().themeTextSecondary)
+            .fontColor($r('app.color.text_caption'))
             .maxLines(1)
             .textOverflow({ overflow: TextOverflow.Ellipsis })
         }
@@ -673,7 +673,7 @@ struct AssistantManagePage {
 
       Text($r('app.string.assistant_prompt'))
         .font(getSettingsTypography().fieldLabel)
-        .fontColor(getAppUiState().themeTextSecondary)
+        .fontColor($r('app.color.text_secondary'))
         .width('100%')
 
       ImmersiveFieldSurface({ cornerRadius: 16 }) {
@@ -881,7 +881,7 @@ struct AssistantManagePage {
     Column({ space: SETTINGS_HEADING_CONTENT_GAP }) {
       Text($r('app.string.assistant_name'))
         .font(getSettingsTypography().fieldLabel)
-        .fontColor(getAppUiState().themeTextSecondary)
+        .fontColor($r('app.color.text_secondary'))
         .width('100%')
 
       Row({ space: 12 }) {
@@ -948,7 +948,7 @@ struct AssistantManagePage {
         Text(this.getDefaultModelText())
           .font(getSettingsTypography().subtitle)
           .lineHeight(SETTINGS_SUBTITLE_LINE_HEIGHT)
-          .fontColor(getAppUiState().themeTextSecondary)
+          .fontColor($r('app.color.text_caption'))
           .maxLines(1)
           .textOverflow({ overflow: TextOverflow.Ellipsis })
       }

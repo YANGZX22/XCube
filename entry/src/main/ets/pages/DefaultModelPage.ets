@@ -598,13 +598,6 @@ struct ModelConfigCard {
   // 使用基本类型避免对象响应式问题
   @Param isConfigured: boolean = false
   @Param displayName: string = ''
-  // 主题颜色
-  private get themePrimary(): string {
-    return getAppUiState().themePrimary
-  }
-  private get themePrimaryLight(): string {
-    return getAppUiState().themePrimaryLight
-  }
 
   @Event onCardClick: () => void = () => {}
   @Event onPromptClick: () => void = () => {}
@@ -622,7 +615,7 @@ struct ModelConfigCard {
               if (this.isConfigured) {
                 Text(this.displayName)
                   .fontSize(13)
-                  .fontColor(this.themePrimary)
+                  .fontColor($r('app.color.text_caption'))
                   .margin({ left: 8 })
                   .maxLines(1)
                   .textOverflow({ overflow: TextOverflow.Ellipsis })
@@ -639,7 +632,7 @@ struct ModelConfigCard {
             Text(this.description)
               .font(getSettingsTypography().subtitle)
               .lineHeight(SETTINGS_SUBTITLE_LINE_HEIGHT)
-              .fontColor(getAppUiState().themeTextSecondary)
+              .fontColor($r('app.color.text_caption'))
               .margin({ top: 4 })
           }
           .alignItems(HorizontalAlign.Start)

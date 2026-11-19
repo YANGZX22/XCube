@@ -17,7 +17,7 @@ export struct SettingsFormSelect {
     Column({ space: SETTINGS_HEADING_CONTENT_GAP }) {
       Text(this.label)
         .font(getSettingsTypography().fieldLabel)
-        .fontColor(getAppUiState().themeTextSecondary)
+        .fontColor($r('app.color.text_secondary'))
         .width('100%')
 
       Select(this.options)

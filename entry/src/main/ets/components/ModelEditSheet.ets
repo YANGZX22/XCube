@@ -598,7 +598,7 @@ export struct ModelEditSheet {
       Column() {
         Text('模型 ID')
           .font(getSettingsTypography().fieldLabel)
-          .fontColor(getAppUiState().themeTextSecondary)
+          .fontColor($r('app.color.text_secondary'))
           .margin({ bottom: SETTINGS_HEADING_CONTENT_GAP })
 
         Text(this.model.id)
@@ -630,7 +630,7 @@ export struct ModelEditSheet {
     Column() {
       Text('模型名称')
         .font(getSettingsTypography().fieldLabel)
-        .fontColor(getAppUiState().themeTextSecondary)
+        .fontColor($r('app.color.text_secondary'))
         .margin({ bottom: SETTINGS_HEADING_CONTENT_GAP })
 
       ImmersiveFieldSurface({ cornerRadius: 16 }) {
@@ -656,7 +656,7 @@ export struct ModelEditSheet {
     Column({ space: SETTINGS_HEADING_CONTENT_GAP }) {
       Text(pickLocalizedText('上下文长度（Token）', 'Context length (tokens)'))
         .font(getSettingsTypography().fieldLabel)
-        .fontColor(getAppUiState().themeTextSecondary)
+        .fontColor($r('app.color.text_secondary'))
 
       ImmersiveFieldSurface({ cornerRadius: 16 }) {
         TextInput({
@@ -685,7 +685,7 @@ export struct ModelEditSheet {
     Column() {
       Text('模型能力')
         .font(getSettingsTypography().fieldLabel)
-        .fontColor(getAppUiState().themeTextSecondary)
+        .fontColor($r('app.color.text_secondary'))
         .margin({ bottom: SETTINGS_HEADING_CONTENT_GAP })
 
       Flex({ wrap: FlexWrap.Wrap, space: { main: LengthMetrics.vp(8), cross: LengthMetrics.vp(8) } }) {
@@ -761,7 +761,7 @@ export struct ModelEditSheet {
           ))
             .font(getSettingsTypography().subtitle)
             .lineHeight(SETTINGS_SUBTITLE_LINE_HEIGHT)
-            .fontColor(getAppUiState().themeTextSecondary)
+            .fontColor($r('app.color.text_caption'))
         }
         .layoutWeight(1)
         .alignItems(HorizontalAlign.Start)
@@ -785,7 +785,7 @@ export struct ModelEditSheet {
         Row() {
           Text(pickLocalizedText('币种', 'Currency'))
             .font(getSettingsTypography().fieldLabel)
-            .fontColor(getAppUiState().themeTextSecondary)
+            .fontColor($r('app.color.text_secondary'))
             .layoutWeight(1)
 
           Select(this.billingCurrencyOptions)
@@ -825,7 +825,7 @@ export struct ModelEditSheet {
             ))
               .font(getSettingsTypography().subtitle)
               .lineHeight(SETTINGS_SUBTITLE_LINE_HEIGHT)
-              .fontColor(getAppUiState().themeTextSecondary)
+              .fontColor($r('app.color.text_caption'))
           }
           .layoutWeight(1)
           .alignItems(HorizontalAlign.Start)
@@ -851,7 +851,7 @@ export struct ModelEditSheet {
               'Choose peak or off-peak prices using the device time zone'))
               .font(getSettingsTypography().subtitle)
               .lineHeight(SETTINGS_SUBTITLE_LINE_HEIGHT)
-              .fontColor(getAppUiState().themeTextSecondary)
+              .fontColor($r('app.color.text_caption'))
           }
           .layoutWeight(1)
           .alignItems(HorizontalAlign.Start)
@@ -872,7 +872,7 @@ export struct ModelEditSheet {
             Row() {
               Text(pickLocalizedText('峰时段（设备本地时间）', 'Peak periods (device local time)'))
                 .font(getSettingsTypography().fieldLabel)
-                .fontColor(getAppUiState().themeTextSecondary)
+                .fontColor($r('app.color.text_secondary'))
                 .layoutWeight(1)
 
               if (this.billingPeakPeriods.length < 3) {
@@ -1004,7 +1004,7 @@ export struct ModelEditSheet {
         ))
           .font(getSettingsTypography().subtitle)
           .lineHeight(SETTINGS_SUBTITLE_LINE_HEIGHT)
-          .fontColor(getAppUiState().themeTextSecondary)
+          .fontColor($r('app.color.text_caption'))
           .width('100%')
       }
     }
@@ -1113,7 +1113,7 @@ export struct ModelEditSheet {
     Column({ space: SETTINGS_HEADING_CONTENT_GAP }) {
       Text(title)
         .font(getSettingsTypography().fieldLabel)
-        .fontColor(getAppUiState().themeTextSecondary)
+        .fontColor($r('app.color.text_secondary'))
         .width('100%')
 
       Row({ space: 10 }) {
@@ -1143,7 +1143,7 @@ export struct ModelEditSheet {
     Column({ space: SETTINGS_HEADING_CONTENT_GAP }) {
       Text(label)
         .font(getSettingsTypography().fieldLabel)
-        .fontColor(getAppUiState().themeTextSecondary)
+        .fontColor($r('app.color.text_secondary'))
         .width('100%')
 
       ImmersiveFieldSurface({ cornerRadius: 14 }) {
@@ -1170,7 +1170,7 @@ export struct ModelEditSheet {
     Column({ space: SETTINGS_HEADING_CONTENT_GAP }) {
       Text(title)
         .font(getSettingsTypography().fieldLabel)
-        .fontColor(getAppUiState().themeTextSecondary)
+        .fontColor($r('app.color.text_secondary'))
         .width('100%')
 
       ImmersiveFieldSurface({ cornerRadius: 14 }) {
@@ -1249,7 +1249,7 @@ export struct ModelEditSheet {
             ))
               .font(getSettingsTypography().subtitle)
               .lineHeight(SETTINGS_SUBTITLE_LINE_HEIGHT)
-              .fontColor(getAppUiState().themeTextSecondary)
+              .fontColor($r('app.color.text_caption'))
               .width('100%')
           }
           .width('100%')
@@ -1269,7 +1269,7 @@ export struct ModelEditSheet {
                 Text('控制输出的随机性，值越高越有创意')
                   .font(getSettingsTypography().subtitle)
                   .lineHeight(SETTINGS_SUBTITLE_LINE_HEIGHT)
-                  .fontColor(getAppUiState().themeTextSecondary)
+                  .fontColor($r('app.color.text_caption'))
                   .margin({ top: 2 })
               }
               .alignItems(HorizontalAlign.Start)
@@ -1278,7 +1278,7 @@ export struct ModelEditSheet {
               Text(this.paramTemperature.toFixed(2))
                 .fontSize(16)
                 .fontWeight(FontWeight.Medium)
-                .fontColor(this.themePrimary)
+                .fontColor($r('app.color.text_caption'))
                 .width(50)
                 .textAlign(TextAlign.End)
             }
@@ -1322,7 +1322,7 @@ export struct ModelEditSheet {
                 Text('核采样参数，控制词汇选择范围')
                   .font(getSettingsTypography().subtitle)
                   .lineHeight(SETTINGS_SUBTITLE_LINE_HEIGHT)
-                  .fontColor(getAppUiState().themeTextSecondary)
+                  .fontColor($r('app.color.text_caption'))
                   .margin({ top: 2 })
               }
               .alignItems(HorizontalAlign.Start)
@@ -1331,7 +1331,7 @@ export struct ModelEditSheet {
               Text(this.paramTopP.toFixed(2))
                 .fontSize(16)
                 .fontWeight(FontWeight.Medium)
-                .fontColor(this.themePrimary)
+                .fontColor($r('app.color.text_caption'))
                 .width(50)
                 .textAlign(TextAlign.End)
             }
@@ -1375,7 +1375,7 @@ export struct ModelEditSheet {
                 Text('减少重复话题的出现')
                   .font(getSettingsTypography().subtitle)
                   .lineHeight(SETTINGS_SUBTITLE_LINE_HEIGHT)
-                  .fontColor(getAppUiState().themeTextSecondary)
+                  .fontColor($r('app.color.text_caption'))
                   .margin({ top: 2 })
               }
               .alignItems(HorizontalAlign.Start)
@@ -1384,7 +1384,7 @@ export struct ModelEditSheet {
               Text(this.paramPresencePenalty.toFixed(2))
                 .fontSize(16)
                 .fontWeight(FontWeight.Medium)
-                .fontColor(this.themePrimary)
+                .fontColor($r('app.color.text_caption'))
                 .width(50)
                 .textAlign(TextAlign.End)
             }
@@ -1428,7 +1428,7 @@ export struct ModelEditSheet {
                 Text('减少重复词汇的出现')
                   .font(getSettingsTypography().subtitle)
                   .lineHeight(SETTINGS_SUBTITLE_LINE_HEIGHT)
-                  .fontColor(getAppUiState().themeTextSecondary)
+                  .fontColor($r('app.color.text_caption'))
                   .margin({ top: 2 })
               }
               .alignItems(HorizontalAlign.Start)
@@ -1437,7 +1437,7 @@ export struct ModelEditSheet {
               Text(this.paramFrequencyPenalty.toFixed(2))
                 .fontSize(16)
                 .fontWeight(FontWeight.Medium)
-                .fontColor(this.themePrimary)
+                .fontColor($r('app.color.text_caption'))
                 .width(50)
                 .textAlign(TextAlign.End)
             }

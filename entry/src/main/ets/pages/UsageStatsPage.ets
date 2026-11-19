@@ -80,7 +80,7 @@ struct UsageMetricCard {
 
           Text(this.title)
             .font(getSettingsTypography().fieldLabel)
-            .fontColor(getAppUiState().themeTextSecondary)
+            .fontColor($r('app.color.text_secondary'))
             .layoutWeight(1)
             .maxLines(1)
             .textOverflow({ overflow: TextOverflow.Ellipsis })
@@ -653,7 +653,7 @@ struct UsageStatsPage {
           ))
             .font(getSettingsTypography().subtitle)
             .lineHeight(SETTINGS_SUBTITLE_LINE_HEIGHT)
-            .fontColor(getAppUiState().themeTextSecondary)
+            .fontColor($r('app.color.text_caption'))
         }
         .layoutWeight(1)
         .alignItems(HorizontalAlign.Start)
@@ -706,7 +706,7 @@ struct UsageStatsPage {
             Text($r('app.string.usage_stats_billing_empty'))
               .font(getSettingsTypography().subtitle)
               .lineHeight(SETTINGS_SUBTITLE_LINE_HEIGHT)
-              .fontColor(getAppUiState().themeTextSecondary)
+              .fontColor($r('app.color.text_caption'))
               .layoutWeight(1)
           }
           .width('100%')
@@ -748,7 +748,7 @@ struct UsageStatsPage {
         .font(getSettingsTypography().subtitle)
         .width('100%')
         .lineHeight(SETTINGS_SUBTITLE_LINE_HEIGHT)
-        .fontColor(getAppUiState().themeTextSecondary)
+        .fontColor($r('app.color.text_caption'))
         .textAlign(TextAlign.Start)
     }
     .width('100%')

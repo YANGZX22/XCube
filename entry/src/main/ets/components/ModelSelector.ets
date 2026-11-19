@@ -555,7 +555,7 @@ export struct ModelSelectorContent {
         .width('100%')
         .textAlign(TextAlign.Start)
         .lineHeight(SETTINGS_SUBTITLE_LINE_HEIGHT)
-        .fontColor(getAppUiState().themeTextSecondary)
+        .fontColor($r('app.color.text_caption'))
         .margin({ top: 4 })
     }
     .width('100%')
@@ -583,7 +583,7 @@ export struct ModelSelectorContent {
         .width('100%')
         .textAlign(TextAlign.Start)
         .lineHeight(SETTINGS_SUBTITLE_LINE_HEIGHT)
-        .fontColor(getAppUiState().themeTextSecondary)
+        .fontColor($r('app.color.text_caption'))
         .margin({ top: 4 })
     }
     .width('100%')
@@ -611,7 +611,7 @@ export struct ModelSelectorContent {
         .width('100%')
         .textAlign(TextAlign.Start)
         .lineHeight(SETTINGS_SUBTITLE_LINE_HEIGHT)
-        .fontColor(getAppUiState().themeTextSecondary)
+        .fontColor($r('app.color.text_caption'))
         .margin({ top: 4 })
     }
     .width('100%')

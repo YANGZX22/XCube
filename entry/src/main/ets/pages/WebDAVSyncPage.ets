@@ -399,7 +399,7 @@ struct WebDAVSyncPage {
     Column() {
       Text(label)
         .font(getSettingsTypography().fieldLabel)
-        .fontColor(getAppUiState().themeTextSecondary)
+        .fontColor($r('app.color.text_secondary'))
         .margin({ bottom: SETTINGS_HEADING_CONTENT_GAP })
       ImmersiveFieldSurface({ cornerRadius: 10 }) {
         TextInput({ text: value, placeholder: placeholder })
@@ -498,7 +498,7 @@ struct WebDAVSyncPage {
           .width('100%')
           .textAlign(TextAlign.Start)
           .lineHeight(SETTINGS_SUBTITLE_LINE_HEIGHT)
-          .fontColor(getAppUiState().themeTextSecondary)
+          .fontColor($r('app.color.text_caption'))
           .margin({ top: 12 })
 
         Text($r('app.string.webdav_security_note'))
@@ -506,7 +506,7 @@ struct WebDAVSyncPage {
           .width('100%')
           .textAlign(TextAlign.Start)
           .lineHeight(SETTINGS_SUBTITLE_LINE_HEIGHT)
-          .fontColor(getAppUiState().themeTextSecondary)
+          .fontColor($r('app.color.text_caption'))
           .margin({ top: 8 })
       }
       .width('100%')

@@ -370,7 +370,7 @@ export struct EmailAccountSettingsCard {
     Column({ space: SETTINGS_HEADING_CONTENT_GAP }) {
       Text(pickLocalizedText('邮箱地址', 'Email address'))
         .font(getSettingsTypography().fieldLabel)
-        .fontColor(getAppUiState().themeTextSecondary)
+        .fontColor($r('app.color.text_secondary'))
         .width('100%')
       ImmersiveFieldSurface({ cornerRadius: 10 }) {
         Row() {
@@ -410,7 +410,7 @@ export struct EmailAccountSettingsCard {
     Column({ space: SETTINGS_HEADING_CONTENT_GAP }) {
       Text(pickLocalizedText('显示名称', 'Display name'))
         .font(getSettingsTypography().fieldLabel)
-        .fontColor(getAppUiState().themeTextSecondary)
+        .fontColor($r('app.color.text_secondary'))
         .width('100%')
       ImmersiveFieldSurface({ cornerRadius: 10 }) {
         TextInput({ text: this.formDisplayName, placeholder: pickLocalizedText('可选', 'Optional') })
@@ -431,7 +431,7 @@ export struct EmailAccountSettingsCard {
     Column({ space: SETTINGS_HEADING_CONTENT_GAP }) {
       Text(pickLocalizedText('登录用户名', 'Username'))
         .font(getSettingsTypography().fieldLabel)
-        .fontColor(getAppUiState().themeTextSecondary)
+        .fontColor($r('app.color.text_secondary'))
         .width('100%')
       ImmersiveFieldSurface({ cornerRadius: 10 }) {
         TextInput({ text: this.formUsername,
@@ -453,7 +453,7 @@ export struct EmailAccountSettingsCard {
     Column({ space: SETTINGS_HEADING_CONTENT_GAP }) {
       Text(pickLocalizedText('授权码 / 应用专用密码', 'Authorization code / app password'))
         .font(getSettingsTypography().fieldLabel)
-        .fontColor(getAppUiState().themeTextSecondary)
+        .fontColor($r('app.color.text_secondary'))
         .width('100%')
       ImmersiveFieldSurface({ cornerRadius: 10 }) {
         TextInput({ text: this.formPassword,
@@ -500,7 +500,7 @@ export struct EmailAccountSettingsCard {
     Column({ space: SETTINGS_HEADING_CONTENT_GAP }) {
       Text('Microsoft Entra Client ID')
         .font(getSettingsTypography().fieldLabel)
-        .fontColor(getAppUiState().themeTextSecondary)
+        .fontColor($r('app.color.text_secondary'))
         .width('100%')
       ImmersiveFieldSurface({ cornerRadius: 10 }) {
         TextInput({ text: this.formOauthClientId, placeholder: '00000000-0000-0000-0000-000000000000' })
@@ -519,7 +519,7 @@ export struct EmailAccountSettingsCard {
       ))
         .font(getSettingsTypography().subtitle)
         .lineHeight(SETTINGS_SUBTITLE_LINE_HEIGHT)
-        .fontColor(getAppUiState().themeTextSecondary)
+        .fontColor($r('app.color.text_caption'))
         .width('100%')
     }.width('100%').alignItems(HorizontalAlign.Start)
   }
@@ -529,7 +529,7 @@ export struct EmailAccountSettingsCard {
     Column({ space: SETTINGS_HEADING_CONTENT_GAP }) {
       Text(pickLocalizedText('服务器', 'Server'))
         .font(getSettingsTypography().fieldLabel)
-        .fontColor(getAppUiState().themeTextSecondary)
+        .fontColor($r('app.color.text_secondary'))
         .width('100%')
       ImmersiveFieldSurface({ cornerRadius: 10 }) {
         TextInput({ text: this.formSmtpHost, placeholder: 'smtp.example.com' })
@@ -550,7 +550,7 @@ export struct EmailAccountSettingsCard {
     Column({ space: SETTINGS_HEADING_CONTENT_GAP }) {
       Text(pickLocalizedText('端口', 'Port'))
         .font(getSettingsTypography().fieldLabel)
-        .fontColor(getAppUiState().themeTextSecondary)
+        .fontColor($r('app.color.text_secondary'))
         .width('100%')
       ImmersiveFieldSurface({ cornerRadius: 10 }) {
         TextInput({ text: this.formSmtpPort, placeholder: '465' })
@@ -572,7 +572,7 @@ export struct EmailAccountSettingsCard {
     Column({ space: SETTINGS_HEADING_CONTENT_GAP }) {
       Text(pickLocalizedText('服务器', 'Server'))
         .font(getSettingsTypography().fieldLabel)
-        .fontColor(getAppUiState().themeTextSecondary)
+        .fontColor($r('app.color.text_secondary'))
         .width('100%')
       ImmersiveFieldSurface({ cornerRadius: 10 }) {
         TextInput({ text: this.formImapHost, placeholder: 'imap.example.com' })
@@ -593,7 +593,7 @@ export struct EmailAccountSettingsCard {
     Column({ space: SETTINGS_HEADING_CONTENT_GAP }) {
       Text(pickLocalizedText('端口', 'Port'))
         .font(getSettingsTypography().fieldLabel)
-        .fontColor(getAppUiState().themeTextSecondary)
+        .fontColor($r('app.color.text_secondary'))
         .width('100%')
       ImmersiveFieldSurface({ cornerRadius: 10 }) {
         TextInput({ text: this.formImapPort, placeholder: '993' })
@@ -676,7 +676,7 @@ export struct EmailAccountSettingsCard {
               Column({ space: SETTINGS_HEADING_CONTENT_GAP }) {
                 Text(pickLocalizedText('Microsoft 设备授权代码', 'Microsoft device authorization code'))
                   .font(getSettingsTypography().fieldLabel)
-                  .fontColor(getAppUiState().themeTextSecondary)
+                  .fontColor($r('app.color.text_secondary'))
                   .width('100%')
                 Text(this.oauthUserCode).fontSize(24).fontWeight(FontWeight.Bold)
                   .fontColor(this.themePrimary).letterSpacing(2).width('100%')
@@ -718,7 +718,7 @@ export struct EmailAccountSettingsCard {
           ))
             .font(getSettingsTypography().subtitle)
             .lineHeight(SETTINGS_SUBTITLE_LINE_HEIGHT)
-            .fontColor(getAppUiState().themeTextSecondary)
+            .fontColor($r('app.color.text_caption'))
             .width('100%')
 
           if (this.connectionMessage !== '') {
@@ -793,7 +793,7 @@ export struct EmailAccountSettingsCard {
                 : pickLocalizedText('连接邮箱，收发邮件。', 'Connect your mailbox to send and receive email.'))
               .font(getSettingsTypography().subtitle)
               .lineHeight(SETTINGS_SUBTITLE_LINE_HEIGHT)
-              .fontColor(getAppUiState().themeTextSecondary)
+              .fontColor($r('app.color.text_caption'))
               .width('100%')
               .maxLines(2)
               .textOverflow({ overflow: TextOverflow.Ellipsis })

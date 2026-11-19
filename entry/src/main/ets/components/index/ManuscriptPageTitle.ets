@@ -9,6 +9,7 @@ import {
 export struct ManuscriptPageTitle {
   @Param title: ResourceStr = ''
   @Param subtitle: ResourceStr = ''
+  @Param subtitleColor: ResourceColor | undefined = undefined
   @Param topPadding: number = 2
   @Param bottomPadding: number = 26
   @Local ruleScale: number = 0
@@ -36,7 +37,7 @@ export struct ManuscriptPageTitle {
         .fontFamily(MANUSCRIPT_BODY_FONT)
         .fontSize(10)
         .fontWeight(FontWeight.Medium)
-        .fontColor(getAppUiState().themeTextSecondary)
+        .fontColor(this.subtitleColor ?? getAppUiState().themeTextSecondary)
         .letterSpacing(2)
         .textCase(TextCase.UpperCase)
         .maxLines(1)

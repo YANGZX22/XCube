@@ -222,12 +222,12 @@ export struct IndexSettingsSheetContent {
       Column() {
         Text(title)
           .font(getSettingsTypography().itemTitle)
-          .fontColor(enabled ? getAppUiState().themeTextPrimary : getAppUiState().themeTextTertiary)
+          .fontColor(enabled ? getAppUiState().themeTextPrimary : $r('app.color.text_tertiary'))
 
         Text(desc)
           .font(getSettingsTypography().subtitle)
           .lineHeight(SETTINGS_SUBTITLE_LINE_HEIGHT)
-          .fontColor(enabled ? getAppUiState().themeTextSecondary : getAppUiState().themeTextTertiary)
+          .fontColor(enabled ? $r('app.color.text_caption') : $r('app.color.text_tertiary'))
           .margin({ top: 4 })
       }
       .alignItems(HorizontalAlign.Start)
@@ -267,7 +267,7 @@ export struct IndexSettingsSheetContent {
           Text($r('app.string.hand_adaptive_follow_target_desc'))
             .font(getSettingsTypography().subtitle)
             .lineHeight(SETTINGS_SUBTITLE_LINE_HEIGHT)
-            .fontColor(getAppUiState().themeTextSecondary)
+            .fontColor($r('app.color.text_caption'))
         }
         .width('100%')
         .alignItems(HorizontalAlign.Start)
@@ -300,7 +300,7 @@ export struct IndexSettingsSheetContent {
         Text(desc)
           .font(getSettingsTypography().subtitle)
           .lineHeight(SETTINGS_SUBTITLE_LINE_HEIGHT)
-          .fontColor(getAppUiState().themeTextSecondary)
+          .fontColor($r('app.color.text_caption'))
           .margin({ top: 4 })
       }
       .alignItems(HorizontalAlign.Start)
@@ -342,7 +342,7 @@ export struct IndexSettingsSheetContent {
       Text($r('app.string.notification_system_settings_tip'))
         .font(getSettingsTypography().subtitle)
         .lineHeight(SETTINGS_SUBTITLE_LINE_HEIGHT)
-        .fontColor(getAppUiState().themeTextSecondary)
+        .fontColor($r('app.color.text_caption'))
         .margin({ top: 10, bottom: 10 })
 
       Stack({ alignContent: Alignment.TopStart }) {

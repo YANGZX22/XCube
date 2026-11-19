@@ -1619,14 +1619,14 @@ export struct ToolsCenterPanel {
           ))
             .font(getSettingsTypography().subtitle)
             .lineHeight(SETTINGS_SUBTITLE_LINE_HEIGHT)
-            .fontColor(getAppUiState().themeTextSecondary)
+            .fontColor($r('app.color.text_caption'))
             .width('100%')
 
           ImmersiveListSurface({ isImmersive: true, cornerRadius: LIST_MATERIAL_CARD_RADIUS }) {
             Column({ space: SETTINGS_HEADING_CONTENT_GAP }) {
               Text(pickLocalizedText('网关地址', 'Gateway URL'))
                 .font(getSettingsTypography().fieldLabel)
-                .fontColor(getAppUiState().themeTextSecondary)
+                .fontColor($r('app.color.text_secondary'))
                 .width('100%')
 
               ImmersiveFieldSurface({ cornerRadius: 10 }) {
@@ -1652,7 +1652,7 @@ export struct ToolsCenterPanel {
               ))
                 .font(getSettingsTypography().subtitle)
                 .lineHeight(SETTINGS_SUBTITLE_LINE_HEIGHT)
-                .fontColor(getAppUiState().themeTextSecondary)
+                .fontColor($r('app.color.text_caption'))
                 .width('100%')
             }
             .width('100%')
@@ -1665,7 +1665,7 @@ export struct ToolsCenterPanel {
             Column({ space: SETTINGS_HEADING_CONTENT_GAP }) {
               Text(pickLocalizedText('Bearer 令牌（推荐）', 'Bearer token (recommended)'))
                 .font(getSettingsTypography().fieldLabel)
-                .fontColor(getAppUiState().themeTextSecondary)
+                .fontColor($r('app.color.text_secondary'))
                 .width('100%')
 
               ImmersiveFieldSurface({ cornerRadius: 10 }) {
@@ -1762,7 +1762,7 @@ export struct ToolsCenterPanel {
           Text($r('app.string.search_service_config_desc'))
             .font(getSettingsTypography().subtitle)
             .lineHeight(SETTINGS_SUBTITLE_LINE_HEIGHT)
-            .fontColor(getAppUiState().themeTextSecondary)
+            .fontColor($r('app.color.text_caption'))
             .width('100%')
             .margin({ bottom: 10 })
 
@@ -1826,7 +1826,7 @@ export struct ToolsCenterPanel {
             Text($r('app.string.search_tavily_base_url_hint'))
               .font(getSettingsTypography().subtitle)
               .lineHeight(SETTINGS_SUBTITLE_LINE_HEIGHT)
-              .fontColor(getAppUiState().themeTextSecondary)
+              .fontColor($r('app.color.text_caption'))
               .width('100%')
               .margin({ top: 6 })
           }
@@ -1920,7 +1920,7 @@ export struct ToolsCenterPanel {
               ))
                 .font(getSettingsTypography().subtitle)
                 .lineHeight(SETTINGS_SUBTITLE_LINE_HEIGHT)
-                .fontColor(getAppUiState().themeTextSecondary)
+                .fontColor($r('app.color.text_caption'))
                 .width('100%')
                 .margin({ top: 8 })
             } else {
@@ -1963,7 +1963,7 @@ export struct ToolsCenterPanel {
               ))
                 .font(getSettingsTypography().subtitle)
                 .lineHeight(SETTINGS_SUBTITLE_LINE_HEIGHT)
-                .fontColor(getAppUiState().themeTextSecondary)
+                .fontColor($r('app.color.text_caption'))
                 .width('100%')
                 .margin({ top: 6 })
             }
@@ -1980,7 +1980,7 @@ export struct ToolsCenterPanel {
                 Text($r('app.string.search_query_optimization_hint'))
                   .font(getSettingsTypography().subtitle)
                   .lineHeight(SETTINGS_SUBTITLE_LINE_HEIGHT)
-                  .fontColor(getAppUiState().themeTextSecondary)
+                  .fontColor($r('app.color.text_caption'))
                   .width('100%')
                   .margin({ top: 2, right: 8 })
               }
@@ -2059,7 +2059,7 @@ export struct ToolsCenterPanel {
                     Text(this.getMcpFormModeTag())
                       .fontSize(10)
                       .fontWeight(FontWeight.Medium)
-                      .fontColor(this.themePrimary)
+                      .fontColor($r('app.color.text_caption'))
                       .padding({ left: 8, right: 8, top: 4, bottom: 4 })
                       .borderRadius(999)
                       .backgroundColor(withColorAlpha(this.themePrimary, this.isDarkMode ? '20' : '10'))
@@ -2069,14 +2069,14 @@ export struct ToolsCenterPanel {
                   Text(this.getMcpFormHeroDescription())
                     .font(getSettingsTypography().subtitle)
                     .lineHeight(SETTINGS_SUBTITLE_LINE_HEIGHT)
-                    .fontColor(getAppUiState().themeTextSecondary)
+                    .fontColor($r('app.color.text_caption'))
                     .width('100%')
 
                   if (this.getMcpFormTargetHint() !== '') {
                     Text(this.getMcpFormTargetHint())
                       .font(getSettingsTypography().subtitle)
                       .lineHeight(SETTINGS_SUBTITLE_LINE_HEIGHT)
-                      .fontColor(getAppUiState().themeTextSecondary)
+                      .fontColor($r('app.color.text_caption'))
                       .width('100%')
                       .maxLines(2)
                       .textOverflow({ overflow: TextOverflow.Ellipsis })
@@ -2091,7 +2091,7 @@ export struct ToolsCenterPanel {
                 Text(this.getMcpFormAuthLabel())
                   .fontSize(11)
                   .fontWeight(FontWeight.Medium)
-                  .fontColor(this.themePrimary)
+                  .fontColor($r('app.color.text_caption'))
                   .padding({ left: 10, right: 10, top: 6, bottom: 6 })
                   .borderRadius(999)
                   .backgroundColor(withColorAlpha(this.themePrimary, this.isDarkMode ? '20' : '10'))
@@ -2122,7 +2122,7 @@ export struct ToolsCenterPanel {
                 Text(pickLocalizedText('填写名称和服务地址。', 'Set the display name and service URL.'))
                   .font(getSettingsTypography().subtitle)
                   .lineHeight(SETTINGS_SUBTITLE_LINE_HEIGHT)
-                  .fontColor(getAppUiState().themeTextSecondary)
+                  .fontColor($r('app.color.text_caption'))
                   .width('100%')
               }
               .width('100%')
@@ -2131,7 +2131,7 @@ export struct ToolsCenterPanel {
               Column({ space: SETTINGS_HEADING_CONTENT_GAP }) {
                 Text(pickLocalizedText('显示名称', 'Display Name'))
                   .font(getSettingsTypography().fieldLabel)
-                  .fontColor(getAppUiState().themeTextSecondary)
+                  .fontColor($r('app.color.text_secondary'))
                   .width('100%')
 
                 ImmersiveFieldSurface({ cornerRadius: 14 }) {
@@ -2156,7 +2156,7 @@ export struct ToolsCenterPanel {
               Column({ space: SETTINGS_HEADING_CONTENT_GAP }) {
                 Text(pickLocalizedText('服务地址', 'Service URL'))
                   .font(getSettingsTypography().fieldLabel)
-                  .fontColor(getAppUiState().themeTextSecondary)
+                  .fontColor($r('app.color.text_secondary'))
                   .width('100%')
 
                 ImmersiveFieldSurface({ cornerRadius: 14 }) {
@@ -2176,7 +2176,7 @@ export struct ToolsCenterPanel {
                 Text(pickLocalizedText('请输入完整的 HTTP/HTTPS 地址。', 'Enter the full HTTP or HTTPS URL.'))
                   .font(getSettingsTypography().subtitle)
                   .lineHeight(SETTINGS_SUBTITLE_LINE_HEIGHT)
-                  .fontColor(getAppUiState().themeTextSecondary)
+                  .fontColor($r('app.color.text_caption'))
                   .width('100%')
               }
               .width('100%')
@@ -2197,7 +2197,7 @@ export struct ToolsCenterPanel {
                 Text(pickLocalizedText('按服务要求选择认证方式。', 'Choose the auth method required by the server.'))
                   .font(getSettingsTypography().subtitle)
                   .lineHeight(SETTINGS_SUBTITLE_LINE_HEIGHT)
-                  .fontColor(getAppUiState().themeTextSecondary)
+                  .fontColor($r('app.color.text_caption'))
                   .width('100%')
               }
               .width('100%')
@@ -2206,7 +2206,7 @@ export struct ToolsCenterPanel {
               Column({ space: SETTINGS_HEADING_CONTENT_GAP }) {
                 Text(pickLocalizedText('认证类型', 'Auth Type'))
                   .font(getSettingsTypography().fieldLabel)
-                  .fontColor(getAppUiState().themeTextSecondary)
+                  .fontColor($r('app.color.text_secondary'))
                   .width('100%')
 
                 Select(this.mcpAuthTypeOptions)
@@ -2229,7 +2229,7 @@ export struct ToolsCenterPanel {
                 Column({ space: SETTINGS_HEADING_CONTENT_GAP }) {
                   Text('Bearer Token')
                     .font(getSettingsTypography().fieldLabel)
-                    .fontColor(getAppUiState().themeTextSecondary)
+                    .fontColor($r('app.color.text_secondary'))
                     .width('100%')
 
                   ImmersiveFieldSurface({ cornerRadius: 14 }) {
@@ -2257,7 +2257,7 @@ export struct ToolsCenterPanel {
                   ))
                     .font(getSettingsTypography().subtitle)
                     .lineHeight(SETTINGS_SUBTITLE_LINE_HEIGHT)
-                    .fontColor(getAppUiState().themeTextSecondary)
+                    .fontColor($r('app.color.text_caption'))
                     .width('100%')
                 }
                 .width('100%')
@@ -2286,7 +2286,7 @@ export struct ToolsCenterPanel {
                     ))
                       .font(getSettingsTypography().subtitle)
                       .lineHeight(SETTINGS_SUBTITLE_LINE_HEIGHT)
-                      .fontColor(getAppUiState().themeTextSecondary)
+                      .fontColor($r('app.color.text_caption'))
                       .width('100%')
                   }
                   .layoutWeight(1)
@@ -2388,7 +2388,7 @@ export struct ToolsCenterPanel {
                     Column({ space: SETTINGS_HEADING_CONTENT_GAP }) {
                       Text(pickLocalizedText('名称', 'Name'))
                         .font(getSettingsTypography().fieldLabel)
-                        .fontColor(getAppUiState().themeTextSecondary)
+                        .fontColor($r('app.color.text_secondary'))
                         .width('100%')
 
                       ImmersiveFieldSurface({ cornerRadius: 14 }) {
@@ -2413,7 +2413,7 @@ export struct ToolsCenterPanel {
                     Column({ space: SETTINGS_HEADING_CONTENT_GAP }) {
                       Text(pickLocalizedText('值', 'Value'))
                         .font(getSettingsTypography().fieldLabel)
-                        .fontColor(getAppUiState().themeTextSecondary)
+                        .fontColor($r('app.color.text_secondary'))
                         .width('100%')
 
                       if (this.isSensitiveMcpHeaderName(entry.name)) {
@@ -2483,7 +2483,7 @@ export struct ToolsCenterPanel {
                   : pickLocalizedText('仅保存当前配置。', 'Only save the current configuration.'))
                   .font(getSettingsTypography().subtitle)
                   .lineHeight(SETTINGS_SUBTITLE_LINE_HEIGHT)
-                  .fontColor(getAppUiState().themeTextSecondary)
+                  .fontColor($r('app.color.text_caption'))
                   .width('100%')
               }
               .layoutWeight(1)
@@ -2919,7 +2919,7 @@ export struct ToolsCenterPanel {
                       Text(this.getMcpServerConnectedCountText())
                         .font(getSettingsTypography().subtitle)
                         .lineHeight(SETTINGS_SUBTITLE_LINE_HEIGHT)
-                        .fontColor(getAppUiState().themeTextSecondary)
+                        .fontColor($r('app.color.text_caption'))
                         .width('100%')
                     }
                   }
@@ -2957,7 +2957,7 @@ export struct ToolsCenterPanel {
                           Text(pickLocalizedText('点击右上角新增。', 'Tap Add in the top right to create one.'))
                             .font(getSettingsTypography().subtitle)
                             .lineHeight(SETTINGS_SUBTITLE_LINE_HEIGHT)
-                            .fontColor(getAppUiState().themeTextSecondary)
+                            .fontColor($r('app.color.text_caption'))
                             .width('100%')
                         }
                         .layoutWeight(1)
@@ -3181,7 +3181,7 @@ struct SearchServiceCardItem {
             Text(this.searchEnabled ? this.searchEngineDisplayValue : this.getDisabledText())
               .font(getSettingsTypography().subtitle)
               .lineHeight(SETTINGS_SUBTITLE_LINE_HEIGHT)
-              .fontColor(getAppUiState().themeTextSecondary)
+              .fontColor($r('app.color.text_caption'))
               .width('100%')
           }
           .layoutWeight(1)
@@ -3258,13 +3258,13 @@ struct RetrievalCallLimitSlider {
       Row() {
         Text(this.label)
           .font(getSettingsTypography().fieldLabel)
-          .fontColor(getAppUiState().themeTextSecondary)
+          .fontColor($r('app.color.text_secondary'))
           .layoutWeight(1)
 
         Text(this.getDisplayLimitText())
           .fontSize(12)
           .fontWeight(FontWeight.Medium)
-          .fontColor(this.themePrimary)
+          .fontColor($r('app.color.text_caption'))
       }
       .width('100%')
 
@@ -3343,7 +3343,7 @@ struct RetrievalCallLimitCardItem {
             Text(pickLocalizedText('设置每轮联网和知识库检索的次数。', 'Set search limits for each turn.'))
               .font(getSettingsTypography().subtitle)
               .lineHeight(SETTINGS_SUBTITLE_LINE_HEIGHT)
-              .fontColor(getAppUiState().themeTextSecondary)
+              .fontColor($r('app.color.text_caption'))
               .width('100%')
           }
           .layoutWeight(1)
@@ -3453,7 +3453,7 @@ struct ContextCompactCardItem {
             Text(this.getStatusText())
               .font(getSettingsTypography().subtitle)
               .lineHeight(SETTINGS_SUBTITLE_LINE_HEIGHT)
-              .fontColor(getAppUiState().themeTextSecondary)
+              .fontColor($r('app.color.text_caption'))
               .width('100%')
           }
           .layoutWeight(1)
@@ -3472,7 +3472,7 @@ struct ContextCompactCardItem {
         Text(getLocalizedBuiltinToolDescription(COMPACT_TOOL_ID))
           .font(getSettingsTypography().subtitle)
           .lineHeight(SETTINGS_SUBTITLE_LINE_HEIGHT)
-          .fontColor(getAppUiState().themeTextSecondary)
+          .fontColor($r('app.color.text_caption'))
           .width('100%')
 
         if (this.compactEnabled) {
@@ -3480,13 +3480,13 @@ struct ContextCompactCardItem {
             Row() {
               Text(pickLocalizedText('上下文长度上限', 'Context length cap'))
                 .font(getSettingsTypography().fieldLabel)
-                .fontColor(getAppUiState().themeTextSecondary)
+                .fontColor($r('app.color.text_secondary'))
                 .layoutWeight(1)
 
               Text(formatTokenCount(this.getDisplayMaxContextTokens()))
                 .fontSize(12)
                 .fontWeight(FontWeight.Medium)
-                .fontColor(this.themePrimary)
+                .fontColor($r('app.color.text_caption'))
             }
             .width('100%')
 
@@ -3525,7 +3525,7 @@ struct ContextCompactCardItem {
             Row() {
               Text(pickLocalizedText('触发阈值', 'Trigger threshold'))
                 .font(getSettingsTypography().fieldLabel)
-                .fontColor(getAppUiState().themeTextSecondary)
+                .fontColor($r('app.color.text_secondary'))
                 .layoutWeight(1)
             }
             .width('100%')
@@ -3560,7 +3560,7 @@ struct ContextCompactCardItem {
             ))
               .font(getSettingsTypography().subtitle)
               .lineHeight(SETTINGS_SUBTITLE_LINE_HEIGHT)
-              .fontColor(getAppUiState().themeTextSecondary)
+              .fontColor($r('app.color.text_caption'))
               .width('100%')
           }
           .width('100%')
@@ -3643,7 +3643,7 @@ struct SkillServiceCardItem {
               : getLocalizedBuiltinToolDescription(USE_SKILL_TOOL_ID))
               .font(getSettingsTypography().subtitle)
               .lineHeight(SETTINGS_SUBTITLE_LINE_HEIGHT)
-              .fontColor(getAppUiState().themeTextSecondary)
+              .fontColor($r('app.color.text_caption'))
               .width('100%')
           }
           .layoutWeight(1)
@@ -3723,7 +3723,7 @@ struct SkillServiceCardItem {
               Text(pickLocalizedText('还没有 Skill，点击新增创建。', 'No Skill yet. Tap Add to create one.'))
                 .font(getSettingsTypography().subtitle)
                 .lineHeight(SETTINGS_SUBTITLE_LINE_HEIGHT)
-                .fontColor(getAppUiState().themeTextSecondary)
+                .fontColor($r('app.color.text_caption'))
                 .layoutWeight(1)
             }
             .width('100%')
@@ -3822,7 +3822,7 @@ struct SkillListCardItem {
             Text(this.getDescription())
               .font(getSettingsTypography().subtitle)
               .lineHeight(SETTINGS_SUBTITLE_LINE_HEIGHT)
-              .fontColor(getAppUiState().themeTextSecondary)
+              .fontColor($r('app.color.text_caption'))
               .width('100%')
               .maxLines(2)
               .textOverflow({ overflow: TextOverflow.Ellipsis })
@@ -3908,8 +3908,8 @@ struct BuiltinToolCardItem {
     return this.needsApproval() ? pickLocalizedText('需确认', 'Approval') : pickLocalizedText('只读', 'Read only')
   }
 
-  private getPermissionTextColor(): string {
-    return this.needsApproval() ? '#D9485F' : this.themePrimary
+  private getPermissionTextColor(): ResourceColor {
+    return this.needsApproval() ? '#D9485F' : $r('app.color.text_caption')
   }
 
   private getPermissionBackgroundColor(): string {
@@ -3973,7 +3973,7 @@ struct BuiltinToolCardItem {
             Text(getLocalizedBuiltinToolDescription(this.tool.id, this.tool.description))
               .font(getSettingsTypography().subtitle)
               .lineHeight(SETTINGS_SUBTITLE_LINE_HEIGHT)
-              .fontColor(getAppUiState().themeTextSecondary)
+              .fontColor($r('app.color.text_caption'))
               .width('100%')
               .maxLines(2)
               .textOverflow({ overflow: TextOverflow.Ellipsis })
@@ -4149,7 +4149,7 @@ struct McpServerCardItem {
             Text(this.serverBaseUrl)
               .font(getSettingsTypography().subtitle)
               .lineHeight(SETTINGS_SUBTITLE_LINE_HEIGHT)
-              .fontColor(getAppUiState().themeTextSecondary)
+              .fontColor($r('app.color.text_caption'))
               .maxLines(2)
               .textOverflow({ overflow: TextOverflow.Ellipsis })
               .width('100%')
@@ -4180,7 +4180,7 @@ struct McpServerCardItem {
             Text(this.authLabel)
               .fontSize(11)
               .fontWeight(FontWeight.Medium)
-              .fontColor(this.themePrimary)
+              .fontColor($r('app.color.text_caption'))
               .padding({ left: 10, right: 10, top: 6, bottom: 6 })
               .borderRadius(999)
               .backgroundColor(this.backgroundHex)
@@ -4214,7 +4214,7 @@ struct McpServerCardItem {
             Text(this.tools.length > 0 ? this.getToolPreviewText() : pickLocalizedText('暂未发现工具', 'No tools discovered'))
               .font(getSettingsTypography().subtitle)
               .lineHeight(SETTINGS_SUBTITLE_LINE_HEIGHT)
-              .fontColor(getAppUiState().themeTextSecondary)
+              .fontColor($r('app.color.text_caption'))
               .layoutWeight(1)
               .maxLines(this.isToolsExpanded ? 10 : 3)
               .textOverflow({ overflow: TextOverflow.Ellipsis })
@@ -4256,7 +4256,7 @@ struct McpServerCardItem {
                     Text(tool.description.length > 0 ? tool.description : tool.id)
                       .font(getSettingsTypography().subtitle)
                       .lineHeight(SETTINGS_SUBTITLE_LINE_HEIGHT)
-                      .fontColor(getAppUiState().themeTextSecondary)
+                      .fontColor($r('app.color.text_caption'))
                       .maxLines(2)
                       .textOverflow({ overflow: TextOverflow.Ellipsis })
                   }

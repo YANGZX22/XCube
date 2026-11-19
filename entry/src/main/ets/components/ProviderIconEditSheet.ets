@@ -320,7 +320,7 @@ export struct ProviderIconEditSheet {
       Column({ space: SETTINGS_HEADING_CONTENT_GAP }) {
         Text($r('app.string.icon_text_input_label'))
           .font(getSettingsTypography().fieldLabel)
-          .fontColor(getAppUiState().themeTextSecondary)
+          .fontColor($r('app.color.text_secondary'))
           .width('100%')
 
         ImmersiveFieldSurface({ cornerRadius: 16 }) {
@@ -354,7 +354,7 @@ export struct ProviderIconEditSheet {
       Text($r('app.string.icon_gallery_hint'))
         .font(getSettingsTypography().subtitle)
         .lineHeight(SETTINGS_SUBTITLE_LINE_HEIGHT)
-        .fontColor(getAppUiState().themeTextSecondary)
+        .fontColor($r('app.color.text_caption'))
         .width('100%')
 
       Button(this.isPickingImage ? $r('app.string.loading') : $r('app.string.icon_pick_gallery'))
@@ -380,12 +380,12 @@ export struct ProviderIconEditSheet {
       Text($r('app.string.icon_link_hint'))
         .font(getSettingsTypography().subtitle)
         .lineHeight(SETTINGS_SUBTITLE_LINE_HEIGHT)
-        .fontColor(getAppUiState().themeTextSecondary)
+        .fontColor($r('app.color.text_caption'))
         .width('100%')
 
       Text($r('app.string.icon_link_label'))
         .font(getSettingsTypography().fieldLabel)
-        .fontColor(getAppUiState().themeTextSecondary)
+        .fontColor($r('app.color.text_secondary'))
         .width('100%')
 
       ImmersiveFieldSurface({ cornerRadius: 16 }) {
@@ -413,7 +413,7 @@ export struct ProviderIconEditSheet {
       Row() {
         Text($r('app.string.icon_background_color'))
           .font(getSettingsTypography().fieldLabel)
-          .fontColor(getAppUiState().themeTextSecondary)
+          .fontColor($r('app.color.text_secondary'))
           .layoutWeight(1)
         Button($r('app.string.icon_random_generate'))
           .fontSize(12)
@@ -452,7 +452,7 @@ export struct ProviderIconEditSheet {
         Text(this.bgColor === TRANSPARENT_BG_COLOR ? $r('app.string.icon_transparent_hint') : this.bgColor)
           .font(getSettingsTypography().subtitle)
           .lineHeight(SETTINGS_SUBTITLE_LINE_HEIGHT)
-          .fontColor(getAppUiState().themeTextSecondary)
+          .fontColor($r('app.color.text_caption'))
           .layoutWeight(1)
 
         Button($r('app.string.icon_select_color'))
@@ -507,7 +507,7 @@ export struct ProviderIconEditSheet {
         Text($r('app.string.icon_transparent_hint'))
           .font(getSettingsTypography().subtitle)
           .lineHeight(SETTINGS_SUBTITLE_LINE_HEIGHT)
-          .fontColor(getAppUiState().themeTextSecondary)
+          .fontColor($r('app.color.text_caption'))
           .margin({ left: 12 })
       }
       .width('100%')

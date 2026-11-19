@@ -733,7 +733,7 @@ export struct ThemeAppearanceSettingsView {
               .font(getSettingsTypography().subtitle)
               .lineHeight(SETTINGS_SUBTITLE_LINE_HEIGHT)
               .fontFamily(MANUSCRIPT_BODY_FONT)
-              .fontColor(getAppUiState().themeTextSecondary)
+              .fontColor($r('app.color.text_caption'))
               .maxLines(3)
           }
           .layoutWeight(1)
@@ -756,7 +756,7 @@ export struct ThemeAppearanceSettingsView {
             .lineHeight(SETTINGS_SUBTITLE_LINE_HEIGHT)
             .fontFamily(MANUSCRIPT_BODY_FONT)
             .fontStyle(FontStyle.Italic)
-            .fontColor(this.getManuscriptAccentDeep())
+            .fontColor($r('app.color.text_caption'))
             .padding({ top: 12 })
             .transition(
               TransitionEffect.OPACITY.combine(TransitionEffect.translate({ y: -6 }))
@@ -898,7 +898,7 @@ export struct ThemeAppearanceSettingsView {
                   .font(getSettingsTypography().subtitle)
                   .lineHeight(SETTINGS_SUBTITLE_LINE_HEIGHT)
                   .fontFamily(this.themeCardTypeface)
-                  .fontColor(getAppUiState().themeTextSecondary)
+                  .fontColor($r('app.color.text_caption'))
                   .width('100%')
                   .constraintSize({ minHeight: 18 })
                   .textOverflow({ overflow: TextOverflow.MARQUEE })
@@ -1575,7 +1575,7 @@ export struct ThemeAppearanceSettingsView {
         Text($r('app.string.appearance_live_preview_desc'))
           .font(getSettingsTypography().subtitle)
           .lineHeight(SETTINGS_SUBTITLE_LINE_HEIGHT)
-          .fontColor(getAppUiState().themeTextSecondary)
+          .fontColor($r('app.color.text_caption'))
           .width('100%')
       }
       .layoutWeight(1)
@@ -1743,7 +1743,7 @@ export struct ThemeAppearanceSettingsView {
                     Text(this.getFontSizeText(this.chatFontSize))
                       .font(getSettingsTypography().subtitle)
                       .lineHeight(SETTINGS_SUBTITLE_LINE_HEIGHT)
-                      .fontColor(getAppUiState().themeTextSecondary)
+                      .fontColor($r('app.color.text_caption'))
                   }
                   .alignItems(HorizontalAlign.Start)
 
@@ -1752,7 +1752,7 @@ export struct ThemeAppearanceSettingsView {
                   Text(`${this.chatFontSize} fp`)
                     .fontSize(13)
                     .fontWeight(FontWeight.Medium)
-                    .fontColor(this.themePrimary)
+                    .fontColor($r('app.color.text_caption'))
                 }
                 .width('100%')
 
@@ -1806,7 +1806,7 @@ export struct ThemeAppearanceSettingsView {
               Text($r('app.string.settings_markdown_renderer_desc'))
                 .font(getSettingsTypography().subtitle)
                 .lineHeight(SETTINGS_SUBTITLE_LINE_HEIGHT)
-                .fontColor(getAppUiState().themeTextSecondary)
+                .fontColor($r('app.color.text_caption'))
                 .width('100%')
 
               Select(this.getMarkdownRendererOptions())
@@ -1849,7 +1849,7 @@ export struct ThemeAppearanceSettingsView {
                 Text($r('app.string.settings_chat_serif_font_desc'))
                   .font(getSettingsTypography().subtitle)
                   .lineHeight(SETTINGS_SUBTITLE_LINE_HEIGHT)
-                  .fontColor(getAppUiState().themeTextSecondary)
+                  .fontColor($r('app.color.text_caption'))
                   .width('100%')
               }
               .layoutWeight(1)
@@ -1948,7 +1948,7 @@ export struct ThemeAppearanceSettingsView {
             Text($r('app.string.wrapped_material_force_blur_desc'))
               .font(getSettingsTypography().subtitle)
               .lineHeight(SETTINGS_SUBTITLE_LINE_HEIGHT)
-              .fontColor(getAppUiState().themeTextSecondary)
+              .fontColor($r('app.color.text_caption'))
               .width('100%')
           }
           .layoutWeight(1)
@@ -1967,7 +1967,7 @@ export struct ThemeAppearanceSettingsView {
         Text(this.getWrappedMaterialStatus())
           .font(getSettingsTypography().subtitle)
           .lineHeight(SETTINGS_SUBTITLE_LINE_HEIGHT)
-          .fontColor(getAppUiState().themeTextSecondary)
+          .fontColor($r('app.color.text_caption'))
           .width('100%')
       }
       .width('100%')
@@ -1997,7 +1997,7 @@ export struct ThemeAppearanceSettingsView {
                   Text($r('app.string.chat_list_immersive_material_desc'))
                     .font(getSettingsTypography().subtitle)
                     .lineHeight(SETTINGS_SUBTITLE_LINE_HEIGHT)
-                    .fontColor(getAppUiState().themeTextSecondary)
+                    .fontColor($r('app.color.text_caption'))
                     .width('100%')
                 }
                 .layoutWeight(1)
@@ -2030,7 +2030,7 @@ export struct ThemeAppearanceSettingsView {
                   Text($r('app.string.knowledge_list_immersive_material_desc'))
                     .font(getSettingsTypography().subtitle)
                     .lineHeight(SETTINGS_SUBTITLE_LINE_HEIGHT)
-                    .fontColor(getAppUiState().themeTextSecondary)
+                    .fontColor($r('app.color.text_caption'))
                     .width('100%')
                 }
                 .layoutWeight(1)
@@ -2061,7 +2061,7 @@ export struct ThemeAppearanceSettingsView {
             ))
               .font(getSettingsTypography().subtitle)
               .lineHeight(SETTINGS_SUBTITLE_LINE_HEIGHT)
-              .fontColor(getAppUiState().themeTextSecondary)
+              .fontColor($r('app.color.text_caption'))
               .width('100%')
           }
         }

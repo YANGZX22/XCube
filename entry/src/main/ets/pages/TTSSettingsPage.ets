@@ -497,7 +497,7 @@ struct TTSSettingsPage {
       Text($r('app.string.tts_enabled_desc'))
         .font(getSettingsTypography().subtitle)
         .lineHeight(SETTINGS_SUBTITLE_LINE_HEIGHT)
-        .fontColor(getAppUiState().themeTextSecondary)
+        .fontColor($r('app.color.text_caption'))
         .layoutWeight(1)
 
       Toggle({ type: ToggleType.Switch, isOn: this.ttsEnabled })
@@ -559,7 +559,7 @@ struct TTSSettingsPage {
           Text(description)
             .font(getSettingsTypography().subtitle)
             .lineHeight(SETTINGS_SUBTITLE_LINE_HEIGHT)
-            .fontColor(getAppUiState().themeTextSecondary)
+            .fontColor($r('app.color.text_caption'))
             .maxLines(2)
             .textOverflow({ overflow: TextOverflow.Ellipsis })
             .width('100%')
@@ -644,7 +644,7 @@ struct TTSSettingsPage {
     Column({ space: SETTINGS_HEADING_CONTENT_GAP }) {
       Text(label)
         .font(getSettingsTypography().fieldLabel)
-        .fontColor(getAppUiState().themeTextSecondary)
+        .fontColor($r('app.color.text_secondary'))
         .width('100%')
 
       ImmersiveFieldSurface({ cornerRadius: 16 }) {
@@ -673,7 +673,7 @@ struct TTSSettingsPage {
       Row({ space: 10 }) {
         Text($r('app.string.tts_voice_id'))
           .font(getSettingsTypography().fieldLabel)
-          .fontColor(getAppUiState().themeTextSecondary)
+          .fontColor($r('app.color.text_secondary'))
           .layoutWeight(1)
 
         Stack({ alignContent: Alignment.TopStart }) {
@@ -783,7 +783,7 @@ struct TTSSettingsPage {
         Text(this.stability.toFixed(2))
           .fontSize(13)
           .fontWeight(FontWeight.Medium)
-          .fontColor(this.themePrimary)
+          .fontColor($r('app.color.text_caption'))
           .width(52)
           .textAlign(TextAlign.End)
       }
@@ -824,7 +824,7 @@ struct TTSSettingsPage {
         Text(this.similarityBoost.toFixed(2))
           .fontSize(13)
           .fontWeight(FontWeight.Medium)
-          .fontColor(this.themePrimary)
+          .fontColor($r('app.color.text_caption'))
           .width(52)
           .textAlign(TextAlign.End)
       }
@@ -865,7 +865,7 @@ struct TTSSettingsPage {
         Text(`${this.speed.toFixed(2)}×`)
           .fontSize(13)
           .fontWeight(FontWeight.Medium)
-          .fontColor(this.themePrimary)
+          .fontColor($r('app.color.text_caption'))
           .width(52)
           .textAlign(TextAlign.End)
       }
@@ -930,7 +930,7 @@ struct TTSSettingsPage {
       Column({ space: SETTINGS_HEADING_CONTENT_GAP }) {
         Text($r('app.string.tts_model'))
           .font(getSettingsTypography().fieldLabel)
-          .fontColor(getAppUiState().themeTextSecondary)
+          .fontColor($r('app.color.text_secondary'))
           .width('100%')
 
         Select(this.modelOptions)
@@ -988,13 +988,13 @@ struct TTSSettingsPage {
       Text($r('app.string.tts_output_format_note'))
         .font(getSettingsTypography().subtitle)
         .lineHeight(SETTINGS_SUBTITLE_LINE_HEIGHT)
-        .fontColor(getAppUiState().themeTextSecondary)
+        .fontColor($r('app.color.text_caption'))
         .width('100%')
 
       Text($r('app.string.tts_security_note'))
         .font(getSettingsTypography().subtitle)
         .lineHeight(SETTINGS_SUBTITLE_LINE_HEIGHT)
-        .fontColor(getAppUiState().themeTextSecondary)
+        .fontColor($r('app.color.text_caption'))
         .width('100%')
     }
     .width('100%')
@@ -1014,7 +1014,7 @@ struct TTSSettingsPage {
     Column({ space: SETTINGS_HEADING_CONTENT_GAP }) {
       Text(label)
         .font(getSettingsTypography().fieldLabel)
-        .fontColor(getAppUiState().themeTextSecondary)
+        .fontColor($r('app.color.text_secondary'))
         .width('100%')
       Select(options)
         .selected(selected)
@@ -1058,7 +1058,7 @@ struct TTSSettingsPage {
         Column({ space: SETTINGS_HEADING_CONTENT_GAP }) {
           Text($r('app.string.tts_mimo_voice_description'))
             .font(getSettingsTypography().fieldLabel)
-            .fontColor(getAppUiState().themeTextSecondary)
+            .fontColor($r('app.color.text_secondary'))
           ImmersiveFieldSurface({ cornerRadius: 16 }) {
             TextArea({ text: this.mimoVoiceDescription, placeholder: $r('app.string.tts_mimo_description_placeholder') })
               .width('100%')
@@ -1079,7 +1079,7 @@ struct TTSSettingsPage {
         Column({ space: SETTINGS_HEADING_CONTENT_GAP }) {
           Text($r('app.string.tts_mimo_voice_sample'))
             .font(getSettingsTypography().fieldLabel)
-            .fontColor(getAppUiState().themeTextSecondary)
+            .fontColor($r('app.color.text_secondary'))
           Button(this.isImportingVoiceSample ? $r('app.string.tts_mimo_importing_sample') :
             $r('app.string.tts_mimo_import_sample'))
             .width('100%')
@@ -1100,7 +1100,7 @@ struct TTSSettingsPage {
           Text($r('app.string.tts_mimo_sample_note'))
             .font(getSettingsTypography().subtitle)
             .lineHeight(SETTINGS_SUBTITLE_LINE_HEIGHT)
-            .fontColor(getAppUiState().themeTextSecondary)
+            .fontColor($r('app.color.text_caption'))
         }
         .width('100%')
         .alignItems(HorizontalAlign.Start)

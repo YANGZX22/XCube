@@ -6058,7 +6058,8 @@ struct Index {
         if (this.isManuscriptMode()) {
           ManuscriptPageTitle({
             title: $r('app.string.tab_settings'),
-            subtitle: pickLocalizedText('偏好目录', 'INDEX OF PREFERENCES')
+            subtitle: pickLocalizedText('偏好目录', 'INDEX OF PREFERENCES'),
+            subtitleColor: $r('app.color.text_caption')
           })
         }
 

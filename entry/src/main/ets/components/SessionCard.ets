@@ -83,7 +83,7 @@ export struct SessionCard {
 
         Text(this.getPreviewBodyText())
           .fontSize(12)
-          .fontColor(this.themeTextSecondary)
+          .fontColor($r('app.color.text_caption'))
           .maxLines(1)
           .textOverflow({ overflow: TextOverflow.Ellipsis })
           .layoutWeight(1)
@@ -92,7 +92,7 @@ export struct SessionCard {
     } else {
       Text(this.getPreviewText())
         .fontSize(12)
-        .fontColor(this.themeTextSecondary)
+        .fontColor($r('app.color.text_caption'))
         .maxLines(1)
         .textOverflow({ overflow: TextOverflow.Ellipsis })
     }
@@ -143,7 +143,7 @@ export struct SessionCard {
         } else {
           Text($r('app.string.session_no_preview'))
             .fontSize(12)
-            .fontColor(this.themeTextSecondary)
+            .fontColor($r('app.color.text_caption'))
             .maxLines(1)
             .textOverflow({ overflow: TextOverflow.Ellipsis })
             .margin({ top: 2 })
@@ -201,7 +201,7 @@ export struct SessionCard {
         } else {
           Text($r('app.string.session_no_preview'))
             .fontSize(12)
-            .fontColor(this.themeTextSecondary)
+            .fontColor($r('app.color.text_caption'))
             .maxLines(1)
             .textOverflow({ overflow: TextOverflow.Ellipsis })
             .layoutWeight(1)

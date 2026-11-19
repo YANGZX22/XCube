@@ -400,7 +400,7 @@ struct ExportDataPage {
         Text(this.buildSessionSubtitle(session))
           .font(getSettingsTypography().subtitle)
           .lineHeight(SETTINGS_SUBTITLE_LINE_HEIGHT)
-          .fontColor(getAppUiState().themeTextSecondary)
+          .fontColor($r('app.color.text_caption'))
           .margin({ top: 3 })
           .maxLines(1)
           .textOverflow({ overflow: TextOverflow.Ellipsis })
@@ -489,7 +489,7 @@ struct ExportDataPage {
           .width('100%')
           .textAlign(TextAlign.Start)
           .lineHeight(SETTINGS_SUBTITLE_LINE_HEIGHT)
-          .fontColor(getAppUiState().themeTextSecondary)
+          .fontColor($r('app.color.text_caption'))
           .margin({ top: 24 })
           .maxLines(1)
           .textOverflow({ overflow: TextOverflow.Ellipsis })
@@ -588,7 +588,7 @@ struct ExportDataPage {
       .width('100%')
       .textAlign(TextAlign.Start)
       .lineHeight(SETTINGS_SUBTITLE_LINE_HEIGHT)
-      .fontColor(getAppUiState().themeTextSecondary)
+      .fontColor($r('app.color.text_caption'))
       .margin({ top: 10 })
   }
 }

@@ -99,7 +99,7 @@ export struct IndexSessionListItem {
         .fontFamily(MANUSCRIPT_BODY_FONT)
         .fontSize(12.5)
         .fontStyle(FontStyle.Italic)
-        .fontColor(getAppUiState().themeTextSecondary)
+        .fontColor($r('app.color.text_caption'))
         .maxLines(1)
         .textOverflow({ overflow: TextOverflow.Ellipsis })
         .padding({ left: 34 })

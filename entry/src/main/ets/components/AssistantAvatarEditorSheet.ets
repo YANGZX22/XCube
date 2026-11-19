@@ -295,7 +295,7 @@ export struct AssistantAvatarEditorSheet {
         Column({ space: SETTINGS_HEADING_CONTENT_GAP }) {
           Text($r('app.string.assistant_avatar_text_label'))
             .font(getSettingsTypography().fieldLabel)
-            .fontColor(getAppUiState().themeTextSecondary)
+            .fontColor($r('app.color.text_secondary'))
             .width('100%')
           ImmersiveFieldSurface({ cornerRadius: 16 }) {
             TextInput({ text: this.textValue, placeholder: $r('app.string.assistant_avatar_text_placeholder') })
@@ -322,7 +322,7 @@ export struct AssistantAvatarEditorSheet {
           Text($r('app.string.assistant_avatar_model_hint'))
             .font(getSettingsTypography().subtitle)
             .lineHeight(SETTINGS_SUBTITLE_LINE_HEIGHT)
-            .fontColor(getAppUiState().themeTextSecondary)
+            .fontColor($r('app.color.text_caption'))
             .width('100%')
           Text(this.defaultModelName !== '' ? this.defaultModelName :
             $r('app.string.assistant_avatar_model_missing'))
@@ -343,7 +343,7 @@ export struct AssistantAvatarEditorSheet {
         Column({ space: SETTINGS_HEADING_CONTENT_GAP }) {
           Text($r('app.string.assistant_avatar_link_label'))
             .font(getSettingsTypography().fieldLabel)
-            .fontColor(getAppUiState().themeTextSecondary)
+            .fontColor($r('app.color.text_secondary'))
             .width('100%')
           ImmersiveFieldSurface({ cornerRadius: 16 }) {
             TextInput({ text: this.linkValue, placeholder: $r('app.string.assistant_avatar_link_placeholder') })
@@ -418,7 +418,7 @@ export struct AssistantAvatarEditorSheet {
           Text($r('app.string.assistant_avatar_gallery_hint'))
             .font(getSettingsTypography().subtitle)
             .lineHeight(SETTINGS_SUBTITLE_LINE_HEIGHT)
-            .fontColor(getAppUiState().themeTextSecondary)
+            .fontColor($r('app.color.text_caption'))
             .width('100%')
           Stack({ alignContent: Alignment.TopStart }) {
             ImmersiveButtonSurface({
@@ -468,7 +468,7 @@ export struct AssistantAvatarEditorSheet {
       Row() {
         Text($r('app.string.assistant_avatar_background_color'))
           .font(getSettingsTypography().fieldLabel)
-          .fontColor(getAppUiState().themeTextSecondary)
+          .fontColor($r('app.color.text_secondary'))
           .layoutWeight(1)
         Stack({ alignContent: Alignment.TopStart }) {
           ImmersiveButtonSurface({
@@ -526,7 +526,7 @@ export struct AssistantAvatarEditorSheet {
           this.tempAvatarColor)
           .font(getSettingsTypography().subtitle)
           .lineHeight(SETTINGS_SUBTITLE_LINE_HEIGHT)
-          .fontColor(getAppUiState().themeTextSecondary)
+          .fontColor($r('app.color.text_caption'))
           .layoutWeight(1)
 
         Stack({ alignContent: Alignment.TopStart }) {
@@ -599,7 +599,7 @@ export struct AssistantAvatarEditorSheet {
         Text($r('app.string.icon_transparent_hint'))
           .font(getSettingsTypography().subtitle)
           .lineHeight(SETTINGS_SUBTITLE_LINE_HEIGHT)
-          .fontColor(getAppUiState().themeTextSecondary)
+          .fontColor($r('app.color.text_caption'))
           .margin({ left: 12 })
       }
       .width('100%')

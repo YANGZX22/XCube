@@ -29,6 +29,10 @@
       "value": "#B3B3B3"
     },
     {
+      "name": "text_caption",
+      "value": "#ADADAD"
+    },
+    {
       "name": "text_tertiary",
       "value": "#8A8A8A"
     },

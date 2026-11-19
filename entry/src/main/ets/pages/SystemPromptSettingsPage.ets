@@ -137,7 +137,7 @@ struct SystemPromptSettingsPage {
         Text($r('app.string.system_prompt_hint'))
           .font(getSettingsTypography().subtitle)
           .lineHeight(SETTINGS_SUBTITLE_LINE_HEIGHT)
-          .fontColor(getAppUiState().themeTextSecondary)
+          .fontColor($r('app.color.text_caption'))
           .width('100%')
 
         Text($r('app.string.system_prompt_variables_hint'))

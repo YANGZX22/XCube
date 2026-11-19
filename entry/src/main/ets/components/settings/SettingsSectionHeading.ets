@@ -30,7 +30,7 @@ export struct SettingsSectionHeading {
         Text(this.subtitle)
           .font(getSettingsTypography().subtitle)
           .lineHeight(SETTINGS_SUBTITLE_LINE_HEIGHT)
-          .fontColor(getAppUiState().themeTextSecondary)
+          .fontColor($r('app.color.text_caption'))
           .textAlign(TextAlign.Start)
           .width('100%')
       }

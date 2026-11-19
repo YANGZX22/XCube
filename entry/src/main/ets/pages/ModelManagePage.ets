@@ -836,7 +836,7 @@ struct ModelManagePage {
                 .width('100%')
                 .textAlign(TextAlign.Start)
                 .lineHeight(SETTINGS_SUBTITLE_LINE_HEIGHT)
-                .fontColor(getAppUiState().themeTextSecondary)
+                .fontColor($r('app.color.text_caption'))
                 .margin({ top: 4 })
             }
             .width('100%')
@@ -975,7 +975,7 @@ struct ModelManagePage {
                   .width('100%')
                   .textAlign(TextAlign.Start)
                   .lineHeight(SETTINGS_SUBTITLE_LINE_HEIGHT)
-                  .fontColor(getAppUiState().themeTextSecondary)
+                  .fontColor($r('app.color.text_caption'))
                   .margin({ top: 4 })
               }
               .width('100%')
@@ -1103,7 +1103,7 @@ struct ModelManagePage {
                   .width('100%')
                   .textAlign(TextAlign.Start)
                   .lineHeight(SETTINGS_SUBTITLE_LINE_HEIGHT)
-                  .fontColor(getAppUiState().themeTextSecondary)
+                  .fontColor($r('app.color.text_caption'))
                   .margin({ top: 4 })
               }
               .width('100%')
@@ -1439,7 +1439,7 @@ struct ProviderCardItem {
 
             Text(this.provider.name)
               .font(getSettingsTypography().itemTitle)
-              .fontColor(this.provider.isConnected ? getAppUiState().themeTextPrimary : getAppUiState().themeTextTertiary)
+              .fontColor(this.provider.isConnected ? getAppUiState().themeTextPrimary : $r('app.color.text_tertiary'))
               .maxLines(1)
               .textOverflow({ overflow: TextOverflow.Ellipsis })
               .flexShrink(1)

@@ -67,7 +67,7 @@ export struct BrowserSettingsSheet {
               Text(pickLocalizedText('保存登录状态并在各对话间共享。', 'Keep sign-ins across conversations.'))
                 .font(getSettingsTypography().subtitle)
                 .lineHeight(SETTINGS_SUBTITLE_LINE_HEIGHT)
-                .fontColor(getAppUiState().themeTextSecondary)
+                .fontColor($r('app.color.text_caption'))
                 .width('100%')
             }
             .layoutWeight(1)

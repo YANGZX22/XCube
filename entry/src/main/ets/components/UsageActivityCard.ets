@@ -301,7 +301,7 @@ export struct UsageActivityCard {
       .width('100%')
       .font(getSettingsTypography().subtitle)
       .lineHeight(SETTINGS_SUBTITLE_LINE_HEIGHT)
-      .fontColor(getAppUiState().themeTextSecondary)
+      .fontColor($r('app.color.text_caption'))
       .margin({ top: 8 })
   }
 
@@ -323,7 +323,7 @@ export struct UsageActivityCard {
           .width('100%')
           .font(getSettingsTypography().subtitle)
           .lineHeight(SETTINGS_SUBTITLE_LINE_HEIGHT)
-          .fontColor(getAppUiState().themeTextSecondary)
+          .fontColor($r('app.color.text_caption'))
           .margin({ top: 6, bottom: SETTINGS_HEADING_CONTENT_GAP })
 
         if (this.loading) {
@@ -372,7 +372,7 @@ export struct UsageActivityCard {
           .width('100%')
           .font(getSettingsTypography().subtitle)
           .lineHeight(SETTINGS_SUBTITLE_LINE_HEIGHT)
-          .fontColor(getAppUiState().themeTextSecondary)
+          .fontColor($r('app.color.text_caption'))
           .margin({ top: 6 })
       }
       .width('100%')
