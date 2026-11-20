@@ -939,7 +939,7 @@ export struct BuiltinBrowserHost {
             this.HeaderActionButton(() => pickLocalizedText('关闭浏览器', 'Close browser'), $r('sys.symbol.xmark'),
               '#EF4444', $r('app.color.status_error'),
               () => this.browser.closeSession(this.state.sessionId))
-            this.HeaderActionButton(() => pickLocalizedText('隐藏浏览器', 'Hide browser'), $r('sys.symbol.chevron_down'),
+            this.HeaderActionButton(() => pickLocalizedText('隐藏浏览器', 'Hide browser'), $r('sys.symbol.minus'),
               '#F5C542', '#F5C542', () => this.browser.hide())
             this.HeaderActionButton(() => this.state.owner === 'user' ? pickLocalizedText('交给模型', 'Give control') :
               pickLocalizedText('接管页面', 'Take over'), null, this.appState.themePrimary, this.appState.themePrimary, () => {
