@@ -205,14 +205,20 @@ function withRecursionLimit(fn) {
 
 /* -------------------- 主解析入口（含脚注预扫描） -------------------- */
 export function parseMarkdown(md, plugins, options) {
+    return parseDocument(md, plugins, options);
+}
+
+function parseDocument(md, plugins, options, sourceBlocks) {
     let tableId = 0
     // 先把原始文本拆成行，预扫描脚注定义（[^id]: ... 多行）
     // Trim only empty outer lines. String.trim() also removes the leading
     // spaces from the first non-empty line, which changes fenced-code
     // indentation semantics.
     const rawLines = md.replace(/\r/g, '').split('\n');
+    let firstLine = 0;
     while (rawLines.length > 0 && isEmptyLine(rawLines[0])) {
         rawLines.shift();
+        firstLine++;
     }
     while (rawLines.length > 0 && isEmptyLine(rawLines[rawLines.length - 1])) {
         rawLines.pop();
@@ -260,9 +266,11 @@ export function parseMarkdown(md, plugins, options) {
 
     // 重新组装未被 consumed 的行为新的 lines 用于主解析
     const lines = [];
+    const sourceLines = sourceBlocks ? [] : null;
     for (let idx = 0; idx < rawLines.length; idx++) {
         if (!consumed.has(idx)) {
             lines.push(rawLines[idx]);
+            if (sourceLines) sourceLines.push(firstLine + idx);
         }
     }
 
@@ -276,6 +284,8 @@ export function parseMarkdown(md, plugins, options) {
             i++;
             continue;
         }
+
+        if (sourceBlocks) sourceBlocks.push({ line: sourceLines[i], index: ast.length });
 
         // 标题
         const h = line.match(/^(#{1,6})\s+(.*)$/);
@@ -451,6 +461,42 @@ export function parseMarkdown(md, plugins, options) {
     }
 
     return ast;
+}
+
+// Keep the source of each top-level block intact for renderers that supply their own Markdown view.
+export function getMarkdownSurfaceBlocks(md) {
+    if (!/`{3}|~{3}|!\[|\|/.test(md)) return [];
+    const starts = [];
+    const tree = parseDocument(md, undefined, { setextHeading: true }, starts);
+    const lines = md.split('\n');
+    const blocks = [];
+    let nextLine = 0;
+    function surface(node) {
+        if (node?.type === 'codeBlock') return 'code';
+        if (node?.type === 'image') return 'image';
+        if (node?.type === 'table') return 'table';
+        for (const child of node?.children || []) {
+            const kind = surface(child);
+            if (kind) return kind;
+        }
+        return '';
+    }
+    for (let i = 0; i < starts.length; i++) {
+        const start = starts[i];
+        const kind = surface(tree[start.index]);
+        if (!kind) continue;
+        const endLine = starts[i + 1]?.line ?? lines.length;
+        if (nextLine < start.line) blocks.push({ kind: '', source: lines.slice(nextLine, start.line).join('\n') });
+        blocks.push({ kind, source: lines.slice(start.line, endLine).join('\n') });
+        nextLine = endLine;
+    }
+    if (blocks.length === 0) return [];
+    // Footnotes, reference definitions and document anchors need one shared parser scope.
+    if (/^\s*(?:\[[^\n]+\]:|\[toc\]\s*$)/im.test(md) || /\]\(\s*#/.test(md)) {
+        return [{ kind: 'document', source: md }];
+    }
+    if (nextLine < lines.length) blocks.push({ kind: '', source: lines.slice(nextLine).join('\n') });
+    return blocks.filter(block => block.source.trim().length > 0);
 }
 
 /* -------------------- 列表解析（支持嵌套，输出规范化 children） -------------------- */

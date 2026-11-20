@@ -28,3 +28,5 @@ export { LongPressMenuInfo, LongPressSelectionType, TextSelectionActionContext, 
 export { MarkdownPlugin, InlinePluginLayout } from './src/main/ets/enhance/model/MarkdownPlugin'
 
 export { PluginNode } from './src/main/ets/enhance/model/TreeNode'
+
+export { getMarkdownSurfaceBlocks } from './src/main/ets/enhance/utils/ast'

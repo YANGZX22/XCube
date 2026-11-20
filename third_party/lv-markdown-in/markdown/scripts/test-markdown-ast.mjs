@@ -11,6 +11,7 @@
  *   完整深度比较；失败时输出输入、差异字段路径、预期值和实际值，并返回非零状态。
  */
 
+import assert from 'node:assert/strict';
 import { fileURLToPath } from 'node:url';
 import { astCases } from './cases/ast-cases.mjs';
 import { loadRequiredExport } from './lib/load-source-module.mjs';
@@ -23,6 +24,19 @@ const parseMarkdown = await loadRequiredExport(astSource, 'parseMarkdown');
 
 runUtilitySelfCheck();
 assertUniqueCaseNames(astCases, 'AST');
+
+const getSurfaceBlocks = await loadRequiredExport(astSource, 'getMarkdownSurfaceBlocks');
+const figure = '![Figure](xcube-image://python_img_example)';
+const code = ['~~~~md', figure, '~~~', '~~~~'].join('\n');
+const table = '| A | B |\n| --- | --- |\n| 1 | 2 |';
+const preview = ['Before', figure, code, table, 'After'].join('\n\n');
+assert.deepEqual(getSurfaceBlocks(preview).map(block => [block.kind, block.source.trim()]), [
+  ['', 'Before'], ['image', figure], ['code', code], ['table', table], ['', 'After']
+]);
+assert.deepEqual(getSurfaceBlocks('~~~~py\nprint(1)'), [{ kind: 'code', source: '~~~~py\nprint(1)' }]);
+assert.deepEqual(getSurfaceBlocks('`' + figure + '` and an ordinary | pipe'), []);
+const withFootnote = preview + '\n\nSee [^n].\n\n[^n]: Note.';
+assert.deepEqual(getSurfaceBlocks(withFootnote), [{ kind: 'document', source: withFootnote }]);
 
 let passed = 0;
 let failed = 0;

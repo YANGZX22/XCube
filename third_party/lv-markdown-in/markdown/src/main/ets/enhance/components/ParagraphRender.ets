@@ -248,7 +248,8 @@ export struct ParagraphRender {
     }
   }
 
-  build() {
+  @Builder
+  private ParagraphContent() {
     Column({ space: IntactImpl.handleBlockSpacing(this.markdownUnion) }) {
       if (this.isSingleBlockLatexParagraph()) {
         this.RenderSingleBlockLatex()
@@ -399,5 +400,14 @@ export struct ParagraphRender {
       }
     }
     .alignItems(HorizontalAlign.Start)
+  }
+
+  build() {
+    if (MDBaseController.getMarkdownController(this.markdownUnion).imageSurface &&
+      this.base?.type === 'paragraph' && this.base.children?.some((item: TreeNode) => item.type === 'image')) {
+      MDBaseController.getMarkdownController(this.markdownUnion).imageSurface!.builder(this.ParagraphContent.bind(this))
+    } else {
+      this.ParagraphContent()
+    }
   }
 }

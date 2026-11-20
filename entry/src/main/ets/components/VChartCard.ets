@@ -1,6 +1,6 @@
 import { VChart } from '@visactor/harmony-vchart'
 import { getAppUiState } from '../state/AppUiState'
-import { withColorAlpha } from '../utils/ColorAlphaUtils'
+import { ChatRichContentSurface } from './ChatRichContentSurface'
 import { VisualEffectsMode } from '../models/ThemeColors'
 import { MANUSCRIPT_COMPACT_BAR_HEIGHT } from '../utils/ManuscriptVisualUtils'
 import { isChineseAppLanguage, pickLocalizedText } from '../utils/LocalizedTextUtils'
@@ -72,10 +72,6 @@ export struct VChartCard {
     return value !== undefined && value !== null && value !== '' ? value : '#7A68F0'
   }
 
-  private get isDarkMode(): boolean {
-    return getAppUiState().isDarkMode === true
-  }
-
   private get isManuscriptMode(): boolean {
     return getAppUiState().visualEffectsMode === VisualEffectsMode.MANUSCRIPT
   }
@@ -97,6 +93,9 @@ export struct VChartCard {
   }
 
   private applyDisplayDefaults(spec: Record<string, Object>): void {
+    if (!this.isManuscriptMode && spec['background'] === undefined) {
+      spec['background'] = 'transparent'
+    }
     const hasCartesianAxes = this.hasCartesianAxes(spec)
     if (hasCartesianAxes) {
       spec['padding'] = new VChartDisplayPadding(28, this.getAxisRightPadding(spec), this.getAxisBottomPadding(spec),
@@ -295,7 +294,8 @@ export struct VChartCard {
     return currentSpec !== null && this.hasVisibleBottomLegend(currentSpec) ? 324 : 300
   }
 
-  build() {
+  @Builder
+  private ChartContent() {
     Column() {
       Row() {
         if (!this.isManuscriptMode) {
@@ -378,16 +378,15 @@ export struct VChartCard {
     }
     .width('100%')
     .padding(this.isManuscriptMode ? 0 : { left: 12, right: 12, top: 10, bottom: 12 })
-    .backgroundColor(this.isManuscriptMode ? getAppUiState().themeSurface :
-      (this.isDarkMode ? '#14171F' : '#FFFFFF'))
-    .border({
-      width: 1,
-      color: this.isManuscriptMode ? getAppUiState().themeDivider :
-        withColorAlpha(this.themePrimary, this.isDarkMode ? '33' : '22')
-    })
+    .backgroundColor(this.isManuscriptMode ? getAppUiState().themeSurface : Color.Transparent)
+    .border({ width: this.isManuscriptMode ? 1 : 0, color: getAppUiState().themeDivider })
     .borderRadius(this.isManuscriptMode ? 3 : 12)
     .clip(true)
-    .margin(this.isManuscriptMode ? { top: 18, bottom: 18 } : 0)
+  }
+
+  build() {
+    ChatRichContentSurface({ content: (): void => { this.ChartContent() } })
+      .margin(this.isManuscriptMode ? { top: 18, bottom: 18 } : 0)
   }
 
   private getChartTypeLabel(): string {

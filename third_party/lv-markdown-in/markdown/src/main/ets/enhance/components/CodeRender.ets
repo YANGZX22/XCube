@@ -3,6 +3,7 @@ import { CodeBlockNode } from '../model/TreeNode';
 import { CodeSourceBlockRender } from './CodeSourceBlockRender';
 import { HtmlRender } from './HtmlRender';
 import { MermaidRender } from './MermaidRender';
+import { RichBlockSurface } from './RichBlockSurface';
 
 @Component
 export struct CodeRender {
@@ -39,7 +40,8 @@ export struct CodeRender {
     return controller.getTextSelectionEnable() && controller.getTextSelectionActionItems().length > 0 ? this.selectionUnion : ''
   }
 
-  build() {
+  @Builder
+  private CodeContent() {
     if (this.isMermaidCodeBlock()) {
       MermaidRender({ base: this.base, streamingActive: this.isPreviewSuppressed() })
     } else if (this.isHtmlCodeBlock()) {
@@ -55,6 +57,16 @@ export struct CodeRender {
         contentBottomPadding: 12,
         actionAreaVisible: this.isActionAreaVisible()
       })
+    }
+  }
+
+  build() {
+    if (MDBaseController.getMarkdownController(this.markdownUnion).richBlockBackdrop) {
+      RichBlockSurface({ inset: 3 }) {
+        this.CodeContent()
+      }
+    } else {
+      this.CodeContent()
     }
   }
 }

@@ -3,6 +3,7 @@ import { pasteboard } from '@kit.BasicServicesKit'
 import { hilog } from '@kit.PerformanceAnalysisKit'
 import { getAppUiState, observeAppUiState } from '../state/AppUiState'
 import { ImmersiveSheetHeader } from './ImmersiveSheetHeader'
+import { ChatRichContentSurface } from './ChatRichContentSurface'
 import { VisualEffectsMode } from '../models/ThemeColors'
 import { MANUSCRIPT_BODY_FONT, MANUSCRIPT_COMPACT_BAR_HEIGHT } from '../utils/ManuscriptVisualUtils'
 import { pickLocalizedText } from '../utils/LocalizedTextUtils'
@@ -283,11 +284,9 @@ export struct HtmlPreviewCard {
     })
   }
 
-  build() {
-    if (this.isManuscriptMode) {
-      this.ManuscriptCard()
-    } else {
-      Column() {
+  @Builder
+  private PreviewCardContent() {
+    Column() {
       // Tab 栏
       Row() {
         // 代码 Tab
@@ -387,6 +386,7 @@ export struct HtmlPreviewCard {
       }
       .width('100%')
       .padding({ left: 8, right: 8, top: 6, bottom: 6 })
+      .backgroundColor($r('app.color.surface'))
 
       Divider()
         .color(getAppUiState().themePrimaryLight)
@@ -405,7 +405,6 @@ export struct HtmlPreviewCard {
         .constraintSize({ maxHeight: 300 })
         .padding(12)
         .scrollBar(BarState.Auto)
-        .backgroundColor($r('app.color.code_background'))
       }
 
       // 预览 Web 视图（始终渲染，用 visibility 切换，避免 WebView 销毁重建）
@@ -422,17 +421,22 @@ export struct HtmlPreviewCard {
         .backgroundColor(this.isDarkMode ? '#1a1a1a' : '#ffffff')
     }
     .width('100%')
-    .backgroundColor($r('app.color.surface'))
     .borderRadius(12)
-    .border({ width: 1, color: getAppUiState().themePrimaryLight })
     .clip(true)
-    .margin({ top: 8, bottom: 4 })
-      .bindSheet($$this.showFullScreen, this.FullScreenBuilder(), {
-        height: SheetSize.LARGE,
-        detents: [SheetSize.LARGE],
-        dragBar: true,
-        showClose: false
-      })
+  }
+
+  build() {
+    if (this.isManuscriptMode) {
+      this.ManuscriptCard()
+    } else {
+      ChatRichContentSurface({ content: (): void => { this.PreviewCardContent() } })
+        .margin({ top: 8, bottom: 4 })
+        .bindSheet($$this.showFullScreen, this.FullScreenBuilder(), {
+          height: SheetSize.LARGE,
+          detents: [SheetSize.LARGE],
+          dragBar: true,
+          showClose: false
+        })
     }
   }
 

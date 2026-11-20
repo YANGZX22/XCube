@@ -15,6 +15,10 @@ import { iconColorFilter } from '../utils/iconFilter';
  */
 @ObservedV2
 export class MarkdownController {
+  // 可选的代码块、表格背板和行内图片装饰，前景仍由原生组件处理。
+  @Trace richBlockBackdrop?: WrappedBuilder<[number]>
+  @Trace imageSurface?: WrappedBuilder<[() => void]>
+
   // 随机字符串
   private union: string = ""
   // ** ================================================= 标题 ==================================================== **

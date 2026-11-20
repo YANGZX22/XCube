@@ -77,116 +77,155 @@ export struct TableRender {
     }
   }
 
-  build() {
-    Row() {
-      Column() {
-        if (this.hasTableAction()) {
-          Row({ space: 4 }) {
-            if (this.getTableCopyClickListener()) {
-              Button() {
-                Image($rawfile('imgs/share.png'))
-                  .width(18)
-                  .height(18)
-                  .colorFilter(TableImpl.handleTableActionIconColorFilter(this.markdownUnion))
-                  .syncLoad(true)
-                  .interpolation(ImageInterpolation.Medium)
-                  .draggable(false)
-              }
-              .width(32)
-              .height(32)
-              .padding(0)
-              .backgroundColor(Color.Transparent)
-              .onClick(() => {
-                this.handleTableCopy()
-              })
-            }
-            if (this.getTableDownloadClickListener()) {
-              Button() {
-                Image($rawfile('imgs/download.png'))
-                  .width(18)
-                  .height(18)
-                  .colorFilter(TableImpl.handleTableActionIconColorFilter(this.markdownUnion))
-                  .syncLoad(true)
-                  .interpolation(ImageInterpolation.Medium)
-                  .draggable(false)
-              }
-              .width(32)
-              .height(32)
-              .padding(0)
-              .backgroundColor(Color.Transparent)
-              .onClick(() => {
-                this.handleTableDownload()
-              })
-            }
-            if (this.getTableExpandClickListener()) {
-              Button() {
-                Image($rawfile('imgs/expand.png'))
-                  .width(18)
-                  .height(18)
-                  .colorFilter(TableImpl.handleTableActionIconColorFilter(this.markdownUnion))
-                  .syncLoad(true)
-                  .interpolation(ImageInterpolation.Medium)
-                  .draggable(false)
-              }
-              .width(32)
-              .height(32)
-              .padding(0)
-              .backgroundColor(Color.Transparent)
-              .onClick(() => {
-                this.handleTableExpand()
-              })
-            }
-          }
-          .width(this.getTableContentWidth())
-          .constraintSize({ maxWidth: "100%" })
-          .height(40)
-          .padding({ right: 4 })
-          .justifyContent(FlexAlign.End)
-          .backgroundColor(TableImpl.handleTableActionBackgroundColor(this.markdownUnion))
-          .border({
-            width: {
-              top: 0,
-              left: 0,
-              right: 0,
-              bottom: TableImpl.handleTableOuterBorderWidth(this.markdownUnion)
-            },
-            color: TableImpl.handleTableOuterBorderColor(this.markdownUnion)
-          })
-        }
+  private backdropRadius(): number {
+    const radius = TableImpl.handleTableBorderRadius(this.markdownUnion)
+    return typeof radius === 'number' ? radius : 14
+  }
 
-        List() {
-          ListItem() {
-            Column() {
-              TableHeadRender({
-                base: this.base,
-                cellWidthArrayIndexed: this.cellWidthArrayIndexed
-              })
-              TableRowRender({
-                base: this.base,
-                cellWidthArrayIndexed: this.cellWidthArrayIndexed
-              })
+  private innerMaterialRadius(): Length {
+    const edge = TableImpl.handleTableOuterBorderWidth(this.markdownUnion)
+    const radius = this.backdropRadius()
+    if (typeof edge === 'number') {
+      return Math.max(0, radius - edge)
+    }
+    if (typeof edge === 'string') {
+      return `calc(${radius}vp - ${edge})`
+    }
+    return Math.max(0, radius - 1)
+  }
+
+  @Builder
+  private TableFace(withMaterial: boolean) {
+    Column() {
+      if (this.hasTableAction()) {
+        Row({ space: 4 }) {
+          if (this.getTableCopyClickListener()) {
+            Button() {
+              Image($rawfile('imgs/share.png'))
+                .width(18)
+                .height(18)
+                .colorFilter(TableImpl.handleTableActionIconColorFilter(this.markdownUnion))
+                .syncLoad(true)
+                .interpolation(ImageInterpolation.Medium)
+                .draggable(false)
             }
-            .alignItems(HorizontalAlign.Start)
+            .width(32)
+            .height(32)
+            .padding(0)
+            .backgroundColor(Color.Transparent)
+            .onClick(() => {
+              this.handleTableCopy()
+            })
+          }
+          if (this.getTableDownloadClickListener()) {
+            Button() {
+              Image($rawfile('imgs/download.png'))
+                .width(18)
+                .height(18)
+                .colorFilter(TableImpl.handleTableActionIconColorFilter(this.markdownUnion))
+                .syncLoad(true)
+                .interpolation(ImageInterpolation.Medium)
+                .draggable(false)
+            }
+            .width(32)
+            .height(32)
+            .padding(0)
+            .backgroundColor(Color.Transparent)
+            .onClick(() => {
+              this.handleTableDownload()
+            })
+          }
+          if (this.getTableExpandClickListener()) {
+            Button() {
+              Image($rawfile('imgs/expand.png'))
+                .width(18)
+                .height(18)
+                .colorFilter(TableImpl.handleTableActionIconColorFilter(this.markdownUnion))
+                .syncLoad(true)
+                .interpolation(ImageInterpolation.Medium)
+                .draggable(false)
+            }
+            .width(32)
+            .height(32)
+            .padding(0)
+            .backgroundColor(Color.Transparent)
+            .onClick(() => {
+              this.handleTableExpand()
+            })
           }
         }
-        .borderRadius(this.hasTableAction() ? 0 : TableImpl.handleTableBorderRadius(this.markdownUnion))
-        .clip(true)
-        .backgroundColor(TableImpl.handleTableBackgroundColor(this.markdownUnion))
-        .listDirection(Axis.Horizontal)
-        .edgeEffect(EdgeEffect.None)
+        .width(this.getTableContentWidth())
+        .constraintSize({ maxWidth: "100%" })
+        .height(40)
+        .padding({ right: 4 })
+        .justifyContent(FlexAlign.End)
+        .backgroundColor(TableImpl.handleTableActionBackgroundColor(this.markdownUnion))
         .border({
-          width: this.hasTableAction() ? 0 : TableImpl.handleTableOuterBorderWidth(this.markdownUnion),
-          color: TableImpl.handleTableOuterBorderColor(this.markdownUnion)
+          width: {
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: TableImpl.handleTableOuterBorderWidth(this.markdownUnion)
+          },
+          color: withMaterial ?
+            TableImpl.handleTableInnerBorderColor(this.markdownUnion) : TableImpl.handleTableOuterBorderColor(this.markdownUnion)
         })
       }
-      .alignItems(HorizontalAlign.End)
-      .constraintSize({ maxWidth: "100%" })
-      .borderRadius(this.hasTableAction() ? TableImpl.handleTableBorderRadius(this.markdownUnion) : 0)
-      .clip(this.hasTableAction())
+
+      List() {
+        ListItem() {
+          Column() {
+            TableHeadRender({
+              base: this.base,
+              cellWidthArrayIndexed: this.cellWidthArrayIndexed
+            })
+            TableRowRender({
+              base: this.base,
+              cellWidthArrayIndexed: this.cellWidthArrayIndexed
+            })
+          }
+          .alignItems(HorizontalAlign.Start)
+        }
+      }
+      .borderRadius(withMaterial || this.hasTableAction() ? 0 : TableImpl.handleTableBorderRadius(this.markdownUnion))
+      .clip(true)
+      .backgroundColor(withMaterial ?
+        Color.Transparent : TableImpl.handleTableBackgroundColor(this.markdownUnion))
+      .listDirection(Axis.Horizontal)
+      .edgeEffect(EdgeEffect.None)
       .border({
-        width: this.hasTableAction() ? TableImpl.handleTableOuterBorderWidth(this.markdownUnion) : 0,
+        width: withMaterial || this.hasTableAction() ? 0 : TableImpl.handleTableOuterBorderWidth(this.markdownUnion),
         color: TableImpl.handleTableOuterBorderColor(this.markdownUnion)
       })
+    }
+    .alignItems(HorizontalAlign.End)
+    .constraintSize({ maxWidth: "100%" })
+    // 原边框占用的尺寸移到前景之外。前景沿同心的内圆角裁剪，避免不透明的单元格盖住材质亮边的弧段。
+    .margin(withMaterial ? TableImpl.handleTableOuterBorderWidth(this.markdownUnion) : 0)
+    .borderRadius(withMaterial ? this.innerMaterialRadius() :
+      (this.hasTableAction() ? TableImpl.handleTableBorderRadius(this.markdownUnion) : 0))
+    .clip(withMaterial || this.hasTableAction())
+    .border({
+      width: !withMaterial && this.hasTableAction() ? TableImpl.handleTableOuterBorderWidth(this.markdownUnion) : 0,
+      color: TableImpl.handleTableOuterBorderColor(this.markdownUnion)
+    })
+  }
+
+  build() {
+    Row() {
+      if (MDBaseController.getMarkdownController(this.markdownUnion).richBlockBackdrop) {
+        Stack({ alignContent: Alignment.TopStart }) {
+          MDBaseController.getMarkdownController(this.markdownUnion).richBlockBackdrop!.builder(this.backdropRadius())
+          this.TableFace(true)
+        }
+        .width(LayoutPolicy.wrapContent)
+        .height(LayoutPolicy.wrapContent)
+        .clip(false)
+        .hitTestBehavior(HitTestMode.Transparent)
+        .accessibilityLevel('no')
+      } else {
+        this.TableFace(false)
+      }
     }
     .width("100%")
     .justifyContent(TableImpl.handleTableAlign(this.markdownUnion))

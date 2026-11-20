@@ -15,6 +15,18 @@ export namespace CodeBlockImpl {
     }
   }
 
+  export function hasBlockBackdrop(markdownUnion: string): boolean {
+    return MDBaseController.getMarkdownController(markdownUnion).richBlockBackdrop !== undefined
+  }
+
+  export function embeddedBackground(markdownUnion: string): ResourceColor {
+    if (hasBlockBackdrop(markdownUnion)) {
+      return Color.Transparent
+    }
+    const theme = MDBaseController.getMarkdownController(markdownUnion).getCodeBlockTheme()
+    return handleBackgroundColor(theme)
+  }
+
   export function handleThemeChange(markdownUnion: string, them: CodeTheme) {
     Logger.info("markdownUnion > " + markdownUnion)
     handleCodeHighlight(markdownUnion, them)

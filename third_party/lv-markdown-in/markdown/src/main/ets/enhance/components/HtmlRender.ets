@@ -465,6 +465,7 @@ export struct HtmlRender {
         } else {
           Scroll() {
             CodeSourceRender({
+              transparentBackground: CodeBlockImpl.hasBlockBackdrop(this.markdownUnion),
               markdownUnion: this.markdownUnion,
               text: this.base?.text || "",
               lang: this.base?.lang || "html",
@@ -478,8 +479,7 @@ export struct HtmlRender {
           .height(300)
           .scrollable(ScrollDirection.Vertical)
           .edgeEffect(EdgeEffect.Spring)
-          .backgroundColor(CodeBlockImpl.handleBackgroundColor(MDBaseController.getMarkdownController(this.markdownUnion)
-            .getCodeBlockTheme()))
+          .backgroundColor(CodeBlockImpl.embeddedBackground(this.markdownUnion))
           .align(Alignment.TopStart)
         }
       }
@@ -487,7 +487,7 @@ export struct HtmlRender {
       .alignItems(HorizontalAlign.Start)
       .borderRadius(CodeBlockImpl.handleCodeBlockBorderRadius(this.markdownUnion))
       .border({
-        width: 1,
+        width: CodeBlockImpl.hasBlockBackdrop(this.markdownUnion) ? 0 : 1,
         color: this.isDarkTheme() ? "#24262B" : "#F3F4F6"
       })
       .clip(true)

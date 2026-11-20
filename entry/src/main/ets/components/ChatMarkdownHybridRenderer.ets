@@ -5,6 +5,9 @@ import {
   MarkdownPlugin,
   MarkdownTheme
 } from '@cangjie-tpc/markdown_arkui'
+import { getMarkdownSurfaceBlocks } from '@luvi/lv-markdown-in'
+import { ChatRichContentSurface } from './ChatRichContentSurface'
+import { MarkdownMediaMaterial, CANGJIE_TABLE_BORDER, CANGJIE_TABLE_RADIUS } from './MarkdownMediaMaterial'
 import { getAppUiState } from '../state/AppUiState'
 import {
   getMarkdownBlockSpacing,
@@ -14,8 +17,14 @@ import {
   MarkdownTitleScale
 } from '../utils/MarkdownTypographyUtils'
 
+interface MarkdownSurfaceBlock {
+  kind: string
+  source: string
+}
+
 @ComponentV2
 export struct ChatMarkdownHybridRenderer {
+  @Param useRichBlockMaterial: boolean = false
   @Param content: string = ''
   @Param isInputEnded: boolean = true
   @Param incrementalAnalysis: boolean = false
@@ -98,6 +107,7 @@ export struct ChatMarkdownHybridRenderer {
     const uiState = getAppUiState()
     return [
       this.themeRenderKey,
+      this.useRichBlockMaterial.toString(),
       this.incrementalAnalysis.toString(),
       this.chatFontSize.toString(),
       this.isInputEnded ? 'ended' : 'streaming',
@@ -283,7 +293,7 @@ export struct ChatMarkdownHybridRenderer {
 
     theme.setTableCellPadding(8)
     theme.setTableBorderColor(tableBorderColor)
-    theme.setTableBorderWidth(1)
+    theme.setTableBorderWidth(CANGJIE_TABLE_BORDER)
     theme.setTableOddRowBackgroundColor(tableBgColor)
     theme.setTableEvenRowBackgroundColor(tableAltBgColor)
     theme.setTableHeaderRowBackgroundColor(tableHeaderBgColor)
@@ -294,7 +304,7 @@ export struct ChatMarkdownHybridRenderer {
     theme.setTableContentTextColor(textColor)
     theme.setTableContentTextSize(textSize)
     theme.setTableContentTextLineHeight(textLineHeight)
-    theme.setTableRadius(6)
+    theme.setTableRadius(CANGJIE_TABLE_RADIUS)
     theme.setTableScrollBarShow(false)
     theme.setTableScrollBarColor(tableBorderColor)
 
@@ -358,14 +368,63 @@ export struct ChatMarkdownHybridRenderer {
   }
 
 
+  @Computed
+  private get materialBlocks(): MarkdownSurfaceBlock[] {
+    if (!this.useRichBlockMaterial) {
+      return []
+    }
+    const content = this.getTypefaceAwareContent()
+    const blocks = getMarkdownSurfaceBlocks(content) as MarkdownSurfaceBlock[]
+    const rich = blocks.filter((block: MarkdownSurfaceBlock) => block.kind !== '')
+    if (rich.length > 0 && rich.every((block: MarkdownSurfaceBlock) => block.kind === 'table' || block.kind === 'image')) {
+      const hasTable = rich.some((block: MarkdownSurfaceBlock) => block.kind === 'table')
+      const hasImage = rich.some((block: MarkdownSurfaceBlock) => block.kind === 'image')
+      return [{ kind: hasTable && hasImage ? 'media' : rich[0].kind, source: content }]
+    }
+    return blocks
+  }
+
+  @Builder
+  private NativeMarkdown(index: number) {
+    CJMarkdown({
+      content: index < 0 ? this.getTypefaceAwareContent() : this.materialBlocks[index].source,
+      config: this.getMarkdownConfig(),
+      plugin: this.getMarkdownPlugin()
+    })
+  }
+
   build() {
     Column() {
       ForEach([this.buildConfigSignature()], (_renderKey: string) => {
-        CJMarkdown({
-          content: this.getTypefaceAwareContent(),
-          config: this.getMarkdownConfig(),
-          plugin: this.getMarkdownPlugin()
-        })
+        if (this.materialBlocks.length > 0) {
+          Column({ space: getMarkdownBlockSpacing(this.chatFontSize, this.compact) }) {
+            ForEach(this.materialBlocks, (block: MarkdownSurfaceBlock, index: number) => {
+              if (block.kind === 'table' || block.kind === 'image' || block.kind === 'media' ||
+                (block.kind === 'document' && (block.source.includes('|') || block.source.includes('![')))) {
+                MarkdownMediaMaterial({
+                  table: block.kind === 'table' || block.kind === 'media' || (block.kind === 'document' && block.source.includes('|')),
+                  images: block.kind === 'image' || block.kind === 'media' || (block.kind === 'document' && block.source.includes('![')),
+                  imageRadius: 0
+                }) {
+                  this.NativeMarkdown(index)
+                }
+              } else if (block.kind !== '') {
+                ChatRichContentSurface({ cornerRadius: 14 }) {
+                  Column() {
+                    this.NativeMarkdown(index)
+                  }
+                  .width('100%')
+                  .padding(3)
+                }
+              } else {
+                this.NativeMarkdown(index)
+              }
+            }, (block: MarkdownSurfaceBlock, index: number) => `${index}:${block.kind}`)
+          }
+          .width('100%')
+        } else {
+          this.NativeMarkdown(-1)
+        }
       }, (renderKey: string): string => renderKey)
     }
     .width('100%')

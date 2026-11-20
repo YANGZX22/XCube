@@ -6,6 +6,8 @@ import {
 } from '../../services/MapKitService'
 import { pickLocalizedText } from '../../utils/LocalizedTextUtils'
 import { MapVisualizationView } from './MapVisualizationView'
+import { ChatRichContentSurface } from '../ChatRichContentSurface'
+import { VisualEffectsMode } from '../../models/ThemeColors'
 
 @ComponentV2
 export struct MapResultCard {
@@ -17,10 +19,6 @@ export struct MapResultCard {
 
   private get themePrimary(): string {
     return getAppUiState().themePrimary
-  }
-
-  private get themePrimaryLight(): string {
-    return getAppUiState().themePrimaryLight
   }
 
   private get cardBackground(): string {
@@ -92,7 +90,8 @@ export struct MapResultCard {
     return parts.join(' · ')
   }
 
-  build() {
+  @Builder
+  private CardContent() {
     Column() {
       Stack({ alignContent: Alignment.TopEnd }) {
         MapVisualizationView({
@@ -176,7 +175,17 @@ export struct MapResultCard {
     .width('100%')
     .borderRadius(14)
     .clip(true)
-    .backgroundColor(this.cardBackground)
-    .border({ width: 0.5, color: this.themePrimaryLight })
+    .backgroundColor(getAppUiState().visualEffectsMode === VisualEffectsMode.MANUSCRIPT ?
+      this.cardBackground : Color.Transparent)
+    .border({
+      width: getAppUiState().visualEffectsMode === VisualEffectsMode.MANUSCRIPT ? 0.5 : 0,
+      color: getAppUiState().themePrimaryLight
+    })
+  }
+
+  build() {
+    ChatRichContentSurface({ cornerRadius: 14 }) {
+      this.CardContent()
+    }
   }
 }

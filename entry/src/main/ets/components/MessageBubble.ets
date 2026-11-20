@@ -1,6 +1,7 @@
 import { InteractiveMaterialRow } from './InteractiveMaterialRow'
 import { FileIcon } from './FileIcon'
 import { ImmersiveMaterialAnchor } from './ImmersiveMaterialBackdrop'
+import { ChatRichContentSurface } from './ChatRichContentSurface'
 import { AssistantResponseSegment, AssistantResponseSegmentType, ChatMessage, MessageRole, MessageAttachment, AttachmentType, ContextCompactionUiState, ToolCall, ToolResult } from '../models/ChatModels'
 import { ReplyAnnotation } from '../models/ReplyAnnotation'
 import { SettingsActionButton } from './settings/SettingsActionButton'
@@ -81,6 +82,7 @@ function hasNonWhitespace(text: string): boolean {
 
 const DOMAIN = 0x0002
 const TAG = 'MessageBubble'
+const TIMELINE_BAR_GROUP_RADIUS: number = 12
 
 // ArkUI 使用 -1 跳过首帧动效，之后每次图标切换都使用不同的触发值。
 enum CopyIconState {
@@ -538,6 +540,7 @@ export struct MessageBubble {
   @Builder
   MessageContentMarkdown() {
     ChatMarkdownRenderer({
+      useRichBlockMaterial: !this.isManuscriptMode,
       allowAnnotations: this.canAnnotateReply,
       onAnnotateSelection: this.onAnnotateSelection,
       content: this.resolvePythonSandboxImageSources(this.message.content),
@@ -571,6 +574,7 @@ export struct MessageBubble {
   @Builder
   ReasoningMarkdown() {
     ChatMarkdownRenderer({
+      useRichBlockMaterial: !this.isManuscriptMode,
       content: this.resolvePythonSandboxImageSources(this.message.reasoningContent),
       isInputEnded: !this.message.isGenerating,
       incrementalAnalysis: this.message.isGenerating,
@@ -604,6 +608,7 @@ export struct MessageBubble {
   @Builder
   StaticMarkdown(content: string) {
     ChatMarkdownRenderer({
+      useRichBlockMaterial: !this.isManuscriptMode,
       allowAnnotations: this.canAnnotateReply,
       onAnnotateSelection: this.onAnnotateSelection,
       content: this.resolvePythonSandboxImageSources(content),
@@ -1841,18 +1846,18 @@ export struct MessageBubble {
   PreviewAttachments() {
     Column() {
       if (this.getPreviewImageEntries().length === 1) {
-        this.CompactPreviewSingleImage(
-          this.getPreviewImageEntries()[0].attachment,
+        this.CompactSingleImage(
+          this.getPreviewImageEntries()[0].attachment, -1,
           this.hasPreviewTextContent() ? 6 : 0
         )
       } else if (this.getPreviewImageEntries().length > 1) {
         Column({ space: this.compactImageGap }) {
           ForEach(this.getPreviewImageGridRows(), (rowIndex: number) => {
             Row({ space: this.compactImageGap }) {
-              this.CompactPreviewGridImage(this.getPreviewImageEntries()[rowIndex * 2].attachment)
+              this.CompactGridImage(this.getPreviewImageEntries()[rowIndex * 2].attachment)
 
               if (rowIndex * 2 + 1 < this.getPreviewImageEntries().length) {
-                this.CompactPreviewGridImage(this.getPreviewImageEntries()[rowIndex * 2 + 1].attachment)
+                this.CompactGridImage(this.getPreviewImageEntries()[rowIndex * 2 + 1].attachment)
               } else {
                 Blank()
                   .layoutWeight(1)
@@ -1867,62 +1872,41 @@ export struct MessageBubble {
   }
 
   @Builder
-  CompactPreviewSingleImage(attachment: MessageAttachment, bottomMargin: number) {
-    if (this.getAttachmentImageSource(attachment) !== '') {
+  private ThumbnailContent(attachment: MessageAttachment, attachmentIndex: number) {
+    Column() {
       Image(this.getAttachmentImageSource(attachment))
-        .width(this.compactImageContainerWidth)
-        .height(this.compactImageMaxHeight)
-        .objectFit(ImageFit.Cover)
-        .borderRadius(8)
-        .clip(true)
-        .margin({ bottom: bottomMargin })
-    }
-  }
-
-  @Builder
-  CompactPreviewGridImage(attachment: MessageAttachment) {
-    if (this.getAttachmentImageSource(attachment) !== '') {
-      Image(this.getAttachmentImageSource(attachment))
+        .id(attachmentIndex >= 0 ? 'img_' + attachment.id : undefined)
         .width('100%')
-        .height(this.compactImageMaxHeight)
+        .height('100%')
         .objectFit(ImageFit.Cover)
         .borderRadius(8)
         .clip(true)
-        .layoutWeight(1)
     }
+    .width('100%')
+    .height(this.compactImageMaxHeight)
+    .onClick(attachmentIndex < 0 ? undefined : (): void => { this.handleImagePreview(attachmentIndex) })
   }
 
   @Builder
   CompactSingleImage(attachment: MessageAttachment, attachmentIndex: number, bottomMargin: number) {
     if (this.getAttachmentImageSource(attachment) !== '') {
-      Image(this.getAttachmentImageSource(attachment))
-        .id('img_' + attachment.id)
-        .width(this.compactImageContainerWidth)
-        .height(this.compactImageMaxHeight)
-        .objectFit(ImageFit.Cover)
-        .borderRadius(8)
-        .clip(true)
+      ChatRichContentSurface({
+        cornerRadius: 8,
+        layoutWidth: this.compactImageContainerWidth,
+        content: (): void => { this.ThumbnailContent(attachment, attachmentIndex) }
+      })
         .margin({ bottom: bottomMargin })
-        .onClick(() => {
-          this.handleImagePreview(attachmentIndex)
-        })
     }
   }
 
   @Builder
-  CompactGridImage(attachment: MessageAttachment, attachmentIndex: number) {
+  CompactGridImage(attachment: MessageAttachment, attachmentIndex: number = -1) {
     if (this.getAttachmentImageSource(attachment) !== '') {
-      Image(this.getAttachmentImageSource(attachment))
-        .id('img_' + attachment.id)
-        .width('100%')
-        .height(this.compactImageMaxHeight)
-        .objectFit(ImageFit.Cover)
-        .borderRadius(8)
-        .clip(true)
+      ChatRichContentSurface({
+        cornerRadius: 8,
+        content: (): void => { this.ThumbnailContent(attachment, attachmentIndex) }
+      })
         .layoutWeight(1)
-        .onClick(() => {
-          this.handleImagePreview(attachmentIndex)
-        })
     }
   }
 
@@ -2694,6 +2678,7 @@ export struct MessageBubble {
   @Builder
   private TimelineSegmentMarkdown(segment: AssistantResponseSegment, compact: boolean = false) {
     ChatMarkdownRenderer({
+      useRichBlockMaterial: !this.isManuscriptMode,
       allowAnnotations: !compact && this.canAnnotateReply,
       onAnnotateSelection: this.onAnnotateSelection,
       content: this.resolvePythonSandboxImageSources(segment.content),
@@ -2726,7 +2711,7 @@ export struct MessageBubble {
       .backgroundColor(Color.Transparent)
   }
 
-  // 思考条正文。外层条目块统一提供边框、材质与投影，这里只画内容。
+  // 思考条正文与外层材质共用同一次展开动画。
   @Builder
   private TimelineReasoningBarBody(segment: AssistantResponseSegment) {
     Column() {
@@ -2813,7 +2798,7 @@ export struct MessageBubble {
 
   // 一个条目块：三条及以上默认合并为单栏，一到两条直接展示。
   @Builder
-  private TimelineBarGroupBlock(block: TimelineBlock) {
+  private TimelineBarGroupContent(block: TimelineBlock) {
     Column() {
       if (this.shouldMergeTimelineBarGroup(block)) {
         this.TimelineBarGroupHeader(block)
@@ -2841,23 +2826,23 @@ export struct MessageBubble {
       }
     }
     .width('100%')
-    .backgroundColor(Color.Transparent)
-    .borderRadius(this.isManuscriptMode ? 0 : 12)
+    .borderRadius(this.isManuscriptMode ? 0 : TIMELINE_BAR_GROUP_RADIUS)
     .border({
-      width: this.isManuscriptMode ? { top: 1, bottom: 1 } : 0.5,
+      width: this.getTimelineBarsForBlock(block).some((bar: TimelineBar) =>
+        bar.kind === TimelineBarKind.REASONING || bar.kind === TimelineBarKind.LEGACY_REASONING) ? 0 :
+        (this.isManuscriptMode ? { top: 1, bottom: 1 } : 0.5),
       color: this.isManuscriptMode ? getAppUiState().themeDivider : this.getTimelineRailColor()
     })
-    .clip(false)
-    .backdropBlur(this.isManuscriptMode ? 0 : 24)
-    .shadow({
-      radius: this.isManuscriptMode ? 0 : 12,
-      color: this.isManuscriptMode ? Color.Transparent :
-        (this.isDarkMode ? 'rgba(0, 0, 0, 0.32)' : 'rgba(15, 23, 42, 0.14)'),
-      offsetX: 0,
-      offsetY: 3
+  }
+
+  @Builder
+  private TimelineBarGroupBlock(block: TimelineBlock) {
+    ChatRichContentSurface({
+      cornerRadius: TIMELINE_BAR_GROUP_RADIUS,
+      content: (): void => { this.TimelineBarGroupContent(block) }
     })
-    .margin({ bottom: 8 })
-    .transition(buildTimelineBlockTransition())
+      .margin({ bottom: 8 })
+      .transition(buildTimelineBlockTransition())
   }
 
   // 块内分割线：普通模式两侧内缩对齐条目内容，手稿模式沿用整幅线条语言
@@ -3274,10 +3259,6 @@ export struct MessageBubble {
     .transition(TransitionEffect.OPACITY.animation({ duration: 150 }))
   }
 
-  // ===== Timeline 主题色 helper（与设计稿一致：底色跟随 AI 气泡，竖线/边框用主题色半透明） =====
-  private getTimelineBackgroundColor(): string {
-    return this.themeAiBubble
-  }
   private getTimelineRailColor(): string {
     return withColorAlpha(this.themePrimary, this.isDarkMode ? '88' : '55')
   }

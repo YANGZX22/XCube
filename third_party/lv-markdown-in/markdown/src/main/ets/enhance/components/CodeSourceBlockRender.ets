@@ -130,6 +130,7 @@ export struct CodeSourceBlockRender {
 
       if (this.themeVersion >= 0) {
         CodeSourceRender({
+          transparentBackground: CodeBlockImpl.hasBlockBackdrop(this.markdownUnion),
           markdownUnion: this.markdownUnion,
           text: this.text || '',
           lang: this.lang || 'code',
@@ -146,10 +147,9 @@ export struct CodeSourceBlockRender {
     .alignItems(HorizontalAlign.Start)
     .borderRadius(CodeBlockImpl.handleCodeBlockBorderRadius(this.markdownUnion))
     .clip(true)
-    .backgroundColor(CodeBlockImpl.handleBackgroundColor(MDBaseController.getMarkdownController(this.markdownUnion)
-      .getCodeBlockTheme()))
+    .backgroundColor(CodeBlockImpl.embeddedBackground(this.markdownUnion))
     .border({
-      width: 1,
+      width: CodeBlockImpl.hasBlockBackdrop(this.markdownUnion) ? 0 : 1,
       color: this.isDarkTheme() ? '#24262B' : '#F3F4F6'
     })
   }

@@ -13,6 +13,7 @@ const HIGHLIGHT_DEBOUNCE_MS = 90
 
 @Component
 export struct CodeSourceRender {
+  @Prop transparentBackground: boolean = false
   @Prop markdownUnion: string = ''
   @Prop @Watch('refreshHighlight') text: string = ''
   @Prop @Watch('refreshHighlight') lang: string = 'code'
@@ -305,7 +306,7 @@ export struct CodeSourceRender {
     }
     .width('100%')
     .alignItems(HorizontalAlign.Start)
-    .backgroundColor(CodeBlockImpl.handleBackgroundColor(MDBaseController.getMarkdownController(this.markdownUnion)
-      .getCodeBlockTheme()))
+    .backgroundColor(this.transparentBackground ? Color.Transparent :
+      CodeBlockImpl.handleBackgroundColor(MDBaseController.getMarkdownController(this.markdownUnion).getCodeBlockTheme()))
   }
 }

@@ -1,6 +1,8 @@
 import { Markdown, MarkdownController, TextSelectionActionContext, TextSelectionActionItem } from '@luvi/lv-markdown-in'
 import { pickLocalizedText } from '../utils/LocalizedTextUtils'
 import { ChatMarkdownHybridRenderer } from './ChatMarkdownHybridRenderer'
+import { chatRichContentBackdrop } from './ChatRichContentSurface'
+import { chatMarkdownImageMaterial } from './MarkdownMediaMaterial'
 import { AppStorageKeys } from '../config/AppStorageKeys'
 import { MarkdownRenderer } from '../services/PreferencesService'
 import { getAppUiState, observeAppUiState } from '../state/AppUiState'
@@ -14,8 +16,12 @@ import {
   getMarkdownTitleSizes
 } from '../utils/MarkdownTypographyUtils'
 
+const CHAT_MARKDOWN_BACKDROP = wrapBuilder(chatRichContentBackdrop)
+const CHAT_MARKDOWN_IMAGE = wrapBuilder(chatMarkdownImageMaterial)
+
 @ComponentV2
 struct ChatLvMarkdownRenderer {
+  @Param useRichBlockMaterial: boolean = false
   @Param content: string = ''
   @Param isInputEnded: boolean = true
   @Param allowAnnotations: boolean = false
@@ -96,6 +102,7 @@ struct ChatLvMarkdownRenderer {
     const uiState = getAppUiState()
     return [
       this.themeRenderKey,
+      this.useRichBlockMaterial.toString(),
       this.chatFontSize.toString(),
       this.isInputEnded ? 'ended' : 'streaming',
       this.allowAnnotations ? pickLocalizedText('添加到对话', 'Add to chat') : '',
@@ -171,7 +178,7 @@ struct ChatLvMarkdownRenderer {
     this.controller.setTableNormalTextColor(textColor)
 
     this.controller
-      .setTableOuterBorderColor(uiState.themeMarkdownTableBorder)
+      .setTableOuterBorderColor(this.useRichBlockMaterial ? Color.Transparent : uiState.themeMarkdownTableBorder)
       .setTableInnerBorderColor(uiState.themeMarkdownTableBorder)
       .setUlPointColor(textColor)
       .setLineColor(uiState.themeMarkdownTableBorder)
@@ -197,6 +204,8 @@ struct ChatLvMarkdownRenderer {
       })
       .setBlockSpacing(getMarkdownBlockSpacing(textSize, this.compact))
 
+    this.controller.richBlockBackdrop = this.useRichBlockMaterial ? CHAT_MARKDOWN_BACKDROP : undefined
+    this.controller.imageSurface = this.useRichBlockMaterial ? CHAT_MARKDOWN_IMAGE : undefined
     this.controller.setTextSelectionActionItems(this.allowAnnotations ? [
       new TextSelectionActionItem(pickLocalizedText('复制', 'Copy'), (selection: TextSelectionActionContext) => selection.copy()),
       new TextSelectionActionItem(pickLocalizedText('添加到对话', 'Add to chat'), (selection: TextSelectionActionContext) => {
@@ -236,6 +245,7 @@ struct ChatLvMarkdownRenderer {
 
 @ComponentV2
 export struct ChatMarkdownRenderer {
+  @Param useRichBlockMaterial: boolean = false
   @Param content: string = ''
   @Param isInputEnded: boolean = true
   @Param allowAnnotations: boolean = false
@@ -261,6 +271,7 @@ export struct ChatMarkdownRenderer {
   @Builder
   private LvMarkdownContent(themeMode: string) {
     ChatLvMarkdownRenderer({
+      useRichBlockMaterial: this.useRichBlockMaterial,
       allowAnnotations: this.allowAnnotations,
       onAnnotateSelection: this.onAnnotateSelection,
       content: this.content,
@@ -290,6 +301,7 @@ export struct ChatMarkdownRenderer {
   @Builder
   private CangjieMarkdownContent(renderPhase: string) {
     ChatMarkdownHybridRenderer({
+      useRichBlockMaterial: this.useRichBlockMaterial,
       content: this.content,
       isInputEnded: this.isInputEnded,
       incrementalAnalysis: this.incrementalAnalysis,

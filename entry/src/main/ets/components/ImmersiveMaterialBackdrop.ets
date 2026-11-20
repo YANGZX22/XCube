@@ -3,25 +3,33 @@ import { shouldUseWrappedMaterial, WrappedMaterialFactory, WRAPPED_MATERIAL_THIN
 import { getBlurBottomShadow } from '../utils/BlurShadowUtils'
 
 export const IMMERSIVE_MATERIAL_SHADOW_OUTSET = 24
+const SHADOW_MARGIN = IMMERSIVE_MATERIAL_SHADOW_OUTSET * 2
+const HOST_LENGTH = `calc(100% + ${SHADOW_MARGIN}vp)`
+const SURFACE_LENGTH = `calc(100% - ${SHADOW_MARGIN}vp)`
 
 // 用底部 TabBar 为内部 Row 提供材质生效区域；不使用浮动 TabBar 的胶囊背板。
-// 仅绘制背景，调用方将它绝对定位在原有前景后面，不迁移输入、点击或业务 builder。
+// 背板置于内容后方，点击与文本选择始终由前景处理。
 @ComponentV2
 export struct ImmersiveMaterialBackdrop {
-  @Param surfaceWidth: number = 0
-  @Param surfaceHeight: number = 0
+  // 省略尺寸时在同一次原生布局中贴合父容器，适用于展开、收起中的背板。
+  @Param surfaceWidth: number | undefined = undefined
+  @Param surfaceHeight: number | undefined = undefined
   @Param cornerRadius: number | BorderRadiuses = 20
   @Param materialStyle: uiMaterial.ImmersiveStyle = WRAPPED_MATERIAL_THIN
   @Param materialColor: ResourceColor = Color.Transparent
   @Param applyShadow: boolean = true
   @Param materialFactory: WrappedMaterialFactory | undefined = undefined
 
+  private hostLength(length: number | undefined): Length {
+    return length === undefined ? HOST_LENGTH : length + SHADOW_MARGIN
+  }
+
   @Builder
   private MaterialBar() {
     Row() {
       Row() {}
-        .width(this.surfaceWidth)
-        .height(this.surfaceHeight)
+        .width(this.surfaceWidth ?? SURFACE_LENGTH)
+        .height(this.surfaceHeight ?? SURFACE_LENGTH)
         .borderRadius(this.cornerRadius)
         .systemMaterial(this.materialFactory !== undefined ? this.materialFactory() : new uiMaterial.ImmersiveMaterial({
           style: this.materialStyle,
@@ -40,13 +48,14 @@ export struct ImmersiveMaterialBackdrop {
 
   build() {
     Stack({ alignContent: Alignment.TopStart }) {
-      if (this.surfaceWidth > 0 && this.surfaceHeight > 0) {
+      if ((this.surfaceWidth === undefined || this.surfaceWidth > 0) &&
+        (this.surfaceHeight === undefined || this.surfaceHeight > 0)) {
         if (shouldUseWrappedMaterial()) {
           Tabs() {
             TabContent() {}
               .tabBar(this.MaterialBar())
           }
-          .barHeight(this.surfaceHeight + IMMERSIVE_MATERIAL_SHADOW_OUTSET * 2)
+          .barHeight(this.surfaceHeight === undefined ? '100%' : this.hostLength(this.surfaceHeight))
           // 普通底部 TabBar 已满足内部 Row 的材质作用域，无需与空内容区重叠。
           // true 会先给整个矩形宿主注入 COMPONENT_THICK，再清除时可能出现首帧背景。
           .barOverlap(false)
@@ -56,8 +65,8 @@ export struct ImmersiveMaterialBackdrop {
           .scrollable(false)
           .fadingEdge(false)
           // 透明宿主四周留白，材质 Row 的实际宽高、圆角均不被扩大或裁剪。
-          .width(this.surfaceWidth + IMMERSIVE_MATERIAL_SHADOW_OUTSET * 2)
-          .height(this.surfaceHeight + IMMERSIVE_MATERIAL_SHADOW_OUTSET * 2)
+          .width(this.hostLength(this.surfaceWidth))
+          .height(this.hostLength(this.surfaceHeight))
           .backgroundColor(Color.Transparent)
           .clip(false)
           .divider(null)
@@ -71,8 +80,8 @@ export struct ImmersiveMaterialBackdrop {
           .position({ x: -IMMERSIVE_MATERIAL_SHADOW_OUTSET, y: -IMMERSIVE_MATERIAL_SHADOW_OUTSET })
         } else {
           Row() {}
-            .width(this.surfaceWidth)
-            .height(this.surfaceHeight)
+            .width(this.surfaceWidth ?? '100%')
+            .height(this.surfaceHeight ?? '100%')
             .backgroundColor(Color.Transparent)
             .borderRadius(this.cornerRadius)
             .backdropBlur(24)
@@ -81,8 +90,8 @@ export struct ImmersiveMaterialBackdrop {
         }
       }
     }
-    .width(this.surfaceWidth)
-    .height(this.surfaceHeight)
+    .width(this.surfaceWidth ?? LayoutPolicy.matchParent)
+    .height(this.surfaceHeight ?? LayoutPolicy.matchParent)
     .clip(false)
     .hitTestBehavior(HitTestMode.BLOCK_DESCENDANTS)
     .focusable(false)

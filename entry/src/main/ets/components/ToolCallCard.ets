@@ -545,11 +545,11 @@ export struct ToolCallCard {
   }
 
   private toggleRawArguments(index: number): void {
-    if (this.isRawArgumentsShown(index)) {
-      this.rawArgumentIndices = this.rawArgumentIndices.filter((value: number) => value !== index)
-    } else {
-      this.rawArgumentIndices = this.rawArgumentIndices.concat([index])
-    }
+    this.getUIContext().animateTo(getTimelineBarExpandAnimation(), () => {
+      this.rawArgumentIndices = this.isRawArgumentsShown(index)
+        ? this.rawArgumentIndices.filter((value: number) => value !== index)
+        : this.rawArgumentIndices.concat([index])
+    })
   }
 
   private isRawResultShown(index: number): boolean {
@@ -557,11 +557,11 @@ export struct ToolCallCard {
   }
 
   private toggleRawResult(index: number): void {
-    if (this.isRawResultShown(index)) {
-      this.rawResultIndices = this.rawResultIndices.filter((value: number) => value !== index)
-    } else {
-      this.rawResultIndices = this.rawResultIndices.concat([index])
-    }
+    this.getUIContext().animateTo(getTimelineBarExpandAnimation(), () => {
+      this.rawResultIndices = this.isRawResultShown(index)
+        ? this.rawResultIndices.filter((value: number) => value !== index)
+        : this.rawResultIndices.concat([index])
+    })
   }
 
   private getEntryArgumentPreview(entry: ToolCallCardEntry): ToolPayloadPreview {

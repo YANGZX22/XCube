@@ -584,6 +584,7 @@ export struct MermaidRender {
         } else {
           Scroll() {
             CodeSourceRender({
+              transparentBackground: CodeBlockImpl.hasBlockBackdrop(this.markdownUnion),
               markdownUnion: this.markdownUnion,
               text: this.base?.text || "",
               lang: this.base?.lang || "mermaid",
@@ -597,7 +598,7 @@ export struct MermaidRender {
           .height(300)
           .scrollable(ScrollDirection.Vertical)
           .edgeEffect(EdgeEffect.Spring)
-          .backgroundColor(CodeBlockImpl.handleBackgroundColor(this.getCodeBlockTheme()))
+          .backgroundColor(CodeBlockImpl.embeddedBackground(this.markdownUnion))
           .align(Alignment.TopStart)
         }
       }
@@ -605,11 +606,11 @@ export struct MermaidRender {
       .alignItems(HorizontalAlign.Start)
       .borderRadius(CodeBlockImpl.handleCodeBlockBorderRadius(this.markdownUnion))
       .border({
-        width: 1,
+        width: CodeBlockImpl.hasBlockBackdrop(this.markdownUnion) ? 0 : 1,
         color: this.isDarkTheme() ? "#24262B" : "#F3F4F6"
       })
       .clip(true)
-      .backgroundColor(CodeBlockImpl.handleBackgroundColor(this.getCodeBlockTheme()))
+      .backgroundColor(CodeBlockImpl.embeddedBackground(this.markdownUnion))
       .onVisibleAreaChange([0.01], (isVisible: boolean, currentRatio: number) => {
         this.previewVisible = isVisible || currentRatio > 0
         if (isVisible || currentRatio > 0) {
