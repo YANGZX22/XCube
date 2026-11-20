@@ -3,6 +3,7 @@ import { AppStorageKeys } from '../config/AppStorageKeys'
 import { LayoutSizeClass } from '../config/LayoutProfile'
 import { ThemeColorConfig } from '../models/ThemeColors'
 import { SettingsPagePresentationMode } from '../config/SettingsDetailPresentation'
+import { DEFAULT_MARKDOWN_RENDERER, MarkdownRenderer, normalizeMarkdownRenderer } from '../services/PreferencesService'
 
 const APP_UI_STATE_KEY = 'chatbox_app_ui_state'
 
@@ -56,7 +57,7 @@ export class AppUiState {
   @Trace chatFontSize: number = 15
   @Trace chatSerifFontEnabled: boolean = false
   @Trace chatSerifFontFamily: string = 'common'
-  @Trace markdownRenderer: string = 'cangjie'
+  @Trace markdownRenderer: MarkdownRenderer = DEFAULT_MARKDOWN_RENDERER
   @Trace chatInputEnterKeySend: boolean = false
   @Trace chatOrderedResponseHistory: boolean = false
   @Trace ttsEnabled: boolean = true
@@ -226,7 +227,7 @@ function applyAppUiStateValue<T extends string | number | boolean>(state: AppUiS
       state.chatSerifFontFamily = value as string
       return
     case AppStorageKeys.MARKDOWN_RENDERER:
-      state.markdownRenderer = value as string
+      state.markdownRenderer = normalizeMarkdownRenderer(value as string)
       return
     case AppStorageKeys.CHAT_INPUT_ENTER_KEY_SEND:
       state.chatInputEnterKeySend = value as boolean
@@ -351,7 +352,7 @@ function createAppUiStateFromStorage(): AppUiState {
   applyAppUiStateValue(state, AppStorageKeys.CHAT_SERIF_FONT_FAMILY,
     readStorageValue<string>(AppStorageKeys.CHAT_SERIF_FONT_FAMILY, 'common'))
   applyAppUiStateValue(state, AppStorageKeys.MARKDOWN_RENDERER,
-    readStorageValue<string>(AppStorageKeys.MARKDOWN_RENDERER, 'cangjie'))
+    readStorageValue<string>(AppStorageKeys.MARKDOWN_RENDERER, DEFAULT_MARKDOWN_RENDERER))
   applyAppUiStateValue(state, AppStorageKeys.CHAT_INPUT_ENTER_KEY_SEND,
     readStorageValue<boolean>(AppStorageKeys.CHAT_INPUT_ENTER_KEY_SEND, false))
   applyAppUiStateValue(state, AppStorageKeys.CHAT_ORDERED_RESPONSE_HISTORY,

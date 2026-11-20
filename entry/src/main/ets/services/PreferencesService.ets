@@ -170,8 +170,10 @@ export enum MarkdownRenderer {
   LV_MARKDOWN_IN = 'lv-markdown-in'
 }
 
+export const DEFAULT_MARKDOWN_RENDERER: MarkdownRenderer = MarkdownRenderer.LV_MARKDOWN_IN
+
 export function normalizeMarkdownRenderer(value: string): MarkdownRenderer {
-  return value === MarkdownRenderer.LV_MARKDOWN_IN ? MarkdownRenderer.LV_MARKDOWN_IN : MarkdownRenderer.CANGJIE
+  return value === MarkdownRenderer.CANGJIE ? MarkdownRenderer.CANGJIE : DEFAULT_MARKDOWN_RENDERER
 }
 
 export function normalizeAppLanguageValue(value: string): AppLanguage {
@@ -555,7 +557,7 @@ export class PreferencesService {
   }
 
   async getMarkdownRenderer(): Promise<MarkdownRenderer> {
-    const renderer = await this.getString(PreferenceKeys.MARKDOWN_RENDERER, MarkdownRenderer.CANGJIE)
+    const renderer = await this.getString(PreferenceKeys.MARKDOWN_RENDERER, DEFAULT_MARKDOWN_RENDERER)
     return normalizeMarkdownRenderer(renderer)
   }
 

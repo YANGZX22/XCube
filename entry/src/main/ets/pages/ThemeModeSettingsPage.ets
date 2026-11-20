@@ -25,7 +25,7 @@ import {
   ThemeInfo,
   VisualEffectsMode
 } from '../models/ThemeColors'
-import { MarkdownRenderer, ThemeMode } from '../services/PreferencesService'
+import { DEFAULT_MARKDOWN_RENDERER, MarkdownRenderer, ThemeMode } from '../services/PreferencesService'
 import { ServiceRegistry } from '../services/ServiceRegistry'
 import { SettingsCompactTitleBarContent } from '../components/settings/SettingsCompactPageHeader'
 import { getSettingsPageContentMaxWidth, getSettingsPageCompactTabsTotalInset } from '../utils/SettingsPageLayoutHelper'
@@ -151,7 +151,7 @@ export struct ThemeAppearanceSettingsView {
   @Local chatFontSize: number = 15
   @Local chatSerifFontEnabled: boolean = false
   @Local chatSerifFontFamily: string = CHAT_SERIF_FONT_COMMON
-  @Local markdownRenderer: MarkdownRenderer = MarkdownRenderer.CANGJIE
+  @Local markdownRenderer: MarkdownRenderer = DEFAULT_MARKDOWN_RENDERER
   @Local customSerifAvailable: boolean = false
   @Local customSerifName: string = ''
   @Local serifFontSelectRevision: number = 0

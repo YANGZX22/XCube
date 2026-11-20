@@ -3,6 +3,7 @@ import {
   getPreferencesService,
   ThemeMode,
   AppLanguage,
+  DEFAULT_MARKDOWN_RENDERER,
   MarkdownRenderer,
   PreferenceKeys
 } from '../services/PreferencesService'
@@ -41,7 +42,7 @@ export class SettingsManager {
   private chatFontSize: number = 15
   private chatSerifFontEnabled: boolean = false
   private chatSerifFontFamily: string = 'common'
-  private markdownRenderer: MarkdownRenderer = MarkdownRenderer.CANGJIE
+  private markdownRenderer: MarkdownRenderer = DEFAULT_MARKDOWN_RENDERER
   private chatInputEnterKeySend: boolean = false
   private chatOrderedResponseHistory: boolean = false
   private ttsEnabled: boolean = true
