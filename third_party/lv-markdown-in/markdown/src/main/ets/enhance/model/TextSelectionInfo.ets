@@ -27,12 +27,31 @@ export class RegisteredTextBlock {
   }
 }
 
+export class SelectionHighlightRect {
+  x: number
+  y: number
+  w: number
+  h: number
+  key: string
+
+  constructor(blockId: string, index: number, rect: common2D.Rect, offsetX: number, offsetY: number) {
+    this.x = offsetX + rect.left
+    this.y = offsetY + rect.top
+    this.w = rect.right - rect.left
+    this.h = rect.bottom - rect.top
+    this.key = `${blockId}:${index}:${this.x},${this.y},${this.w},${this.h}`
+  }
+}
+
 export class SelectedTextInfo {
   block: RegisteredTextBlock
   componentInfo: componentUtils.ComponentInfo
   rects: common2D.Rect[]
   startIndex: number
   endIndex: number
+  private highlightX: number = NaN
+  private highlightY: number = NaN
+  private highlights: SelectionHighlightRect[] = []
 
   constructor(block: RegisteredTextBlock, componentInfo: componentUtils.ComponentInfo, rects: common2D.Rect[],
     startIndex: number, endIndex: number) {
@@ -41,6 +60,18 @@ export class SelectedTextInfo {
     this.rects = rects
     this.startIndex = startIndex
     this.endIndex = endIndex
+  }
+
+  getHighlights(rootInfo: componentUtils.ComponentInfo): SelectionHighlightRect[] {
+    const x = px2vp(this.componentInfo.screenOffset.x - rootInfo.screenOffset.x)
+    const y = px2vp(this.componentInfo.screenOffset.y - rootInfo.screenOffset.y)
+    if (this.highlightX !== x || this.highlightY !== y) {
+      this.highlightX = x
+      this.highlightY = y
+      this.highlights = this.rects.map((rect: common2D.Rect, index: number) =>
+        new SelectionHighlightRect(this.block.id, index, rect, x, y))
+    }
+    return this.highlights
   }
 
   getCaretPosition(rootInfo: componentUtils.ComponentInfo, isEnd: boolean = true): Position | undefined {

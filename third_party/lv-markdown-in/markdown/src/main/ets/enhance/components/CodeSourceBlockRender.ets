@@ -10,6 +10,7 @@ export struct CodeSourceBlockRender {
   @Prop lang: string = 'code'
   @Prop text: string = ''
   @Prop autoCollapse: boolean = true
+  @Prop selectionUnion: string = ''
   @Prop selectable: boolean = false
   @Prop lineNumberWidth: number = 34
   @Prop contentBottomPadding: number = 12
@@ -134,6 +135,7 @@ export struct CodeSourceBlockRender {
           lang: this.lang || 'code',
           autoCollapse: this.autoCollapse,
           selectable: this.selectable,
+          selectionUnion: this.selectionUnion,
           lineNumberWidth: this.lineNumberWidth,
           contentBottomPadding: this.contentBottomPadding,
           contentTopPadding: this.actionAreaVisible ? 0 : 12

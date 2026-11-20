@@ -58,7 +58,7 @@ export class TextSelectionMouseTracker {
       const selecting = this.selecting
       this.reset()
       if (selecting) {
-        const handled = TextSelectionController.getInstance(selectionUnion).triggerEndSelection()
+        const handled = TextSelectionController.getInstance(selectionUnion).triggerEndSelection(event.windowX, event.windowY)
         if (handled) {
           event.stopPropagation()
         }

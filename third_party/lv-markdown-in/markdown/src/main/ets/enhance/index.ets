@@ -21,25 +21,21 @@ import { generateRandomString } from './utils/RandomString';
 import { getLatexText, preloadLatexImage } from './builders/LatexBuilder';
 import { common2D } from '@kit.ArkGraphics2D';
 import text from '@ohos.graphics.text';
-import { BlockSelectionStartInfo, CaretInfo, LongPressMenuInfo, LongPressSelectionType, RegisteredTextBlock, SelectedTextInfo, TextSelectionActionContext, TextSelectionActionItem } from './model/TextSelectionInfo';
-import { componentUtils } from '@kit.ArkUI';
+import { BlockSelectionStartInfo, CaretInfo, LongPressMenuInfo, LongPressSelectionType, RegisteredTextBlock, SelectedTextInfo, SelectionHighlightRect, TextSelectionActionContext, TextSelectionActionItem } from './model/TextSelectionInfo';
+import { componentUtils, FrameCallback, Magnifier } from '@kit.ArkUI';
 import { clearActiveTextSelectionMouseTracker, isPrimaryMouseButton } from './utils/TextSelectionMouseUtil';
 
 const TAG = "LV-MARKDOWN-IN"
 
-// 选区高亮的单个矩形(root 相对坐标, vp)。改用声明式叠层渲染替代 Canvas。
-class SelectionHighlightRect {
-  x: number
-  y: number
-  w: number
-  h: number
+class SelectionDragFrame extends FrameCallback {
+  private flush: () => void
 
-  constructor(x: number, y: number, w: number, h: number) {
-    this.x = x
-    this.y = y
-    this.w = w
-    this.h = h
+  constructor(flush: () => void) {
+    super()
+    this.flush = flush
   }
+
+  onFrame(_time: number): void { this.flush() }
 }
 
 /**
@@ -88,7 +84,7 @@ export struct Markdown {
   @State private treeNode: TreeNode[] = []
   private startCaretInfo: CaretInfo = new CaretInfo()
   private endCaretInfo: CaretInfo = new CaretInfo()
-  @State private selectedTextInfos: SelectedTextInfo[] = []
+  private selectedTextInfos: SelectedTextInfo[] = []
   @State private selectionActive: boolean = false
   @State private selectionActionBarVisible: boolean = false
   @State private startCaretX: number = -100
@@ -97,10 +93,36 @@ export struct Markdown {
   @State private endCaretY: number = -100
   private selectedRangeStartOrder: number = -1
   private selectedRangeEndOrder: number = -1
-  private lastSelectionUpdateTime: number = 0
-  private readonly selectionUpdateInterval: number = 24
+  private pendingDrag: boolean = false
+  private dragFramePosted: boolean = false
+  private dragX: number = 0
+  private dragY: number = 0
+  private dragStartCaret: boolean = false
+  private dragMagnifier?: Magnifier
+  private magnifiedBlockId: string = ''
+  private dragFrame: SelectionDragFrame = new SelectionDragFrame(() => {
+    this.dragFramePosted = false
+    this.flushCaretDrag()
+  })
   private readonly initialSelectionLength: number = 3
-  private readonly selectionActionBarWidth: number = 188
+  private selectionItemWidths: Map<string, number> = new Map()
+  private getSelectionActionBarWidth(): number {
+    const items = this.controller.getTextSelectionActionItems()
+    const desired = items.length === 0 ? 188 : items.reduce((width: number, item: TextSelectionActionItem) =>
+      width + this.selectionItemWidth(item.title), 8)
+    return this.selectionLayerWidth > 16 ? Math.min(desired, this.selectionLayerWidth - 16) : desired
+  }
+
+  private selectionItemWidth(title: string): number {
+    const context = this.getUIContext()
+    const key = `${context.fp2px(14)}|${title}`
+    const cached = this.selectionItemWidths.get(key)
+    if (cached !== undefined) return cached
+    const size = context.getMeasureUtils().measureTextSize({ textContent: title, fontSize: 14 })
+    const width = Math.max(60, Math.ceil(context.px2vp(Number(size.width))) + 16)
+    this.selectionItemWidths.set(key, width)
+    return width
+  }
   private readonly selectionActionBarHeight: number = 40
   private readonly selectionActionBarSpacing: number = 12
   private readonly selectionActionBarEdgeInset: number = 8
@@ -124,7 +146,8 @@ export struct Markdown {
   // 选区高亮改为声明式叠层(一组定位矩形), 与手柄走同一渲染管线 → 同帧提交, 高亮不再尾随手柄;
   // 取代原 Canvas(独立画布提交晚一帧 + 每帧 reset 整张"内容尺寸"画布的开销)。
   @State private selectionRectList: SelectionHighlightRect[] = []
-  private rectRangeCache: Map<string, Map<string, common2D.Rect[]>> = new Map()
+  private selectionRootInfo?: componentUtils.ComponentInfo
+  @State private selectionMenuPosition: Position = { x: 0, y: 0 }
   @State private selectionLayerWidth: number = 0
   @State private selectionLayerHeight: number = 0
   /**
@@ -163,8 +186,8 @@ export struct Markdown {
         this.updateSelectionByMouse(globalX, globalY)
       })
     TextSelectionController.getInstance(this.selectionUnion)
-      .setEndSelectionHandler(() => {
-        this.endSelectionByMouse()
+      .setEndSelectionHandler((x: number, y: number) => {
+        this.endSelectionByMouse(x, y)
       })
     TextSelectionController.getInstance(this.selectionUnion)
       .setClearSelectionHandler(() => {
@@ -175,6 +198,8 @@ export struct Markdown {
   }
 
   aboutToDisappear(): void {
+    this.pendingDrag = false
+    this.releaseMagnifier()
     MarkdownPluginRegistry.destroy(this.pluginUnion)
     if (this.workerRegistered) {
       this.workerManager.unregister(this.workerUnion)
@@ -192,6 +217,9 @@ export struct Markdown {
   }
 
   private clearSelection() {
+    this.pendingDrag = false
+    this.releaseMagnifier()
+    this.selectionRootInfo = undefined
     this.selectionActive = false
     this.selectionActionBarVisible = false
     clearActiveTextSelectionMouseTracker()
@@ -204,12 +232,10 @@ export struct Markdown {
     this.endCaretY = -100
     this.selectedRangeStartOrder = -1
     this.selectedRangeEndOrder = -1
-    this.lastSelectionUpdateTime = 0
     this.mouseSelecting = false
     this.mouseSelectionDragged = false
     this.suppressSelectionOverlayClick = false
     this.selectedTextInfos = []
-    this.rectRangeCache.clear()
     this.selectionRectList = []
   }
 
@@ -508,97 +534,18 @@ export struct Markdown {
     }
   }
 
-  private getTextIndex(localX: number, localY: number, layoutManager: LayoutManager, maxLength: number,
-    cacheKey?: string): number {
-    const lineCount = layoutManager.getLineCount()
-    if (lineCount <= 0) {
-      return 0
-    }
-    let lineNumber = -1
-    for (let i = 0; i < lineCount; i++) {
-      const lineMetrics = layoutManager.getLineMetrics(i)
-      const top = this.getUIContext().px2vp(lineMetrics.topHeight)
-      const bottom = this.getUIContext().px2vp(lineMetrics.topHeight + lineMetrics.height)
-      if (localY >= top && localY <= bottom) {
-        lineNumber = i
-        break
-      }
-    }
-    if (lineNumber < 0) {
-      lineNumber = localY < 0 ? 0 : lineCount - 1
-    }
-    const lineMetrics = layoutManager.getLineMetrics(lineNumber)
-    const lineStart = lineMetrics.startIndex
-    const lineEnd = Math.min(lineMetrics.endIndex + 1, maxLength)
-    if (lineEnd <= lineStart) {
-      return lineStart
-    }
-    if (localX <= this.getUIContext().px2vp(lineMetrics.left)) {
-      return lineStart
-    }
-
-    const lineRight = this.getUIContext().px2vp(lineMetrics.left + lineMetrics.width)
-    if (localX >= lineRight) {
-      return lineEnd
-    }
-
-    let low = lineStart
-    let high = lineEnd - 1
-    while (low <= high) {
-      const mid = Math.floor((low + high) / 2)
-      const rects = this.getRectsForRange(mid, Math.min(mid + 1, maxLength), layoutManager, cacheKey)
-      if (rects.length == 0) {
-        return mid
-      }
-      const rect = rects[0]
-      const center = (rect.left + rect.right) / 2
-      if (localX < center) {
-        high = mid - 1
-      } else {
-        low = mid + 1
-      }
-    }
-
-    return Math.max(lineStart, Math.min(low, lineEnd))
+  private getTextIndex(localX: number, localY: number, layout: LayoutManager, length: number): number {
+    const context = this.getUIContext()
+    const hit = layout.getGlyphPositionAtCoordinate(context.vp2px(localX), context.vp2px(localY))
+    return Math.max(0, Math.min(hit.position, length))
   }
 
-  private getLayoutTextLength(layoutManager: LayoutManager): number {
-    const lineCount = layoutManager.getLineCount()
-    if (lineCount <= 0) {
-      return 0
-    }
-    let maxLength = 0
-    for (let i = 0; i < lineCount; i++) {
-      const lineMetrics = layoutManager.getLineMetrics(i)
-      maxLength = Math.max(maxLength, lineMetrics.endIndex + 1)
-    }
-    return maxLength
+  private getLayoutTextLength(layout: LayoutManager): number {
+    const lines = layout.getLineCount()
+    return lines > 0 ? layout.getLineMetrics(lines - 1).endIndex + 1 : 0
   }
 
-  private getRectsForRange(start: number, end: number, layoutManager: LayoutManager,
-    cacheKey?: string): common2D.Rect[] {
-    const rangeStart = Math.max(0, start)
-    const rangeEnd = Math.max(rangeStart, end)
-    if (!cacheKey) {
-      return this.loadRectsForRange(rangeStart, rangeEnd, layoutManager)
-    }
-    const blockCache = this.rectRangeCache.get(cacheKey)
-    const rangeCacheKey = `${rangeStart}:${rangeEnd}`
-    if (blockCache?.has(rangeCacheKey)) {
-      return blockCache.get(rangeCacheKey) || []
-    }
-    const rects = this.loadRectsForRange(rangeStart, rangeEnd, layoutManager)
-    if (blockCache) {
-      blockCache.set(rangeCacheKey, rects)
-    } else {
-      const nextBlockCache: Map<string, common2D.Rect[]> = new Map()
-      nextBlockCache.set(rangeCacheKey, rects)
-      this.rectRangeCache.set(cacheKey, nextBlockCache)
-    }
-    return rects
-  }
-
-  private loadRectsForRange(start: number, end: number, layoutManager: LayoutManager): common2D.Rect[] {
+  private getRectsForRange(start: number, end: number, layoutManager: LayoutManager): common2D.Rect[] {
     return layoutManager.getRectsForRange({ start, end }, text.RectWidthStyle.TIGHT,
       text.RectHeightStyle.TIGHT).map((item): common2D.Rect => {
       return {
@@ -612,22 +559,34 @@ export struct Markdown {
 
   private getCaretInfo(globalX: number, globalY: number, info: CaretInfo) {
     const registry = TextSelectionController.getInstance(this.selectionUnion)
-    const hit = registry.getBlockInfoByPoint(globalX, globalY)
+    const hit = registry.getBlockInfoByPoint(globalX, globalY, info.blockOrder)
     if (!hit) {
+      if (this.magnifiedBlockId) {
+        this.dragMagnifier?.unbind()
+        this.magnifiedBlockId = ''
+      }
       return false
     }
     const localX = globalX - px2vp(hit.info.screenOffset.x)
     const localY = globalY - px2vp(hit.info.screenOffset.y)
+    if (this.dragMagnifier) {
+      if (this.magnifiedBlockId !== hit.block.id) {
+        this.dragMagnifier.bind(hit.block.id)
+        this.magnifiedBlockId = hit.block.id
+      }
+      this.dragMagnifier.show(Math.max(0, Math.min(localX, px2vp(hit.info.size.width))),
+        Math.max(0, Math.min(localY, px2vp(hit.info.size.height))))
+    }
     const layoutManager = hit.block.controller.getLayoutManager()
     const layoutLength = this.getLayoutTextLength(layoutManager)
-    const caretIndex = this.getTextIndex(localX, localY, layoutManager, layoutLength, hit.block.id)
+    const caretIndex = this.getTextIndex(localX, localY, layoutManager, layoutLength)
     info.blockOrder = hit.block.order
     info.caretIndex = Math.max(0, Math.min(caretIndex, layoutLength))
     return true
   }
 
   private buildSelectedTextInfo(order: number, start: CaretInfo, end: CaretInfo,
-    registry: TextSelectionController): SelectedTextInfo | undefined {
+    registry: TextSelectionController, previous?: SelectedTextInfo): SelectedTextInfo | undefined {
     const block: RegisteredTextBlock | undefined = registry.getBlockByOrder(order)
     if (!block) {
       return undefined
@@ -643,7 +602,11 @@ export struct Markdown {
       const endIndex = order == end.blockOrder ? end.caretIndex : layoutLength
       const rangeStart = Math.max(0, Math.min(startIndex, layoutLength))
       const rangeEnd = Math.max(rangeStart, Math.min(endIndex, layoutLength))
-      const rects = this.getRectsForRange(rangeStart, rangeEnd, layoutManager, block.id)
+      if (previous && previous.block === block && previous.componentInfo === blockInfo &&
+        previous.startIndex === rangeStart && previous.endIndex === rangeEnd) {
+        return previous
+      }
+      const rects = this.getRectsForRange(rangeStart, rangeEnd, layoutManager)
       return new SelectedTextInfo(block, blockInfo, rects, rangeStart, rangeEnd)
     } catch (_err) {
       return undefined
@@ -681,8 +644,7 @@ export struct Markdown {
 
   private refreshSelectedTextInfosComponentInfo(registry: TextSelectionController) {
     for (let i = 0; i < this.selectedTextInfos.length; i++) {
-      // 读缓存即可: 拖动期间块位置静止, 且拖动开始已 invalidateLayoutCache 重采过一次。
-      // 不再每帧逐块 getBlockRect(true) 强制同步查询 → 减轻每帧负担, 让 Canvas 高亮跟上手柄。
+      // 拖动开始时已清空布局缓存，同一次拖动内复用块位置。
       const blockInfo = registry.getBlockRect(this.selectedTextInfos[i].block.id)
       if (blockInfo) {
         this.selectedTextInfos[i].componentInfo = blockInfo
@@ -691,7 +653,8 @@ export struct Markdown {
   }
 
   private collectSelectedTextInfos(start: CaretInfo, end: CaretInfo) {
-    const rootInfo = componentUtils.getRectangleById(this.selectionRootId)
+    const rootInfo = this.selectionRootInfo ?? componentUtils.getRectangleById(this.selectionRootId)
+    this.selectionRootInfo = rootInfo
     const registry = TextSelectionController.getInstance(this.selectionUnion)
     const expectedCount = end.blockOrder - start.blockOrder + 1
     const canIncrementallyUpdate = this.selectedTextInfos.length > 0 &&
@@ -740,18 +703,11 @@ export struct Markdown {
               continue
             }
             updatedOrders.add(order)
-            this.updateSelectedTextInfoAtOrder(order, this.buildSelectedTextInfo(order, start, end, registry))
+            const previous = this.selectedTextInfos[order - start.blockOrder]
+            this.updateSelectedTextInfoAtOrder(order, this.buildSelectedTextInfo(order, start, end, registry, previous))
           }
         }
       }
-    }
-    this.refreshSelectedTextInfosComponentInfo(registry)
-    if (this.selectedTextInfos.length == 0) {
-      this.startCaretX = -100
-      this.startCaretY = -100
-      this.endCaretX = -100
-      this.endCaretY = -100
-      return
     }
     this.updateCaretPositions(rootInfo)
     this.paintSelection(rootInfo)
@@ -779,26 +735,22 @@ export struct Markdown {
     } else {
       this.collectSelectedTextInfos(infoB, infoA)
     }
-    this.selectionActive = true
+    this.selectionActive = this.selectedTextInfos.length > 0
   }
 
-  private paintSelection(rootInfo?: componentUtils.ComponentInfo) {
-    const rootRect = rootInfo || componentUtils.getRectangleById(this.selectionRootId)
+  private paintSelection(rootInfo: componentUtils.ComponentInfo) {
     const rects: SelectionHighlightRect[] = []
-    for (let i = 0; i < this.selectedTextInfos.length; i++) {
-      const info = this.selectedTextInfos[i]
-      for (let j = 0; j < info.rects.length; j++) {
-        const rect = info.rects[j]
-        const x = px2vp(info.componentInfo.screenOffset.x) - px2vp(rootRect.screenOffset.x) + rect.left
-        const y = px2vp(info.componentInfo.screenOffset.y) - px2vp(rootRect.screenOffset.y) + rect.top
-        rects.push(new SelectionHighlightRect(x, y, rect.right - rect.left, rect.bottom - rect.top))
-      }
+    for (const info of this.selectedTextInfos) {
+      for (const rect of info.getHighlights(rootInfo)) rects.push(rect)
     }
     // 赋新数组引用驱动声明式叠层重渲染; 与 caret @State 同管线, 同帧上屏。
     this.selectionRectList = rects
   }
 
   private startSelection(selectionInfo: BlockSelectionStartInfo) {
+    this.pendingDrag = false
+    this.releaseMagnifier()
+    this.selectionRootInfo = undefined
     // 长按菜单模式: 不立即选区, 改为把按压点 / 段落文本 / 选取动作交给消费端渲染蒙层菜单。
     if (this.controller.getLongPressMenuEnable()) {
       this.handleLongPressMenu(selectionInfo)
@@ -826,8 +778,7 @@ export struct Markdown {
     const localY = selectionInfo.localY
     const layoutManager = block.controller.getLayoutManager()
     const layoutLength = this.getLayoutTextLength(layoutManager)
-    this.rectRangeCache.clear()
-    const caretIndex = this.getTextIndex(localX, localY, layoutManager, layoutLength, block.id)
+    const caretIndex = this.getTextIndex(localX, localY, layoutManager, layoutLength)
     this.startCaretInfo.blockOrder = block.order
     this.startCaretInfo.caretIndex = Math.max(0, Math.min(caretIndex, layoutLength))
     this.endCaretInfo.blockOrder = this.startCaretInfo.blockOrder
@@ -914,7 +865,6 @@ export struct Markdown {
       this.clearSelection()
       return
     }
-    this.rectRangeCache.clear()
     this.startCaretInfo.blockOrder = block.order
     this.startCaretInfo.caretIndex = 0
     this.endCaretInfo.blockOrder = block.order
@@ -928,24 +878,27 @@ export struct Markdown {
   }
 
   private updateCaretByGesture(globalX: number, globalY: number, isStart: boolean) {
-    const now = Date.now()
-    if (this.lastSelectionUpdateTime > 0 && now - this.lastSelectionUpdateTime < this.selectionUpdateInterval) {
-      return
+    this.dragX = globalX
+    this.dragY = globalY
+    this.dragStartCaret = isStart
+    this.pendingDrag = true
+    if (!this.dragFramePosted) {
+      this.dragFramePosted = true
+      this.getUIContext().postFrameCallback(this.dragFrame)
     }
-    const target = isStart ? this.startCaretInfo : this.endCaretInfo
-    const oldBlockOrder = target.blockOrder
-    const oldCaretIndex = target.caretIndex
-    const hit = this.getCaretInfo(globalX, globalY, target)
-    if (!hit) {
-      return
+  }
+
+  private flushCaretDrag(): void {
+    if (!this.pendingDrag) return
+    this.pendingDrag = false
+    if (!this.selectionActive) return
+    const target = this.dragStartCaret ? this.startCaretInfo : this.endCaretInfo
+    const oldOrder = target.blockOrder
+    const oldIndex = target.caretIndex
+    if (this.getCaretInfo(this.dragX, this.dragY, target) &&
+      (target.blockOrder !== oldOrder || target.caretIndex !== oldIndex)) {
+      this.updateSelectionByOrderedCaret(this.startCaretInfo, this.endCaretInfo)
     }
-    if (oldBlockOrder == target.blockOrder && oldCaretIndex == target.caretIndex) {
-      this.refreshSelectionVisuals()
-      this.lastSelectionUpdateTime = now
-      return
-    }
-    this.updateSelectionByOrderedCaret(this.startCaretInfo, this.endCaretInfo)
-    this.lastSelectionUpdateTime = now
   }
 
   private updateSelectionByMouse(globalX: number, globalY: number) {
@@ -962,17 +915,18 @@ export struct Markdown {
     this.updateCaretByGesture(globalX, globalY, false)
   }
 
-  private endSelectionByMouse() {
+  private endSelectionByMouse(x: number, y: number) {
     if (!this.mouseSelecting) {
       return
     }
+    this.updateSelectionByMouse(x, y)
     this.mouseSelecting = false
     clearActiveTextSelectionMouseTracker()
     if (!this.mouseSelectionDragged) {
       this.clearSelection()
       return
     }
-    this.refreshSelectionVisuals()
+    this.flushCaretDrag()
     this.showSelectionActionBar()
     this.suppressSelectionOverlayClick = true
   }
@@ -987,7 +941,7 @@ export struct Markdown {
       return
     }
     if (event.action == MouseAction.Release) {
-      this.endSelectionByMouse()
+      this.endSelectionByMouse(event.windowX, event.windowY)
       event.stopPropagation()
     }
   }
@@ -1000,16 +954,27 @@ export struct Markdown {
     return this.isSelectionDarkTheme() ? '#F9FAFB' : '#111827'
   }
 
-  private getSelectionMenuOptions(): MenuOptions {
-    const options: MenuOptions = this.selectionMenuOptions()
-    const onDisappear = options.onDisappear
-    options.placement = Placement.BottomLeft
-    options.enableArrow = false
-    options.onDisappear = (): void => {
-      this.hideSelectionActionBar()
-      onDisappear?.()
+  private getSelectionPopupOptions(): CustomPopupOptions {
+    const style = this.selectionMenuOptions()
+    return {
+      builder: (): void => { this.selectionActionMenu() },
+      placement: Placement.BottomLeft,
+      width: this.getSelectionActionBarWidth(),
+      radius: this.selectionActionBarHeight / 2,
+      targetSpace: 0,
+      enableArrow: false,
+      mask: false,
+      autoCancel: false,
+      focusable: false,
+      showInSubWindow: false,
+      systemMaterial: style.systemMaterial,
+      popupColor: style.backgroundColor,
+      backgroundBlurStyle: style.backgroundBlurStyle,
+      backgroundEffect: style.backgroundEffect,
+      onStateChange: (event): void => {
+        if (!event.isVisible) style.onDisappear?.()
+      }
     }
-    return options
   }
 
   private getSelectedTextValue(): string {
@@ -1070,7 +1035,6 @@ export struct Markdown {
     if (!firstBlock || !lastBlock) {
       return
     }
-    this.rectRangeCache.clear()
     this.startCaretInfo.blockOrder = firstBlock.order
     this.startCaretInfo.caretIndex = 0
     this.endCaretInfo.blockOrder = lastBlock.order
@@ -1083,6 +1047,7 @@ export struct Markdown {
     if (!this.selectionActive || this.selectedTextInfos.length == 0) {
       return
     }
+    this.selectionMenuPosition = this.getSelectionActionBarPosition()
     this.selectionActionBarVisible = true
   }
 
@@ -1092,11 +1057,32 @@ export struct Markdown {
     }
   }
 
+  private releaseMagnifier(): void {
+    if (this.magnifiedBlockId) this.dragMagnifier?.unbind()
+    this.magnifiedBlockId = ''
+    this.dragMagnifier = undefined
+  }
+
+  private beginCaretDrag(touch: boolean): void {
+    this.pendingDrag = false
+    this.releaseMagnifier()
+    if (touch) this.dragMagnifier = this.getUIContext().getMagnifier?.()
+    this.hideSelectionActionBar()
+    TextSelectionController.getInstance(this.selectionUnion).invalidateLayoutCache()
+    this.refreshSelectionVisuals()
+  }
+
+  private endCaretDrag(): void {
+    this.flushCaretDrag()
+    this.releaseMagnifier()
+    this.showSelectionActionBar()
+  }
+
   private getSelectionBounds(rootInfo: componentUtils.ComponentInfo): common2D.Rect | undefined {
     let left = Number.MAX_VALUE
     let top = Number.MAX_VALUE
-    let right = Number.MIN_VALUE
-    let bottom = Number.MIN_VALUE
+    let right = -Infinity
+    let bottom = -Infinity
     let hasRect = false
     for (let i = 0; i < this.selectedTextInfos.length; i++) {
       const info = this.selectedTextInfos[i]
@@ -1123,30 +1109,28 @@ export struct Markdown {
   }
 
   private getSelectionActionBarPosition(): Position {
-    const rootInfo = componentUtils.getRectangleById(this.selectionRootId)
-    const selectionBounds = this.getSelectionBounds(rootInfo)
-    const anchorX = this.endCaretX + 10
-    const minX = this.selectionActionBarEdgeInset
-    const maxX =
-      Math.max(minX, this.selectionLayerWidth - this.selectionActionBarWidth - this.selectionActionBarEdgeInset)
-    const x = Math.max(minX, Math.min(anchorX - this.selectionActionBarWidth / 2, maxX))
-    let y = Math.max(this.selectionActionBarEdgeInset,
-      this.endCaretY - this.selectionActionBarHeight - this.selectionActionBarSpacing)
-    if (selectionBounds) {
-      const aboveY = selectionBounds.top - this.selectionActionBarHeight - this.selectionActionBarSpacing
-      const belowY = selectionBounds.bottom + this.selectionActionBarSpacing
-      const maxY = Math.max(this.selectionActionBarEdgeInset,
-        this.selectionLayerHeight - this.selectionActionBarHeight - this.selectionActionBarEdgeInset)
-      if (aboveY >= this.selectionActionBarEdgeInset) {
-        y = aboveY
-      } else if (belowY <= maxY) {
-        y = belowY
-      } else {
-        const spaceAbove = Math.max(0, selectionBounds.top - this.selectionActionBarEdgeInset)
-        const spaceBelow = Math.max(0,
-          this.selectionLayerHeight - this.selectionActionBarEdgeInset - selectionBounds.bottom)
-        y = spaceAbove >= spaceBelow ? this.selectionActionBarEdgeInset : maxY
-      }
+    const root = componentUtils.getRectangleById(this.selectionRootId)
+    const bounds = this.getSelectionBounds(root)
+    const width = this.getSelectionActionBarWidth()
+    const inset = this.selectionActionBarEdgeInset
+    const x = Math.max(inset, Math.min(this.endCaretX + 10 - width / 2, this.selectionLayerWidth - width - inset))
+    // 短段落的上方也可放工具栏。用当前窗口页面的可见空间，而非正文自身的高度。
+    const page = this.getUIContext().getPageRootNode?.()
+    const pageTop = page ? Number(page.getPositionToWindow().y) - px2vp(root.windowOffset.y) : 0
+    const pageHeight = page ? px2vp(Number(page.getMeasuredSize().height)) : this.selectionLayerHeight
+    const minY = pageTop + inset
+    const maxY = Math.max(minY, pageTop + pageHeight - inset - this.selectionActionBarHeight)
+    const above = (bounds?.top ?? this.startCaretY) - this.selectionActionBarSpacing - this.selectionActionBarHeight
+    const below = Math.max(bounds?.bottom ?? this.endCaretY, this.startCaretY + 36, this.endCaretY + 36) +
+      this.selectionActionBarSpacing
+    let y: number
+    if (above >= minY && above <= maxY) {
+      y = above
+    } else if (below >= minY && below <= maxY) {
+      y = below
+    } else {
+      const activeCaret = this.dragStartCaret ? this.startCaretY : this.endCaretY
+      y = activeCaret < (minY + maxY) / 2 ? maxY : minY
     }
     return { x, y }
   }
@@ -1156,10 +1140,12 @@ export struct Markdown {
       return
     }
     const currentRootInfo = rootInfo || componentUtils.getRectangleById(this.selectionRootId)
+    this.selectionRootInfo = currentRootInfo
     const currentRegistry = registry || TextSelectionController.getInstance(this.selectionUnion)
     this.refreshSelectedTextInfosComponentInfo(currentRegistry)
     this.updateCaretPositions(currentRootInfo)
     this.paintSelection(currentRootInfo)
+    if (this.selectionActionBarVisible) this.selectionMenuPosition = this.getSelectionActionBarPosition()
   }
 
   private updateSelectionLayerSize(newValue: Area) {
@@ -1175,63 +1161,77 @@ export struct Markdown {
       changed = true
     }
     if (changed && this.selectionActive) {
-      this.refreshSelectionVisuals()
+      TextSelectionController.getInstance(this.selectionUnion).invalidateLayoutCache()
+      this.selectionRootInfo = undefined
+      this.selectedRangeStartOrder = -1
+      this.updateSelectionByOrderedCaret(this.startCaretInfo, this.endCaretInfo)
+      if (this.selectionActionBarVisible) this.selectionMenuPosition = this.getSelectionActionBarPosition()
     }
   }
 
   @Builder
   private selectionActionItem(title: string, click: () => void, fontColor?: ResourceColor) {
-    Text(title)
-      .width(60)
-      .height(34)
-      .textAlign(TextAlign.Center)
+    Button(title, { type: ButtonType.Capsule, buttonStyle: ButtonStyleMode.TEXTUAL })
+      .width(this.selectionItemWidth(title))
+      .height(this.selectionActionBarHeight)
+      .padding(0)
       .fontSize(14)
+      .fontWeight(FontWeight.Regular)
       .fontColor(fontColor ?? this.getSelectionActionItemTextColor())
-      .backgroundColor(Color.Transparent)
-      .onClick(() => {
-        click()
+      .stateStyles({
+        normal: {
+          .backgroundColor(Color.Transparent)
+        },
+        pressed: {
+          .backgroundColor($r('sys.color.interactive_pressed'))
+        }
       })
+      .onClick(click)
   }
 
   @Builder
   private selectionActionMenu() {
-    Row() {
-      if (this.controller.getTextSelectionActionItems().length > 0) {
-        ForEach(this.controller.getTextSelectionActionItems(), (item: TextSelectionActionItem) => {
-          this.selectionActionItem(item.title, () => {
-            item.onClick(this.createSelectionActionContext())
-          }, item.fontColor)
-        }, (item: TextSelectionActionItem, index: number): string => `${index}_${item.title}`)
-      } else {
-        this.selectionActionItem('复制', () => {
-          this.triggerTextSelectionCopy()
-        })
-        this.selectionActionItem('全选', () => {
-          this.triggerTextSelectionSelectAll()
-        })
-        this.selectionActionItem('取消', () => {
-          this.clearSelection()
-        })
+    Scroll() {
+      Row() {
+        if (this.controller.getTextSelectionActionItems().length > 0) {
+          ForEach(this.controller.getTextSelectionActionItems(), (item: TextSelectionActionItem) => {
+            this.selectionActionItem(item.title, () => {
+              item.onClick(this.createSelectionActionContext())
+            }, item.fontColor)
+          }, (item: TextSelectionActionItem, index: number): string => `${index}_${item.title}`)
+        } else {
+          this.selectionActionItem('复制', () => {
+            this.triggerTextSelectionCopy()
+          })
+          this.selectionActionItem('全选', () => {
+            this.triggerTextSelectionSelectAll()
+          })
+          this.selectionActionItem('取消', () => {
+            this.clearSelection()
+          })
+        }
       }
+      .alignItems(VerticalAlign.Center)
+      .padding({ left: 4, right: 4 })
     }
-    .alignItems(VerticalAlign.Center)
-    .padding(4)
-    .width(this.selectionActionBarWidth)
+    .scrollable(ScrollDirection.Horizontal)
+    .scrollBar(BarState.Off)
+    .width(this.getSelectionActionBarWidth())
     .height(this.selectionActionBarHeight)
-    // 只绘制操作内容，背景、阴影和材质由原生菜单层负责。
+    // 只绘制操作内容，背景、阴影和材质由原生浮层负责。
     .backgroundColor(Color.Transparent)
   }
 
   @Builder
   private selectionActionBar() {
     Row()
-    .width(this.selectionActionBarWidth)
+    .width(this.getSelectionActionBarWidth())
     .height(0)
-    .position(this.getSelectionActionBarPosition())
+    .position(this.selectionMenuPosition)
     .zIndex(30)
     .focusable(false)
     .accessibilityLevel('no')
-    .bindMenu(this.selectionActionBarVisible, this.selectionActionMenu(), this.getSelectionMenuOptions())
+    .bindPopup(this.selectionActionBarVisible, this.getSelectionPopupOptions())
   }
 
   build() {
@@ -1248,14 +1248,14 @@ export struct Markdown {
           })
 
         if (this.controller.getTextSelectionEnable()) {
-          ForEach(this.selectionRectList, (r: SelectionHighlightRect, idx: number) => {
+          ForEach(this.selectionRectList, (r: SelectionHighlightRect) => {
             Column()
               .width(r.w)
               .height(r.h)
               .backgroundColor('#4C0A59F7')
               .position({ x: r.x, y: r.y })
               .hitTestBehavior(HitTestMode.None)
-          }, (r: SelectionHighlightRect, idx: number): string => `${idx}_${r.x}_${r.y}_${r.w}_${r.h}`)
+          }, (r: SelectionHighlightRect): string => r.key)
         }
 
         if (this.controller.getTextSelectionEnable() && this.selectionActive) {
@@ -1280,39 +1280,21 @@ export struct Markdown {
             caretX: this.startCaretX,
             caretY: this.startCaretY,
             isStart: true,
-            caretDragStart: () => {
-              this.hideSelectionActionBar()
-              // 抓住手柄开始拖动时, 让选区几何缓存失效一次 → 本次拖动首帧重采一次全部块矩形
-              // (纠正选中后到再次拖动之间可能发生的滚动), 之后每帧只读缓存, 不再逐帧 getRectangleById。
-              TextSelectionController.getInstance(this.selectionUnion).invalidateLayoutCache()
-              this.refreshSelectionVisuals()
-            },
+            caretDragStart: (touch: boolean) => this.beginCaretDrag(touch),
             caretDragUpdate: (globalX: number, globalY: number, isStart: boolean) => {
               this.updateCaretByGesture(globalX, globalY, isStart)
             },
-            caretDragEnd: () => {
-              this.refreshSelectionVisuals()
-              this.showSelectionActionBar()
-            }
+            caretDragEnd: () => this.endCaretDrag()
           })
           SelectionCaret({
             caretX: this.endCaretX,
             caretY: this.endCaretY,
             isStart: false,
-            caretDragStart: () => {
-              this.hideSelectionActionBar()
-              // 抓住手柄开始拖动时, 让选区几何缓存失效一次 → 本次拖动首帧重采一次全部块矩形
-              // (纠正选中后到再次拖动之间可能发生的滚动), 之后每帧只读缓存, 不再逐帧 getRectangleById。
-              TextSelectionController.getInstance(this.selectionUnion).invalidateLayoutCache()
-              this.refreshSelectionVisuals()
-            },
+            caretDragStart: (touch: boolean) => this.beginCaretDrag(touch),
             caretDragUpdate: (globalX: number, globalY: number, isStart: boolean) => {
               this.updateCaretByGesture(globalX, globalY, isStart)
             },
-            caretDragEnd: () => {
-              this.refreshSelectionVisuals()
-              this.showSelectionActionBar()
-            }
+            caretDragEnd: () => this.endCaretDrag()
           })
           // 手柄拖动时只关闭菜单，保留锚点，结束拖动后可重新打开原生菜单。
           this.selectionActionBar()
@@ -1338,14 +1320,26 @@ struct SelectionCaret {
   @Prop caretX: number = -100
   @Prop caretY: number = -100
   @Prop isStart: boolean = true
-  caretDragStart: () => void = () => {
-  }
+  caretDragStart: (touch: boolean) => void = (_touch: boolean) => {}
   caretDragUpdate: (globalX: number, globalY: number, isStart: boolean) => void =
     (_globalX: number, _globalY: number, _isStart: boolean) => {
     }
   caretDragEnd: () => void = () => {
   }
-  @State private mouseDragging: boolean = false
+  private mouseDragging: boolean = false
+  private grabOffsetX: number = 0
+  private grabOffsetY: number = 0
+
+  private beginDrag(localX: number, localY: number, touch: boolean): void {
+    // 44vp 命中区内，竖线所在字符的命中点为 (20, 20)；抓住下方圆点时也从同一字符移动。
+    this.grabOffsetX = 20 - localX
+    this.grabOffsetY = 20 - localY
+    this.caretDragStart(touch)
+  }
+
+  private moveTo(x: number, y: number): void {
+    this.caretDragUpdate(x + this.grabOffsetX, y + this.grabOffsetY, this.isStart)
+  }
 
   build() {
     Stack({ alignContent: Alignment.TopStart }) {
@@ -1369,31 +1363,40 @@ struct SelectionCaret {
     .zIndex(20)
     .gesture(
       PanGesture({ distance: 1 })
-        .onActionStart(() => {
-          this.caretDragStart()
+        .onActionStart((event: GestureEvent) => {
+          const finger = event.fingerList[0]
+          if (finger) {
+            this.beginDrag(finger.localX, finger.localY, event.source === SourceType.TouchScreen ||
+              event.sourceTool === SourceTool.Finger || event.sourceTool === SourceTool.Pen)
+            this.moveTo(finger.globalX, finger.globalY)
+          }
         })
         .onActionUpdate((event: GestureEvent) => {
-          const finger = event.fingerList[event.fingerList.length - 1]
-          this.caretDragUpdate(finger.globalX, finger.globalY, this.isStart)
+          const finger = event.fingerList[0]
+          if (finger) this.moveTo(finger.globalX, finger.globalY)
         })
-        .onActionEnd(() => {
+        .onActionEnd((event: GestureEvent) => {
+          const finger = event.fingerList[0]
+          if (finger) this.moveTo(finger.globalX, finger.globalY)
           this.caretDragEnd()
         })
+        .onActionCancel(() => this.caretDragEnd())
     )
     .onMouse((event: MouseEvent) => {
       if (event.action == MouseAction.Press && isPrimaryMouseButton(event)) {
         this.mouseDragging = true
-        this.caretDragStart()
+        this.beginDrag(event.x, event.y, false)
         event.stopPropagation()
         return
       }
       if (event.action == MouseAction.Move && this.mouseDragging) {
-        this.caretDragUpdate(event.windowX, event.windowY, this.isStart)
+        this.moveTo(event.windowX, event.windowY)
         event.stopPropagation()
         return
       }
       if (event.action == MouseAction.Release && this.mouseDragging) {
         this.mouseDragging = false
+        this.moveTo(event.windowX, event.windowY)
         this.caretDragEnd()
         event.stopPropagation()
       }

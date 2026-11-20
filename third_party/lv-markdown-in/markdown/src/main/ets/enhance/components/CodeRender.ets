@@ -7,6 +7,7 @@ import { MermaidRender } from './MermaidRender';
 @Component
 export struct CodeRender {
   @Consume markdownUnion: string
+  @Consume selectionUnion: string
   @Prop base: CodeBlockNode | undefined = undefined
 
   // 当前 fenced code 未闭合时抑制预览: Mermaid/HTML 先展示源码, 收到闭合 ``` 后再切预览。
@@ -33,6 +34,11 @@ export struct CodeRender {
     return MDBaseController.getMarkdownController(this.markdownUnion).getCodeBlockActionAreaVisible()
   }
 
+  private codeSelectionUnion(): string {
+    const controller = MDBaseController.getMarkdownController(this.markdownUnion)
+    return controller.getTextSelectionEnable() && controller.getTextSelectionActionItems().length > 0 ? this.selectionUnion : ''
+  }
+
   build() {
     if (this.isMermaidCodeBlock()) {
       MermaidRender({ base: this.base, streamingActive: this.isPreviewSuppressed() })
@@ -44,7 +50,7 @@ export struct CodeRender {
         lang: this.base?.lang || "code",
         text: this.base?.text || "",
         autoCollapse: this.base?.closed !== false,
-        selectable: false,
+        selectionUnion: this.codeSelectionUnion(),
         lineNumberWidth: 34,
         contentBottomPadding: 12,
         actionAreaVisible: this.isActionAreaVisible()

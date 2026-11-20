@@ -4,6 +4,11 @@ import { CodeBlockImpl } from '../impl/CodeBlockImpl'
 import { HighlightCode, HighlightNode } from '../model/highlightNode'
 import { PrismHighlightUtil } from '../utils/PrismHighlightUtil'
 
+import { BlockSelectionStartInfo, TextSelectionSegment } from '../model/TextSelectionInfo'
+import { TextSelectionController } from '../controller/TextSelectionController'
+import { TextSelectionMouseTracker } from '../utils/TextSelectionMouseUtil'
+import { generateRandomString } from '../utils/RandomString'
+
 const HIGHLIGHT_DEBOUNCE_MS = 90
 
 @Component
@@ -12,6 +17,11 @@ export struct CodeSourceRender {
   @Prop @Watch('refreshHighlight') text: string = ''
   @Prop @Watch('refreshHighlight') lang: string = 'code'
   @Prop autoCollapse: boolean = true
+  @Prop selectionUnion: string = ''
+  private codeController: TextController = new TextController()
+  private selectionId: string = 'md_code_' + generateRandomString()
+  private mouseTracker: TextSelectionMouseTracker = new TextSelectionMouseTracker()
+  private selectionMounted: boolean = false
   @Prop selectable: boolean = false
   @Prop lineNumberWidth: number = 34
   @Prop contentBottomPadding: number = 12
@@ -41,6 +51,7 @@ export struct CodeSourceRender {
   }
 
   aboutToDisappear(): void {
+    this.highlightVersion++
     if (this.codeThemeListener) {
       getContext().eventHub.off(markdownCodeThemeChangeEventName, this.codeThemeListener)
       this.codeThemeListener = null
@@ -99,6 +110,15 @@ export struct CodeSourceRender {
     this.highlightNode = rows
     this.BASE_ROWS = rows.length
     this.MAX_ROWS = autoCollapse ? Math.min(autoCollapseThreshold, this.BASE_ROWS) : this.BASE_ROWS
+    this.registerSelectionBlock()
+  }
+
+  private registerSelectionBlock(): void {
+    if (!this.selectionMounted || this.selectionUnion === '') return
+    const text = this.visibleRows().map((row: HighlightNode) =>
+      row.code.map((token: HighlightCode) => token.text).join('')).join('\n')
+    TextSelectionController.getInstance(this.selectionUnion).registerBlock(this.selectionId, this.codeController,
+      [new TextSelectionSegment(text.length, text)])
   }
 
   private buildPlainTextRows(text: string, normalColor: string): HighlightNode[] {
@@ -120,6 +140,7 @@ export struct CodeSourceRender {
   private showMore() {
     animateTo({ duration: 300 }, () => {
       this.MAX_ROWS = this.BASE_ROWS
+      this.registerSelectionBlock()
     })
   }
 
@@ -145,6 +166,19 @@ export struct CodeSourceRender {
 
   private getCodeLineHeight(): ResourceStr | number {
     return MDBaseController.getMarkdownController(this.markdownUnion).getCodeBlockLineHeight()
+  }
+
+  @Builder
+  private CodeSpans() {
+    ForEach(this.visibleRows(), (row: HighlightNode, rowIndex: number) => {
+      ForEach(row.code, (code: HighlightCode) => {
+        Span(code.text)
+          .fontColor(code.color)
+      })
+      if (rowIndex < this.visibleRowCount() - 1) {
+        Span('\n')
+      }
+    })
   }
 
   build() {
@@ -180,18 +214,33 @@ export struct CodeSourceRender {
 
         Scroll() {
           Column() {
-            if (this.selectable) {
+            if (this.selectionUnion !== '') {
+              Text('', { controller: this.codeController }) {
+                this.CodeSpans()
+              }
+              .id(this.selectionId)
+              .lineHeight(this.getCodeLineHeight())
+              .fontSize(this.getCodeFontSize())
+              .fontFamily(this.getCodeFontFamily())
+              .gesture(LongPressGesture().onAction((event: GestureEvent) => {
+                const finger = event.fingerList[0]
+                if (finger) TextSelectionController.getInstance(this.selectionUnion).triggerStartSelection(
+                  new BlockSelectionStartInfo(this.selectionId, finger.localX, finger.localY, true, finger.globalX, finger.globalY))
+              }))
+              .onMouse((event: MouseEvent) => this.mouseTracker.handleBlockSelectionMouseEvent(this.selectionUnion, this.selectionId, event))
+              .onAppear(() => {
+                this.selectionMounted = true
+                this.registerSelectionBlock()
+              })
+              .onDisAppear(() => {
+                this.selectionMounted = false
+                this.mouseTracker.reset()
+                TextSelectionController.getInstance(this.selectionUnion).unregisterBlock(this.selectionId)
+              })
+            } else if (this.selectable) {
               Row() {
                 Text() {
-                  ForEach(this.visibleRows(), (row: HighlightNode, rowIndex: number) => {
-                    ForEach(row.code, (code: HighlightCode) => {
-                      Span(code.text)
-                        .fontColor(code.color)
-                    })
-                    if (rowIndex < this.visibleRowCount() - 1) {
-                      Span('\n')
-                    }
-                  })
+                  this.CodeSpans()
                 }
                 .lineHeight(this.getCodeLineHeight())
                 .fontSize(this.getCodeFontSize())

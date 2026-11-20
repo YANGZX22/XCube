@@ -13,7 +13,7 @@ export class TextSelectionController {
   private readonly HIT_SLOP: number = 24
   private startSelectionHandler?: (info: BlockSelectionStartInfo) => void
   private updateSelectionHandler?: (globalX: number, globalY: number) => void
-  private endSelectionHandler?: () => void
+  private endSelectionHandler?: (globalX: number, globalY: number) => void
   private clearSelectionHandler?: () => void
 
   private constructor(markdownUnion: string) {
@@ -67,7 +67,7 @@ export class TextSelectionController {
     this.updateSelectionHandler = handler
   }
 
-  setEndSelectionHandler(handler?: () => void) {
+  setEndSelectionHandler(handler?: (globalX: number, globalY: number) => void) {
     this.endSelectionHandler = handler
   }
 
@@ -102,11 +102,11 @@ export class TextSelectionController {
     return true
   }
 
-  triggerEndSelection(): boolean {
+  triggerEndSelection(globalX: number, globalY: number): boolean {
     if (TextSelectionController.activeMarkdownUnion != this.markdownUnion || !this.endSelectionHandler) {
       return false
     }
-    this.endSelectionHandler()
+    this.endSelectionHandler(globalX, globalY)
     return true
   }
 
@@ -206,8 +206,20 @@ export class TextSelectionController {
     return nearest
   }
 
-  getBlockInfoByPoint(globalX: number, globalY: number): BlockHitInfo | undefined {
+  getBlockInfoByPoint(globalX: number, globalY: number, previousOrder: number = -1): BlockHitInfo | undefined {
     const blocks = this.getOrderedBlocks()
+    // 连续拖动通常停留在同一段，跨行时也优先检查相邻文本块。
+    for (const order of [previousOrder, previousOrder + 1, previousOrder - 1]) {
+      const block = blocks[order]
+      if (!block) continue
+      const info = this.getBlockRect(block.id)
+      if (!info) continue
+      const x = globalX - px2vp(info.screenOffset.x)
+      const y = globalY - px2vp(info.screenOffset.y)
+      if (x >= 0 && x <= px2vp(info.size.width) && y >= 0 && y <= px2vp(info.size.height)) {
+        return new BlockHitInfo(block, info)
+      }
+    }
     // 不再每帧 refreshBlockRects 对全部块 getRectangleById(同步原生查询, 块越多越卡拖动)。
     // 矩形来自快照缓存: 拖动开始时由宿主 invalidateLayoutCache 触发一次全量重采(getOrderedBlocks
     // → refreshLayoutSnapshot), 之后本方法每帧只读缓存。拖动期间布局静止, 缓存有效。
