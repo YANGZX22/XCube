@@ -73,7 +73,7 @@ export class ChatStopFlow {
     }
 
     if (lastMessage.isGenerating) {
-      lastMessage.isGenerating = false
+      lastMessage.finishGeneration()
     }
     if (lastMessage.isSearching) {
       lastMessage.isSearching = false

@@ -607,8 +607,13 @@ export class ChatMessage {
   @Trace cacheWriteTokens: number
   // 运行时字段：发送链路已按真实请求逐轮统计时，UI 计费回调不得再用可见历史覆盖。
   @Trace tokenUsageTracked: boolean
-  // 仅当当前累计值全部来自供应商 usage 时为 true；不持久化，不影响历史统计。
+  // 仅当所有轮次的累计值均来自供应商 usage 时为 true。
   @Trace tokenUsageExact: boolean
+  @Trace generationStartedAt: number = 0
+  @Trace generationDurationMs: number = -1 // 旧消息没有计时记录，0 表示有记录且不足 1 毫秒
+  @Trace modelDurationMs: number = -1 // 主模型已完成的请求耗时，旧消息没有分段计时
+  @Trace modelRoundStartedAt: number = -1 // 仅运行时使用，工具执行期间为 -1
+  @Trace auxiliaryOutputTokens: number = 0 // 计入总用量的子智能体与上下文压缩输出
   // 推理内容（用于支持 o1, DeepSeek R1 等推理模型）
   @Trace reasoningContent: string
   // 对话树父消息 ID（指向对话链中的前驱消息，根消息为空）
@@ -676,6 +681,38 @@ export class ChatMessage {
     this.responseSegments = []
     this.toolCallId = ''
     this.documentToolHint = ''
+  }
+
+  startGeneration(startedAt: number = Date.now()): void {
+    this.generationStartedAt = startedAt
+    this.generationDurationMs = -1
+    this.modelDurationMs = 0
+    this.modelRoundStartedAt = -1
+    this.auxiliaryOutputTokens = 0
+    this.isGenerating = true
+  }
+
+  elapsedGenerationMs(now: number = Date.now()): number {
+    return this.isGenerating && this.generationStartedAt > 0 ?
+      Math.max(0, now - this.generationStartedAt) : this.generationDurationMs
+  }
+
+  elapsedModelGenerationMs(now: number = Date.now()): number {
+    return this.modelRoundStartedAt < 0 ? this.modelDurationMs :
+      this.modelDurationMs + Math.max(0, now - this.modelRoundStartedAt)
+  }
+
+  finishModelRound(now: number = Date.now()): void {
+    if (this.modelRoundStartedAt >= 0) {
+      this.modelDurationMs = this.elapsedModelGenerationMs(now)
+      this.modelRoundStartedAt = -1
+    }
+  }
+
+  finishGeneration(now: number = Date.now()): void {
+    this.finishModelRound(now)
+    this.generationDurationMs = this.elapsedGenerationMs(now)
+    this.isGenerating = false
   }
 
   // 检查是否有推理内容

@@ -231,6 +231,10 @@ interface MessageData {
   outputPricePerMillion?: number
   estimatedInputTokens?: number
   estimatedOutputTokens?: number
+  tokenUsageExact?: boolean
+  generationDurationMs?: number
+  modelDurationMs?: number
+  auxiliaryOutputTokens?: number
   estimatedCost?: number
   uncachedInputTokens?: number
   cacheReadTokens?: number
@@ -720,6 +724,10 @@ export class ImportExportService {
             outputPricePerMillion: m.outputPricePerMillion,
             estimatedInputTokens: m.estimatedInputTokens,
             estimatedOutputTokens: m.estimatedOutputTokens,
+            tokenUsageExact: m.tokenUsageTracked ? m.tokenUsageExact : undefined,
+            generationDurationMs: m.generationDurationMs >= 0 ? m.generationDurationMs : undefined,
+            modelDurationMs: m.modelDurationMs >= 0 ? m.elapsedModelGenerationMs() : undefined,
+            auxiliaryOutputTokens: m.auxiliaryOutputTokens > 0 ? m.auxiliaryOutputTokens : undefined,
             estimatedCost: m.estimatedCost,
             uncachedInputTokens: m.uncachedInputTokens,
             cacheReadTokens: m.cacheReadTokens,
@@ -1069,6 +1077,20 @@ export class ImportExportService {
           message.outputPricePerMillion = msgData.outputPricePerMillion || 0
           message.estimatedInputTokens = msgData.estimatedInputTokens || 0
           message.estimatedOutputTokens = msgData.estimatedOutputTokens || 0
+          message.tokenUsageTracked = typeof msgData.tokenUsageExact === 'boolean'
+          message.tokenUsageExact = msgData.tokenUsageExact === true
+          if (typeof msgData.generationDurationMs === 'number' && Number.isFinite(msgData.generationDurationMs) &&
+            msgData.generationDurationMs >= 0) {
+            message.generationDurationMs = Math.floor(msgData.generationDurationMs)
+          }
+          if (typeof msgData.modelDurationMs === 'number' && Number.isFinite(msgData.modelDurationMs) &&
+            msgData.modelDurationMs >= 0) {
+            message.modelDurationMs = Math.floor(msgData.modelDurationMs)
+          }
+          if (typeof msgData.auxiliaryOutputTokens === 'number' && Number.isFinite(msgData.auxiliaryOutputTokens)) {
+            message.auxiliaryOutputTokens = Math.max(0, Math.min(message.estimatedOutputTokens,
+              Math.floor(msgData.auxiliaryOutputTokens)))
+          }
           message.estimatedCost = msgData.estimatedCost || 0
           message.uncachedInputTokens = msgData.uncachedInputTokens || 0
           message.cacheReadTokens = msgData.cacheReadTokens || 0

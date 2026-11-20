@@ -9,7 +9,6 @@ import { VisualEffectsMode } from '../models/ThemeColors'
 import { pasteboard } from '@kit.BasicServicesKit'
 import { image } from '@kit.ImageKit'
 import { showToast } from '../utils/ToastUtil'
-import { getModelIconPath, buildIconResourcePath } from '../utils/ProviderIconUtils'
 import { shouldShowAssistantMessageToolbar } from '../utils/MessageBubbleDisplayUtils'
 import { encodeRenderText } from '../utils/RenderTextSignatureUtils'
 import { TimelineToolIndex } from '../utils/TimelineToolIndex'
@@ -24,14 +23,14 @@ import { MapResultCard } from './map/MapResultCard'
 import { statusPulseDots, TypingDots } from './TypingDots'
 import { ThinkingStatusIndicator } from './ThinkingStatusIndicator'
 import { ChatMarkdownRenderer } from './ChatMarkdownRenderer'
-import { AssistantAvatarView } from './AssistantAvatar'
+import { ReplyStatisticsHeader } from './chat/ReplyStatisticsHeader'
 import { hilog } from '@kit.PerformanceAnalysisKit'
 import { SymbolGlyphModifier, uiMaterial } from '@kit.ArkUI'
 import { getAppUiState } from '../state/AppUiState'
 import { getThinMenuOptions } from '../utils/WrappedMaterialSupport'
 import { withColorAlpha } from '../utils/ColorAlphaUtils'
 import { MAP_SEARCH_ROUTE_TOOL_ID, MATH_CHART_TOOL_ID } from '../config/BuiltinTools'
-import { formatBillingAmount, formatCacheHitPercent } from '../utils/ModelBillingUtils'
+import { formatBillingAmount, getMessageCacheHitPercent } from '../utils/ModelBillingUtils'
 import { ImmersiveSheetHeader } from './ImmersiveSheetHeader'
 import { resolveChatSerifFontFamily } from '../utils/ChatSerifFontUtils'
 import {
@@ -144,12 +143,8 @@ export struct MessageBubble {
   @Param message: ChatMessage = new ChatMessage('', MessageRole.USER, '')
   @Param renderSignature: string = ''
   @Param contentRenderSignature: string = ''
-  @Param showHeader: boolean = true  // 是否显示消息头部（模型信息）
-  @Param currentModelId: string = ''  // 当前会话的模型 ID（用于图标匹配回退）
-  @Param assistantName: string = '默认助手'
-  @Param assistantAvatarSymbol: string = 'AI'
-  @Param assistantAvatarColor: string = '#7A68F0'
-  @Param assistantAvatarCacheKey: number = 0
+  @Param showHeader: boolean = true
+  @Param currentModelId: string = ''
   @Param themeRenderKey: string = ''
   @Param allowAnnotations: boolean = false
   @Param isMultiSelectMode: boolean = false  // 是否处于多选模式
@@ -206,10 +201,6 @@ export struct MessageBubble {
   private get isManuscriptMode(): boolean {
     return getAppUiState().visualEffectsMode === VisualEffectsMode.MANUSCRIPT
   }
-  private get manuscriptAssistantLabel(): string {
-    const name = this.assistantName.trim()
-    return (name !== '' ? name : 'AI').toUpperCase()
-  }
   private get manuscriptAccent(): string {
     return this.isDarkMode ? '#C99A52' : '#B68235'
   }
@@ -246,7 +237,6 @@ export struct MessageBubble {
   private cachedHasPreviewTextContent: boolean = false
   private cachedHasMessageTextContent: boolean = false
   private cachedHasToolbarPayload: boolean = false
-  private cachedCurrentMessageModelIconResourcePath: string = ''
   private cachedReadonlyMessageContent: string = ''
   private cachedReadonlyReasoningContent: string = ''
   private readonlyMessageContentDirty: boolean = true
@@ -291,31 +281,6 @@ export struct MessageBubble {
   @Event onSelect: (messageId: string) => void = () => {}
   @Event onEnterMultiSelect: (messageId: string) => void = () => {}
   @Event onSwitchVersion: (delta: number) => void = (_delta: number): void => {}
-
-  // 获取当前消息模型图标文件名（空字符串表示无可用图标）
-  private getCurrentMessageModelIconPath(): string {
-    // 优先用 modelId → 回退到当前会话模型 ID → 最后回退到 modelName
-    let id = this.message.modelId
-    if (id === '' || id === undefined) {
-      id = this.currentModelId
-    }
-    if (id === '' || id === undefined) {
-      id = this.message.modelName
-    }
-    if (id === '' || id === undefined) {
-      return ''
-    }
-    return getModelIconPath(id, '', '')
-  }
-
-  // 获取当前消息模型图标资源路径（空字符串表示无可用图标）
-  private computeCurrentMessageModelIconResourcePath(): string {
-    const iconPath = this.getCurrentMessageModelIconPath()
-    if (iconPath === '') {
-      return ''
-    }
-    return buildIconResourcePath(iconPath)
-  }
 
   private getPrimaryTouchPoint(event: TouchEvent): TouchObject | null {
     if (event.changedTouches && event.changedTouches.length > 0) {
@@ -510,7 +475,6 @@ export struct MessageBubble {
     this.cachedHasPreviewTextContent = this.cachedDisplayContent.length > 0
     this.cachedHasMessageTextContent = this.message.replyAnnotations.length > 0 || hasNonWhitespace(this.message.content)
     this.cachedHasToolbarPayload = this.cachedHasMessageTextContent || this.message.hasAttachments()
-    this.cachedCurrentMessageModelIconResourcePath = this.computeCurrentMessageModelIconResourcePath()
     // 这两份只读文本每次都要跑好几趟全文正则，按需算即可：流式期间没有任何渲染
     // 路径读它们，急切计算等于每个分片白扫两遍正文和思考。
     this.readonlyMessageContentDirty = true
@@ -1159,11 +1123,6 @@ export struct MessageBubble {
     return this.cachedHasToolbarPayload
   }
 
-  private getCurrentMessageModelIconResourcePath(): string {
-    this.ensureDerivedRenderCaches()
-    return this.cachedCurrentMessageModelIconResourcePath
-  }
-
   private hasHtmlSegments(): boolean {
     this.ensureDerivedRenderCaches()
     return this.cachedHasHtmlSegments
@@ -1217,15 +1176,7 @@ export struct MessageBubble {
   }
 
   private getCacheHitText(): string {
-    const percent = formatCacheHitPercent(
-      this.message.uncachedInputTokens,
-      this.message.cacheReadTokens,
-      this.message.cacheWriteTokens
-    )
-    if (percent === null) {
-      return '--%'
-    }
-    return `${percent}%`
+    return `${getMessageCacheHitPercent(this.message) ?? '--'}%`
   }
 
   private canCopyMessageContent(): boolean {
@@ -2888,48 +2839,11 @@ export struct MessageBubble {
 
       Column() {
         Column({ space: this.isManuscriptMode ? 5 : 4 }) {
-          if (this.showHeader && !this.isManuscriptMode) {
-            Row() {
-              // 助手头像
-              Column() {
-                AssistantAvatarView({
-                  value: this.assistantAvatarSymbol,
-                  color: this.assistantAvatarColor,
-                  avatarSize: 30,
-                  radius: 8,
-                  fontSize: 14,
-                  cacheKey: this.assistantAvatarCacheKey,
-                  avatarBorderWidth: 1,
-                  avatarBorderColor: this.themePrimaryLight
-                })
-              }
-              .width(30)
-              .height(30)
-              .borderRadius(8)
-              .justifyContent(FlexAlign.Center)
-              .alignItems(HorizontalAlign.Center)
-
-              // 模型名称
-              Text(this.message.modelName || 'AI')
-                .fontSize(13)
-                .fontWeight(FontWeight.Medium)
-                .fontColor($r('app.color.text_primary'))
-                .margin({ left: 10 })
-
-              Blank()
-            }
-            .width('100%')
-            .alignItems(VerticalAlign.Center)
-          }
-          if (this.isManuscriptMode) {
-            Text(this.manuscriptAssistantLabel)
-              .fontFamily(MANUSCRIPT_BODY_FONT)
-              .fontSize(10)
-              .fontWeight(FontWeight.Medium)
-              .fontColor(this.manuscriptAccentDeep)
-              .letterSpacing(2)
-              .width('100%')
-              .textAlign(TextAlign.Start)
+          if (this.showHeader) {
+            ReplyStatisticsHeader({
+              message: this.message,
+              foreground: this.isManuscriptMode ? this.manuscriptAccentDeep : $r('app.color.text_secondary')
+            })
           }
 
           Column() {

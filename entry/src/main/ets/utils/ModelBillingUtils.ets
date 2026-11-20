@@ -251,15 +251,20 @@ export function formatCacheHitPercent(
   return `99.${'9'.repeat(decimalPlaces - 1)}${10 - roundedLoss}`
 }
 
-// 一次模型请求的 Token 统计器。工具调用会产生多轮 API 请求，因此不能只把
-// 可见聊天历史估算一次；每轮优先采用服务端 usage，缺失时才保留本地估算。
+export function getMessageCacheHitPercent(message: ChatMessage): string | null {
+  return formatCacheHitPercent(message.uncachedInputTokens, message.cacheReadTokens, message.cacheWriteTokens)
+}
+
+// 按主模型请求轮次累加用量和耗时。优先使用供应商上报的 Token，缺失时使用本地估算。
 export class RequestTokenUsageTracker {
+  private readonly message: ChatMessage
   private completedInputTokens: number = 0
   private completedOutputTokens: number = 0
   private completedUncachedInputTokens: number = 0
   private completedCacheReadTokens: number = 0
   private completedCacheWriteTokens: number = 0
   private currentEstimatedInputTokens: number = 0
+  private currentEstimatedOutputTokens: number = 0
   private currentActualInputTokens: number = -1
   private currentActualOutputTokens: number = -1
   private currentCacheReadTokens: number = 0
@@ -268,13 +273,28 @@ export class RequestTokenUsageTracker {
   private allCompletedRoundsExact: boolean = true
   private currentRoundActive: boolean = false
 
-  beginRound(estimatedInputTokens: number): void {
+  constructor(message: ChatMessage) {
+    this.message = message
+  }
+
+  beginRound(estimatedInputTokens: number, now: number = Date.now()): void {
+    if (this.message.isGenerating) {
+      this.message.modelRoundStartedAt = now
+    }
     this.currentEstimatedInputTokens = Math.max(0, Math.round(estimatedInputTokens))
+    this.currentEstimatedOutputTokens = 0
     this.currentActualInputTokens = -1
     this.currentActualOutputTokens = -1
     this.currentCacheReadTokens = 0
     this.currentCacheWriteTokens = 0
     this.currentRoundActive = true
+  }
+
+  addEstimatedOutput(deltaTokens: number): void {
+    if (this.currentRoundActive && this.currentActualOutputTokens < 0) {
+      this.currentEstimatedOutputTokens += deltaTokens
+      this.message.estimatedOutputTokens = this.completedOutputTokens + this.currentEstimatedOutputTokens
+    }
   }
 
   updateCurrentRoundUsage(
@@ -299,7 +319,9 @@ export class RequestTokenUsageTracker {
     }
   }
 
-  finishRound(estimatedOutputTokens: number): void {
+  finishRound(estimatedOutputTokens: number, now: number = Date.now()): void {
+    if (!this.currentRoundActive) return
+    this.message.finishModelRound(now)
     if (this.currentActualInputTokens < 0 || this.currentActualOutputTokens < 0) {
       this.allCompletedRoundsExact = false
     }
@@ -314,6 +336,7 @@ export class RequestTokenUsageTracker {
     this.completedOutputTokens += this.currentActualOutputTokens >= 0 ?
       this.currentActualOutputTokens : Math.max(0, Math.round(estimatedOutputTokens))
     this.currentEstimatedInputTokens = 0
+    this.currentEstimatedOutputTokens = 0
     this.currentActualInputTokens = -1
     this.currentActualOutputTokens = -1
     this.currentCacheReadTokens = 0
@@ -321,6 +344,7 @@ export class RequestTokenUsageTracker {
     this.currentRoundActive = false
   }
 
+  // 子智能体和上下文压缩独立上报用量，单独记录这部分输出供回复速率计算。
   addCompletedUsage(
     inputTokens: number,
     outputTokens: number,
@@ -329,8 +353,10 @@ export class RequestTokenUsageTracker {
     cacheWriteTokens: number = 0
   ): void {
     const normalizedInputTokens = Math.max(0, Math.round(inputTokens))
+    const normalizedOutputTokens = Math.max(0, Math.round(outputTokens))
     this.completedInputTokens += normalizedInputTokens
-    this.completedOutputTokens += Math.max(0, Math.round(outputTokens))
+    this.completedOutputTokens += normalizedOutputTokens
+    this.message.auxiliaryOutputTokens += normalizedOutputTokens
     if (exact) {
       this.hasAnyActualUsage = true
       this.addCompletedInputBuckets(normalizedInputTokens, cacheReadTokens, cacheWriteTokens)
@@ -339,14 +365,15 @@ export class RequestTokenUsageTracker {
     }
   }
 
-  applyToMessage(message: ChatMessage): void {
+  applyToMessage(): void {
+    const message = this.message
     message.tokenUsageTracked = true
     const currentRoundExact = !this.currentRoundActive ||
       (this.currentActualInputTokens >= 0 && this.currentActualOutputTokens >= 0)
     message.tokenUsageExact = this.hasAnyActualUsage && this.allCompletedRoundsExact && currentRoundExact
     message.estimatedInputTokens = this.completedInputTokens + this.getCurrentInputTokens()
     message.estimatedOutputTokens = this.completedOutputTokens +
-      (this.currentActualOutputTokens >= 0 ? this.currentActualOutputTokens : 0)
+      (this.currentActualOutputTokens >= 0 ? this.currentActualOutputTokens : this.currentEstimatedOutputTokens)
     const currentCacheReadTokens = this.currentActualInputTokens >= 0 ?
       Math.min(this.currentActualInputTokens, this.currentCacheReadTokens) : 0
     const currentCacheWriteTokens = this.currentActualInputTokens >= 0 ?

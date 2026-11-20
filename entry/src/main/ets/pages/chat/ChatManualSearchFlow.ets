@@ -197,13 +197,14 @@ export class ChatManualSearchFlow {
     return userMessage
   }
 
-  private createSearchingAIMessage(): ChatMessage {
+  private createSearchingAIMessage(startedAt: number): ChatMessage {
     const aiMessage = new ChatMessage(
       this.generateId(),
       MessageRole.ASSISTANT,
       '',
       this.deps.getCurrentModelName()
     )
+    aiMessage.startGeneration(startedAt)
     aiMessage.isSearching = true
     this.deps.messages.push(aiMessage)
     this.deps.onSyncMessages()
@@ -223,7 +224,7 @@ export class ChatManualSearchFlow {
     attachmentsToSend: MessageAttachment[] = [],
     requestId: string = '',
     taskId: string = ''): Promise<void> {
-    const searchingAIMessage = this.createSearchingAIMessage()
+    const searchingAIMessage = this.createSearchingAIMessage(userMessage.timestamp)
 
     try {
       const runtimeConfig = await this.deps.webSearchService.getRuntimeConfigSnapshot()
@@ -364,7 +365,7 @@ export class ChatManualSearchFlow {
     attachmentsToSend: MessageAttachment[] = [],
     requestId: string = '',
     taskId: string = ''): Promise<void> {
-    const searchingAIMessage = this.createSearchingAIMessage()
+    const searchingAIMessage = this.createSearchingAIMessage(userMessage.timestamp)
 
     try {
       const runtimeConfig = await this.deps.webSearchService.getRuntimeConfigSnapshot()
@@ -564,7 +565,8 @@ export class ChatManualSearchFlow {
       this.deps.getReasoningLevel(),
       currentProvider.apiPath || undefined,
       currentProvider.customHeadersJson || undefined,
-      pendingUser.replyAnnotations
+      pendingUser.replyAnnotations,
+      pendingUser.timestamp
     )
   }
 }

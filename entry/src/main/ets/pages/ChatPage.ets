@@ -751,7 +751,7 @@ export struct ChatPage {
       if (lastMessage.role === MessageRole.ASSISTANT) {
         // 如果没有活跃请求，重置生成状态
         if (lastMessage.isGenerating && !hasActiveRequestForCurrentSession) {
-          lastMessage.isGenerating = false
+          lastMessage.finishGeneration()
           console.info('ChatPage', '[fixInconsistentState] 重置最后一条消息的 isGenerating 状态')
         }
         // 如果没有活跃请求，重置搜索状态
@@ -4184,7 +4184,6 @@ export struct ChatPage {
           isWorkingMarkPinned: this.isManuscriptWorkingMarkPinned,
           topInsetHeight: this.getMessageListContentTopSpacerHeight(),
           currentModelId: this.currentModelId,
-          assistantName: this.currentAssistantName,
           assistantAvatarSymbol: this.currentAssistantAvatarSymbol,
           assistantAvatarColor: this.currentAssistantColor,
           assistantAvatarCacheKey: this.assistantAvatarRenderTick,

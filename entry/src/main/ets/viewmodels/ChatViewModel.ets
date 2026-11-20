@@ -1665,7 +1665,7 @@ export class ChatViewModel {
         return
       }
       // stop 后持久化的消息应结束生成/搜索状态
-      info.message.isGenerating = false
+      info.message.finishGeneration()
       info.message.isSearching = false
       this.clearContextCompactionUi(info.message)
       entries.push(info)
@@ -1959,7 +1959,7 @@ export class ChatViewModel {
       modelId
     )
     aiMessage.parentId = parentage.forkContext !== null ? parentage.forkContext.aiParentId : (userMessage !== null ? userMessage.id : '')
-    aiMessage.isGenerating = true
+    aiMessage.startGeneration()
     onAIMessageAdded(aiMessage)
     this.addPendingAIMessage(aiMessage, snapshotSessionId, onAIMessageUpdated, true)
 
@@ -2029,7 +2029,7 @@ export class ChatViewModel {
       return
     }
 
-    const usageTracker = new RequestTokenUsageTracker()
+    const usageTracker = new RequestTokenUsageTracker(aiMessage)
     const requestId = this.generateId()
     let cancelled = false
     let userCancelled = false
@@ -2072,6 +2072,7 @@ export class ChatViewModel {
           return
         }
         roundGeneratedContent += value
+        usageTracker.addEstimatedOutput(estimateTextTokens(value))
         aiMessage.content += value
         if (roundContentSegment === null) {
           roundContentSegment = new AssistantResponseSegment(
@@ -2089,6 +2090,7 @@ export class ChatViewModel {
           return
         }
         roundGeneratedReasoning += value
+        usageTracker.addEstimatedOutput(estimateTextTokens(value))
         aiMessage.reasoningContent += value
         if (roundReasoningSegment === null) {
           roundReasoningSegment = new AssistantResponseSegment(
@@ -2113,15 +2115,15 @@ export class ChatViewModel {
         modelId,
         reasoningLevel
       )
-      usageTracker.beginRound(estimatedRequestInput)
-      usageTracker.applyToMessage(aiMessage)
-      onAIMessageUpdated(aiMessage)
       const requestMaxOutputTokens = resolveRequestMaxOutputTokens(
         this.getConfiguredMaxOutputTokens(providerId, modelId),
         this.getCurrentModelContextWindow(providerId, modelId),
         estimatedRequestInput
       )
 
+      usageTracker.beginRound(estimatedRequestInput)
+      usageTracker.applyToMessage()
+      onAIMessageUpdated(aiMessage)
       const httpRequest = this.aiApiService.streamChatRequest(
         apiConfig,
         requestMessages,
@@ -2149,7 +2151,7 @@ export class ChatViewModel {
           usageTracker.finishRound(
             estimateTextTokens(roundGeneratedContent) + estimateTextTokens(roundGeneratedReasoning)
           )
-          usageTracker.applyToMessage(aiMessage)
+          usageTracker.applyToMessage()
 
           if (this.hasPendingSteeringMessages(snapshotSessionId)) {
             const assistantContinuation = new RequestMessage('assistant', roundGeneratedContent)
@@ -2174,7 +2176,7 @@ export class ChatViewModel {
           }
 
           this.fillEmptyAIContentPlaceholder(aiMessage)
-          aiMessage.isGenerating = false
+          aiMessage.finishGeneration()
           onAIMessageUpdated(aiMessage)
           if (snapshotSession !== null) {
             await this.databaseService.addMessage(snapshotSessionId, aiMessage)
@@ -2197,9 +2199,9 @@ export class ChatViewModel {
           usageTracker.finishRound(
             estimateTextTokens(roundGeneratedContent) + estimateTextTokens(roundGeneratedReasoning)
           )
-          usageTracker.applyToMessage(aiMessage)
+          usageTracker.applyToMessage()
           this.fillEmptyAIContentPlaceholder(aiMessage, error)
-          aiMessage.isGenerating = false
+          aiMessage.finishGeneration()
           onAIMessageUpdated(aiMessage)
           this.clearPendingSteeringMessages(snapshotSessionId)
           if (userCancelled) {
@@ -2236,7 +2238,7 @@ export class ChatViewModel {
             usage.cache_read_tokens ?? 0,
             usage.cache_write_tokens ?? 0
           )
-          usageTracker.applyToMessage(aiMessage)
+          usageTracker.applyToMessage()
           onAIMessageUpdated(aiMessage)
         }
       )
@@ -2348,7 +2350,7 @@ Answer the user's question from this material. State any material gaps or unavai
       modelId
     )
     aiMessage.parentId = parentage.forkContext !== null ? parentage.forkContext.aiParentId : (userMessage !== null ? userMessage.id : '')
-    aiMessage.isGenerating = true
+    aiMessage.startGeneration()
     onAIMessageAdded(aiMessage)
     this.addPendingAIMessage(aiMessage, snapshotSessionId, onAIMessageUpdated)
 
@@ -2396,16 +2398,13 @@ Answer the user's question from this material. State any material gaps or unavai
       return
     }
 
-    const usageTracker = new RequestTokenUsageTracker()
+    const usageTracker = new RequestTokenUsageTracker(aiMessage)
     const estimatedRequestInput = this.aiApiService.estimateRequestInputTokens(
       apiConfig,
       requestMessages,
       modelId,
       ReasoningLevel.OFF
     )
-    usageTracker.beginRound(estimatedRequestInput)
-    usageTracker.applyToMessage(aiMessage)
-    onAIMessageUpdated(aiMessage)
     const requestMaxOutputTokens = resolveRequestMaxOutputTokens(
       this.getConfiguredMaxOutputTokens(providerId, modelId),
       this.getCurrentModelContextWindow(providerId, modelId),
@@ -2421,12 +2420,15 @@ Answer the user's question from this material. State any material gaps or unavai
     const localReasoningThrottle = createThrottle(150)
     const requestId = this.generateId()
 
+    const requestTemperature = await this.getRequestTemperature()
     if (this.isCancelled(cancelSnapshot)) {
       return
     }
 
-	    const requestTemperature = await this.getRequestTemperature()
-	    const httpRequest = this.aiApiService.streamChatRequest(
+    usageTracker.beginRound(estimatedRequestInput)
+    usageTracker.applyToMessage()
+    onAIMessageUpdated(aiMessage)
+    const httpRequest = this.aiApiService.streamChatRequest(
       apiConfig,
       requestMessages,
       modelId,
@@ -2434,6 +2436,7 @@ Answer the user's question from this material. State any material gaps or unavai
         if (cancelled) {
           return
         }
+        usageTracker.addEstimatedOutput(estimateTextTokens(contentChunk))
         if (!hasReceivedFirstChunk) {
           localFirstChunkThrottle.throttle(contentChunk, (throttledContent: string) => {
             if (cancelled) {
@@ -2486,8 +2489,8 @@ Answer the user's question from this material. State any material gaps or unavai
         })
         this.fillEmptyAIContentPlaceholder(aiMessage)
         usageTracker.finishRound(estimateTextTokens(aiMessage.content) + estimateTextTokens(aiMessage.reasoningContent))
-        usageTracker.applyToMessage(aiMessage)
-        aiMessage.isGenerating = false
+        usageTracker.applyToMessage()
+        aiMessage.finishGeneration()
         onAIMessageUpdated(aiMessage)
         if (snapshotSession !== null) {
           await this.databaseService.addMessage(snapshotSessionId, aiMessage)
@@ -2534,9 +2537,9 @@ Answer the user's question from this material. State any material gaps or unavai
           }
         })
         usageTracker.finishRound(estimateTextTokens(aiMessage.content) + estimateTextTokens(aiMessage.reasoningContent))
-        usageTracker.applyToMessage(aiMessage)
+        usageTracker.applyToMessage()
         this.fillEmptyAIContentPlaceholder(aiMessage, error)
-        aiMessage.isGenerating = false
+        aiMessage.finishGeneration()
         onAIMessageUpdated(aiMessage)
 
         if (userCancelled) {
@@ -2554,6 +2557,7 @@ Answer the user's question from this material. State any material gaps or unavai
         if (cancelled) {
           return
         }
+        usageTracker.addEstimatedOutput(estimateTextTokens(reasoningContent))
         localReasoningThrottle.throttle(reasoningContent, (throttledContent: string) => {
           if (cancelled) {
             return
@@ -2580,7 +2584,7 @@ Answer the user's question from this material. State any material gaps or unavai
           usage.cache_read_tokens ?? 0,
           usage.cache_write_tokens ?? 0
         )
-        usageTracker.applyToMessage(aiMessage)
+        usageTracker.applyToMessage()
         onAIMessageUpdated(aiMessage)
       }
     )
@@ -2617,7 +2621,8 @@ Answer the user's question from this material. State any material gaps or unavai
     reasoningLevel: ReasoningLevel = ReasoningLevel.OFF,
     apiPath?: string,
     customHeadersJson?: string,
-    annotations: ReplyAnnotation[] = []
+    annotations: ReplyAnnotation[] = [],
+    startedAt: number = Date.now()
   ): Promise<void> {
     const cancelSnapshot = this.cancelToken
     await this.persistPendingSession()
@@ -2707,7 +2712,7 @@ Use relevant facts already present in these results to answer directly. Report m
       modelId
     )
     aiMessage.parentId = parentage.forkContext !== null ? parentage.forkContext.aiParentId : (userMessage !== null ? userMessage.id : '')
-    aiMessage.isGenerating = true
+    aiMessage.startGeneration(startedAt)
 
     // 将搜索引用数据复制到 AI 消息，确保 SearchReferenceCard 可以正确显示
     aiMessage.searchQuery = searchResult.query
@@ -2766,16 +2771,13 @@ Use relevant facts already present in these results to answer directly. Report m
       return
     }
 
-    const usageTracker = new RequestTokenUsageTracker()
+    const usageTracker = new RequestTokenUsageTracker(aiMessage)
     const estimatedRequestInput = this.aiApiService.estimateRequestInputTokens(
       apiConfig,
       requestMessages,
       modelId,
       ReasoningLevel.OFF
     )
-    usageTracker.beginRound(estimatedRequestInput)
-    usageTracker.applyToMessage(aiMessage)
-    onAIMessageUpdated(aiMessage)
     const requestMaxOutputTokens = resolveRequestMaxOutputTokens(
       this.getConfiguredMaxOutputTokens(providerId, modelId),
       this.getCurrentModelContextWindow(providerId, modelId),
@@ -2791,12 +2793,15 @@ Use relevant facts already present in these results to answer directly. Report m
     const localReasoningThrottle = createThrottle(150)
     const requestId = this.generateId()
 
+    const requestTemperature = await this.getRequestTemperature()
     if (this.isCancelled(cancelSnapshot)) {
       return
     }
 
-	    const requestTemperature = await this.getRequestTemperature()
-	    const httpRequest = this.aiApiService.streamChatRequest(
+    usageTracker.beginRound(estimatedRequestInput)
+    usageTracker.applyToMessage()
+    onAIMessageUpdated(aiMessage)
+    const httpRequest = this.aiApiService.streamChatRequest(
       apiConfig,
       requestMessages,
       modelId,
@@ -2804,6 +2809,7 @@ Use relevant facts already present in these results to answer directly. Report m
         if (cancelled) {
           return
         }
+        usageTracker.addEstimatedOutput(estimateTextTokens(contentChunk))
         if (!hasReceivedFirstChunk) {
           localFirstChunkThrottle.throttle(contentChunk, (throttledContent: string) => {
             if (cancelled) {
@@ -2856,8 +2862,8 @@ Use relevant facts already present in these results to answer directly. Report m
         })
         this.fillEmptyAIContentPlaceholder(aiMessage)
         usageTracker.finishRound(estimateTextTokens(aiMessage.content) + estimateTextTokens(aiMessage.reasoningContent))
-        usageTracker.applyToMessage(aiMessage)
-        aiMessage.isGenerating = false
+        usageTracker.applyToMessage()
+        aiMessage.finishGeneration()
         onAIMessageUpdated(aiMessage)
         if (snapshotSession !== null) {
           await this.databaseService.addMessage(snapshotSessionId, aiMessage)
@@ -2904,9 +2910,9 @@ Use relevant facts already present in these results to answer directly. Report m
           }
         })
         usageTracker.finishRound(estimateTextTokens(aiMessage.content) + estimateTextTokens(aiMessage.reasoningContent))
-        usageTracker.applyToMessage(aiMessage)
+        usageTracker.applyToMessage()
         this.fillEmptyAIContentPlaceholder(aiMessage, error)
-        aiMessage.isGenerating = false
+        aiMessage.finishGeneration()
         onAIMessageUpdated(aiMessage)
 
         if (userCancelled) {
@@ -2924,6 +2930,7 @@ Use relevant facts already present in these results to answer directly. Report m
         if (cancelled) {
           return
         }
+        usageTracker.addEstimatedOutput(estimateTextTokens(reasoningContent))
         localReasoningThrottle.throttle(reasoningContent, (throttledContent: string) => {
           if (cancelled) {
             return
@@ -2950,7 +2957,7 @@ Use relevant facts already present in these results to answer directly. Report m
           usage.cache_read_tokens ?? 0,
           usage.cache_write_tokens ?? 0
         )
-        usageTracker.applyToMessage(aiMessage)
+        usageTracker.applyToMessage()
         onAIMessageUpdated(aiMessage)
       }
     )
@@ -3069,7 +3076,7 @@ Use relevant facts already present in these results to answer directly. Report m
       modelId
     )
     aiMessage.parentId = parentage.forkContext !== null ? parentage.forkContext.aiParentId : (userMessage !== null ? userMessage.id : '')
-    aiMessage.isGenerating = true
+    aiMessage.startGeneration()
 
     // 检测启用了哪些工具（用于构建 system prompt）
     let hasWebSearchTool = false
@@ -3233,7 +3240,7 @@ Use relevant facts already present in these results to answer directly. Report m
       return
     }
 
-    const usageTracker = new RequestTokenUsageTracker()
+    const usageTracker = new RequestTokenUsageTracker(aiMessage)
     let initialContextUsage = this.computeRequestContextUsage(
       apiConfig,
       requestMessages,
@@ -3307,7 +3314,7 @@ Use relevant facts already present in these results to answer directly. Report m
         (inputTokens: number, outputTokens: number, exact: boolean,
           cacheReadTokens: number, cacheWriteTokens: number): void => {
           usageTracker.addCompletedUsage(inputTokens, outputTokens, exact, cacheReadTokens, cacheWriteTokens)
-          usageTracker.applyToMessage(aiMessage)
+          usageTracker.applyToMessage()
           onAIMessageUpdated(aiMessage)
         }
       )
@@ -3429,7 +3436,7 @@ Use relevant facts already present in these results to answer directly. Report m
       (inputTokens: number, outputTokens: number, exact: boolean,
         cacheReadTokens: number, cacheWriteTokens: number): void => {
         usageTracker.addCompletedUsage(inputTokens, outputTokens, exact, cacheReadTokens, cacheWriteTokens)
-        usageTracker.applyToMessage(aiMessage)
+        usageTracker.applyToMessage()
         onAIMessageUpdated(aiMessage)
       },
       this.getCurrentModelContextWindow(providerId, modelId),
@@ -3625,7 +3632,7 @@ Use relevant facts already present in these results to answer directly. Report m
   ): Promise<void> {
     this.fillFallbackFromSearchSummaryIfNeeded(aiMessage)
     this.fillEmptyAIContentPlaceholder(aiMessage)
-    aiMessage.isGenerating = false
+    aiMessage.finishGeneration()
     aiMessage.isSearching = false
     this.clearContextCompactionUi(aiMessage)
     onAIMessageUpdated(aiMessage)
@@ -4054,7 +4061,7 @@ Use relevant facts already present in these results to answer directly. Report m
           (inputTokens: number, outputTokens: number, exact: boolean,
             cacheReadTokens: number, cacheWriteTokens: number): void => {
             usageTracker.addCompletedUsage(inputTokens, outputTokens, exact, cacheReadTokens, cacheWriteTokens)
-            usageTracker.applyToMessage(aiMessage)
+            usageTracker.applyToMessage()
             onAIMessageUpdated(aiMessage)
           }
         )
@@ -4247,7 +4254,9 @@ Use relevant facts already present in these results to answer directly. Report m
         return
       }
       roundGeneratedContent += content
-      roundGeneratedContentTokens += estimateTextTokens(content)
+      const deltaTokens = estimateTextTokens(content)
+      roundGeneratedContentTokens += deltaTokens
+      usageTracker.addEstimatedOutput(deltaTokens)
       appendResponseTextSegment(AssistantResponseSegmentType.CONTENT, content)
       if (roundHasToolCallDelta) {
         roundContentBuffer += content
@@ -4264,7 +4273,9 @@ Use relevant facts already present in these results to answer directly. Report m
         return
       }
       roundGeneratedReasoning += content
-      roundGeneratedReasoningTokens += estimateTextTokens(content)
+      const deltaTokens = estimateTextTokens(content)
+      roundGeneratedReasoningTokens += deltaTokens
+      usageTracker.addEstimatedOutput(deltaTokens)
       appendResponseTextSegment(AssistantResponseSegmentType.REASONING, content)
       if (roundHasToolCallDelta) {
         roundReasoningBuffer += content
@@ -4290,7 +4301,7 @@ Use relevant facts already present in these results to answer directly. Report m
     // 检查是否已取消
     if (isToolCancelledFn()) {
       console.info('ChatViewModel', 'Tool execution cancelled by user')
-      aiMessage.isGenerating = false
+      aiMessage.finishGeneration()
       onAIMessageUpdated(aiMessage)
       onComplete()
       return
@@ -4307,9 +4318,6 @@ Use relevant facts already present in these results to answer directly. Report m
       toolsEnabledInThisRound ? toolsForThisRound : undefined,
       true
     )
-    usageTracker.beginRound(estimatedRoundInput)
-    usageTracker.applyToMessage(aiMessage)
-    onAIMessageUpdated(aiMessage)
     const roundMaxOutputTokens = resolveRequestMaxOutputTokens(
       this.getConfiguredMaxOutputTokens(apiConfig.providerId, modelId),
       this.getCurrentModelContextWindow(apiConfig.providerId, modelId),
@@ -4366,7 +4374,7 @@ Use relevant facts already present in these results to answer directly. Report m
       localReasoningThrottle.reset()
       setHasReceivedFirstChunk(false)
       usageTracker.finishRound(generatedTokens)
-      usageTracker.applyToMessage(aiMessage)
+      usageTracker.applyToMessage()
       onAIMessageUpdated(aiMessage)
       if (roundHttpRequest !== null) {
         try {
@@ -4387,7 +4395,7 @@ Use relevant facts already present in these results to answer directly. Report m
           (inputTokens: number, outputTokens: number, exact: boolean,
             cacheReadTokens: number, cacheWriteTokens: number): void => {
             usageTracker.addCompletedUsage(inputTokens, outputTokens, exact, cacheReadTokens, cacheWriteTokens)
-            usageTracker.applyToMessage(aiMessage)
+            usageTracker.applyToMessage()
             onAIMessageUpdated(aiMessage)
           }
         )
@@ -4463,7 +4471,7 @@ Use relevant facts already present in these results to answer directly. Report m
         console.error('ChatViewModel', `Failed to resume after automatic compaction: ${message}`)
         this.clearContextCompactionUi(aiMessage)
         this.fillEmptyAIContentPlaceholder(aiMessage, message)
-        aiMessage.isGenerating = false
+        aiMessage.finishGeneration()
         aiMessage.isSearching = false
         onAIMessageUpdated(aiMessage)
         this.clearPendingAIMessageIfMatches(aiMessage.id)
@@ -4475,6 +4483,9 @@ Use relevant facts already present in these results to answer directly. Report m
     }
 
     // 发送流式请求（带工具）
+    usageTracker.beginRound(estimatedRoundInput)
+    usageTracker.applyToMessage()
+    onAIMessageUpdated(aiMessage)
     const httpRequest = this.aiApiService.streamChatRequestWithTools(
       apiConfig,
       requestMessages,
@@ -4538,7 +4549,7 @@ Use relevant facts already present in these results to answer directly. Report m
         usageTracker.finishRound(
           roundGeneratedContentTokens + roundGeneratedReasoningTokens + estimatedToolCallOutput
         )
-        usageTracker.applyToMessage(aiMessage)
+        usageTracker.applyToMessage()
         onAIMessageUpdated(aiMessage)
 
         // 检查是否有工具调用
@@ -4629,7 +4640,7 @@ Use relevant facts already present in these results to answer directly. Report m
           // 检查工具执行是否被取消
           if (this.hasCancelledToolResult(toolResults)) {
             console.info('ChatViewModel', 'Tool execution was cancelled')
-            aiMessage.isGenerating = false
+            aiMessage.finishGeneration()
             onAIMessageUpdated(aiMessage)
             onComplete()
             this.toolExecutionService.clearCancelCheckCallback()
@@ -4936,7 +4947,27 @@ Use relevant facts already present in these results to answer directly. Report m
         }
         flushBufferedRoundOutput()
         usageTracker.finishRound(roundGeneratedContentTokens + roundGeneratedReasoningTokens)
-        usageTracker.applyToMessage(aiMessage)
+        usageTracker.applyToMessage()
+
+        const finishWithError = (): void => {
+          if (!aiMessage.isGenerating || isCancelledFn()) return
+          this.fillEmptyAIContentPlaceholder(aiMessage, error)
+          aiMessage.finishGeneration()
+          aiMessage.isSearching = false
+          onAIMessageUpdated(aiMessage)
+
+          if (isUserCancelledFn()) {
+            setUserCancelled(false)
+            console.info('ChatViewModel', 'Request cancelled by user')
+            onComplete()
+          } else {
+            onError(error)
+          }
+          this.clearPendingAIMessageIfMatches(aiMessage.id)
+          this.unregisterActiveRequest(requestId)
+          getContextCompactionService().endRequest(requestId)
+          getSubAgentService().clearRuntime()
+        }
 
         // 模型能力被标成支持原生文档/图片，但该接口并不接受对应的 content part 时，整轮会
         // 直接 400。工具本身已经成功，丢掉原生文件重试一次比让这一轮彻底失败更有用。
@@ -4993,32 +5024,17 @@ Use relevant facts already present in these results to answer directly. Report m
             ).catch((retryError: Object): void => {
               console.error('ChatViewModel',
                 `Retry without native tool input failed: ${JSON.stringify(retryError)}`)
-              onError(error)
+              finishWithError()
             })
           }).catch((degradeError: Object): void => {
             console.error('ChatViewModel',
               `Failed to fall back to text for native tool input: ${JSON.stringify(degradeError)}`)
-            onError(error)
+            finishWithError()
           })
           return
         }
 
-        this.fillEmptyAIContentPlaceholder(aiMessage, error)
-        aiMessage.isGenerating = false
-        aiMessage.isSearching = false
-        onAIMessageUpdated(aiMessage)
-
-        if (isUserCancelledFn()) {
-          setUserCancelled(false)
-          console.info('ChatViewModel', 'Request cancelled by user')
-          onComplete()
-        } else {
-          onError(error)
-        }
-        this.clearPendingAIMessageIfMatches(aiMessage.id)
-        this.unregisterActiveRequest(requestId)
-        getContextCompactionService().endRequest(requestId)
-        getSubAgentService().clearRuntime()
+        finishWithError()
       },
 	      requestTemperature,
       roundMaxOutputTokens,
@@ -5051,11 +5067,14 @@ Use relevant facts already present in these results to answer directly. Report m
           return
         }
         markCurrentRoundAsToolCall()
+        let deltaTokens = 0
         for (let i = 0; i < toolCallDeltas.length; i++) {
-          roundGeneratedToolCallTokens += estimateTextTokens(toolCallDeltas[i].id || '')
-          roundGeneratedToolCallTokens += estimateTextTokens(toolCallDeltas[i].functionName || '')
-          roundGeneratedToolCallTokens += estimateTextTokens(toolCallDeltas[i].arguments || '')
+          deltaTokens += estimateTextTokens(toolCallDeltas[i].id || '')
+          deltaTokens += estimateTextTokens(toolCallDeltas[i].functionName || '')
+          deltaTokens += estimateTextTokens(toolCallDeltas[i].arguments || '')
         }
+        roundGeneratedToolCallTokens += deltaTokens
+        usageTracker.addEstimatedOutput(deltaTokens)
         maybeInterruptForAutomaticCompaction()
       },
       (usage: UsageInfo): void => {
@@ -5070,7 +5089,7 @@ Use relevant facts already present in these results to answer directly. Report m
           usage.cache_read_tokens ?? 0,
           usage.cache_write_tokens ?? 0
         )
-        usageTracker.applyToMessage(aiMessage)
+        usageTracker.applyToMessage()
         onAIMessageUpdated(aiMessage)
         maybeInterruptForAutomaticCompaction()
       }

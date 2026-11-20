@@ -37,7 +37,6 @@ export struct ChatMessageListSection {
   @Param isWorkingMarkPinned: boolean = false
   @Param topInsetHeight: number = 0
   @Param currentModelId: string = ''
-  @Param assistantName: string = '默认助手'
   @Param assistantAvatarSymbol: string = 'AI'
   @Param assistantAvatarColor: string = '#7A68F0'
   @Param assistantAvatarCacheKey: number = 0
@@ -164,10 +163,6 @@ export struct ChatMessageListSection {
     this.syncMessageRows()
   }
 
-  private checkShouldShowMessageHeader(message: ChatMessage, index: number): boolean {
-    return shouldShowMessageHeader(message, index, (i: number) => this.messages[i])
-  }
-
   private isValidMessageTimestamp(message: ChatMessage | null | undefined): boolean {
     if (message === undefined || message === null) {
       return false
@@ -252,7 +247,7 @@ export struct ChatMessageListSection {
       const isEditing = this.isEditingMessage && this.editingMessageId === message.id
       const isDimmed = this.isEditingMessage && !isEditing
       const showDateDivider = this.checkShouldShowDateDivider(message, i)
-      const showHeader = this.checkShouldShowMessageHeader(message, i)
+      const showHeader = shouldShowMessageHeader(message)
       const contentRenderSignature = buildChatMessageContentRenderSignature(
         message,
         isEditing,
@@ -349,10 +344,6 @@ export struct ChatMessageListSection {
                 renderSignature: item.renderSignature,
                 contentRenderSignature: item.contentRenderSignature,
                 currentModelId: this.currentModelId,
-                assistantName: this.assistantName,
-                assistantAvatarSymbol: item.assistantAvatarSymbol,
-                assistantAvatarColor: item.assistantAvatarColor,
-                assistantAvatarCacheKey: item.assistantAvatarCacheKey,
                 chatFontSize: this.chatFontSize,
                 themeRenderKey: this.themeRenderKey,
                 contentMaxWidth: this.getEffectiveContentMaxWidth(),

@@ -19,10 +19,6 @@ export struct ChatMessageListItem {
   @Param renderSignature: string = ''
   @Param contentRenderSignature: string = ''
   @Param currentModelId: string = ''
-  @Param assistantName: string = '默认助手'
-  @Param assistantAvatarSymbol: string = 'AI'
-  @Param assistantAvatarColor: string = '#7A68F0'
-  @Param assistantAvatarCacheKey: number = 0
   @Param chatFontSize: number = 15
   @Param themeRenderKey: string = ''
   @Param contentMaxWidth: number = 99999
@@ -75,10 +71,6 @@ export struct ChatMessageListItem {
           contentRenderSignature: this.contentRenderSignature,
           showHeader: this.showHeader,
           currentModelId: this.currentModelId,
-          assistantName: this.assistantName,
-          assistantAvatarSymbol: this.assistantAvatarSymbol,
-          assistantAvatarColor: this.assistantAvatarColor,
-          assistantAvatarCacheKey: this.assistantAvatarCacheKey,
           chatFontSize: this.chatFontSize,
           themeRenderKey: this.themeRenderKey,
           isMultiSelectMode: this.isMultiSelectMode,

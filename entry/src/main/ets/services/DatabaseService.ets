@@ -289,6 +289,10 @@ export class DatabaseService {
         output_price_per_million REAL DEFAULT 0,
         estimated_input_tokens INTEGER DEFAULT 0,
         estimated_output_tokens INTEGER DEFAULT 0,
+        token_usage_exact INTEGER DEFAULT -1,
+        generation_duration_ms INTEGER DEFAULT -1,
+        model_duration_ms INTEGER DEFAULT -1,
+        auxiliary_output_tokens INTEGER DEFAULT 0,
         estimated_cost REAL DEFAULT 0,
         uncached_input_tokens INTEGER DEFAULT 0,
         cache_read_tokens INTEGER DEFAULT 0,
@@ -477,7 +481,7 @@ export class DatabaseService {
     }
   }
 
-  // 添加消息计费快照字段（用于预估费用展示与历史统计）
+  // 升级历史消息的用量、计时和计费快照。
   private async addMessageBillingColumnsIfNeeded(): Promise<void> {
     if (this.rdbStore === null) {
       return
@@ -489,6 +493,10 @@ export class DatabaseService {
       'output_price_per_million REAL DEFAULT 0',
       'estimated_input_tokens INTEGER DEFAULT 0',
       'estimated_output_tokens INTEGER DEFAULT 0',
+      'token_usage_exact INTEGER DEFAULT -1',
+      'generation_duration_ms INTEGER DEFAULT -1',
+      'model_duration_ms INTEGER DEFAULT -1',
+      'auxiliary_output_tokens INTEGER DEFAULT 0',
       'estimated_cost REAL DEFAULT 0'
     ]
     for (let i = 0; i < columns.length; i++) {
@@ -2303,6 +2311,10 @@ export class DatabaseService {
       output_price_per_million: message.outputPricePerMillion,
       estimated_input_tokens: message.estimatedInputTokens,
       estimated_output_tokens: message.estimatedOutputTokens,
+      token_usage_exact: message.tokenUsageTracked ? (message.tokenUsageExact ? 1 : 0) : -1,
+      generation_duration_ms: message.generationDurationMs,
+      model_duration_ms: message.elapsedModelGenerationMs(),
+      auxiliary_output_tokens: message.auxiliaryOutputTokens,
       estimated_cost: message.estimatedCost,
       uncached_input_tokens: message.uncachedInputTokens,
       cache_read_tokens: message.cacheReadTokens,
@@ -2510,6 +2522,12 @@ export class DatabaseService {
     message.outputPricePerMillion = this.safeGetDouble(resultSet, 'output_price_per_million')
     message.estimatedInputTokens = this.safeGetLong(resultSet, 'estimated_input_tokens')
     message.estimatedOutputTokens = this.safeGetLong(resultSet, 'estimated_output_tokens')
+    const usageExact = this.safeGetLong(resultSet, 'token_usage_exact', -1)
+    message.tokenUsageTracked = usageExact >= 0
+    message.tokenUsageExact = usageExact === 1
+    message.generationDurationMs = this.safeGetLong(resultSet, 'generation_duration_ms', -1)
+    message.modelDurationMs = this.safeGetLong(resultSet, 'model_duration_ms', -1)
+    message.auxiliaryOutputTokens = this.safeGetLong(resultSet, 'auxiliary_output_tokens')
     message.estimatedCost = this.safeGetDouble(resultSet, 'estimated_cost')
     message.uncachedInputTokens = this.safeGetLong(resultSet, 'uncached_input_tokens')
     message.cacheReadTokens = this.safeGetLong(resultSet, 'cache_read_tokens')

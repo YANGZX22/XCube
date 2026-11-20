@@ -101,15 +101,15 @@ export default function tokenAccountingTest() {
     })
 
     it('accumulates_actual_and_fallback_usage_across_api_rounds', 0, () => {
-      const tracker = new RequestTokenUsageTracker()
       const message = new ChatMessage('assistant', MessageRole.ASSISTANT, '')
+      const tracker = new RequestTokenUsageTracker(message)
 
       tracker.beginRound(100)
       tracker.updateCurrentRoundUsage(90, 10)
       tracker.finishRound(99)
       tracker.beginRound(200)
       tracker.finishRound(20)
-      tracker.applyToMessage(message)
+      tracker.applyToMessage()
 
       expect(message.estimatedInputTokens).assertEqual(290)
       expect(message.estimatedOutputTokens).assertEqual(30)
@@ -118,8 +118,8 @@ export default function tokenAccountingTest() {
     })
 
     it('tracks_disjoint_cache_usage_buckets_across_api_rounds', 0, () => {
-      const tracker = new RequestTokenUsageTracker()
       const message = new ChatMessage('assistant-cache', MessageRole.ASSISTANT, '')
+      const tracker = new RequestTokenUsageTracker(message)
 
       tracker.beginRound(100)
       tracker.updateCurrentRoundUsage(100, 10, 90, 0)
@@ -127,7 +127,7 @@ export default function tokenAccountingTest() {
       tracker.beginRound(100)
       tracker.updateCurrentRoundUsage(100, 5, 0, 100)
       tracker.finishRound(5)
-      tracker.applyToMessage(message)
+      tracker.applyToMessage()
 
       expect(message.uncachedInputTokens).assertEqual(10)
       expect(message.cacheReadTokens).assertEqual(90)

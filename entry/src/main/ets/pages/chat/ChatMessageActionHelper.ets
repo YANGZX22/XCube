@@ -74,6 +74,11 @@ export function syncChatMessageFromSource(target: ChatMessage, source: ChatMessa
   target.content = source.content
   target.replyAnnotations = source.replyAnnotations
   target.timestamp = source.timestamp
+  target.generationStartedAt = source.generationStartedAt
+  target.generationDurationMs = source.generationDurationMs
+  target.modelDurationMs = source.modelDurationMs
+  target.modelRoundStartedAt = source.modelRoundStartedAt
+  target.auxiliaryOutputTokens = source.auxiliaryOutputTokens
   target.modelName = source.modelName
   target.modelId = source.modelId
   target.billingEnabled = source.billingEnabled

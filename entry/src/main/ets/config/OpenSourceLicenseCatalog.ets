@@ -83,9 +83,9 @@ export const RUNTIME_LICENSES: LicenseCatalogItem[] = [
 export const ASSET_LICENSES: LicenseCatalogItem[] = [
   new LicenseCatalogItem(
     'Lucide', '1.76.0', 'ISC + MIT',
-    '执行过程使用 pencil 和 feather 图标。' +
+    '执行过程使用 pencil 和 feather 图标。回复统计使用 gauge、snail、turtle、rabbit、footprints 和 square-sparkles 图标。' +
       '© 2026 Lucide Icons and Contributors。feather 源自 Feather，© 2013 至今 Cole Bemis。',
-    'Activity uses pencil and feather. ' +
+    'Activity uses pencil and feather. Reply statistics use gauge, snail, turtle, rabbit, footprints and square-sparkles. ' +
       '© 2026 Lucide Icons and Contributors. The feather icon derives from Feather, © 2013–present Cole Bemis.'
   ),
   new LicenseCatalogItem(
