@@ -11,7 +11,7 @@
 <p align="center">
   <img src="https://img.shields.io/badge/HarmonyOS-7_(API_26)-4285F4" alt="HarmonyOS 7" />
   <a href="./CHANGELOG.md"><img src="https://img.shields.io/badge/version-2.1.1-2ea44f" alt="Version 2.1.1" /></a>
-  <a href="https://appgallery.huawei.com/link/invite-test-wap?taskId=ea479545cdb1a7d831163c11b530b911&invitationCode=29VdBr62t8H"><img src="https://img.shields.io/badge/download-2.1.1-CF0A2C" alt="Version 2.1.1 invitation testing link" /></a>
+  <a href="https://appgallery.huawei.com/link/invite-test-wap?taskId=353fe589ffb44b07d5b39ac7a577de61&invitationCode=6mYTT4CXL9D"><img src="https://img.shields.io/badge/download-2.1.1-CF0A2C" alt="Version 2.1.1 invitation testing link" /></a>
   <a href="./LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue" alt="MIT License" /></a>
 </p>
 
@@ -138,7 +138,7 @@ HarmonyOS apps cannot directly run the Node.js CLI required by ModLens. The proj
 
 ## Getting Started
 
-### 1. Install directly from the [Invitation Testing Link](https://appgallery.huawei.com/link/invite-test-wap?taskId=ea479545cdb1a7d831163c11b530b911&invitationCode=29VdBr62t8H) (Recommended)
+### 1. Install directly from the [Invitation Testing Link](https://appgallery.huawei.com/link/invite-test-wap?taskId=353fe589ffb44b07d5b39ac7a577de61&invitationCode=6mYTT4CXL9D) (Recommended)
 
 ### 2. Build Locally
 
