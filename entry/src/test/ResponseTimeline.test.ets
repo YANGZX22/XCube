@@ -4,11 +4,44 @@ import {
   AssistantResponseSegmentJson,
   AssistantResponseSegmentType,
   ChatMessage,
-  MessageRole
+  MessageRole,
+  ToolCall
 } from '../main/ets/models/ChatModels'
 
 export default function responseTimelineTest() {
   describe('responseTimelineTest', () => {
+    it('follows_the_current_reasoning_segment_across_tool_rounds', 0, () => {
+      const message = new ChatMessage('rounds', MessageRole.ASSISTANT, '')
+      message.isGenerating = true
+      expect(message.isStreamingReasoning()).assertFalse()
+      message.responseSegments.push(new AssistantResponseSegment('r1', AssistantResponseSegmentType.REASONING, '先检索'))
+      expect(message.isStreamingReasoning()).assertTrue()
+      message.responseSegments.push(new AssistantResponseSegment('t', AssistantResponseSegmentType.TOOL_CALLS, '', ['call']))
+      expect(message.isStreamingReasoning()).assertFalse()
+      message.responseSegments.push(new AssistantResponseSegment('r2', AssistantResponseSegmentType.REASONING, '整理结果'))
+      expect(message.isStreamingReasoning()).assertTrue()
+      message.isGenerating = false
+      expect(message.isStreamingReasoning()).assertFalse()
+      message.isGenerating = true
+      message.responseSegments.push(new AssistantResponseSegment('c', AssistantResponseSegmentType.CONTENT, '正文'))
+      expect(message.isStreamingReasoning()).assertFalse()
+    })
+
+    it('recognizes_live_reasoning_in_messages_without_segments', 0, () => {
+      const message = new ChatMessage('legacy', MessageRole.ASSISTANT, '')
+      message.isGenerating = true
+      message.reasoningContent = '思考'
+      expect(message.isStreamingReasoning()).assertTrue()
+      message.isSearching = true
+      expect(message.isStreamingReasoning()).assertFalse()
+      message.isSearching = false
+      message.content = '正文'
+      expect(message.isStreamingReasoning()).assertFalse()
+      message.content = ''
+      message.toolCalls.push(new ToolCall('call', 'web_search'))
+      expect(message.isStreamingReasoning()).assertFalse()
+    })
+
     it('round_trips_response_history_without_losing_order', 0, () => {
       const message = new ChatMessage('assistant-timeline', MessageRole.ASSISTANT, '最终输出')
       message.responseSegments.push(new AssistantResponseSegment(

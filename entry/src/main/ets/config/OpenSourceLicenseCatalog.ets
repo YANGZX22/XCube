@@ -82,6 +82,13 @@ export const RUNTIME_LICENSES: LicenseCatalogItem[] = [
 
 export const ASSET_LICENSES: LicenseCatalogItem[] = [
   new LicenseCatalogItem(
+    'Lucide', '1.76.0', 'ISC + MIT',
+    '执行过程使用 pencil 和 feather 图标。' +
+      '© 2026 Lucide Icons and Contributors。feather 源自 Feather，© 2013 至今 Cole Bemis。',
+    'Activity uses pencil and feather. ' +
+      '© 2026 Lucide Icons and Contributors. The feather icon derives from Feather, © 2013–present Cole Bemis.'
+  ),
+  new LicenseCatalogItem(
     'Material Icon Theme', '5.38.1', 'MIT',
     'VS Code 文件图标与文件关联规则；Copyright © 2025 Material Extensions。完整许可证与来源随应用图标资源打包。',
     'VS Code file icons and associations; Copyright © 2025 Material Extensions. The full license and source notice are bundled with the icon assets.'

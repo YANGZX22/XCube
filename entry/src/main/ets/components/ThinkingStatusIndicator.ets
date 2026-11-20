@@ -1,20 +1,22 @@
 /**
  * 思考条与合并栏共用的状态指示：图标 + 标题。
  *
- * 思考中时（仅默认模式）一束高光沿横向不断扫过图标与文字。图标和文字被当成
+ * 推理时一束高光沿横向扫过图标与文字。图标和文字被当成
  * 一个整体：渐变画在同一层离屏画布上，用 SRC_IN 混合裁到内容形状里，
  * 所以高光穿过图标与文字之间时是连续的，不会在接缝处断开。
  *
- * 手稿模式有自己的工作指示语言（ManuscriptWorkingIndicator 的打字机动效），
- * 这里保持静止，不加任何动效。
+ * 独立思考条启用三点脉冲和缓动扫光；合并栏沿用原有的线性扫光和书写图标。
  *
  * 渐变本身不变，只靠 translate 滚动：位移走系统动画线程，
  * 不必逐帧重建 shader，也不占 JS 计时器。
  */
 
+import { curves } from '@kit.ArkUI'
 import { getAppUiState } from '../state/AppUiState'
 import { withColorAlpha } from '../utils/ColorAlphaUtils'
 import { VisualEffectsMode } from '../models/ThemeColors'
+import { ExecutionWritingIcon } from './ExecutionWritingIcon'
+import { statusPulseDots } from './TypingDots'
 
 // 高光带每 SWEEP_PERIOD 重复一次，至少铺三个周期并覆盖完整标题宽度，
 // 位移正好走一个周期后回到起点，循环处看不出接缝。
@@ -30,8 +32,9 @@ const STATUS_ICON_SIZE: number = 14
 @ComponentV2
 export struct ThinkingStatusIndicator {
   @Param isActive: boolean = false
+  @Param showReasoningMotion: boolean = false
   @Param label: ResourceStr | undefined = undefined
-  @Param icon: Resource = $r('sys.symbol.AI_deep_thinking')
+  @Param showWritingIcon: boolean = false
   @Param inactiveColor: ResourceColor | undefined = undefined
   @Param fullWidth: boolean = false
   @Local private sweepOffset: number = SWEEP_START_OFFSET
@@ -53,7 +56,7 @@ export struct ThinkingStatusIndicator {
 
   @Computed
   private get animationEnabled(): boolean {
-    return this.isActive && !this.isManuscriptMode
+    return this.isActive && (this.showReasoningMotion ? !getAppUiState().appInBackground : !this.isManuscriptMode)
   }
 
   private getAccentColor(): ResourceColor {
@@ -70,11 +73,15 @@ export struct ThinkingStatusIndicator {
 
   // 暗处用主题色压暗打底、纯白冲顶，亮处用主题色本色冲顶，两种底色下都够醒目
   private getSweepBaseColor(): string {
+    if (this.showReasoningMotion) {
+      return withColorAlpha(this.themePrimary, '99')
+    }
     return withColorAlpha(this.themePrimary, this.isDarkMode ? '5C' : '52')
   }
 
   private getSweepHighlightColor(): string {
-    return this.isDarkMode ? '#FFFFFF' : this.themePrimary
+    if (!this.isDarkMode) return this.themePrimary
+    return this.showReasoningMotion ? getAppUiState().themeTextPrimary : '#FFFFFF'
   }
 
   private getSweepColors(): Array<[ResourceColor, number]> {
@@ -123,7 +130,17 @@ export struct ThinkingStatusIndicator {
         return
       }
       try {
-        this.getUIContext().animateTo({
+        const context = this.getUIContext()
+        if (this.showReasoningMotion) {
+          context.keyframeAnimateTo({ iterations: -1 }, [
+            { duration: 450, event: () => { this.sweepOffset = SWEEP_START_OFFSET } },
+            { duration: 2100, curve: curves.cubicBezierCurve(0.714, 0.121, 0.211, 0.888),
+              event: () => { this.sweepOffset = SWEEP_END_OFFSET } },
+            { duration: 450, event: () => { this.sweepOffset = SWEEP_END_OFFSET } }
+          ])
+          return
+        }
+        context.animateTo({
           duration: SWEEP_DURATION,
           curve: Curve.Linear,
           iterations: -1,
@@ -150,12 +167,16 @@ export struct ThinkingStatusIndicator {
   @Builder
   private ThinkingContent() {
     Row() {
-      SymbolGlyph(this.icon)
-        .fontSize(STATUS_ICON_SIZE)
-        .width(STATUS_ICON_SIZE)
-        .height(STATUS_ICON_SIZE)
-        .fontColor([this.getAccentColor()])
-        .flexShrink(0)
+      if (this.showWritingIcon) {
+        ExecutionWritingIcon({ isActive: this.isActive, tint: this.getAccentColor() })
+      } else {
+        SymbolGlyph($r('sys.symbol.AI_deep_thinking'))
+          .fontSize(STATUS_ICON_SIZE)
+          .width(STATUS_ICON_SIZE)
+          .height(STATUS_ICON_SIZE)
+          .fontColor([this.getAccentColor()])
+          .flexShrink(0)
+      }
 
       Text(this.label ?? (this.isActive ? $r('app.string.reasoning_thinking') : $r('app.string.reasoning_process')))
         .fontSize(13)
@@ -164,7 +185,11 @@ export struct ThinkingStatusIndicator {
         .maxLines(1)
         .textOverflow({ overflow: TextOverflow.Ellipsis })
         .layoutWeight(this.fullWidth ? 1 : 0)
+        .flexShrink(this.fullWidth ? 0 : 1)
         .margin({ left: 6 })
+      if (this.animationEnabled && this.showReasoningMotion) {
+        statusPulseDots(5)
+      }
     }
     .width(this.fullWidth ? '100%' : undefined)
     .alignItems(VerticalAlign.Center)

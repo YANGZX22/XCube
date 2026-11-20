@@ -2,6 +2,7 @@ import { ToolCall, ToolResult } from '../models/ChatModels'
 import { getAppUiState } from '../state/AppUiState'
 import { buildToolArgumentsPreview, buildToolResultPreview, ToolPayloadPreview } from '../utils/ToolPayloadSummaryUtils'
 import { withColorAlpha } from '../utils/ColorAlphaUtils'
+import { statusPulseDots } from './TypingDots'
 import { VisualEffectsMode } from '../models/ThemeColors'
 import { MANUSCRIPT_COMPACT_BAR_HEIGHT } from '../utils/ManuscriptVisualUtils'
 import {
@@ -16,6 +17,7 @@ import {
   getTimelineBarExpandAnimation
 } from '../utils/TimelineBarTransitionUtils'
 import {
+  normalizeToolIconId,
   resolveToolIconImageKind,
   resolveToolSymbolResource,
   TOOL_ICON_IMAGE_DOCX,
@@ -41,9 +43,7 @@ function getToolDisplayName(toolCall: ToolCall): string | Resource {
   if (lookupId.trim() === '') {
     return pickLocalizedText('未知工具', 'Unknown Tool')
   }
-  const normalized = lookupId.toLowerCase().replace(/[\s\-]+/g, '_')
-  if (normalized === 'web_search' || normalized === 'exa_search' || normalized === 'websearch'
-    || normalized === 'search_web' || normalized === 'internet_search' || normalized === 'web_search_exa') {
+  if (normalizeToolIconId(lookupId) === 'web_search') {
     return $r('app.string.web_search')
   }
   return getLocalizedBuiltinToolName(lookupId, fallback)
@@ -148,8 +148,15 @@ export struct ToolCallCard {
     return false
   }
 
+  @Computed
+  private get showScalingDots(): boolean {
+    if (!this.isExecuting) return false
+    const toolId = normalizeToolIconId(this.getToolIconId())
+    return toolId !== 'builtin_browser' && toolId !== 'web_search'
+  }
+
   aboutToAppear(): void {
-    if (this.isExecuting) {
+    if (this.showScalingDots) {
       this.startDotAnimation()
     }
   }
@@ -158,9 +165,9 @@ export struct ToolCallCard {
     this.stopDotAnimation()
   }
 
-  @Monitor('isExecuting')
+  @Monitor('showScalingDots')
   onExecutingStateChange(): void {
-    if (this.isExecuting) {
+    if (this.showScalingDots) {
       this.startDotAnimation()
       return
     }
@@ -275,8 +282,7 @@ export struct ToolCallCard {
           }
 
           // 执行状态
-          if (this.isExecuting) {
-            // 执行中：显示跳动点
+          if (this.showScalingDots) {
             Row({ space: 2 }) {
               Column()
                 .width(4)
@@ -301,6 +307,8 @@ export struct ToolCallCard {
             }
             .flexShrink(0)
             .margin({ left: 8 })
+          } else if (this.isExecuting) {
+            statusPulseDots(5)
           } else if (this.hasAnyResult() && !this.shouldHideStatusIcon()) {
             // 已完成：根据结果显示成功/失败状态
             SymbolGlyph(this.getResultStatusSymbol())

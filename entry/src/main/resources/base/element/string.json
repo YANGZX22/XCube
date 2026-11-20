@@ -1054,7 +1054,7 @@
     },
     {
       "name": "reasoning_thinking",
-      "value": "Thinking..."
+      "value": "Thinking"
     },
     {
       "name": "favorite_models_empty_title",
@@ -1978,7 +1978,7 @@
     },
     {
       "name": "about_open_source_licenses_desc",
-      "value": "Libraries, models, fonts, and development tools"
+      "value": "Libraries, icons, models, fonts, and development tools"
     },
     {
       "name": "about_license_sheet_title",
@@ -1994,7 +1994,7 @@
     },
     {
       "name": "about_license_assets_section",
-      "value": "Bundled Models and Fonts"
+      "value": "Bundled Icons, Models, and Fonts"
     },
     {
       "name": "about_license_development_section",

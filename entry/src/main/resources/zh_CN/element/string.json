@@ -1978,7 +1978,7 @@
     },
     {
       "name": "about_open_source_licenses_desc",
-      "value": "库、模型、字体与开发工具"
+      "value": "依赖库、图标、模型、字体与开发工具"
     },
     {
       "name": "about_license_sheet_title",
@@ -1994,7 +1994,7 @@
     },
     {
       "name": "about_license_assets_section",
-      "value": "内置模型与字体"
+      "value": "内置图标、模型与字体"
     },
     {
       "name": "about_license_development_section",

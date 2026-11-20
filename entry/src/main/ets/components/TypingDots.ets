@@ -1,4 +1,48 @@
+import { curves } from '@kit.ArkUI'
 import { getAppUiState } from '../state/AppUiState'
+
+@ComponentV2
+struct StatusPulseDot {
+  @Require @Param delayMs: number
+  @Local private strength: number = 0.29
+  private started: boolean = false
+
+  private start(): void {
+    if (this.started) return
+    this.started = true
+    this.getUIContext().keyframeAnimateTo({ delay: this.delayMs, iterations: -1 }, [
+      { duration: 60, event: () => { this.strength = 0.29 } },
+      { duration: 120, curve: curves.cubicBezierCurve(0.165, 0.84, 0.44, 1), event: () => { this.strength = 1 } },
+      { duration: 120, event: () => { this.strength = 1 } },
+      { duration: 480, curve: Curve.EaseOut, event: () => { this.strength = 0.29 } },
+      { duration: 420, event: () => { this.strength = 0.29 } }
+    ])
+  }
+
+  build() {
+    Circle()
+      .width(3)
+      .height(3)
+      .fill(getAppUiState().themePrimary)
+      .opacity(this.strength)
+      .onSizeChange((): void => { this.start() })
+  }
+}
+
+@Builder
+export function statusPulseDots(leftMargin: number = 0) {
+  if (!getAppUiState().appInBackground) {
+    Row({ space: 2 }) {
+      ForEach([0, 180, 360], (delay: number) => {
+        StatusPulseDot({ delayMs: delay })
+      }, (delay: number) => delay.toString())
+    }
+    .margin({ left: leftMargin })
+    .flexShrink(0)
+    .hitTestBehavior(HitTestMode.BLOCK_DESCENDANTS)
+    .accessibilityLevel('no-hide-descendants')
+  }
+}
 
 @ComponentV2
 export struct TypingDots {

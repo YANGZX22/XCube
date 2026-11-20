@@ -20,3 +20,12 @@ AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
 LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
+
+Third-party icons
+-----------------
+
+The pencil and feather icons come from Lucide 1.76.0
+(https://github.com/lucide-icons/lucide/tree/1.76.0). Lucide uses the ISC
+License. The feather icon derives from Feather and carries its MIT notice.
+The full upstream license and copyright notices are included in
+entry/src/main/resources/rawfile/licenses/lucide.txt.

@@ -21,7 +21,7 @@ import { AskUserCard } from './AskUserCard'
 import { HtmlPreviewCard } from './HtmlPreviewCard'
 import { VChartCard } from './VChartCard'
 import { MapResultCard } from './map/MapResultCard'
-import { TypingDots } from './TypingDots'
+import { statusPulseDots, TypingDots } from './TypingDots'
 import { ThinkingStatusIndicator } from './ThinkingStatusIndicator'
 import { ChatMarkdownRenderer } from './ChatMarkdownRenderer'
 import { AssistantAvatarView } from './AssistantAvatar'
@@ -2716,7 +2716,10 @@ export struct MessageBubble {
   private TimelineReasoningBarBody(segment: AssistantResponseSegment) {
     Column() {
       Row() {
-        ThinkingStatusIndicator({ isActive: this.isActiveTimelineSegment(segment) })
+        ThinkingStatusIndicator({
+          isActive: this.message.isStreamingReasoning() && this.isActiveTimelineSegment(segment),
+          showReasoningMotion: true
+        })
 
         Blank().layoutWeight(1)
 
@@ -2763,7 +2766,7 @@ export struct MessageBubble {
       ThinkingStatusIndicator({
         isActive: this.isTimelineBarGroupActive(block),
         label: this.getTimelineBarGroupTitle(block),
-        icon: $r('sys.symbol.line_below_highlighter'),
+        showWritingIcon: true,
         inactiveColor: $r('app.color.text_secondary'),
         fullWidth: true
       })
@@ -3240,8 +3243,7 @@ export struct MessageBubble {
           .maxLines(1)
           .textOverflow({ overflow: TextOverflow.Ellipsis })
 
-        // 三个跳动的点
-        TypingDots({ dotSize: 4, spacing: 2 })
+        statusPulseDots()
       }
       .constraintSize({ maxWidth: 220 })
       .padding({ left: 10, right: 10, top: 5, bottom: 5 })
@@ -3275,7 +3277,7 @@ export struct MessageBubble {
   ReasoningSection() {
     Column() {
       Row() {
-        ThinkingStatusIndicator({ isActive: this.message.isGenerating })
+        ThinkingStatusIndicator({ isActive: this.message.isStreamingReasoning(), showReasoningMotion: true })
 
         Blank()
           .layoutWeight(1)
@@ -3446,9 +3448,9 @@ export struct MessageBubble {
         `I'll search for: ${this.message.searchQuery}`)
     }
     if (engine !== '') {
-      return pickLocalizedText(`正在通过${engine}查询...`, `Searching with ${engine}...`)
+      return pickLocalizedText(`正在通过${engine}查询`, `Searching with ${engine}`)
     }
-    return pickLocalizedText('正在查询...', 'Searching...')
+    return pickLocalizedText('正在查询', 'Searching')
   }
 
   private resetCopyFeedback(): void {

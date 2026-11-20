@@ -5028,47 +5028,31 @@ export struct ChatPage {
     console.info('ChatPage', `[onAppInBackgroundChanged] appInBackground=${this.appInBackground}`)
   }
 
-  private calcIsAwaitingAiOutput(): boolean {
+  @Computed
+  private get activeComposerReply(): ChatMessage | undefined {
     if (!this.isSending) {
-      return false
+      return undefined
     }
-
-    const total = this.messages.length
-    if (total <= 0) {
-      return true
-    }
-
-    // 从尾部向前找最近一条 AI 消息；若 AI 还没开始输出（内容为空），则认为处于等待态
-    for (let i = total - 1; i >= 0; i--) {
-      const msg = this.messages[i]
-      if (msg.role === MessageRole.ASSISTANT) {
-        return msg.isGenerating && msg.content.length === 0 && msg.reasoningContent.length === 0
-      }
-      if (msg.role === MessageRole.USER) {
-        break
-      }
-    }
-
-    return true
-  }
-
-  private calcInFlightSendMenuAvailable(): boolean {
-    if (!this.isSending) {
-      return false
-    }
-
-    // AI 气泡一旦结束生成，后续短暂的持久化/任务收尾不应继续触发发送方式选择。
-    // 尚未创建 AI 气泡时，最近一条是当前用户消息，仍属于等待回答阶段。
     for (let i = this.messages.length - 1; i >= 0; i--) {
       const message = this.messages[i]
       if (message.role === MessageRole.ASSISTANT) {
-        return message.isGenerating
+        return message
       }
       if (message.role === MessageRole.USER) {
-        return true
+        break
       }
     }
-    return true
+    return undefined
+  }
+
+  private calcIsAwaitingAiOutput(): boolean {
+    const message = this.activeComposerReply
+    return this.isSending && (message === undefined ||
+      (message.isGenerating && message.content.length === 0 && message.reasoningContent.length === 0))
+  }
+
+  private calcInFlightSendMenuAvailable(): boolean {
+    return this.isSending && (this.activeComposerReply?.isGenerating ?? true)
   }
 
   // 处理返回按钮点击

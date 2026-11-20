@@ -683,6 +683,17 @@ export class ChatMessage {
     return this.reasoningContent.length > 0
   }
 
+  isStreamingReasoning(): boolean {
+    if (!this.isGenerating || this.role !== MessageRole.ASSISTANT || this.isSearching) {
+      return false
+    }
+    const segments = this.responseSegments
+    if (segments.length > 0) {
+      return segments[segments.length - 1].type === AssistantResponseSegmentType.REASONING
+    }
+    return this.hasReasoningContent() && this.content.length === 0 && !this.hasToolCalls()
+  }
+
   // 检查是否有附件
   hasAttachments(): boolean {
     return this.attachments.length > 0
