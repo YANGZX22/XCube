@@ -244,7 +244,7 @@ export struct AssistantAvatarView {
   @Param modelProviderId: string = ''
   @Param modelId: string = ''
   @Param modelName: string = ''
-  @Param avatarBorderWidth: number = 0
+  @Param avatarBorderWidth: number | undefined = undefined
   @Param avatarBorderColor: ResourceColor = Color.Transparent
   // 材质按钮提供背景和轮廓时，仅绘制头像内容，避免实色底板遮住材质。
   @Param contentOnly: boolean = false
@@ -282,12 +282,12 @@ export struct AssistantAvatarView {
     if (this.contentOnly) {
       return 0
     }
-    return this.avatarBorderWidth > 0 ? this.avatarBorderWidth : (this.isTransparentTextAvatar() ? 1 : 0)
+    return this.avatarBorderWidth ?? (this.isTransparentTextAvatar() ? 1 : 0)
   }
 
   private getAvatarBorderColor(): ResourceColor {
-    return this.avatarBorderWidth > 0 ? this.avatarBorderColor :
-      (this.isTransparentTextAvatar() ? getAppUiState().themePrimaryLight : Color.Transparent)
+    return this.avatarBorderWidth === undefined && this.isTransparentTextAvatar() ?
+      getAppUiState().themePrimaryLight : this.avatarBorderColor
   }
 
   @Builder
@@ -333,7 +333,7 @@ export struct AssistantAvatarView {
     .height(this.avatarSize)
     .borderRadius(this.radius)
     .backgroundColor(this.contentOnly ? Color.Transparent : $r('app.color.model_icon_bg'))
-    .border({ width: this.contentOnly ? 0 : this.avatarBorderWidth, color: this.avatarBorderColor })
+    .border({ width: this.contentOnly ? 0 : (this.avatarBorderWidth ?? 0), color: this.avatarBorderColor })
     .justifyContent(FlexAlign.Center)
     .alignItems(HorizontalAlign.Center)
     .clip(true)
@@ -353,7 +353,7 @@ export struct AssistantAvatarView {
       .width(this.avatarSize)
       .height(this.avatarSize)
       .borderRadius(this.radius)
-      .border({ width: this.contentOnly ? 0 : this.avatarBorderWidth, color: this.avatarBorderColor })
+      .border({ width: this.contentOnly ? 0 : (this.avatarBorderWidth ?? 0), color: this.avatarBorderColor })
       .clip(true)
     } else {
       Stack() {

@@ -2070,7 +2070,7 @@
     },
     {
       "name": "settings_chat_serif_font_desc",
-      "value": "仅在用户与 AI 消息气泡内使用衬线字体"
+      "value": "用户消息和 AI 回复的正文使用衬线字体"
     },
     {
       "name": "settings_chat_serif_font_family",
