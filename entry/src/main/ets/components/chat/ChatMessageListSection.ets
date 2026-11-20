@@ -1,4 +1,5 @@
 import { ChatMessage, MessageAttachment, MessageRole } from '../../models/ChatModels'
+import { ReplyAnnotation } from '../../models/ReplyAnnotation'
 import { CHAT_COMPOSER_HORIZONTAL_INSET_VP } from '../../config/ChatLayout'
 import { DraftPreviewBubble } from './DraftPreviewBubble'
 import { shouldShowMessageHeader } from '../../utils/MessageListUtils'
@@ -52,6 +53,8 @@ export struct ChatMessageListSection {
   @Event onImageClick: (images: Array<string>, imageIndex: number) => void = (_images: Array<string>, _imageIndex: number): void => {
   }
   @Event onFileAttachmentClick: (attachment: MessageAttachment) => void = (_attachment: MessageAttachment): void => {}
+  @Event onAnnotateSelection: (quote: string) => void = () => {}
+  @Event onReviewSentAnnotations: (notes: ReplyAnnotation[]) => void = () => {}
   @Event onOpenLink: (title: string, url: string) => void = (_title: string, _url: string): void => {}
   @Event onOpenMap: (visualizationJson: string) => void = (_visualizationJson: string): void => {}
   @Event onTTS: (messageId: string, content: string) => void = (_messageId: string, _content: string): void => {}
@@ -378,6 +381,8 @@ export struct ChatMessageListSection {
                 onFileAttachmentClick: (attachment: MessageAttachment): void => {
                   this.onFileAttachmentClick(attachment)
                 },
+                onAnnotateSelection: this.onAnnotateSelection,
+                onReviewSentAnnotations: this.onReviewSentAnnotations,
                 onOpenLink: (title: string, url: string): void => {
                   this.onOpenLink(title, url)
                 },

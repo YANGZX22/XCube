@@ -1554,6 +1554,7 @@ struct Index {
             existing.lastMessagePreview = fresh.lastMessagePreview
             existing.messageCount = fresh.messageCount
             existing.draftText = fresh.draftText
+            existing.draftAnnotations = [...fresh.draftAnnotations]
             existing.draftAttachments = [...fresh.draftAttachments]
             existing.isFavorite = fresh.isFavorite
             existing.modelId = fresh.modelId

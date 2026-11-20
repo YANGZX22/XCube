@@ -1,5 +1,6 @@
 import { ChatMessage, MessageAttachment, ReasoningLevel } from '../../models/ChatModels'
 import { ChatViewModel } from '../../viewmodels/ChatViewModel'
+import { ReplyAnnotation } from '../../models/ReplyAnnotation'
 import { findMessageIndexById } from './ChatMessageActionHelper'
 
 export interface ChatInlineEditFlowDependencies {
@@ -10,7 +11,8 @@ export interface ChatInlineEditFlowDependencies {
     attachments: MessageAttachment[],
     webSearchEnabled: boolean,
     selectedToolIds: string[],
-    reasoningLevel: ReasoningLevel
+    reasoningLevel: ReasoningLevel,
+    annotations: ReplyAnnotation[]
   ) => boolean
   onSyncMessages: () => void
   // 把当前展示路径截断为指定的前缀消息（编辑时去掉被编辑消息及其后续，使新消息成为同级版本）
@@ -28,7 +30,8 @@ export interface ChatInlineEditFlowDependencies {
     attachments: MessageAttachment[],
     webSearchEnabled: boolean,
     selectedToolIds: string[],
-    reasoningLevel: ReasoningLevel
+    reasoningLevel: ReasoningLevel,
+    annotations: ReplyAnnotation[]
   ) => Promise<void>
   onShowToast: (message: string | Resource) => void
 }
@@ -46,7 +49,8 @@ export class ChatInlineEditFlow {
     pendingAttachments: MessageAttachment[],
     editingWebSearchEnabled: boolean,
     editingSelectedToolIds: string[],
-    editingReasoningLevel: ReasoningLevel
+    editingReasoningLevel: ReasoningLevel,
+    annotations: ReplyAnnotation[] = []
   ): Promise<void> {
     if (editingMessageId === '') {
       console.warn('ChatInlineEditFlow', '[saveAndSendInline] editingMessageId is empty')
@@ -62,7 +66,7 @@ export class ChatInlineEditFlow {
 
     const hasContent = inputText.trim() !== ''
     const hasAttachments = pendingAttachments.length > 0
-    if (!hasContent && !hasAttachments) {
+    if (!hasContent && !hasAttachments && annotations.length === 0) {
       this.deps.onShowToast($r('app.string.message_content_empty'))
       return
     }
@@ -73,6 +77,7 @@ export class ChatInlineEditFlow {
       const savedWebSearchEnabled = editingWebSearchEnabled
       const savedToolIds = [...editingSelectedToolIds]
       const savedReasoningLevel = editingReasoningLevel
+      const savedAnnotations = annotations.slice()
 
       // 在创建分支并发送之前，先复用正常发送链路做一次前置校验。
       // 失败时保留原消息和当前编辑态，避免“内容没了但也没发出去”的烂体验。
@@ -81,7 +86,8 @@ export class ChatInlineEditFlow {
         savedAttachments,
         savedWebSearchEnabled,
         savedToolIds,
-        savedReasoningLevel
+        savedReasoningLevel,
+        savedAnnotations
       )
       if (!canCommit) {
         return
@@ -106,7 +112,8 @@ export class ChatInlineEditFlow {
         savedAttachments,
         savedWebSearchEnabled,
         savedToolIds,
-        savedReasoningLevel
+        savedReasoningLevel,
+        savedAnnotations
       )
     } catch (error) {
       console.error('ChatInlineEditFlow', `[saveAndSendInline] Error: ${JSON.stringify(error)}`)

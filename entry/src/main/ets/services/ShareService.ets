@@ -9,6 +9,7 @@ import { image } from '@kit.ImageKit'
 import { fileIo as fs } from '@kit.CoreFileKit'
 import { common } from '@kit.AbilityKit'
 import { ChatMessage, MessageRole } from '../models/ChatModels'
+import { getAnnotatedDisplayText } from '../utils/LocalizedTextUtils'
 
 // 分享模式枚举
 export enum ShareMode {
@@ -50,8 +51,9 @@ export class ShareService {
       lines.push(`### ${roleLabel} · ${time}\n`)
 
       // 添加消息内容
-      if (msg.content.length > 0) {
-        lines.push(msg.content)
+      const content = getAnnotatedDisplayText(msg.content, msg.replyAnnotations.length)
+      if (content.length > 0) {
+        lines.push(content)
         lines.push('')
       }
 
@@ -81,12 +83,13 @@ export class ShareService {
       const time = this.formatTime(msg.timestamp)
 
       lines.push(`${roleLabel} ${time}`)
-      if (msg.content.length > 0) {
-        lines.push(msg.content)
+      const content = getAnnotatedDisplayText(msg.content, msg.replyAnnotations.length)
+      if (content.length > 0) {
+        lines.push(content)
       }
 
       if (msg.reasoningContent.trim().length > 0) {
-        if (msg.content.length > 0) {
+        if (content.length > 0) {
           lines.push('')
         }
         lines.push('[思考过程]')

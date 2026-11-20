@@ -30,6 +30,7 @@ import skillPackageTest from './SkillPackage.test';
 import pythonSandboxRuntimeTest from './PythonSandboxRuntime.test';
 import attachmentCleanupTest from './AttachmentCleanup.test';
 import chatInFlightMessageTest from './ChatInFlightMessage.test';
+import replyAnnotationTest from './ReplyAnnotation.test';
 import deepSeekWebSearchUtilsTest from './DeepSeekWebSearchUtils.test';
 import subAgentArgumentParserTest from './SubAgentArgumentParser.test';
 import openAIStreamCompatibilityTest from './OpenAIStreamCompatibility.test';
@@ -73,6 +74,7 @@ export default function testsuite() {
   pythonSandboxRuntimeTest();
   attachmentCleanupTest();
   chatInFlightMessageTest();
+  replyAnnotationTest();
   deepSeekWebSearchUtilsTest();
   subAgentArgumentParserTest();
   openAIStreamCompatibilityTest();

@@ -42,6 +42,8 @@ import { buildProviderImportOrder } from '../config/ProviderOrderUtils'
 import { AppStorageKeys } from '../config/AppStorageKeys'
 import { setAppUiStateValue } from '../state/AppUiState'
 
+import { normalizeReplyAnnotations, ReplyAnnotation } from '../models/ReplyAnnotation'
+
 const ASSISTANT_AVATAR_EXPORT_DIR: string = 'assistant_avatars'
 
 // 导出选项
@@ -216,6 +218,7 @@ interface MessageData {
   id: string
   role: string
   content: string
+  replyAnnotations?: ReplyAnnotation[]
   timestamp: number
   modelName: string
   modelId?: string
@@ -709,6 +712,7 @@ export class ImportExportService {
             reasoningContent: m.reasoningContent,
             responseTimeline: m.responseSegments.map((segment: AssistantResponseSegment): AssistantResponseSegmentJson =>
               segment.toJson()),
+            replyAnnotations: m.replyAnnotations.length > 0 ? m.replyAnnotations : undefined,
             contextCompactionState: m.contextCompactionState,
             billingEnabled: m.billingEnabled,
             billingCurrency: m.billingCurrency,
@@ -1049,6 +1053,7 @@ export class ImportExportService {
             msgData.modelId || ''
           )
           message.timestamp = msgData.timestamp
+          message.replyAnnotations = normalizeReplyAnnotations(msgData.replyAnnotations)
           message.reasoningContent = msgData.reasoningContent || ''
           if (msgData.responseTimeline && msgData.responseTimeline.length > 0) {
             for (const segmentData of msgData.responseTimeline) {

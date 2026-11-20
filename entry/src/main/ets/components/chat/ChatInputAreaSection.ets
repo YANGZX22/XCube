@@ -14,6 +14,9 @@ export struct ChatInputAreaSection {
   @Local isAiNoticeHidden: boolean = false
   @Param inputText: string = ''
   @Event onInputTextChange: (value: string) => void = (_value: string): void => {}
+  @Param annotationCount: number = 0
+  @Event onReviewAnnotations: () => void = () => {}
+  @Event onClearAnnotations: () => void = () => {}
   @Param attachments: MessageAttachment[] = []
   @Event onAttachmentsChange: (value: MessageAttachment[]) => void = (_value: MessageAttachment[]): void => {}
   @Param isSending: boolean = false
@@ -248,6 +251,9 @@ export struct ChatInputAreaSection {
 
         ChatInputBar({
           composerController: this.composerController,
+          annotationCount: this.annotationCount,
+          onReviewAnnotations: this.onReviewAnnotations,
+          onClearAnnotations: this.onClearAnnotations,
           inputText: this.inputText,
           onInputTextChange: (value: string): void => {
             this.onInputTextChange(value)

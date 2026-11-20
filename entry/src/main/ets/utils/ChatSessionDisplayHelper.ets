@@ -1,4 +1,5 @@
 import { ChatSession, MessageAttachment } from '../models/ChatModels'
+import { getAnnotatedDisplayText } from './LocalizedTextUtils'
 
 export const SESSION_DRAFT_TAG_TEXT: string = '草稿'
 export const SESSION_DRAFT_PREFIX: string = `[${SESSION_DRAFT_TAG_TEXT}]`
@@ -24,7 +25,7 @@ function getDraftAttachmentPreview(attachments: MessageAttachment[]): string {
 }
 
 export function hasSessionDraftContent(session: ChatSession): boolean {
-  return normalizePreviewText(session.draftText) !== '' || session.draftAttachments.length > 0
+  return normalizePreviewText(session.draftText) !== '' || session.draftAttachments.length > 0 || session.draftAnnotations.length > 0
 }
 
 export function getSessionPreviewBodyText(session: ChatSession): string {
@@ -32,6 +33,9 @@ export function getSessionPreviewBodyText(session: ChatSession): string {
     const normalizedDraftText = normalizePreviewText(session.draftText)
     if (normalizedDraftText !== '') {
       return normalizedDraftText
+    }
+    if (session.draftAttachments.length === 0 && session.draftAnnotations.length > 0) {
+      return normalizePreviewText(getAnnotatedDisplayText('', session.draftAnnotations.length))
     }
     return getDraftAttachmentPreview(session.draftAttachments)
   }

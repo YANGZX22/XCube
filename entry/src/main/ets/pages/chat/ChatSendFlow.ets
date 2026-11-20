@@ -9,6 +9,8 @@ import {
   ToolResult
 } from '../../models/ChatModels'
 import { ChatViewModel, ToolCallCallbacks } from '../../viewmodels/ChatViewModel'
+import { ReplyAnnotation } from '../../models/ReplyAnnotation'
+import { getAnnotatedDisplayText } from '../../utils/LocalizedTextUtils'
 import { ChatTaskOrchestratorService } from '../../services/ChatTaskOrchestratorService'
 import { ToolRegistry } from '../../services/ToolRegistry'
 import { appendUniqueToolId } from './ChatToolIdHelper'
@@ -57,8 +59,7 @@ export interface ChatSendFlowDependencies {
   getCurrentModelName: () => string
   getMessages: () => ChatMessage[]
   getReasoningLevel: () => ReasoningLevel
-  executeManualSearch: (messageContent: string, attachmentsToSend: MessageAttachment[]) => Promise<void>
-  onClearComposer: () => void
+  executeManualSearch: (messageContent: string, attachmentsToSend: MessageAttachment[], annotations: ReplyAnnotation[]) => Promise<void>
   onBeforeSend: () => void
   onSetSending: (value: boolean) => void
   onSetCurrentTaskId: (taskId: string) => void
@@ -88,11 +89,12 @@ export class ChatSendFlow {
     isSending: boolean,
     currentProvider: ModelProvider | null,
     currentModelId: string,
-    canStartNewTask: boolean
+    canStartNewTask: boolean,
+    hasReplyAnnotations: boolean = false
   ): ChatSendPrepareResult {
     const result = new ChatSendPrepareResult()
     const messageContent = inputText.trim()
-    if (messageContent === '' && pendingAttachmentCount === 0) {
+    if (messageContent === '' && pendingAttachmentCount === 0 && !hasReplyAnnotations) {
       return result
     }
     if (isSending) {
@@ -159,7 +161,8 @@ export class ChatSendFlow {
     modelSupportsVision: boolean = true,
     requestContent: string = '',
     userDocumentToolHint: string = '',
-    requiredSkillId: string = ''
+    requiredSkillId: string = '',
+    annotations: ReplyAnnotation[] = []
   ): Promise<void> {
     const plan = this.buildExecutionPlan(
       messageContent,
@@ -175,7 +178,7 @@ export class ChatSendFlow {
     )
 
     if (plan.kind === ChatExecutionPlanKind.MANUAL_SEARCH) {
-      await this.deps.executeManualSearch(messageContent, attachmentsToSend)
+      await this.deps.executeManualSearch(messageContent, attachmentsToSend, annotations)
       return
     }
 
@@ -190,7 +193,8 @@ export class ChatSendFlow {
         modelSupportsVision,
         requestContent,
         userDocumentToolHint,
-        requiredSkillId
+        requiredSkillId,
+        annotations
       )
       return
     }
@@ -210,7 +214,8 @@ export class ChatSendFlow {
       modelSupportsDocuments,
       modelSupportsVision,
       requestContent,
-      userDocumentToolHint
+      userDocumentToolHint,
+      annotations
     )
   }
 
@@ -365,7 +370,6 @@ export class ChatSendFlow {
 
   private handleUserMessageAdded(userMessage: ChatMessage): void {
     this.deps.onSessionResolved()
-    this.deps.onClearComposer()
     this.deps.messages.push(userMessage)
     this.deps.onSyncMessages()
     this.deps.onSetNewEmptySession(false)
@@ -432,9 +436,10 @@ export class ChatSendFlow {
     modelSupportsDocuments: boolean = true,
     modelSupportsVision: boolean = true,
     requestContent: string = '',
-    userDocumentToolHint: string = ''
+    userDocumentToolHint: string = '',
+    annotations: ReplyAnnotation[] = []
   ): Promise<void> {
-    const taskId = this.startTaskOrFail(messageContent)
+    const taskId = this.startTaskOrFail(getAnnotatedDisplayText(messageContent, annotations.length))
     if (taskId === '') {
       return
     }
@@ -477,7 +482,8 @@ export class ChatSendFlow {
         requestContent,
         userDocumentToolHint,
         currentProvider.apiPath || undefined,
-        currentProvider.customHeadersJson || undefined
+        currentProvider.customHeadersJson || undefined,
+        annotations
       )
     } catch (error) {
       const message = `发送失败: ${toErrorDetail(error as Object)}`
@@ -496,9 +502,10 @@ export class ChatSendFlow {
     modelSupportsVision: boolean = true,
     requestContent: string = '',
     userDocumentToolHint: string = '',
-    requiredSkillId: string = ''
+    requiredSkillId: string = '',
+    annotations: ReplyAnnotation[] = []
   ): Promise<void> {
-    const taskId = this.startTaskOrFail(messageContent)
+    const taskId = this.startTaskOrFail(getAnnotatedDisplayText(messageContent, annotations.length))
     if (taskId === '') {
       return
     }
@@ -578,7 +585,8 @@ export class ChatSendFlow {
         userDocumentToolHint,
         currentProvider.apiPath || undefined,
         currentProvider.customHeadersJson || undefined,
-        requiredSkillId
+        requiredSkillId,
+        annotations
       )
     } catch (error) {
       const message = `发送失败: ${toErrorDetail(error as Object)}`

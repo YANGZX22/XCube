@@ -1,4 +1,5 @@
 import { ChatMessage, MessageAttachment, MessageRole } from '../../models/ChatModels'
+import { ReplyAnnotation } from '../../models/ReplyAnnotation'
 import { DateDivider } from '../DateDivider'
 import { MessageBubble } from '../MessageBubble'
 import { getAppUiState } from '../../state/AppUiState'
@@ -38,6 +39,8 @@ export struct ChatMessageListItem {
     (_images: Array<string>, _imageIndex: number): void => {}
   @Event onFileAttachmentClick: (attachment: MessageAttachment) => void =
     (_attachment: MessageAttachment): void => {}
+  @Event onAnnotateSelection: (quote: string) => void = () => {}
+  @Event onReviewSentAnnotations: (notes: ReplyAnnotation[]) => void = () => {}
   @Event onOpenLink: (title: string, url: string) => void = (_title: string, _url: string): void => {}
   @Event onOpenMap: (visualizationJson: string) => void = (_visualizationJson: string): void => {}
   @Event onTTS: (messageId: string, content: string) => void = (_messageId: string, _content: string): void => {}
@@ -80,6 +83,7 @@ export struct ChatMessageListItem {
           themeRenderKey: this.themeRenderKey,
           isMultiSelectMode: this.isMultiSelectMode,
           isSelected: this.isSelected,
+          allowAnnotations: !this.isEditing && !this.isDimmed,
           isEditing: this.isEditing,
           previewContent: this.isEditing ? this.previewContent : '',
           previewAttachments: this.isEditing ? this.previewAttachments : [],
@@ -105,6 +109,8 @@ export struct ChatMessageListItem {
           onFileAttachmentClick: (attachment: MessageAttachment): void => {
             this.onFileAttachmentClick(attachment)
           },
+          onAnnotateSelection: this.onAnnotateSelection,
+          onReviewSentAnnotations: this.onReviewSentAnnotations,
           onOpenLink: (title: string, url: string): void => {
             this.onOpenLink(title, url)
           },

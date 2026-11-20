@@ -1,4 +1,4 @@
-import { getAppPromptLanguage } from '../utils/LocalizedTextUtils'
+import { getAnnotatedDisplayText, getAnnotatedRequestText, getAppPromptLanguage } from '../utils/LocalizedTextUtils'
 import { PromptLanguage, pickPromptText } from '../utils/PromptLanguageUtils'
 import { selectToolRound, ToolRoundOptions } from '../utils/ToolRoundPolicy'
 import { getToolProgressStop, isToolProgressStop } from '../utils/ToolProgressGuard'
@@ -41,6 +41,7 @@ import { HttpRequestController } from '../services/HttpService'
 import { getEffectiveApiKey } from '../config/PresetProviders'
 import { getPreferencesService } from '../services/PreferencesService'
 import { PreferenceKeys } from '../services/PreferencesService'
+import { ReplyAnnotation } from '../models/ReplyAnnotation'
 import { AppStorageKeys } from '../config/AppStorageKeys'
 import { setAppUiStateValue } from '../state/AppUiState'
 import { ChatSessionStore } from './ChatSessionStore'
@@ -807,9 +808,11 @@ export class ChatViewModel {
     sessionId: string,
     content: string,
     attachments: MessageAttachment[] = [],
-    requiredSkillId: string = ''
+    requiredSkillId: string = '',
+    annotations: ReplyAnnotation[] = []
   ): boolean {
-    if (sessionId === '' || (content.trim() === '' && attachments.length === 0)) {
+    const item = new ChatInFlightMessage(content, attachments, InFlightMessageDelivery.STEER, sessionId, annotations)
+    if (sessionId === '' || !item.hasPayload()) {
       return false
     }
     const candidates: PendingAIMessageInfo[] = []
@@ -829,17 +832,18 @@ export class ChatViewModel {
     }
 
     if (requiredSkillId && !target.hasSkillTool) return false
-    const item = new ChatInFlightMessage(content, attachments, InFlightMessageDelivery.STEER)
     item.requiredSkillId = requiredSkillId
     const pending = this.pendingSteeringMessages.get(sessionId) ?? []
     pending.push(item)
     this.pendingSteeringMessages.set(sessionId, pending)
 
-    target.message.responseSegments.push(new AssistantResponseSegment(
+    const segment = new AssistantResponseSegment(
       `${target.message.id}_${target.message.responseSegments.length}_${AssistantResponseSegmentType.USER_GUIDANCE}`,
       AssistantResponseSegmentType.USER_GUIDANCE,
       buildSteeringTimelineText(item.content, item.attachments)
-    ))
+    )
+    segment.replyAnnotations = item.replyAnnotations
+    target.message.responseSegments.push(segment)
     target.onUpdated(target.message)
     return true
   }
@@ -876,7 +880,7 @@ export class ChatViewModel {
         supportsDocuments,
         supportsVision
       )
-      let guidance = buildSteeringRequestContent(pending[i].content)
+      let guidance = buildSteeringRequestContent(getAnnotatedRequestText(pending[i].content, pending[i].replyAnnotations))
       if (pending[i].requiredSkillId) {
         guidance += '\n\n' + buildRequiredSkillPrompt(pending[i].requiredSkillId, getAppPromptLanguage())
       }
@@ -1006,7 +1010,8 @@ export class ChatViewModel {
       if (msg.role === MessageRole.ASSISTANT) {
         this.appendPersistedSteeringHistory(msg, historyMessages)
       }
-      const requestMessage = new RequestMessage(msg.role, msg.content, this.cloneAttachments(msg.attachments))
+      const requestMessage = new RequestMessage(msg.role, getAnnotatedRequestText(msg.content, msg.replyAnnotations),
+        this.cloneAttachments(msg.attachments))
       requestMessage.reasoningContent = msg.reasoningContent
       historyMessages.push(requestMessage)
     }
@@ -1016,8 +1021,10 @@ export class ChatViewModel {
   private appendPersistedSteeringHistory(message: ChatMessage, target: RequestMessage[]): void {
     for (let i = 0; i < message.responseSegments.length; i++) {
       const segment = message.responseSegments[i]
-      if (segment.type === AssistantResponseSegmentType.USER_GUIDANCE && segment.content.trim() !== '') {
-        target.push(new RequestMessage('user', buildSteeringRequestContent(segment.content)))
+      if (segment.type === AssistantResponseSegmentType.USER_GUIDANCE &&
+        (segment.content.trim() !== '' || segment.replyAnnotations.length > 0)) {
+        target.push(new RequestMessage('user', buildSteeringRequestContent(
+          getAnnotatedRequestText(segment.content, segment.replyAnnotations))))
       }
     }
   }
@@ -1583,8 +1590,14 @@ export class ChatViewModel {
   // 气泡里，因此这里把调用参数与配对结果展开成可供摘要模型读取的文本记录。
   private buildManualCompactionHistoryText(message: ChatMessage): string {
     const sections: string[] = []
-    if (message.content.trim() !== '') {
-      sections.push(message.content)
+    const content = getAnnotatedRequestText(message.content, message.replyAnnotations)
+    if (content.trim() !== '') {
+      sections.push(content)
+    }
+    for (const segment of message.responseSegments) {
+      if (segment.type === AssistantResponseSegmentType.USER_GUIDANCE && segment.replyAnnotations.length > 0) {
+        sections.push(getAnnotatedRequestText(segment.content, segment.replyAnnotations))
+      }
     }
     if (message.attachments.length > 0) {
       const attachmentNames: string[] = []
@@ -1766,38 +1779,34 @@ export class ChatViewModel {
     this.currentSession = this.sessionStore.getCurrentSession()
   }
 
-  async saveSessionDraft(content: string, attachments: MessageAttachment[]): Promise<ChatSession | null> {
-    const hasDraftContent = content.trim() !== '' || attachments.length > 0
-	    if (this.currentSession === null) {
-	      if (!hasDraftContent) {
-	        return null
-	      }
-	      const assistant = await this.assistantService.getCurrentAssistantForNewChat()
-	      this.createPendingSession('', assistant.id, assistant.defaultModelId, assistant.defaultProviderId)
-	    }
+  async saveSessionDraft(content: string, attachments: MessageAttachment[],
+    annotations: ReplyAnnotation[] = []): Promise<ChatSession | null> {
+    const hasDraftContent = content.trim() !== '' || attachments.length > 0 || annotations.length > 0
+    if (this.currentSession === null) {
+      if (!hasDraftContent) return null
+      const assistant = await this.assistantService.getCurrentAssistantForNewChat()
+      if (this.currentSession !== null) return null
+      this.createPendingSession('', assistant.id, assistant.defaultModelId, assistant.defaultProviderId)
+    }
+    const session = this.sessionStore.getCurrentSession()
+    if (session === null) return null
     if (hasDraftContent && this.sessionStore.isCurrentSessionPending()) {
       await this.persistPendingSession()
+      if (this.sessionStore.getCurrentSession()?.id !== session.id) return null
     }
 
-    this.currentSession = this.sessionStore.getCurrentSession()
-    if (this.currentSession === null) {
-      return null
+    session.draftAnnotations = annotations.slice()
+    session.draftText = content
+    session.draftAttachments = this.cloneAttachments(attachments)
+    if (session.messages.length === 0) {
+      session.title = this.buildDraftTitle(content)
+      session.lastMessagePreview = this.buildDraftPreview(content, attachments)
+      session.updatedAt = Date.now()
     }
-
-    this.currentSession.draftText = content
-    this.currentSession.draftAttachments = this.cloneAttachments(attachments)
-    if (this.currentSession.messages.length === 0) {
-      this.currentSession.title = this.buildDraftTitle(content)
-      this.currentSession.lastMessagePreview = this.buildDraftPreview(content, attachments)
-      this.currentSession.updatedAt = Date.now()
+    if (!this.sessionStore.isCurrentSessionPending()) {
+      await this.databaseService.updateSessionDraft(session.id, content, attachments, annotations)
     }
-
-    if (this.sessionStore.isCurrentSessionPending()) {
-      return this.currentSession
-    }
-
-    await this.databaseService.updateSessionDraft(this.currentSession.id, content, attachments)
-    return this.currentSession
+    return session
   }
 
   // 加载会话
@@ -1877,7 +1886,8 @@ export class ChatViewModel {
     requestContent: string = '',
     userDocumentToolHint: string = '',
     apiPath?: string,  // 可选的自定义 API 路径
-    customHeadersJson?: string
+    customHeadersJson?: string,
+    annotations: ReplyAnnotation[] = []
   ): Promise<void> {
     const cancelSnapshot = this.cancelToken
     this.toolExecutionService.resetWebSearchQueryState()
@@ -1909,7 +1919,7 @@ export class ChatViewModel {
       this.getOpenAITransportForProvider(providerId) !== OpenAITransport.RESPONSES
     const historyMessages = this.buildConversationRequestHistory(historySource, contextStartIndex, preserveToolProtocol)
     const requestAttachments = await this.prepareOutgoingAttachments(attachments)
-    const effectiveRequestContent = requestContent !== '' ? requestContent : content
+    const effectiveRequestContent = getAnnotatedRequestText(requestContent !== '' ? requestContent : content, annotations)
     if (this.isCancelled(cancelSnapshot)) {
       return
     }
@@ -1924,6 +1934,7 @@ export class ChatViewModel {
         ''
       )
       userMessage.parentId = parentage.userParentId
+      userMessage.replyAnnotations = annotations.slice()
       // 添加附件到用户消息
       if (attachments.length > 0) {
         for (let i = 0; i < attachments.length; i++) {
@@ -1959,7 +1970,7 @@ export class ChatViewModel {
       // 先把活跃叶子推进到新用户消息，保证中途中断也展示新分支
       await this.advanceActiveLeaf(snapshotSession, snapshotSessionId, userMessage.id)
       if (shouldAutoGenerateTitle) {
-        const title = this.buildDraftTitle(content)
+        const title = this.buildDraftTitle(getAnnotatedDisplayText(content, annotations.length))
         snapshotSession.title = title
         await this.databaseService.updateSessionTitle(snapshotSessionId, title)
         this.notifySessionListChanged()
@@ -2605,7 +2616,8 @@ Answer the user's question from this material. State any material gaps or unavai
     onError: (error: string) => void,
     reasoningLevel: ReasoningLevel = ReasoningLevel.OFF,
     apiPath?: string,
-    customHeadersJson?: string
+    customHeadersJson?: string,
+    annotations: ReplyAnnotation[] = []
   ): Promise<void> {
     const cancelSnapshot = this.cancelToken
     await this.persistPendingSession()
@@ -2672,6 +2684,7 @@ Use relevant facts already present in these results to answer directly. Report m
         ''
       )
       userMessage.parentId = parentage.userParentId
+      userMessage.replyAnnotations = annotations.slice()
       for (let i = 0; i < attachments.length; i++) {
         userMessage.attachments.push(attachments[i])
       }
@@ -2727,7 +2740,7 @@ Use relevant facts already present in these results to answer directly. Report m
       requestMessages.push(historyMessages[i])
     }
     requestMessages.push(new RequestMessage('user',
-      this.buildSearchResultRequestContent(content, searchResult),
+      getAnnotatedRequestText(this.buildSearchResultRequestContent(content, searchResult), annotations),
       requestAttachments))
 
     await this.prepareHistoryAttachments(requestMessages)
@@ -2979,7 +2992,8 @@ Use relevant facts already present in these results to answer directly. Report m
     userDocumentToolHint: string = '',
     apiPath?: string,
     customHeadersJson?: string,
-    requiredSkillId: string = ''
+    requiredSkillId: string = '',
+    annotations: ReplyAnnotation[] = []
   ): Promise<void> {
     const cancelSnapshot = this.cancelToken
     // 工具模式拥有独立的用户请求生命周期。每次发送都必须清空上一轮的搜索分页与
@@ -3015,7 +3029,7 @@ Use relevant facts already present in these results to answer directly. Report m
       apiStyle === ApiStyle.OPENAI
     )
     const requestAttachments = await this.prepareOutgoingAttachments(attachments)
-    const effectiveRequestContent = requestContent !== '' ? requestContent : content
+    const effectiveRequestContent = getAnnotatedRequestText(requestContent !== '' ? requestContent : content, annotations)
     if (this.isCancelled(cancelSnapshot)) {
       return
     }
@@ -3030,6 +3044,7 @@ Use relevant facts already present in these results to answer directly. Report m
         ''
       )
       userMessage.parentId = parentage.userParentId
+      userMessage.replyAnnotations = annotations.slice()
       // 添加附件到用户消息
       if (attachments.length > 0) {
         for (let i = 0; i < attachments.length; i++) {
@@ -3105,7 +3120,7 @@ Use relevant facts already present in these results to answer directly. Report m
       this.appendMessageToSessionIfMissing(snapshotSession, userMessage)
       await this.advanceActiveLeaf(snapshotSession, snapshotSessionId, userMessage.id)
       if (shouldAutoGenerateTitle) {
-        const title = this.buildDraftTitle(content)
+        const title = this.buildDraftTitle(getAnnotatedDisplayText(content, annotations.length))
         snapshotSession.title = title
         await this.databaseService.updateSessionTitle(snapshotSessionId, title)
         this.notifySessionListChanged()

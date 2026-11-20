@@ -1,3 +1,5 @@
+import { MAX_REPLY_ANNOTATIONS, ReplyAnnotation } from '../models/ReplyAnnotation'
+import { ReplyAnnotationEditor } from '../components/chat/ReplyAnnotationEditor'
 import { ImmersiveFieldSurface } from '../components/ImmersiveFieldSurface'
 import { BuiltinBrowserState } from '../services/BuiltinBrowserService'
 import { getBuiltinBrowserManager } from '../services/BuiltinBrowserManager'
@@ -6,8 +8,8 @@ import { sortToolsForDisplay } from '../utils/ToolDisplayOrderUtils'
 import { shouldUseDrawnNavigation } from '../utils/DrawnNavigationSupport'
 import { ImmersiveButtonSurface } from '../components/ImmersiveButtonSurface'
 import { getBlurBottomShadow } from '../utils/BlurShadowUtils'
-import { KeyboardAvoidMode, SymbolGlyphModifier, uiMaterial } from '@kit.ArkUI'
-import { getStaticSheetMaterial, shouldUseWrappedMaterial } from '../utils/WrappedMaterialSupport'
+import { KeyboardAvoidMode, promptAction, SymbolGlyphModifier, uiMaterial } from '@kit.ArkUI'
+import { getPopupMaterial, getStaticSheetMaterial, shouldUseWrappedMaterial } from '../utils/WrappedMaterialSupport'
 import { common } from '@kit.AbilityKit'
 import {
   HdsNavDestination,
@@ -70,7 +72,7 @@ import {
   registerBuiltinTools
 } from '../config/BuiltinTools'
 import { AppStorageKeys } from '../config/AppStorageKeys'
-import { getChatAiNoticeExtraInsetVp } from '../config/ChatLayout'
+import { CHAT_ANNOTATION_BAR_HEIGHT_VP, getChatAiNoticeExtraInsetVp } from '../config/ChatLayout'
 import { inputMethod } from '@kit.IMEKit'
 import { pasteboard } from '@kit.BasicServicesKit'
 import { webview } from '@kit.ArkWeb'
@@ -130,7 +132,7 @@ import { getAppUiState, observeAppUiState, setAppUiStateValue } from '../state/A
 import { applyModelDraft } from '../utils/ModelDraftUtils'
 import { ToolPreviewEntry, buildToolArgumentsPreview } from '../utils/ToolPayloadSummaryUtils'
 import { DEFAULT_PRIMARY_COLOR } from '../config/ThemeDefaults'
-import { pickLocalizedText } from '../utils/LocalizedTextUtils'
+import { getAnnotatedDisplayText, pickLocalizedText } from '../utils/LocalizedTextUtils'
 import { normalizeAssistantAvatarValue } from '../components/AssistantAvatar'
 import { CanvasDocumentService } from '../services/CanvasDocumentService'
 import {
@@ -223,6 +225,7 @@ class DocumentFallbackSendResult {
 interface ChatResendOptions {
   queuedSkillId?: string
   regenerateFromId?: string
+  replyAnnotations?: ReplyAnnotation[]
 }
 
 interface ReadScheduleApprovalArgs {
@@ -286,6 +289,11 @@ export struct ChatPage {
   @Local providers: ModelProvider[] = []
   // 附件相关状态
   @Local pendingAttachments: MessageAttachment[] = []
+  @Local private pendingAnnotations: ReplyAnnotation[] = []
+  private preEditDraftText: string = ''
+  private preEditDraftAttachments: MessageAttachment[] = []
+  private preEditDraftAnnotations: ReplyAnnotation[] = []
+  private commitSentDraft?: () => void
   // 语音输入录音浮层
   @Local showVoiceInputSheet: boolean = false
   // 是否在列表底部
@@ -927,6 +935,7 @@ export struct ChatPage {
     this.webSearchConversationEnabled = this.selectedToolIds.includes('web_search') ||
       (loadResult.webSearchEnabled && loadResult.webSearchConversationEnabled)
     this.reasoningLevel = loadResult.reasoningLevel
+    this.pendingAnnotations = loadResult.draftAnnotations
     this.inputText = loadResult.draftText
     this.pendingAttachments = [...loadResult.draftAttachments]
     this.isNewChatTransition = loadResult.isNewChatTransition
@@ -3420,14 +3429,10 @@ export struct ChatPage {
       getCurrentModelName: (): string => this.currentModel,
       getMessages: (): ChatMessage[] => this.messages,
       getReasoningLevel: (): ReasoningLevel => this.reasoningLevel,
-      executeManualSearch: async (messageContent: string, attachmentsToSend: MessageAttachment[]): Promise<void> => {
+      executeManualSearch: async (messageContent: string, attachmentsToSend: MessageAttachment[],
+        annotations: ReplyAnnotation[]): Promise<void> => {
         console.info('ChatPage', '[联网查询] 显式联网模式，使用手动搜索执行链路')
-        await this.getManualSearchFlow().startManualSearchFallback(messageContent, attachmentsToSend)
-      },
-      onClearComposer: (): void => {
-        this.clearDraftAutosaveTimer()
-        this.inputText = ''
-        this.pendingAttachments = []
+        await this.getManualSearchFlow().startManualSearchFallback(messageContent, attachmentsToSend, annotations)
       },
       onBeforeSend: (): void => {
         this.safeStopInputSession()
@@ -3455,11 +3460,7 @@ export struct ChatPage {
       onSessionResolved: (): void => {
         this.syncCurrentSessionFromViewModel()
       },
-      onDraftCommitted: (): void => {
-        this.persistCurrentDraftState('', []).catch((error: Error): void => {
-          console.error('ChatPage', `Failed to clear draft after send: ${JSON.stringify(error)}`)
-        })
-      },
+      onDraftCommitted: (): void => this.commitSentDraft?.(),
       onMarkAutoTaskCompleted: (): void => {
         // no-op
       },
@@ -3566,11 +3567,6 @@ export struct ChatPage {
       onSetSearchCancelled: (value: boolean): void => {
         this.isSearchCancelled = value
       },
-      onClearComposer: (): void => {
-        this.clearDraftAutosaveTimer()
-        this.inputText = ''
-        this.pendingAttachments = []
-      },
       onBeforeManualSearchStart: (): void => {
         this.safeStopInputSession()
         this.getScrollUiFlow().scrollToBottomWithAnimation()
@@ -3578,11 +3574,7 @@ export struct ChatPage {
       onSetNewEmptySession: (value: boolean): void => {
         this.isNewEmptySession = value
       },
-      onDraftCommitted: (): void => {
-        this.persistCurrentDraftState('', []).catch((error: Error): void => {
-          console.error('ChatPage', `Failed to clear draft after manual search: ${JSON.stringify(error)}`)
-        })
-      },
+      onDraftCommitted: (): void => this.commitSentDraft?.(),
       onMarkAutoTaskFailed: (message: string): void => {
         // no-op
       },
@@ -3612,7 +3604,8 @@ export struct ChatPage {
         attachments: MessageAttachment[],
         _webSearchEnabled: boolean,
         _selectedToolIds: string[],
-        _reasoningLevel: ReasoningLevel
+        _reasoningLevel: ReasoningLevel,
+        annotations: ReplyAnnotation[]
       ): boolean => {
         const prepareResult = this.getSendFlow().prepareSendRequest(
           content,
@@ -3620,7 +3613,8 @@ export struct ChatPage {
           this.isSending,
           this.currentProvider,
           this.currentModelId,
-          this.chatTaskOrchestrator.canStartNewTask()
+          this.chatTaskOrchestrator.canStartNewTask(),
+          annotations.length > 0
         )
         return prepareResult.shouldSend && this.getRequestedSkillId(content) !== ''
       },
@@ -3630,22 +3624,9 @@ export struct ChatPage {
       onTruncateActivePath: (prefix: ChatMessage[]): void => {
         this.replaceMessages(prefix)
       },
-      onResetEditState: (): void => {
-        this.isEditingMessage = false
-        this.editingMessageId = ''
-        this.editingOriginalContent = ''
-        this.editingOriginalAttachments = []
-        this.editingReasoningLevel = ReasoningLevel.OFF
-      },
-      onApplySavedDraft: (
-        content: string,
-        attachments: MessageAttachment[],
-        webSearchEnabled: boolean,
-        selectedToolIds: string[],
-        reasoningLevel: ReasoningLevel
-      ): void => {
-        this.inputText = content
-        this.pendingAttachments = [...attachments]
+      onResetEditState: (): void => this.handleCancelEdit(),
+      onApplySavedDraft: (_content: string, _attachments: MessageAttachment[], webSearchEnabled: boolean,
+        selectedToolIds: string[], reasoningLevel: ReasoningLevel): void => {
         const nextToolIds = [...selectedToolIds]
         if (this.webSearchAvailable && webSearchEnabled && !nextToolIds.includes('web_search')) {
           nextToolIds.push('web_search')
@@ -3653,23 +3634,9 @@ export struct ChatPage {
         this.applySelectedToolIdsInMemory(nextToolIds)
         this.reasoningLevel = this.normalizeReasoningLevelForCurrentModel(reasoningLevel)
       },
-      onTriggerSend: async (
-        content: string,
-        attachments: MessageAttachment[],
-        webSearchEnabled: boolean,
-        selectedToolIds: string[],
-        reasoningLevel: ReasoningLevel
-      ): Promise<void> => {
-        this.inputText = content
-        this.pendingAttachments = [...attachments]
-        const nextToolIds = [...selectedToolIds]
-        if (this.webSearchAvailable && webSearchEnabled && !nextToolIds.includes('web_search')) {
-          nextToolIds.push('web_search')
-        }
-        this.applySelectedToolIdsInMemory(nextToolIds)
-        this.reasoningLevel = this.normalizeReasoningLevelForCurrentModel(reasoningLevel)
-        await this.sendMessage()
-      },
+      onTriggerSend: (content: string, attachments: MessageAttachment[], _web: boolean, _tools: string[],
+        _reasoning: ReasoningLevel, annotations: ReplyAnnotation[]): Promise<void> =>
+        this.sendMessage(content, attachments, { replyAnnotations: annotations }),
       onShowToast: (message: string | Resource): void => {
         this.showChatSnack(message)
       }
@@ -3832,7 +3799,7 @@ export struct ChatPage {
       getIsSending: (): boolean => this.isSending,
       getIsEditingMessage: (): boolean => this.isEditingMessage,
       getEditingMessageId: (): string => this.editingMessageId,
-      hasDraftContent: (): boolean => this.inputText.trim() !== '' || this.pendingAttachments.length > 0,
+      hasDraftContent: (): boolean => this.hasDraftContent(),
       onSetIsAtTopState: (value: boolean): void => {
         this.isAtTop = value
       },
@@ -4209,7 +4176,7 @@ export struct ChatPage {
           editingMessageId: this.editingMessageId,
           selectedMessageIds: this.selectedMessageIds,
           isMultiSelectMode: this.isMultiSelectMode,
-          inputText: this.inputText,
+          inputText: getAnnotatedDisplayText(this.inputText, this.pendingAnnotations.length),
           pendingAttachments: this.pendingAttachments,
           showDraftPreview: this.hasDraftContent(),
           draftPreviewTimeText: this.getPreviewTimeText(),
@@ -4248,6 +4215,8 @@ export struct ChatPage {
               this.showError(pickLocalizedText('PDF 预览失败', 'Failed to preview PDF'))
             })
           },
+          onAnnotateSelection: (quote: string): void => this.openReplyAnnotations(quote),
+          onReviewSentAnnotations: (notes: ReplyAnnotation[]): void => this.presentReplyAnnotations(notes),
           onOpenLink: (title: string, url: string): void => {
             this.handleMessageLinkOpen(title, url)
           },
@@ -4337,6 +4306,9 @@ export struct ChatPage {
               onInputTextChange: (value: string): void => {
                 this.inputText = value
               },
+              annotationCount: this.pendingAnnotations.length,
+              onReviewAnnotations: (): void => this.openReplyAnnotations(),
+              onClearAnnotations: (): void => this.clearReplyAnnotations(),
               attachments: this.pendingAttachments,
               onAttachmentsChange: (value: MessageAttachment[]): void => {
                 this.pendingAttachments = [...value]
@@ -5303,7 +5275,7 @@ export struct ChatPage {
   }
 
   private buildMessagePreviewText(message: ChatMessage, maxLength: number): string {
-    const contentPreview = this.normalizeInlinePreviewText(message.content, maxLength)
+    const contentPreview = this.normalizeInlinePreviewText(getAnnotatedDisplayText(message.content, message.replyAnnotations.length), maxLength)
     if (contentPreview !== '') {
       return contentPreview
     }
@@ -5620,8 +5592,71 @@ export struct ChatPage {
     this.getScrollUiFlow().handleReachEnd()
   }
 
+  private clearReplyAnnotations(): void {
+    this.pendingAnnotations = []
+    this.scheduleDraftAutosave()
+  }
+
+  private openReplyAnnotations(quote?: string): void {
+    if ((this.isEditingMessage && quote !== undefined) || this.isMultiSelectMode || this.isLoading) return
+    const original = this.pendingAnnotations
+    const sessionId = this.sessionId
+    const editingId = this.editingMessageId
+    const notes = original.slice()
+    if (quote !== undefined) {
+      if (quote.trim() === '') return
+      if (notes.length >= MAX_REPLY_ANNOTATIONS) {
+        this.showChatSnack(pickLocalizedText('每条消息最多添加 5 处注释', 'You can add up to 5 annotations per message'))
+        return
+      }
+      notes.push({ quote: quote, comment: '' })
+    }
+    if (notes.length === 0) return
+    const index = quote === undefined ? 0 : notes.length - 1
+    this.presentReplyAnnotations(notes, index, (edited: ReplyAnnotation[]): void => {
+      if (this.sessionId === sessionId && this.pendingAnnotations === original && this.editingMessageId === editingId) {
+        this.pendingAnnotations = edited.slice()
+        this.scheduleDraftAutosave()
+        this.getScrollUiFlow().setInputBarVisible(true)
+      }
+    })
+  }
+
+  private presentReplyAnnotations(notes: ReplyAnnotation[], index: number = 0, save?: (edited: ReplyAnnotation[]) => void): void {
+    const dialog = new promptAction.DialogController()
+    this.getUIContext().getPromptAction().presentCustomDialog(
+      (): void => this.ReplyAnnotationsDialog(notes, index, dialog, save), dialog, {
+        alignment: DialogAlignment.Center,
+        autoCancel: true,
+        cornerRadius: 24,
+        backgroundColor: Color.Transparent,
+        backgroundBlurStyle: shouldUseWrappedMaterial() ? BlurStyle.NONE : BlurStyle.COMPONENT_THICK,
+        systemMaterial: getPopupMaterial()
+      }
+    ).catch((error: Error): void => {
+      console.error('ReplyAnnotations', error.message)
+      this.showChatSnack(pickLocalizedText('无法打开回复注释，请重试', 'Couldn’t open reply annotations. Try again.'),
+        2500, SnackBarTone.ERROR)
+    })
+  }
+
+  @Builder
+  private ReplyAnnotationsDialog(notes: ReplyAnnotation[], index: number, dialog: promptAction.DialogController,
+    save?: (edited: ReplyAnnotation[]) => void) {
+    ReplyAnnotationEditor({
+      notes: notes,
+      initialIndex: index,
+      readOnly: save === undefined,
+      onSave: (edited: ReplyAnnotation[]): void => {
+        save?.(edited)
+        dialog.close()
+      },
+      onCancel: (): void => dialog.close()
+    })
+  }
+
   private hasDraftContent(): boolean {
-    return this.inputText.trim() !== '' || this.pendingAttachments.length > 0
+    return this.inputText.trim() !== '' || this.pendingAttachments.length > 0 || this.pendingAnnotations.length > 0
   }
 
   private readMeasuredAreaHeight(area: Area): number {
@@ -5798,7 +5833,8 @@ export struct ChatPage {
       return measuredHeight + pinnedMarkHeight
     }
     return getListBottomPaddingForChat(this.pendingAttachments.length, this.isEditingMessage,
-      this.px2vp(this.bottomAvoidHeight)) + pinnedMarkHeight
+      this.px2vp(this.bottomAvoidHeight)) + pinnedMarkHeight +
+      (this.pendingAnnotations.length > 0 ? CHAT_ANNOTATION_BAR_HEIGHT_VP : 0)
   }
 
   // 获取预览气泡的时间文本
@@ -5842,7 +5878,7 @@ export struct ChatPage {
     this.clearDraftAutosaveTimer()
     this.draftAutosaveTimerId = setTimeout(() => {
       this.draftAutosaveTimerId = -1
-      this.persistCurrentDraftState(this.inputText, this.pendingAttachments).catch((error: Error): void => {
+      this.persistCurrentDraftState(this.inputText, this.pendingAttachments, this.pendingAnnotations).catch((error: Error): void => {
         console.error('ChatPage', `Failed to autosave draft: ${JSON.stringify(error)}`)
       })
     }, this.draftAutosaveDelayMs)
@@ -5853,15 +5889,17 @@ export struct ChatPage {
     if (!immediate || this.isLoading || this.isEditingMessage) {
       return
     }
-    await this.persistCurrentDraftState(this.inputText, this.pendingAttachments)
+    await this.persistCurrentDraftState(this.inputText, this.pendingAttachments, this.pendingAnnotations)
   }
 
-  private async persistCurrentDraftState(content: string, attachments: MessageAttachment[]): Promise<void> {
+  private async persistCurrentDraftState(content: string, attachments: MessageAttachment[],
+    annotations: ReplyAnnotation[] = []): Promise<void> {
     if (this.isLoading || this.isEditingMessage) {
       return
     }
-    const session = await this.chatViewModel.saveSessionDraft(content, attachments)
-    if (session === null) {
+    const previousId = this.sessionId
+    const session = await this.chatViewModel.saveSessionDraft(content, attachments, annotations)
+    if (session === null || this.sessionId !== previousId) {
       return
     }
     this.sessionId = session.id
@@ -5927,7 +5965,7 @@ export struct ChatPage {
 
   // 同步包装方法，用于 onSend 回调
   handleSend(): void {
-    if (!this.isEditingMessage && isGoalSlashCommandInput(this.inputText)) {
+    if (!this.isEditingMessage && this.pendingAnnotations.length === 0 && isGoalSlashCommandInput(this.inputText)) {
       const goalAction = resolveGoalSlashCommandAction(
         this.inputText,
         this.chatViewModel.getCurrentSessionConversationGoal()
@@ -5958,7 +5996,8 @@ export struct ChatPage {
     }
     // 输入框里只有一条斜杠命令时按命令执行，而不是把命令原文发给模型
     const slashCommandId = resolveSlashCommandId(this.inputText)
-    if (slashCommandId !== '' && this.pendingAttachments.length === 0 && !this.isEditingMessage) {
+    if (slashCommandId !== '' && this.pendingAttachments.length === 0 && this.pendingAnnotations.length === 0 &&
+      !this.isEditingMessage) {
       this.handleSlashCommand(slashCommandId)
       return
     }
@@ -6166,9 +6205,10 @@ export struct ChatPage {
       this.inputText,
       this.pendingAttachments,
       InFlightMessageDelivery.QUEUE,
-      this.sessionId
+      this.sessionId,
+      this.pendingAnnotations
     )
-    if (message.content === '' && message.attachments.length === 0) {
+    if (!message.hasPayload()) {
       return true
     }
     const requiredSkillId = this.getRequestedSkillId(message.content)
@@ -6176,7 +6216,7 @@ export struct ChatPage {
     message.requiredSkillId = requiredSkillId ?? ''
     this.queuedInFlightMessages.push(message)
     this.queuedMessageCount = this.queuedInFlightMessages.length
-    this.clearComposerAfterInFlightSend()
+    this.clearSentDraft()
     this.showChatSnack(pickLocalizedText(
       '正在压缩上下文，消息已排队，压缩完成后自动发送',
       'Compacting context; your message is queued and will send when it finishes'
@@ -6320,9 +6360,10 @@ export struct ChatPage {
       this.inputText,
       this.pendingAttachments,
       delivery,
-      this.sessionId
+      this.sessionId,
+      this.pendingAnnotations
     )
-    if (message.content === '' && message.attachments.length === 0) {
+    if (!message.hasPayload()) {
       return
     }
     const requiredSkillId = this.getRequestedSkillId(message.content)
@@ -6332,8 +6373,9 @@ export struct ChatPage {
     // 压缩期间不能引导当前这一轮：引导消息会在请求边界插进正在被摘要覆盖的历史里。
     // 降级为排队，压缩结束后再作为正常消息发出。
     if (delivery === InFlightMessageDelivery.STEER && !this.isContextCompactionInProgress() &&
-      this.chatViewModel.submitSteeringMessage(this.sessionId, message.content, message.attachments, message.requiredSkillId)) {
-      this.clearComposerAfterInFlightSend()
+      this.chatViewModel.submitSteeringMessage(this.sessionId, message.content, message.attachments,
+        message.requiredSkillId, message.replyAnnotations)) {
+      this.clearSentDraft()
       this.markMessageListChanged()
       this.showChatSnack($r('app.string.chat_inflight_steer_accepted'), 2200, SnackBarTone.SUCCESS)
       return
@@ -6343,16 +6385,18 @@ export struct ChatPage {
     message.delivery = InFlightMessageDelivery.QUEUE
     this.queuedInFlightMessages.push(message)
     this.queuedMessageCount = this.queuedInFlightMessages.length
-    this.clearComposerAfterInFlightSend()
+    this.clearSentDraft()
     this.showChatSnack($r('app.string.chat_inflight_queue_accepted'), 2200, SnackBarTone.SUCCESS)
   }
 
-  private clearComposerAfterInFlightSend(): void {
-    this.clearDraftAutosaveTimer()
-    this.inputText = ''
-    this.pendingAttachments = []
-    this.persistCurrentDraftState('', []).catch((error: Error): void => {
-      console.error('ChatPage', `Failed to clear draft after in-flight send: ${JSON.stringify(error)}`)
+  private clearSentDraft(text: string = this.inputText, attachments: MessageAttachment[] = this.pendingAttachments,
+    annotations: ReplyAnnotation[] = this.pendingAnnotations): void {
+    if (this.inputText === text) this.inputText = ''
+    const sentIds = new Set<string>(attachments.map((item: MessageAttachment) => item.id))
+    this.pendingAttachments = this.pendingAttachments.filter((item: MessageAttachment) => !sentIds.has(item.id))
+    this.pendingAnnotations = this.pendingAnnotations.filter((note: ReplyAnnotation) => !annotations.includes(note))
+    this.flushDraftAutosave(true).catch((error: Error): void => {
+      console.error('ChatPage', `Failed to clear sent draft: ${JSON.stringify(error)}`)
     })
   }
 
@@ -6398,17 +6442,11 @@ export struct ChatPage {
     this.queuedDispatchRunning = true
     this.queuedInFlightMessages.splice(0, 1)
     this.queuedMessageCount = this.queuedInFlightMessages.length
-    const preservedDraftText = this.inputText
-    const preservedDraftAttachments = this.pendingAttachments.slice()
     try {
-      await this.sendMessage(next.content, next.attachments, { queuedSkillId: next.requiredSkillId })
+      await this.sendMessage(next.content, next.attachments, {
+        queuedSkillId: next.requiredSkillId, replyAnnotations: next.replyAnnotations
+      })
     } finally {
-      // 排队期间用户可能已经开始输入下一条草稿；自动续发不能把它一起清空。
-      if (preservedDraftText !== '' || preservedDraftAttachments.length > 0) {
-        this.inputText = preservedDraftText
-        this.pendingAttachments = preservedDraftAttachments
-        this.scheduleDraftAutosave()
-      }
       this.queuedDispatchRunning = false
     }
   }
@@ -6439,8 +6477,17 @@ export struct ChatPage {
     }
     // 分叉重发（重新生成）：内容/附件来自原用户消息，不读取也不清空输入框草稿
     const isOverride = contentOverride !== undefined
-    const sourceText = isOverride ? (contentOverride as string) : this.inputText
+    const draftText = this.inputText
+    const annotations = isOverride ? options?.replyAnnotations ?? [] : this.pendingAnnotations.slice()
+    const draftSession = this.sessionId
+    const sourceText = isOverride ? (contentOverride as string) : draftText
     const sourceAttachments = isOverride ? (attachmentsOverride ?? []) : this.pendingAttachments
+    // 消费已发出的选文和附件；异步校验期间补写的草稿仍属于下一条消息。
+    this.commitSentDraft = isOverride ? undefined : (): void => {
+      if (this.sessionId === draftSession && !this.isEditingMessage) {
+        this.clearSentDraft(draftText, sourceAttachments, annotations)
+      }
+    }
     this.isSendDispatching = true
     try {
       const prepareResult = this.getSendFlow().prepareSendRequest(
@@ -6449,7 +6496,8 @@ export struct ChatPage {
         this.isSending,
         this.currentProvider,
         this.currentModelId,
-        this.chatTaskOrchestrator.canStartNewTask()
+        this.chatTaskOrchestrator.canStartNewTask(),
+        annotations.length > 0
       )
       if (!prepareResult.shouldSend || prepareResult.currentProvider === null) {
         return
@@ -6563,7 +6611,8 @@ export struct ChatPage {
         modelSupportsVision,
         requestMessageContent,
         userDocumentToolHint,
-        requiredSkillId
+        requiredSkillId,
+        annotations
       )
       this.forcedToolIdsOnce = []
     } catch (error) {
@@ -6571,6 +6620,7 @@ export struct ChatPage {
       this.forcedToolIdsOnce = []
       this.showError($r('app.string.action_failed_retry'))
     } finally {
+      this.commitSentDraft = undefined
       this.isSendDispatching = false
     }
   }
@@ -6586,7 +6636,9 @@ export struct ChatPage {
     }
     const userMsg = this.messages[userMsgIndex]
     // 发送校验通过后才切换分支，已停用的技能不会截断当前回答。
-    await this.sendMessage(userMsg.content, userMsg.attachments.slice(), { regenerateFromId: userMsg.id })
+    await this.sendMessage(userMsg.content, userMsg.attachments.slice(), {
+      regenerateFromId: userMsg.id, replyAnnotations: userMsg.replyAnnotations
+    })
   }
 
   showError(message: string | Resource): void {
@@ -6955,6 +7007,7 @@ export struct ChatPage {
     this.routeParams = {} as ChatPageRouteParams
     this.inputText = ''
     this.pendingAttachments = []
+    this.pendingAnnotations = []
     // 清空当前消息
     this.clearMessages()
     // 更新会话ID和标题
@@ -7040,12 +7093,19 @@ export struct ChatPage {
 
   // 编辑消息：进入内联编辑模式
   private async handleEditMessage(message: ChatMessage): Promise<void> {
+    if (!this.isEditingMessage) {
+      this.preEditDraftText = this.inputText
+      this.preEditDraftAttachments = this.pendingAttachments
+      this.preEditDraftAnnotations = this.pendingAnnotations
+      await this.flushDraftAutosave(true)
+    }
     this.editingOriginalContent = message.content
     this.editingOriginalAttachments = [...message.attachments]
     this.editingMessageId = message.id
     this.editingMessageIsUser = message.role === MessageRole.USER
     this.inputText = message.content
     this.pendingAttachments = [...message.attachments]
+    this.pendingAnnotations = message.replyAnnotations.slice()
     const messageIndex = findMessageIndexById(this.messages, message.id)
     this.editingReasoningLevel = this.reasoningLevel
     this.isEditingMessage = true
@@ -7069,9 +7129,12 @@ export struct ChatPage {
 
   // 取消编辑
   private handleCancelEdit(): void {
-    // 恢复原始内容
-    this.inputText = ''
-    this.pendingAttachments = []
+    this.inputText = this.preEditDraftText
+    this.pendingAttachments = this.preEditDraftAttachments
+    this.pendingAnnotations = this.preEditDraftAnnotations
+    this.preEditDraftText = ''
+    this.preEditDraftAttachments = []
+    this.preEditDraftAnnotations = []
 
     // 退出编辑模式
     this.isEditingMessage = false
@@ -7089,7 +7152,8 @@ export struct ChatPage {
       this.pendingAttachments,
       this.webSearchConversationEnabled,
       this.selectedToolIds,
-      this.editingReasoningLevel
+      this.editingReasoningLevel,
+      this.pendingAnnotations
     )
   }
 

@@ -1,3 +1,5 @@
+import { normalizeReplyAnnotations, ReplyAnnotation } from './ReplyAnnotation'
+
 // 复杂任务默认允许最多 32K 输出；具体可用额度仍由模型服务端上限决定。
 export const DEFAULT_MAX_OUTPUT_TOKENS: number = 32768
 
@@ -202,6 +204,7 @@ export interface AssistantResponseSegmentJson {
   type: string
   content: string
   toolCallIds: string[]
+  replyAnnotations?: ReplyAnnotation[]
 }
 
 @ObservedV2
@@ -210,6 +213,7 @@ export class AssistantResponseSegment {
   @Trace type: string
   @Trace content: string
   @Trace toolCallIds: string[]
+  @Trace replyAnnotations: ReplyAnnotation[] = []
 
   constructor(id: string = '', type: string = AssistantResponseSegmentType.CONTENT, content: string = '',
     toolCallIds: string[] = []) {
@@ -225,7 +229,9 @@ export class AssistantResponseSegment {
       json.type === AssistantResponseSegmentType.CONTEXT_COMPACTION ||
       json.type === AssistantResponseSegmentType.USER_GUIDANCE
       ? json.type : AssistantResponseSegmentType.CONTENT
-    return new AssistantResponseSegment(json.id || '', type, json.content || '', json.toolCallIds || [])
+    const segment = new AssistantResponseSegment(json.id || '', type, json.content || '', json.toolCallIds || [])
+    segment.replyAnnotations = normalizeReplyAnnotations(json.replyAnnotations)
+    return segment
   }
 
   toJson(): AssistantResponseSegmentJson {
@@ -233,7 +239,8 @@ export class AssistantResponseSegment {
       id: this.id,
       type: this.type,
       content: this.content,
-      toolCallIds: this.toolCallIds.slice()
+      toolCallIds: this.toolCallIds.slice(),
+      replyAnnotations: this.replyAnnotations.length > 0 ? this.replyAnnotations : undefined
     }
   }
 }
@@ -581,6 +588,7 @@ export class ChatMessage {
   @Trace id: string
   @Trace role: MessageRole
   @Trace content: string
+  @Trace replyAnnotations: ReplyAnnotation[] = []
   @Trace timestamp: number
   @Trace modelName: string
   // 模型 ID（用于图标匹配等）
@@ -1083,6 +1091,7 @@ export class ChatSession {
   @Trace lastMessagePreview: string
   @Trace messageCount: number
   @Trace draftText: string
+  @Trace draftAnnotations: ReplyAnnotation[]
   @Trace draftAttachments: MessageAttachment[]
   @Trace branchGroupId: string
   @Trace branchIndex: number
@@ -1117,6 +1126,7 @@ export class ChatSession {
     this.lastMessagePreview = ''
     this.messageCount = 0
     this.draftText = ''
+    this.draftAnnotations = []
     this.draftAttachments = []
     this.branchGroupId = ''
     this.branchIndex = 0

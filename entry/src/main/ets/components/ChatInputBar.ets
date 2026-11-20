@@ -1,9 +1,13 @@
 import { ImmersiveInputSurface } from './ImmersiveInputSurface'
 import { AttachmentPicker } from './AttachmentPicker'
 import { InteractiveMaterialButton } from './InteractiveMaterialButton'
+import { InteractiveMaterialRow } from './InteractiveMaterialRow'
 import { getModelIconPath, buildIconResourcePath } from '../utils/ProviderIconUtils'
 import { FileIcon } from './FileIcon'
-import { CHAT_ATTACHMENT_PREVIEW_HEIGHT_VP } from '../config/ChatLayout'
+import { formatLocalizedCount, pickLocalizedText } from '../utils/LocalizedTextUtils'
+import {
+  CHAT_ANNOTATION_BAR_HEIGHT_VP, CHAT_ANNOTATION_CHIP_HEIGHT_VP, CHAT_ANNOTATION_GAP_VP, CHAT_ATTACHMENT_PREVIEW_HEIGHT_VP
+} from '../config/ChatLayout'
 import { MessageAttachment, AttachmentType } from '../models/ChatModels'
 import {
   BaseItemInfo,
@@ -26,8 +30,10 @@ import {
   MANUSCRIPT_HEADING_FONT
 } from '../utils/ManuscriptVisualUtils'
 
-const INPUT_ROW_MIN_HEIGHT_VP: number = 52
-const INPUT_ROW_MAX_HEIGHT_VP: number = 132
+const INPUT_FIELD_MIN_HEIGHT_VP: number = 40
+const INPUT_FIELD_MAX_HEIGHT_VP: number = 120
+const INPUT_ROW_INSET_VP: number = 6
+const ANNOTATION_LABEL_PADDING_VP: number = 12
 
 @ComponentV2
 export struct ChatInputBar {
@@ -45,6 +51,9 @@ export struct ChatInputBar {
   @Param inputText: string = ''
   @Param composerController: TextAreaController | undefined = undefined
   @Event onInputTextChange: (value: string) => void = (_value: string): void => {}
+  @Param annotationCount: number = 0
+  @Event onReviewAnnotations: () => void = () => {}
+  @Event onClearAnnotations: () => void = () => {}
   @Param attachments: MessageAttachment[] = []
   @Event onAttachmentsChange: (value: MessageAttachment[]) => void = (_value: MessageAttachment[]): void => {}
   @Param isSending: boolean = false
@@ -88,7 +97,7 @@ export struct ChatInputBar {
   }
   private get contentAboveInputHeightVp(): number {
     const previewHeight = this.attachments.length > 0 ? CHAT_ATTACHMENT_PREVIEW_HEIGHT_VP : 0
-    return previewHeight + (this.isEditing ? this.editingHeaderHeightVp : 0)
+    return previewHeight + (this.annotationCount > 0 ? CHAT_ANNOTATION_BAR_HEIGHT_VP : 0) + (this.isEditing ? this.editingHeaderHeightVp : 0)
   }
   private get manuscriptAccent(): string {
     return getAppUiState().isDarkMode ? '#C99A52' : '#B68235'
@@ -189,8 +198,8 @@ export struct ChatInputBar {
         this.ManuscriptBar()
       } else {
         ImmersiveInputSurface({
-          minSurfaceHeight: INPUT_ROW_MIN_HEIGHT_VP + this.contentAboveInputHeightVp,
-          maxSurfaceHeight: INPUT_ROW_MAX_HEIGHT_VP + this.contentAboveInputHeightVp
+          minSurfaceHeight: INPUT_FIELD_MIN_HEIGHT_VP + INPUT_ROW_INSET_VP * 2 + this.contentAboveInputHeightVp,
+          maxSurfaceHeight: INPUT_FIELD_MAX_HEIGHT_VP + INPUT_ROW_INSET_VP * 2 + this.contentAboveInputHeightVp
         }) {
           this.InputSurfaceContent()
         }
@@ -253,6 +262,7 @@ export struct ChatInputBar {
         })
       }
 
+      this.AnnotationBar()
       Row({ space: 8 }) {
         Button({ type: ButtonType.Normal, stateEffect: false }) {
           if (this.currentModelId !== '' && this.hasCurrentModelIcon()) {
@@ -472,6 +482,7 @@ export struct ChatInputBar {
   @Builder
   ImmersiveBar() {
     Column() {
+      this.AnnotationBar()
       this.AttachmentPreview()
       this.InputRow()
     }
@@ -547,7 +558,7 @@ export struct ChatInputBar {
           .fontColor($r('app.color.text_primary'))
           .backgroundColor(Color.Transparent)
           .layoutWeight(1)
-          .constraintSize({ minHeight: 40, maxHeight: 120 })
+          .constraintSize({ minHeight: INPUT_FIELD_MIN_HEIGHT_VP, maxHeight: INPUT_FIELD_MAX_HEIGHT_VP })
           .padding({
             left: 12,
             right: 12,
@@ -660,13 +671,9 @@ export struct ChatInputBar {
         }))
       }
       .width('100%')
-      .constraintSize({ minHeight: INPUT_ROW_MIN_HEIGHT_VP, maxHeight: INPUT_ROW_MAX_HEIGHT_VP })
-      .padding({
-        left: 6,
-        right: 6,
-        top: 6,
-        bottom: 6
-      })
+      .constraintSize({ minHeight: INPUT_FIELD_MIN_HEIGHT_VP, maxHeight: INPUT_FIELD_MAX_HEIGHT_VP })
+      .padding({ left: INPUT_ROW_INSET_VP, right: INPUT_ROW_INSET_VP })
+      .margin({ top: this.annotationCount > 0 ? CHAT_ANNOTATION_GAP_VP : INPUT_ROW_INSET_VP, bottom: INPUT_ROW_INSET_VP })
   }
 
   @Builder
@@ -705,6 +712,62 @@ export struct ChatInputBar {
     .backgroundColor(Color.Transparent)
     .backgroundBlurStyle(BlurStyle.NONE)
     .borderRadius(12)
+  }
+
+  private get annotationLabel(): string {
+    return formatLocalizedCount(this.annotationCount, '处注释', 'annotation', 'annotations')
+  }
+
+  private get annotationChipWidth(): number {
+    const context = this.getUIContext()
+    const measured = context.getMeasureUtils().measureTextSize({
+      textContent: this.annotationLabel, fontSize: 12, fontWeight: FontWeight.Medium
+    })
+    return Math.ceil(context.px2vp(Number(measured.width))) + ANNOTATION_LABEL_PADDING_VP * 2 + CHAT_ANNOTATION_CHIP_HEIGHT_VP
+  }
+
+  @Builder
+  private AnnotationBar() {
+    if (this.annotationCount > 0) {
+      Row() {
+        InteractiveMaterialRow({
+          surfaceWidth: this.annotationChipWidth,
+          surfaceHeight: CHAT_ANNOTATION_CHIP_HEIGHT_VP,
+          horizontalPadding: 0,
+          spacing: 0
+        }) {
+          Button({ type: ButtonType.Normal, stateEffect: false }) {
+            Text(this.annotationLabel)
+              .fontSize(12)
+              .fontWeight(FontWeight.Medium)
+              .fontColor(this.isManuscriptMode ? this.manuscriptAccentDeep : this.themePrimary)
+              .maxLines(1)
+          }
+          .layoutWeight(1)
+          .height(CHAT_ANNOTATION_CHIP_HEIGHT_VP)
+          .padding(0)
+          .backgroundColor(Color.Transparent)
+          .accessibilityText(this.annotationLabel)
+          .onClick(this.onReviewAnnotations)
+
+          Button({ type: ButtonType.Circle, stateEffect: false }) {
+            SymbolGlyph($r('sys.symbol.xmark'))
+              .fontSize(12)
+              .fontColor([getAppUiState().themeTextSecondary])
+          }
+          .width(CHAT_ANNOTATION_CHIP_HEIGHT_VP)
+          .height(CHAT_ANNOTATION_CHIP_HEIGHT_VP)
+          .padding(0)
+          .backgroundColor(Color.Transparent)
+          .accessibilityText(pickLocalizedText('清空全部注释', 'Clear all annotations'))
+          .onClick(this.onClearAnnotations)
+        }
+      }
+      .width('100%')
+      .height(INPUT_ROW_INSET_VP + CHAT_ANNOTATION_CHIP_HEIGHT_VP)
+      .justifyContent(FlexAlign.Start)
+      .padding({ left: this.isManuscriptMode ? 0 : INPUT_ROW_INSET_VP, top: INPUT_ROW_INSET_VP })
+    }
   }
 
   @Builder
@@ -826,7 +889,7 @@ export struct ChatInputBar {
   }
 
   private computeHasContent(): boolean {
-    return this.inputText.trim() !== '' || this.attachments.length > 0
+    return this.inputText.trim() !== '' || this.attachments.length > 0 || this.annotationCount > 0
   }
 
   private isInFlightSendChoiceActive(): boolean {
@@ -849,7 +912,7 @@ export struct ChatInputBar {
     return $r('sys.symbol.paperplane')
   }
 
-  @Monitor('inputText', 'attachments')
+  @Monitor('inputText', 'attachments', 'annotationCount')
   onInputOrAttachmentsChanged(): void {
     if (!this.isSendDispatching) {
       this.onComposerContentChanged()

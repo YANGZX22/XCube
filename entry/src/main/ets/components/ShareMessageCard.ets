@@ -1,3 +1,4 @@
+import { getAnnotatedDisplayText } from '../utils/LocalizedTextUtils'
 import { FileIcon } from './FileIcon'
 /**
  * 分享消息卡片组件
@@ -212,6 +213,11 @@ export struct ShareMessageCard {
           Blank()
 
           Column() {
+            if (message.replyAnnotations.length > 0) {
+              Text(getAnnotatedDisplayText('', message.replyAnnotations.length))
+                .fontSize(12)
+                .fontColor(getAppUiState().themeTextSecondary)
+            }
             // 附件展示
             if (message.hasAttachments()) {
               this.ShareAttachments(message, true)

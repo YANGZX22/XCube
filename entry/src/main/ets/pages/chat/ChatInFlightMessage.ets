@@ -1,4 +1,5 @@
 import { MessageAttachment } from '../../models/ChatModels'
+import { ReplyAnnotation } from '../../models/ReplyAnnotation'
 
 export enum InFlightMessageDelivery {
   STEER = 'steer',
@@ -8,6 +9,7 @@ export enum InFlightMessageDelivery {
 export class ChatInFlightMessage {
   content: string
   attachments: MessageAttachment[]
+  replyAnnotations: ReplyAnnotation[]
   delivery: InFlightMessageDelivery
   sessionId: string
   requiredSkillId: string = ''
@@ -16,12 +18,18 @@ export class ChatInFlightMessage {
     content: string,
     attachments: MessageAttachment[] = [],
     delivery: InFlightMessageDelivery = InFlightMessageDelivery.QUEUE,
-    sessionId: string = ''
+    sessionId: string = '',
+    replyAnnotations: ReplyAnnotation[] = []
   ) {
     this.content = content.trim()
     this.attachments = attachments.slice()
+    this.replyAnnotations = replyAnnotations.slice()
     this.delivery = delivery
     this.sessionId = sessionId
+  }
+
+  hasPayload(): boolean {
+    return this.content !== '' || this.attachments.length > 0 || this.replyAnnotations.length > 0
   }
 }
 

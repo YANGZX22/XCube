@@ -1,3 +1,4 @@
+import { parseReplyAnnotations, ReplyAnnotation } from '../models/ReplyAnnotation'
 import { getBuiltinBrowserManager } from './BuiltinBrowserManager'
 import { relationalStore } from '@kit.ArkData'
 import { Context } from '@kit.AbilityKit'
@@ -236,6 +237,7 @@ export class DatabaseService {
         message_count INTEGER DEFAULT 0,
         draft_text TEXT DEFAULT '',
         draft_attachments_json TEXT DEFAULT '',
+        draft_annotations_json TEXT DEFAULT '',
         branch_group_id TEXT DEFAULT '',
         branch_index INTEGER DEFAULT 0,
         branch_count INTEGER DEFAULT 1,
@@ -278,6 +280,7 @@ export class DatabaseService {
         model_name TEXT,
         timestamp INTEGER,
         reasoning_content TEXT,
+        reply_annotations_json TEXT DEFAULT '',
         response_timeline_json TEXT DEFAULT '',
         context_compaction_state TEXT DEFAULT '',
         billing_enabled INTEGER DEFAULT 0,
@@ -364,6 +367,7 @@ export class DatabaseService {
       // 尝试添加 reasoning_content 字段（用于推理模型）
       await this.addReasoningContentColumnIfNeeded()
       await this.addMessageResponseTimelineColumnIfNeeded()
+      await this.addMessageReplyAnnotationsColumnIfNeeded()
       await this.addMessageContextCompactionStateColumnIfNeeded()
       // 尝试添加 is_preset 和 icon_path 字段（用于供应商图标管理）
       await this.addProviderIconColumnsIfNeeded()
@@ -433,6 +437,15 @@ export class DatabaseService {
     } catch (error) {
       // 如果字段已存在，会抛出错误，忽略即可
       console.info('DatabaseService', 'reasoning_content column may already exist')
+    }
+  }
+
+  private async addMessageReplyAnnotationsColumnIfNeeded(): Promise<void> {
+    if (this.rdbStore === null) return
+    try {
+      await this.rdbStore.executeSql(`ALTER TABLE ${TableNames.MESSAGES} ADD COLUMN reply_annotations_json TEXT DEFAULT ''`)
+    } catch (error) {
+      console.info('DatabaseService', 'reply_annotations_json column may already exist')
     }
   }
 
@@ -727,8 +740,15 @@ export class DatabaseService {
       )
     } catch (error) {
       console.info('DatabaseService', 'draft_attachments_json column may already exist')
-	    }
-	  }
+    }
+    try {
+      await this.rdbStore.executeSql(
+        `ALTER TABLE ${TableNames.SESSIONS} ADD COLUMN draft_annotations_json TEXT DEFAULT ''`
+      )
+    } catch (error) {
+      console.info('DatabaseService', 'draft_annotations_json column may already exist')
+    }
+  }
 
 	  private async addSessionAssistantColumnIfNeeded(): Promise<void> {
 	    if (this.rdbStore === null) {
@@ -1382,6 +1402,7 @@ export class DatabaseService {
       last_message_preview: session.lastMessagePreview,
       message_count: session.messageCount,
       draft_text: session.draftText,
+      draft_annotations_json: session.draftAnnotations.length > 0 ? JSON.stringify(session.draftAnnotations) : '',
       draft_attachments_json: this.serializeDraftAttachments(session.draftAttachments),
       branch_group_id: session.branchGroupId,
       branch_index: session.branchIndex,
@@ -1602,44 +1623,23 @@ export class DatabaseService {
     }
   }
 
-  async updateSessionDraft(sessionId: string, draftText: string, draftAttachments: MessageAttachment[]): Promise<void> {
+  async updateSessionDraft(sessionId: string, draftText: string, draftAttachments: MessageAttachment[],
+    annotations: ReplyAnnotation[] = []): Promise<void> {
     await this.waitForInitialization()
     if (this.rdbStore === null || sessionId === '') {
       return
     }
 
-    let messageCount = 0
-    const queryPredicates = new relationalStore.RdbPredicates(TableNames.SESSIONS)
-    queryPredicates.equalTo('id', sessionId)
     try {
-      const resultSet = await this.rdbStore.query(queryPredicates)
-      if (resultSet.goToNextRow()) {
-        try {
-          messageCount = resultSet.getLong(resultSet.getColumnIndex('message_count'))
-        } catch (e) {
-          messageCount = 0
-        }
-      }
-      resultSet.close()
-    } catch (error) {
-      console.error('DatabaseService', `Failed to query session draft meta: ${JSON.stringify(error)}`)
-      return
-    }
-
-    const valueBucket: relationalStore.ValuesBucket = {
-      draft_text: draftText,
-      draft_attachments_json: this.serializeDraftAttachments(draftAttachments)
-    }
-    if (messageCount === 0) {
-      valueBucket.title = this.buildDraftTitle(draftText)
-      valueBucket.last_message_preview = this.buildDraftPreview(draftText, draftAttachments)
-      valueBucket.updated_at = Date.now()
-    }
-
-    const updatePredicates = new relationalStore.RdbPredicates(TableNames.SESSIONS)
-    updatePredicates.equalTo('id', sessionId)
-    try {
-      await this.rdbStore.update(valueBucket, updatePredicates)
+      await this.rdbStore.executeSql(`
+        UPDATE ${TableNames.SESSIONS} SET draft_text = ?, draft_attachments_json = ?, draft_annotations_json = ?,
+          title = CASE WHEN COALESCE(message_count, 0) = 0 THEN ? ELSE title END,
+          last_message_preview = CASE WHEN COALESCE(message_count, 0) = 0 THEN ? ELSE last_message_preview END,
+          updated_at = CASE WHEN COALESCE(message_count, 0) = 0 THEN ? ELSE updated_at END
+        WHERE id = ?`, [
+        draftText, this.serializeDraftAttachments(draftAttachments), annotations.length > 0 ? JSON.stringify(annotations) : '',
+        this.buildDraftTitle(draftText), this.buildDraftPreview(draftText, draftAttachments), Date.now(), sessionId
+      ])
       setAppUiStateValue(AppStorageKeys.SESSION_LIST_REFRESH_AT, Date.now())
     } catch (error) {
       console.error('DatabaseService', `Failed to update session draft: ${JSON.stringify(error)}`)
@@ -2149,6 +2149,7 @@ export class DatabaseService {
         } catch (e) {
           session.draftAttachments = []
         }
+        session.draftAnnotations = parseReplyAnnotations(this.safeGetString(resultSet, 'draft_annotations_json'))
         session.branchGroupId = this.safeGetString(resultSet, 'branch_group_id')
         session.branchIndex = this.safeGetLong(resultSet, 'branch_index', 0)
         session.branchCount = this.safeGetLong(resultSet, 'branch_count', 1)
@@ -2236,6 +2237,7 @@ export class DatabaseService {
         } catch (e) {
           session.draftAttachments = []
         }
+        session.draftAnnotations = parseReplyAnnotations(this.safeGetString(resultSet, 'draft_annotations_json'))
         session.branchGroupId = this.safeGetString(resultSet, 'branch_group_id')
         session.branchIndex = this.safeGetLong(resultSet, 'branch_index', 0)
         session.branchCount = this.safeGetLong(resultSet, 'branch_count', 1)
@@ -2292,6 +2294,7 @@ export class DatabaseService {
       model_id: message.modelId || '',
       timestamp: message.timestamp,
       reasoning_content: message.reasoningContent,
+      reply_annotations_json: message.replyAnnotations.length > 0 ? JSON.stringify(message.replyAnnotations) : '',
       response_timeline_json: this.serializeResponseTimeline(message),
       context_compaction_state: message.contextCompactionState,
       billing_enabled: message.billingEnabled ? 1 : 0,
@@ -2370,7 +2373,7 @@ export class DatabaseService {
       const data = JSON.parse(raw) as AssistantResponseSegmentJson[]
       for (let i = 0; i < data.length; i++) {
         const segment = AssistantResponseSegment.fromJson(data[i])
-        if (segment.content !== '' || segment.toolCallIds.length > 0) {
+        if (segment.content !== '' || segment.toolCallIds.length > 0 || segment.replyAnnotations.length > 0) {
           segments.push(segment)
         }
       }
@@ -2495,6 +2498,7 @@ export class DatabaseService {
     message.modelId = this.safeGetString(resultSet, 'model_id')
     message.timestamp = resultSet.getLong(resultSet.getColumnIndex('timestamp'))
     message.reasoningContent = this.safeGetString(resultSet, 'reasoning_content')
+    message.replyAnnotations = parseReplyAnnotations(this.safeGetString(resultSet, 'reply_annotations_json'))
     message.responseSegments = this.parseResponseTimeline(this.safeGetString(resultSet, 'response_timeline_json'))
     const contextCompactionState = this.safeGetString(resultSet, 'context_compaction_state')
     if (contextCompactionState === 'completed') {

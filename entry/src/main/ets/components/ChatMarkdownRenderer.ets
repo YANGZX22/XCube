@@ -1,4 +1,5 @@
-import { Markdown, MarkdownController } from '@luvi/lv-markdown-in'
+import { Markdown, MarkdownController, TextSelectionActionContext, TextSelectionActionItem } from '@luvi/lv-markdown-in'
+import { pickLocalizedText } from '../utils/LocalizedTextUtils'
 import { ChatMarkdownHybridRenderer } from './ChatMarkdownHybridRenderer'
 import { AppStorageKeys } from '../config/AppStorageKeys'
 import { MarkdownRenderer } from '../services/PreferencesService'
@@ -17,6 +18,8 @@ import {
 struct ChatLvMarkdownRenderer {
   @Param content: string = ''
   @Param isInputEnded: boolean = true
+  @Param allowAnnotations: boolean = false
+  @Event onAnnotateSelection: (quote: string) => void = () => {}
   @Param chatFontSize: number = 15
   @Param compact: boolean = false
   @Param latexFontSize: number = 0
@@ -95,6 +98,7 @@ struct ChatLvMarkdownRenderer {
       this.themeRenderKey,
       this.chatFontSize.toString(),
       this.isInputEnded ? 'ended' : 'streaming',
+      this.allowAnnotations ? pickLocalizedText('添加到对话', 'Add to chat') : '',
       this.compact ? 'compact' : 'normal',
       this.latexFontSize.toString(),
       this.textColorOverride,
@@ -193,6 +197,17 @@ struct ChatLvMarkdownRenderer {
       })
       .setBlockSpacing(getMarkdownBlockSpacing(textSize, this.compact))
 
+    this.controller.setTextSelectionActionItems(this.allowAnnotations ? [
+      new TextSelectionActionItem(pickLocalizedText('复制', 'Copy'), (selection: TextSelectionActionContext) => selection.copy()),
+      new TextSelectionActionItem(pickLocalizedText('添加到对话', 'Add to chat'), (selection: TextSelectionActionContext) => {
+        const quote = selection.selectedText
+        selection.clear()
+        this.onAnnotateSelection(quote)
+      }),
+      new TextSelectionActionItem(pickLocalizedText('全选', 'Select all'), (selection: TextSelectionActionContext) => selection.selectAll()),
+      new TextSelectionActionItem(pickLocalizedText('取消', 'Cancel'), (selection: TextSelectionActionContext) => selection.clear())
+    ] : [])
+
     // 这两个 setter 会广播重绘事件，仅在主题方向改变时调用。
     if (shouldRefreshCodeTheme) {
       this.controller.setCodeBlockTheme(codeTheme)
@@ -223,6 +238,8 @@ struct ChatLvMarkdownRenderer {
 export struct ChatMarkdownRenderer {
   @Param content: string = ''
   @Param isInputEnded: boolean = true
+  @Param allowAnnotations: boolean = false
+  @Event onAnnotateSelection: (quote: string) => void = () => {}
   @Param incrementalAnalysis: boolean = false
   @Param chatFontSize: number = 15
   @Param compact: boolean = false
@@ -244,6 +261,8 @@ export struct ChatMarkdownRenderer {
   @Builder
   private LvMarkdownContent(themeMode: string) {
     ChatLvMarkdownRenderer({
+      allowAnnotations: this.allowAnnotations,
+      onAnnotateSelection: this.onAnnotateSelection,
       content: this.content,
       isInputEnded: this.isInputEnded,
       chatFontSize: this.chatFontSize,

@@ -2,6 +2,8 @@ import { InteractiveMaterialRow } from './InteractiveMaterialRow'
 import { FileIcon } from './FileIcon'
 import { ImmersiveMaterialAnchor } from './ImmersiveMaterialBackdrop'
 import { AssistantResponseSegment, AssistantResponseSegmentType, ChatMessage, MessageRole, MessageAttachment, AttachmentType, ContextCompactionUiState, ToolCall, ToolResult } from '../models/ChatModels'
+import { ReplyAnnotation } from '../models/ReplyAnnotation'
+import { SettingsActionButton } from './settings/SettingsActionButton'
 import { VisualEffectsMode } from '../models/ThemeColors'
 import { pasteboard } from '@kit.BasicServicesKit'
 import { image } from '@kit.ImageKit'
@@ -37,7 +39,7 @@ import {
   MANUSCRIPT_HEADING_FONT,
   MANUSCRIPT_COMPACT_BAR_HEIGHT
 } from '../utils/ManuscriptVisualUtils'
-import { pickLocalizedText } from '../utils/LocalizedTextUtils'
+import { getAnnotatedDisplayText, pickLocalizedText } from '../utils/LocalizedTextUtils'
 import {
   appendTimelineBar,
   finalizeTimelineBlocks,
@@ -147,6 +149,7 @@ export struct MessageBubble {
   @Param assistantAvatarColor: string = '#7A68F0'
   @Param assistantAvatarCacheKey: number = 0
   @Param themeRenderKey: string = ''
+  @Param allowAnnotations: boolean = false
   @Param isMultiSelectMode: boolean = false  // 是否处于多选模式
   @Param isSelected: boolean = false  // 是否被选中
   @Param isEditing: boolean = false  // 是否处于编辑状态（被编辑的消息高亮显示）
@@ -177,6 +180,11 @@ export struct MessageBubble {
   @Local assistantBubbleWidthVp: number = 0
   @Local assistantBubbleHeightVp: number = 0
   // 深色模式状态（用于主题适配）
+  private get canAnnotateReply(): boolean {
+    return this.allowAnnotations && this.message.role === MessageRole.ASSISTANT &&
+      !this.isMultiSelectMode && !this.message.isGenerating && !this.message.isSearching
+  }
+
   private get isDarkMode(): boolean {
     return getAppUiState().isDarkMode
   }
@@ -277,6 +285,8 @@ export struct MessageBubble {
   // 图片点击预览回调
   @Event onImageClick: (images: Array<string>, index: number) => void = () => {}
   @Event onFileAttachmentClick: (attachment: MessageAttachment) => void = (_attachment: MessageAttachment): void => {}
+  @Event onAnnotateSelection: (quote: string) => void = () => {}
+  @Event onReviewSentAnnotations: (notes: ReplyAnnotation[]) => void = () => {}
   @Event onOpenLink: (title: string, url: string) => void = () => {}
   @Event onOpenMap: (visualizationJson: string) => void = (_visualizationJson: string): void => {}
   // TTS朗读回调
@@ -477,6 +487,7 @@ export struct MessageBubble {
       this.message.cacheReadTokens.toString(),
       this.message.cacheWriteTokens.toString(),
       encodeRenderText(this.message, 'content', this.message.content),
+      this.message.replyAnnotations.length.toString(),
       encodeRenderText(this.message, 'reasoningContent', this.message.reasoningContent),
       this.message.isGenerating ? '1' : '0',
       this.message.isSearching ? '1' : '0',
@@ -505,7 +516,7 @@ export struct MessageBubble {
       ? this.hasRenderableAttachments(this.previewAttachments)
       : this.hasRenderableAttachments(this.message.attachments)
     this.cachedHasPreviewTextContent = this.cachedDisplayContent.length > 0
-    this.cachedHasMessageTextContent = hasNonWhitespace(this.message.content)
+    this.cachedHasMessageTextContent = this.message.replyAnnotations.length > 0 || hasNonWhitespace(this.message.content)
     this.cachedHasToolbarPayload = this.cachedHasMessageTextContent || this.message.hasAttachments()
     this.cachedCurrentMessageModelIconResourcePath = this.computeCurrentMessageModelIconResourcePath()
     // 这两份只读文本每次都要跑好几趟全文正则，按需算即可：流式期间没有任何渲染
@@ -527,6 +538,8 @@ export struct MessageBubble {
   @Builder
   MessageContentMarkdown() {
     ChatMarkdownRenderer({
+      allowAnnotations: this.canAnnotateReply,
+      onAnnotateSelection: this.onAnnotateSelection,
       content: this.resolvePythonSandboxImageSources(this.message.content),
       isInputEnded: !this.message.isGenerating,
       incrementalAnalysis: this.message.isGenerating,
@@ -591,6 +604,8 @@ export struct MessageBubble {
   @Builder
   StaticMarkdown(content: string) {
     ChatMarkdownRenderer({
+      allowAnnotations: this.canAnnotateReply,
+      onAnnotateSelection: this.onAnnotateSelection,
       content: this.resolvePythonSandboxImageSources(content),
       isInputEnded: true,
       incrementalAnalysis: false,
@@ -686,17 +701,55 @@ export struct MessageBubble {
   }
 
   @Builder
+  private AnnotationCount(notes: ReplyAnnotation[]) {
+    SettingsActionButton({
+      label: getAnnotatedDisplayText('', notes.length),
+      accessibilityLabel: getAnnotatedDisplayText('', notes.length) + ' · ' +
+        pickLocalizedText('查看选文和评论', 'View excerpts and comments'),
+      compact: true,
+      buttonHeight: 28,
+      trailingSymbol: $r('sys.symbol.chevron_right'),
+      applyShadow: false,
+      isEnabled: !this.isMultiSelectMode,
+      onActivate: (): void => this.onReviewSentAnnotations(notes)
+    })
+  }
+
+  @Builder
+  private ManuscriptUserLabel() {
+    Text($r('app.string.manuscript_you'))
+      .fontFamily(MANUSCRIPT_BODY_FONT)
+      .fontSize(10)
+      .fontWeight(FontWeight.Medium)
+      .fontColor(this.manuscriptAccentDeep)
+      .letterSpacing(2)
+      .width('100%')
+      .textAlign(TextAlign.End)
+  }
+
+  @Builder
+  private UserMessageText(guidance?: AssistantResponseSegment) {
+    if ((guidance?.content ?? this.getDisplayContent()).length > 0) {
+      Text(guidance?.content ?? this.getDisplayContent())
+        .fontFamily(this.chatBubbleTypeface)
+        .fontSize(this.isManuscriptMode ? 15 : this.chatFontSize)
+        .fontStyle(this.isManuscriptMode ? FontStyle.Italic : FontStyle.Normal)
+        .fontColor(this.isManuscriptMode ? getAppUiState().themeTextPrimary : $r('app.color.text_primary'))
+        .lineHeight(this.isManuscriptMode ? 25 : Math.round(this.chatFontSize * 1.4))
+        .width(this.isManuscriptMode ? '100%' : undefined)
+        .textAlign(this.isManuscriptMode ? TextAlign.End : TextAlign.Start)
+        .alignSelf(this.isManuscriptMode ? ItemAlign.End : ItemAlign.Start)
+    }
+  }
+
+  @Builder
   ManuscriptUserMessage() {
     Column({ space: 5 }) {
-      Text($r('app.string.manuscript_you'))
-        .fontFamily(MANUSCRIPT_BODY_FONT)
-        .fontSize(10)
-        .fontWeight(FontWeight.Medium)
-        .fontColor(this.manuscriptAccentDeep)
-        .letterSpacing(2)
-        .width('100%')
-        .textAlign(TextAlign.End)
+      this.ManuscriptUserLabel()
 
+      if (!this.isEditing && this.message.replyAnnotations.length > 0) {
+        this.AnnotationCount(this.message.replyAnnotations)
+      }
       if (this.hasDisplayAttachments()) {
         Row() {
           if (this.isEditing) {
@@ -709,17 +762,7 @@ export struct MessageBubble {
         .justifyContent(FlexAlign.End)
       }
 
-      if (this.getDisplayContent().length > 0) {
-        Text(this.getDisplayContent())
-          .fontFamily(MANUSCRIPT_BODY_FONT)
-          .fontSize(15)
-          .fontStyle(FontStyle.Italic)
-          .fontColor(getAppUiState().themeTextPrimary)
-          .lineHeight(25)
-          .textAlign(TextAlign.End)
-          .width('100%')
-      }
-
+      this.UserMessageText()
       if (this.shouldShowUserToolbar()) {
         Row({ space: 0 }) {
           if (this.shouldShowVersionSwitcher()) {
@@ -923,10 +966,7 @@ export struct MessageBubble {
 
   // 获取显示内容（编辑模式下使用预览内容）
   private computeDisplayContent(): string {
-    if (this.isEditing) {
-      return this.previewContent
-    }
-    return this.message.content
+    return this.isEditing ? this.previewContent : this.message.content
   }
 
   private getDisplayContent(): string {
@@ -1544,7 +1584,7 @@ export struct MessageBubble {
       .backgroundColor(Color.Transparent)
       .accessibilityText(this.copyIconState === CopyIconState.COPIED ? $r('app.string.copy_success') : $r('app.string.copy'))
       .onClick((): void => {
-        this.copyToClipboard(this.message.content, true)
+        this.copyToClipboard(getAnnotatedDisplayText(this.message.content, this.message.replyAnnotations.length), true)
       })
     }
   }
@@ -1675,6 +1715,9 @@ export struct MessageBubble {
             })
 
             Column() {
+              if (!this.isEditing && this.message.replyAnnotations.length > 0) {
+                this.AnnotationCount(this.message.replyAnnotations)
+              }
               // 图片附件显示
               if (this.hasDisplayAttachments()) {
                 if (this.isEditing) {
@@ -2584,7 +2627,7 @@ export struct MessageBubble {
       } else if (segment.type === AssistantResponseSegmentType.CONTEXT_COMPACTION) {
         blocks.push(new TimelineBlock(TimelineBlockKind.COMPACTION, segment.content))
       } else if (segment.type === AssistantResponseSegmentType.USER_GUIDANCE) {
-        if (segment.content.trim().length > 0) {
+        if (segment.content.trim().length > 0 || segment.replyAnnotations.length > 0) {
           const guidanceBlock = new TimelineBlock(TimelineBlockKind.GUIDANCE, segment.id)
           guidanceBlock.segment = segment
           blocks.push(guidanceBlock)
@@ -2651,6 +2694,8 @@ export struct MessageBubble {
   @Builder
   private TimelineSegmentMarkdown(segment: AssistantResponseSegment, compact: boolean = false) {
     ChatMarkdownRenderer({
+      allowAnnotations: !compact && this.canAnnotateReply,
+      onAnnotateSelection: this.onAnnotateSelection,
       content: this.resolvePythonSandboxImageSources(segment.content),
       isInputEnded: !this.isActiveTimelineSegment(segment),
       incrementalAnalysis: this.isActiveTimelineSegment(segment),
@@ -3131,15 +3176,18 @@ export struct MessageBubble {
   }
 
   @Builder
+  private UserGuidanceContent(segment: AssistantResponseSegment) {
+    if (segment.replyAnnotations.length > 0) {
+      this.AnnotationCount(segment.replyAnnotations)
+    }
+    this.UserMessageText(segment)
+  }
+
+  @Builder
   UserGuidanceSection(segment: AssistantResponseSegment) {
     Row() {
       Column() {
-        Text(segment.content)
-          .fontSize(13)
-          .fontFamily(this.chatBubbleTypeface)
-          .fontColor(this.isManuscriptMode ? $r('app.color.text_primary') : this.themeUserBubbleText)
-          .maxLines(4)
-          .textOverflow({ overflow: TextOverflow.Ellipsis })
+        this.UserGuidanceContent(segment)
       }
       .constraintSize({ maxWidth: '88%' })
       .padding({ left: 10, right: 10, top: 7, bottom: 7 })

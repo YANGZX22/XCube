@@ -1,5 +1,6 @@
 import { describe, expect, it } from '@ohos/hypium'
 import { AttachmentType, MessageAttachment } from '../main/ets/models/ChatModels'
+import { ReplyAnnotation } from '../main/ets/models/ReplyAnnotation'
 import {
   buildSteeringRequestContent,
   buildSteeringTimelineText,
@@ -33,6 +34,15 @@ export default function chatInFlightMessageTest() {
       expect(timeline.includes('diagram.png')).assertEqual(true)
       expect(request.includes('User guidance received')).assertEqual(true)
       expect(request.includes('Do not repeat completed work')).assertEqual(true)
+    })
+
+    it('queues highlights without mixing excerpts into the composer text', 0, () => {
+      const notes: ReplyAnnotation[] = [{ quote: 'Original excerpt', comment: '' }]
+      const queued = new ChatInFlightMessage('', [], InFlightMessageDelivery.QUEUE, 'session-1', notes)
+      notes.pop()
+      expect(queued.content).assertEqual('')
+      expect(queued.hasPayload()).assertEqual(true)
+      expect(queued.replyAnnotations[0].quote).assertEqual('Original excerpt')
     })
   })
 }

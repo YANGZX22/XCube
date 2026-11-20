@@ -10,6 +10,8 @@ import {
   SearchReference
 } from '../../models/ChatModels'
 import { ChatViewModel } from '../../viewmodels/ChatViewModel'
+import { ReplyAnnotation } from '../../models/ReplyAnnotation'
+import { getAnnotatedDisplayText } from '../../utils/LocalizedTextUtils'
 import { ProviderViewModel } from '../../viewmodels/ProviderViewModel'
 import {
   WebSearchService,
@@ -62,7 +64,6 @@ export interface ChatManualSearchFlowDependencies {
   onScrollBottom: () => void
   onSetSending: (value: boolean) => void
   onSetSearchCancelled: (value: boolean) => void
-  onClearComposer: () => void
   onBeforeManualSearchStart: () => void
   onSetNewEmptySession: (value: boolean) => void
   onDraftCommitted: () => void
@@ -140,9 +141,10 @@ export class ChatManualSearchFlow {
     this.deps.onMarkAutoTaskFailed(errorMessage)
   }
 
-  async startManualSearchFallback(messageContent: string, attachmentsToSend: MessageAttachment[] = []): Promise<void> {
+  async startManualSearchFallback(messageContent: string, attachmentsToSend: MessageAttachment[] = [],
+    annotations: ReplyAnnotation[] = []): Promise<void> {
     this.cancelCurrentSearchRequest()
-    const taskId = this.startTaskOrFail(messageContent)
+    const taskId = this.startTaskOrFail(getAnnotatedDisplayText(messageContent, annotations.length))
     if (taskId === '') {
       return
     }
@@ -156,25 +158,26 @@ export class ChatManualSearchFlow {
     const isPureUrl = extractedUrl !== null && extractedUrl === messageContent.trim()
 
     this.deps.onSetCurrentTaskId(taskId)
-    this.deps.onClearComposer()
     this.deps.onSetSending(true)
     this.deps.onSetSearchCancelled(false)
     this.deps.onBeforeManualSearchStart()
 
-    const userMessage = this.createPendingUserMessage(messageContent, attachmentsToSend)
+    const userMessage = this.createPendingUserMessage(messageContent, attachmentsToSend, annotations)
 
     if (isPureUrl && extractedUrl !== null) {
       await this.performUrlFetchAsync(extractedUrl, messageContent, userMessage, attachmentsToSend, requestId, taskId)
       return
     }
-    await this.performBingSearchAsync(messageContent, userMessage, attachmentsToSend, requestId, taskId)
+    const searchQuery = messageContent || annotations.map((note: ReplyAnnotation) =>
+      [note.quote, note.comment].join(' ').trim()).join('\n')
+    await this.performBingSearchAsync(searchQuery, userMessage, attachmentsToSend, requestId, taskId)
   }
 
   private generateId(): string {
     return Date.now().toString() + Math.random().toString(36).substring(2, 9)
   }
 
-  createPendingUserMessage(content: string, attachments: MessageAttachment[] = []): ChatMessage {
+  createPendingUserMessage(content: string, attachments: MessageAttachment[] = [], annotations: ReplyAnnotation[] = []): ChatMessage {
     const userMessage = new ChatMessage(
       this.generateId(),
       MessageRole.USER,
@@ -182,6 +185,7 @@ export class ChatManualSearchFlow {
       ''
     )
     userMessage.isSearching = false
+    userMessage.replyAnnotations = annotations.slice()
     for (let i = 0; i < attachments.length; i++) {
       userMessage.attachments.push(attachments[i])
     }
@@ -344,7 +348,7 @@ export class ChatManualSearchFlow {
         userMessage.searchReferences.push(searchResult.references[i])
       }
 
-      await this.sendSearchResultMessage(query, searchResult, attachmentsToSend, taskId)
+      await this.sendSearchResultMessage(userMessage, searchResult, attachmentsToSend, taskId)
     } catch (error) {
       this.removeSearchingAIMessage(searchingAIMessage)
       console.error('ChatPage', `[performBingSearchAsync] 搜索异常: ${JSON.stringify(error)}`)
@@ -393,7 +397,7 @@ export class ChatManualSearchFlow {
         for (let i = 0; i < failureSearchResult.references.length; i++) {
           userMessage.searchReferences.push(failureSearchResult.references[i])
         }
-        await this.sendSearchResultMessage(originalInput.trim() !== '' ? originalInput : url, failureSearchResult,
+        await this.sendSearchResultMessage(userMessage, failureSearchResult,
           attachmentsToSend, taskId)
         return
       }
@@ -418,7 +422,7 @@ export class ChatManualSearchFlow {
         userMessage.searchReferences.push(searchResult.references[i])
       }
 
-      await this.sendSearchResultMessage(originalInput.trim() !== '' ? originalInput : url, searchResult,
+      await this.sendSearchResultMessage(userMessage, searchResult,
         attachmentsToSend, taskId)
     } catch (error) {
       this.removeSearchingAIMessage(searchingAIMessage)
@@ -481,7 +485,7 @@ export class ChatManualSearchFlow {
     return new ModelBillingSnapshot(model)
   }
 
-  private async sendSearchResultMessage(userQuery: string, searchResult: SearchResult,
+  private async sendSearchResultMessage(pendingUser: ChatMessage, searchResult: SearchResult,
     attachmentsToSend: MessageAttachment[] = [],
     taskId: string = ''): Promise<void> {
     const currentProvider = this.deps.getCurrentProvider()
@@ -502,8 +506,9 @@ export class ChatManualSearchFlow {
 
     const modelId = this.deps.appStateManager.getCurrentModelId()
     const billing = this.getModelBillingSnapshot(currentProvider, modelId)
+    let userAdded = false
     await this.deps.chatViewModel.sendMessageWithSearchResult(
-      userQuery,
+      pendingUser.content,
       searchResult,
       currentProvider.id,
       currentProvider.type,
@@ -512,25 +517,26 @@ export class ChatManualSearchFlow {
       currentProvider.baseUrl,
       modelId,
       this.deps.getCurrentModelName(),
-      this.deps.getMessages(),
+      this.deps.getMessages().filter((message: ChatMessage) => message.id !== pendingUser.id),
       attachmentsToSend,
       0,
       (userMessage: ChatMessage): void => {
+        userAdded = true
         const allMessages = this.deps.messages
-        let found = false
-        for (let i = allMessages.length - 1; i >= 0; i--) {
-          if (allMessages[i].role === MessageRole.USER) {
-            syncChatMessageFromSource(allMessages[i], userMessage)
-            found = true
-            break
-          }
-        }
-        if (!found) {
+        const index = allMessages.findIndex((message: ChatMessage) => message.id === pendingUser.id)
+        if (index >= 0) {
+          syncChatMessageFromSource(allMessages[index], userMessage)
+        } else {
           allMessages.push(userMessage)
           this.deps.onSyncMessages()
         }
       },
       (aiMessage: ChatMessage): void => {
+        if (!userAdded) {
+          // 重新生成会复用原用户消息，此时移除仅用于显示搜索进度的临时副本。
+          const index = this.deps.messages.findIndex((message: ChatMessage) => message.id === pendingUser.id)
+          if (index >= 0) this.deps.messages.splice(index, 1)
+        }
         applyEstimatedBilling(aiMessage, this.deps.messages, billing, true)
         this.deps.messages.push(aiMessage)
         this.deps.onSyncMessages()
@@ -557,7 +563,8 @@ export class ChatManualSearchFlow {
       },
       this.deps.getReasoningLevel(),
       currentProvider.apiPath || undefined,
-      currentProvider.customHeadersJson || undefined
+      currentProvider.customHeadersJson || undefined,
+      pendingUser.replyAnnotations
     )
   }
 }

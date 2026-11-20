@@ -72,6 +72,7 @@ export function syncChatMessageFromSource(target: ChatMessage, source: ChatMessa
   target.id = source.id
   target.role = source.role
   target.content = source.content
+  target.replyAnnotations = source.replyAnnotations
   target.timestamp = source.timestamp
   target.modelName = source.modelName
   target.modelId = source.modelId

@@ -1,3 +1,4 @@
+import { ReplyAnnotation } from '../../models/ReplyAnnotation'
 import { ChatMessage, MessageAttachment, ModelProvider, ReasoningLevel } from '../../models/ChatModels'
 import { AppStateManager } from '../../viewmodels/AppStateManager'
 import { ProviderViewModel } from '../../viewmodels/ProviderViewModel'
@@ -22,6 +23,7 @@ export class ChatPageLoadResult {
   messages: ChatMessage[] = []
   draftText: string = ''
   draftAttachments: MessageAttachment[] = []
+  draftAnnotations: ReplyAnnotation[] = []
   isNewChatTransition: boolean = true
   isNewEmptySession: boolean = false
   assistantId: string = DEFAULT_ASSISTANT_ID
@@ -85,6 +87,7 @@ export class ChatPageLoadFlow {
         result.sessionTitle = session.title
         // 展示当前活跃路径（对话树），而非全部消息（含非活跃版本）
         result.messages = this.deps.chatViewModel.getActivePathForSession(session)
+        result.draftAnnotations = session.draftAnnotations.slice()
         result.draftText = session.draftText
         result.draftAttachments = this.cloneDraftAttachments(session.draftAttachments)
         result.branchIndex = session.branchIndex
