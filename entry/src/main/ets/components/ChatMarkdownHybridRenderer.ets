@@ -4,7 +4,7 @@ import {
   MarkdownConfiguration,
   MarkdownPlugin,
   MarkdownTheme
-} from '@cangjie-tpc/markdown_hybrid'
+} from '@cangjie-tpc/markdown_arkui'
 import { getAppUiState } from '../state/AppUiState'
 import {
   getMarkdownBlockSpacing,
@@ -19,7 +19,6 @@ export struct ChatMarkdownHybridRenderer {
   @Param content: string = ''
   @Param isInputEnded: boolean = true
   @Param incrementalAnalysis: boolean = false
-  @Param useCangjieComponent: boolean = true
   @Param chatFontSize: number = 15
   @Param compact: boolean = false
   @Param latexFontSize: number = 0
@@ -46,8 +45,7 @@ export struct ChatMarkdownHybridRenderer {
   }
 
   /**
-   * 仓颉未提供有序列表前缀字体接口。使用衬线字体时，将编号转为转义后的普通正文，
-   * 并移除列表语法及源缩进，使编号继承段落字体且不再保留列表缩进槽位。
+   * 自定义字体沿用无缩进的编号排版，编号和正文使用同一种字体。
    */
   private getTypefaceAwareContent(): string {
     if (!this.isCustomTextTypeface() || this.content === '') {
@@ -100,6 +98,7 @@ export struct ChatMarkdownHybridRenderer {
     const uiState = getAppUiState()
     return [
       this.themeRenderKey,
+      this.incrementalAnalysis.toString(),
       this.chatFontSize.toString(),
       this.isInputEnded ? 'ended' : 'streaming',
       uiState.isDarkMode ? 'dark' : 'light',
@@ -222,6 +221,7 @@ export struct ChatMarkdownHybridRenderer {
 
     theme.setIsMarkdownParserSync(false)
     theme.setIsCodeBlockParserSync(false)
+    theme.globalTheme.setEnableParseThrottle(this.incrementalAnalysis)
     theme.setIsOnCopy(this.isInputEnded)
     theme.setBlockFirstTopMargin(0)
     theme.setBlockLastBottomMargin(0)
@@ -242,11 +242,11 @@ export struct ChatMarkdownHybridRenderer {
     theme.setLinkColor(linkColor)
     theme.setLinkSize(textSize)
     theme.setLinkLineHeight(textLineHeight)
-    theme.setLinkBackGroupColor(linkBgColor)
+    theme.linkTheme.setLinkTextBackgroundColor(linkBgColor)
     theme.setIsLinkUnderlined(false)
 
     theme.setBlockQuoteColor(linkColor)
-    theme.setBlockQuoteBackGroupColor(quoteBgColor)
+    theme.blockQuoteTheme.setBlockQuoteBackgroundColor(quoteBgColor)
     theme.setBlockQuoteWidth(3)
     theme.setBlockQuoteLeftMargin(quoteLeftMargin)
     theme.setBlockQuoteRightMargin(quoteRightMargin)
@@ -277,8 +277,8 @@ export struct ChatMarkdownHybridRenderer {
     theme.setCodeListTitleSelectTextSize(codeTextSize)
     theme.setCodeListTitleSelectTextColor(codeTextColor)
     theme.setCodeListTitleUnSelectTextColor(textColor)
-    theme.setCodeListTitleSelectBackGroupColor(codeBgColor)
-    theme.setCodeListTitleUnSelectBackGroupColor(0x00000000)
+    theme.codeBlockTheme.setCodeBlockListTitleSelectBackgroundColor(codeBgColor)
+    theme.codeBlockTheme.setCodeBlockListTitleUnselectBackgroundColor(0x00000000)
     theme.setIsSeparateCodeBlock(false)
 
     theme.setTableCellPadding(8)
@@ -303,7 +303,7 @@ export struct ChatMarkdownHybridRenderer {
     theme.setLatexDefaultText(true)
     theme.setLatexMathTextSize(this.latexFontSize > 0 ? this.latexFontSize : this.chatFontSize + (this.compact ? 0 : 2))
     theme.setLatexMathTextColor(textColor)
-    theme.setLatexMathBackGroupColor(0x00000000)
+    theme.latexMathTheme.setLatexMathBackgroundColor(0x00000000)
     theme.setLatexMathColorFormat(LatexMathColorFormat.COLOR_FORMAT_BGRA_8888)
     theme.setLatexMathBlockCenter(false)
     theme.setIsDark(uiState.isDarkMode)
@@ -363,9 +363,6 @@ export struct ChatMarkdownHybridRenderer {
       ForEach([this.buildConfigSignature()], (_renderKey: string) => {
         CJMarkdown({
           content: this.getTypefaceAwareContent(),
-          isInputEnded: this.isInputEnded,
-          incrementalAnalysis: this.incrementalAnalysis,
-          useCangjieComponent: this.useCangjieComponent,
           config: this.getMarkdownConfig(),
           plugin: this.getMarkdownPlugin()
         })

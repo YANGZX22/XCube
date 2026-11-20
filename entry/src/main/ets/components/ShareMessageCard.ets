@@ -280,7 +280,6 @@ export struct ShareMessageCard {
                   content: message.content,
                   isInputEnded: true,
                   incrementalAnalysis: false,
-                  useCangjieComponent: true,
                   chatFontSize: 14,
                   themeRenderKey: message.id,
                   showCodeFullScreen: false

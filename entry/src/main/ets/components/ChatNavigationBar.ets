@@ -210,7 +210,6 @@ export struct ChatNavigationBar {
                         content: this.normalizeLatexInTitle(this.sessionTitle),
                         isInputEnded: true,
                         incrementalAnalysis: false,
-                        useCangjieComponent: true,
                         chatFontSize: 16,
                         compact: true,
                         latexFontSize: 16,

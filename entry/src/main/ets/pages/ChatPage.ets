@@ -1417,7 +1417,6 @@ export struct ChatPage {
       content: this.canvasDocumentContent,
       isInputEnded: true,
       incrementalAnalysis: false,
-      useCangjieComponent: true,
       chatFontSize: 14,
       compact: false,
       themeRenderKey: `canvas-${this.canvasDocumentRevision}-${this.canvasDocumentUpdatedAt}-${renderEpoch}`,

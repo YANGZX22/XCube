@@ -6,7 +6,7 @@
   "author": "",
   "license": "",
   "dependencies": {
-    "@cangjie-tpc/markdown_hybrid": "^1.3.6",
+    "@cangjie-tpc/markdown_arkui": "file:../third_party/markdown4cj/markdown_arkui-1.4.0.har",
     "@luvi/lv-markdown-in": "file:../third_party/lv-markdown-in/markdown",
     "sherpa_onnx": "1.12.20",
     "@visactor/harmony-vchart": "^1.13.5",

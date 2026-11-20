@@ -224,7 +224,6 @@ export struct ChatMarkdownRenderer {
   @Param content: string = ''
   @Param isInputEnded: boolean = true
   @Param incrementalAnalysis: boolean = false
-  @Param useCangjieComponent: boolean = true
   @Param chatFontSize: number = 15
   @Param compact: boolean = false
   @Param latexFontSize: number = 0
@@ -275,7 +274,6 @@ export struct ChatMarkdownRenderer {
       content: this.content,
       isInputEnded: this.isInputEnded,
       incrementalAnalysis: this.incrementalAnalysis,
-      useCangjieComponent: this.useCangjieComponent,
       chatFontSize: this.chatFontSize,
       compact: this.compact,
       latexFontSize: this.latexFontSize,

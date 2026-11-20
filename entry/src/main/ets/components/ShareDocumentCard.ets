@@ -64,7 +64,6 @@ export struct ShareDocumentCard {
             content: this.content,
             isInputEnded: true,
             incrementalAnalysis: false,
-            useCangjieComponent: true,
             chatFontSize: 14,
             themeRenderKey: `canvas-share-${this.updatedAt}`,
             showCodeFullScreen: false

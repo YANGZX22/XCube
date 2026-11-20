@@ -44,9 +44,19 @@ export const RUNTIME_LICENSES: LicenseCatalogItem[] = [
     'Copyright © 2023 Arjun Barrett。', 'Copyright © 2023 Arjun Barrett.'
   ),
   new LicenseCatalogItem(
-    '@cangjie-tpc/markdown_hybrid', '1.3.6', 'Apache-2.0',
-    'Cangjie-TPC Markdown4cj 混合库。',
-    'Cangjie-TPC Markdown4cj hybrid library.'
+    '@cangjie-tpc/markdown_arkui', '1.4.0', 'Apache-2.0',
+    'Cangjie-TPC Markdown4cj 的 ArkUI 渲染器。',
+    'ArkUI renderer for Cangjie-TPC Markdown4cj.'
+  ),
+  new LicenseCatalogItem(
+    '@cangjie-tpc/markdown_parser_hybrid', '1.0.0', 'Apache-2.0',
+    'Cangjie-TPC Markdown4cj 的 Markdown 解析器。',
+    'Markdown parser for Cangjie-TPC Markdown4cj.'
+  ),
+  new LicenseCatalogItem(
+    '@cangjie-tpc/codeformat_hybrid', '1.1.1', 'Apache-2.0',
+    'Cangjie-TPC 代码格式化库。',
+    'Code formatting library from Cangjie-TPC.'
   ),
   new LicenseCatalogItem(
     '@cangjie-tpc/formula_hybrid', '1.3.0', 'MIT',
@@ -54,7 +64,7 @@ export const RUNTIME_LICENSES: LicenseCatalogItem[] = [
     'Formula hybrid library; its license file credits Copyright © 2020 Nano Michael.'
   ),
   new LicenseCatalogItem(
-    '@cangjie-tpc/prism_hybrid', '1.2.6', 'Apache-2.0',
+    '@cangjie-tpc/prism_hybrid', '1.2.7', 'Apache-2.0',
     'Cangjie-TPC Prism4cj 代码高亮库。',
     'Cangjie-TPC Prism4cj syntax-highlighting library.'
   ),

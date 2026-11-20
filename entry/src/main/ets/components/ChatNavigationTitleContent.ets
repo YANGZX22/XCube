@@ -601,7 +601,6 @@ export struct ChatNavigationTitleContent {
                     content: this.normalizeLatexInTitle(this.sessionTitle),
                     isInputEnded: true,
                     incrementalAnalysis: false,
-                    useCangjieComponent: true,
                     chatFontSize: 15,
                     compact: true,
                     latexFontSize: 15,
